@@ -41,3 +41,28 @@ readonly callbacksを使えるようにし、新factory分岐を別途回帰検�
   外側12秒（できれば複数epoch）まで保つことを条件にし、早いendedを成功扱いしない。
 - protected packageの既存read-signin-enrollment.ps1へ固定ReadonlySource分岐を統合。必須ファイル集合は維持する。全体build/typecheck/関連tests、独立レビュー。
 - 元の鍵・viewer・enrollment・historyを保持する限定復旧で実機へ導入し、SCM段階とpreloginを確認。
+
+## 2026-11-07: セッションを跨ぐworkerのJob管理
+
+b38c76f6へ標準Upgradeし起動観測は受理されたが、実サービスは1066/107で停止。
+登録鍵とruntimeの3ファイルのhashは維持し、異常runを再利用していない。
+SYSTEMのreadonly診断ではcontextとmailboxは成功し、presence作成だけが失敗。
+固定stage診断によりCreateProcessAsUserWがWin32 5を返すことを確認した。
+[MicrosoftのJob制約](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-assignprocesstojobobject)では同一Jobのprocessは同じsessionでなければならない。
+修正前はsession0のNode Jobをsession1 workerが継承しようとしていた。
+原因の確定には修正後のnative作成・停止検証を必要とし、推測だけで成功扱いしない。
+
+- Root Node Jobはbreakawayなしのまま。
+- SCM Host自身が、自分が保持するRoot Node Jobに所属しないことを実handleで検査。OS所有のouter Jobは変更しない。保護observed journalのHost PID/creation/imageを保持し、明示parentとして指定。
+- Hostが作るSYSTEM-only named aggregate Jobを全Winlogon workerの親Jobとする。
+- 名は保護started recordのowner/runId/PID/creationから双方が導出。Hostは既存objectを採用せず、brokerはOpenだけ行う。
+- 作成時からJOB_LIST=[aggregate, individual]。個別停止はpeerを巻き込まない。
+- 正常完了のjobEmptyはRoot Node Jobとaggregate双方の0が条件。
+- finallyは先にRootを回収して追加作成を止め、aggregateの0確認後にpackage/runtime leaseを解放。
+- 失敗時に別起動方式へ落とさない。作成結果・Job0が不明なら正常完了記録を残さない。
+
+独立レビューでJob名をHostが実保持することの結合を必須とし、環境変数によるJob名指定は採用しなかった。
+
+実機ではsshdとSCM自体もouter Job所属だったため、全Job外を要求する案は取り下げた。
+明示parentと二Jobのsuspended fixtureはbreakaway追加なしで成功した。
+RootのhandleはHostだけが保持し、brokerへの公開・継承はしない（self-held handleによるkill-on-close妨害を防ぐ）。

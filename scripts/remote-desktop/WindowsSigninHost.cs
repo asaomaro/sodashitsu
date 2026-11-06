@@ -72,7 +72,7 @@ public static class SodaDesktopSigninHost {
         public void Dispose(){lock(gate){disposed=true;SodaDesktopSigninPackageNative.Release(held);}}
     }
     internal static void Run(WaitHandle stop){
-        SodaDesktopSigninPackageNative.Lease package=null;RuntimeLease runtime=null;SodaDesktopSigninProcess.Child child=null;SodaDesktopSigninRunSession run=null;
+        SodaDesktopSigninPackageNative.Lease package=null;RuntimeLease runtime=null;SodaDesktopSigninProcess.Child child=null;SodaDesktopSigninRunSession run=null;SodaDesktopSigninProcess.HostJobs workers=null;
         uint stage=101;
         try {
             package=SodaDesktopSigninPackageNative.Verify(Owner);stage=102;runtime=RuntimeLease.Open();
@@ -80,16 +80,17 @@ public static class SodaDesktopSigninHost {
             Func<bool> retained=()=>package.Current()&&runtime.Current();
             stage=103;var journal=SodaDesktopSigninRunStorage.OpenHost(Owner,package.ManifestSha256,runtime.BarrierSha256,retained);
             stage=104;run=SodaDesktopSigninRunSession.Open(journal,Owner,retained,stop);if(!run.Ready())throw Failure();
-            stage=105;child=SodaDesktopSigninProcess.Start(Plan.Installed(package,runtime.Path),()=>!stop.WaitOne(0)&&retained(),()=>run.Resume(),()=>run.ConfirmResume());
+            stage=105;workers=new SodaDesktopSigninProcess.HostJobs(Owner,run.WorkerIdentity);child=SodaDesktopSigninProcess.Start(Plan.Installed(package,runtime.Path),()=>!stop.WaitOne(0)&&retained(),()=>run.Resume(),()=>run.ConfirmResume());
             stage=106;while(!stop.WaitOne(250)&&retained()&&child.Running()){}
             stage=107;if(stop.WaitOne(0)){if(!child.TryGraceful())throw Failure();}
             else if(!retained()||!child.ExitedSuccessfully()||!child.TryGraceful())throw Failure();
-            stage=108;run.Complete(child,retained);stage=109;WaitAfterCompletion(run,stop,retained);
+            stage=108;run.CompleteCore(()=>child.TryGraceful()&&workers.Empty(),retained);stage=109;WaitAfterCompletion(run,stop,retained);
         }catch{throw new StartupFailure(stage);}finally {
             // Holding the entire package until ALL descendants stop is mandatory.
             // On an OS failure never release the leases to a surviving child.
             if(child!=null&&!child.Stop())Environment.FailFast("Signin host could not stop its child");
-            if(child!=null)child.Dispose();if(run!=null)run.Dispose();if(runtime!=null)runtime.Dispose();if(package!=null)package.Dispose();
+            if(workers!=null&&!workers.Stop())Environment.FailFast("Signin host could not stop session workers");
+            if(workers!=null)workers.Dispose();if(child!=null)child.Dispose();if(run!=null)run.Dispose();if(runtime!=null)runtime.Dispose();if(package!=null)package.Dispose();
         }
     }
     // Keep a clean normal Host alive until a controller can pin it and request

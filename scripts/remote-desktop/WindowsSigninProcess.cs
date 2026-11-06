@@ -31,6 +31,35 @@ internal static class SodaDesktopSigninProcess {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool CreatePipe(out IntPtr read,out IntPtr write,ref SA sa,uint size);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool SetHandleInformation(IntPtr handle,uint mask,uint flags);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool WriteFile(IntPtr handle,byte[] bytes,uint count,out uint written,IntPtr overlapped);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern IntPtr CreateJobObjectW(ref SA sa,string name);
+    static bool EmptyJob(IntPtr job){Accounting data;return job!=IntPtr.Zero&&QueryInformationJobObject(job,1,out data,(uint)Marshal.SizeOf(typeof(Accounting)),IntPtr.Zero)&&data.Active==0;}
+    static bool StopJob(IntPtr job){
+        if(job==IntPtr.Zero||!TerminateJobObject(job,1))return false;var timer=Stopwatch.StartNew();
+        while(timer.ElapsedMilliseconds<8000){if(EmptyJob(job))return true;Thread.Sleep(10);}return false;
+    }
+    // Both sides derive this name from the protected, observed run. Never accept
+    // a job name or parent PID from Node, an environment variable, or an RPC.
+    internal static string HostJobName(string owner,SodaDesktopSigninRunRecord started){
+        Require(started!=null&&started.Kind=="started"&&started.Owner==SodaDesktopSigninPackage.OwnerSid(owner));
+        return @"Global\SodaDesktopSigninWorkers-"+SodaDesktopSigninPackage.Slot(owner)+"-"+started.RunId+"-"+started.Field("pid")+"-"+started.Field("createdFiletime");
+    }
+    internal sealed class HostJobs:IDisposable {
+        IntPtr job;bool stopped;
+        internal HostJobs(string owner,SodaDesktopSigninRunRecord started){
+            Require(SodaDesktopSigninVault.SystemPrimary()&&Process.GetCurrentProcess().SessionId==0);
+            using(var self=Process.GetCurrentProcess())Require(self.Id==(long)started.Field("pid")&&self.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture)==(string)started.Field("createdFiletime"));
+            var acl=new System.Security.AccessControl.RawSecurityDescriptor("O:SYG:SYD:P(A;;GA;;;SY)");byte[] bytes=new byte[acl.BinaryLength];acl.GetBinaryForm(bytes,0);IntPtr descriptor=Marshal.AllocHGlobal(bytes.Length);
+            try{Marshal.Copy(bytes,0,descriptor,bytes.Length);var sa=new SA{Size=Marshal.SizeOf(typeof(SA)),Descriptor=descriptor};
+                job=CreateJobObjectW(ref sa,HostJobName(owner,started));int error=Marshal.GetLastWin32Error();Require(job!=IntPtr.Zero);
+                // A preexisting object is never adopted, modified or terminated.
+                if(error==183){Close(ref job);throw new InvalidOperationException("Signin worker job already exists");}
+                var limits=new Limits();limits.Basic.Flags=0x2000;Require(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(typeof(Limits))));Require(EmptyJob(job));
+            }catch{Close(ref job);throw;}finally{Marshal.FreeHGlobal(descriptor);}
+        }
+        internal bool Empty(){return !stopped&&EmptyJob(job);}
+        internal bool Stop(){if(stopped)return true;if(!StopJob(job))return false;stopped=true;return true;}
+        public void Dispose(){if(!Stop())Environment.FailFast("Signin session workers could not stop");Close(ref job);}
+    }
     static void Require(bool value){if(!value)throw SodaDesktopSigninHost.Failure();}
     static void Close(ref IntPtr value){if(value!=IntPtr.Zero&&value!=new IntPtr(-1))CloseHandle(value);value=IntPtr.Zero;}
     internal static void Layouts(){Require(IntPtr.Size==8&&Marshal.SizeOf(typeof(SI))==104&&Marshal.SizeOf(typeof(SX))==112&&Marshal.SizeOf(typeof(Limits))==144&&Marshal.SizeOf(typeof(Accounting))==48);}
@@ -69,6 +98,9 @@ internal static class SodaDesktopSigninProcess {
         var inherited=new IntPtr[3];var process=new PI();bool initialized=false,transferred=false;
         try {
             job=CreateJobObjectW(IntPtr.Zero,null);Require(job!=IntPtr.Zero);
+            // The verified SCM Host may belong to an OS-owned outer Job, but
+            // must never join the anonymous Node Root that only it owns.
+            using(var self=Process.GetCurrentProcess()){bool member;Require(IsProcessInJob(self.Handle,job,out member)&&!member);}
             var limits=new Limits();limits.Basic.Flags=0x2000;Require(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(typeof(Limits))));
             var sa=new SA{Size=Marshal.SizeOf(typeof(SA)),Inherit=1};
             Require(CreatePipe(out inherited[0],out stopWrite,ref sa,4096));Require(SetHandleInformation(stopWrite,1,0));

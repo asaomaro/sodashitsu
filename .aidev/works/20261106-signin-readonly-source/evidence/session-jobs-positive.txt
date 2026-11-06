@@ -1,0 +1,24 @@
+stdout:
+{
+    "probe":  {
+                  "code":  0,
+                  "error":  "",
+                  "probe":  {
+                                "passed":  true,
+                                "session":  1,
+                                "neverResumed":  true,
+                                "twoWorkers":  true,
+                                "individualIsolation":  true,
+                                "rootIsolation":  true,
+                                "callerContained":  true,
+                                "aggregateReaped":  true,
+                                "breakaway":  false
+                            }
+              },
+    "taskRemoved":  true,
+    "taskResult":  0,
+    "unchanged":  true,
+    "sddl":  "O:BAG:BAD:PAI(A;;FA;;;SY)(A;;FA;;;BA)"
+}
+
+stderr:

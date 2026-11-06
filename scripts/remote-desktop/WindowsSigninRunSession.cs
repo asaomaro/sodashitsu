@@ -29,6 +29,7 @@ internal sealed class SodaDesktopSigninRunSession:IDisposable {
             var result=new SodaDesktopSigninRunSession(journal,admission,observation,started,wall,()=>!stopped()&&current(),()=>!stopped(),(string)intent.Field("mode")=="admin");transferred=true;return result;
         }finally{if(!transferred){if(observation!=null)observation.Close();if(admission!=null)admission.Close();if(journal!=null)journal.Dispose();}}
     }
+    internal SodaDesktopSigninRunRecord WorkerIdentity{get{lock(gate){if(ended||resumed)throw Failure();return started;}}}
     internal bool Ready(){lock(gate){return !ended&&!resumed&&observation.CanResume(current);}}
     internal bool Resume(){lock(gate){if(ended||resumed||!observation.TakeResume(current)){ended=true;return false;}resumed=true;return true;}}
     internal bool ConfirmResume(){lock(gate){if(ended||!resumed||finalized||!observation.ConfirmResume(immediate)){ended=true;return false;}finalized=true;return true;}}

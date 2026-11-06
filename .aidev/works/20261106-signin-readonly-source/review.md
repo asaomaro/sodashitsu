@@ -12,3 +12,13 @@ evidenceを保存。旧Runtimeはbyteexact復元。実機での本番サービ�
 統合版も別contextで全差分再レビュー、mustなし。既存oneoff/固定共有分岐のguardを確認。
 package path集合は変更せず、旧manifestからのstrict Upgradeを維持する構成にした。
 統合版native最終fixtureは20秒継続＋3拒否ケース成功、runtime不変/Jobzero/task削除。
+
+
+## 2026-11-07 cross-session native Job修正
+
+独立review_resource_monitorで製品5files、fixture、各setupの固定hash/ACL/task/cleanupを点検。追加mustなし。
+当初の全Job外条件は実機outer Jobに適合しないため、実Root handleでのHost非所属へ変更。
+RootをbrokerへOpenさせる案はself-held handleによるkill-on-close妨害があるため採用しない。
+最終native fixtureはRoot handleを持つGateだけがmembershipを照合し、明示親とworker双方のRoot非所属を確認。
+positive task0、negativeは親属性のみ旧状態でCreateProcessAsUserWエラー5、source byteExact復元。
+詳細と生出力はevidence/session-jobs-*。実サービス導入成功はまだ主張しない。

@@ -1,0 +1,5 @@
+{
+  "exitCode": 0,
+  "stdout": "{\r\n    \"probe\":  {\r\n                  \"code\":  0,\r\n                  \"error\":  \"\",\r\n                  \"probe\":  {\r\n                                \"passed\":  true,\r\n                                \"session\":  1,\r\n                                \"neverResumed\":  true,\r\n                                \"twoWorkers\":  true,\r\n                                \"individualIsolation\":  true,\r\n                                \"rootIsolation\":  true,\r\n                                \"callerContained\":  true,\r\n                                \"aggregateReaped\":  true,\r\n                                \"breakaway\":  false\r\n                            }\r\n              },\r\n    \"taskRemoved\":  true,\r\n    \"taskResult\":  0,\r\n    \"unchanged\":  true,\r\n    \"sddl\":  \"O:BAG:BAD:PAI(A;;FA;;;SY)(A;;FA;;;BA)\"\r\n}\r\n",
+  "stderr": ""
+}

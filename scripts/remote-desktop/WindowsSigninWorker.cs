@@ -42,8 +42,9 @@ public static class SodaDesktopSigninWorker {
         using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open()){
             uint console=SodaDesktopSigninWorkerNative.WTSGetActiveConsoleSessionId();Require(console>0&&console<=Int32.MaxValue);Guid nonce=Guid.NewGuid();
             if(purpose==Purpose.Presence){Require(package.Current());Send(parentOut,new{type="signin_context",ownerSid=Owner,packageRoot=Path.GetDirectoryName(package.Bootstrap),stateDir=runtime.Path});}
+            using(var host=SodaDesktopSigninWorkerNative.HostBinding.Open(Owner,package.ManifestSha256,runtime.BarrierSha256,()=>package.Current()&&runtime.Current()))
             using(var pipe=SodaDesktopSigninWorkerNative.Server(SodaDesktopSigninWorkerNative.PipeName(Owner,nonce))){
-                uint pid;var child=SodaDesktopSigninWorkerNative.Start(Owner,nonce,(int)console,purpose,runtime.Path,out pid);
+                uint pid;var child=SodaDesktopSigninWorkerNative.Start(Owner,nonce,(int)console,purpose,runtime.Path,host,out pid);
                 try{
                     var pending=Task.Factory.FromAsync(pipe.BeginWaitForConnection,pipe.EndWaitForConnection,null);var timer=Stopwatch.StartNew();
                     pending.ContinueWith(failed=>failed.Exception.Handle(error=>true),TaskContinuationOptions.OnlyOnFaulted|TaskContinuationOptions.ExecuteSynchronously);

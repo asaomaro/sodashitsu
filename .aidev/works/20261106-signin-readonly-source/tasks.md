@@ -31,3 +31,22 @@ raw OpenStandardOutput UTF8 Write/FlushとOpenStandardInput strictUTF8 readerへ
 旧検証やschemaは緩めず、新workerと共通読取を既存read-signin-enrollment.ps1に統合。
 固定-ReadonlySource分岐のみ-StateDirを受け、従来oneoffは-StateDirを拒否して1回返却/終了。
 package三つのリストはHEADと完全一致。最終System実機fixtureでも更新scriptの20秒継続/拒否3件を確認。
+
+
+## Session間worker起動の修正（2026-11-07）
+
+- [x] 実機のCreateProcessAsUserW Win32 5を固定stage診断で特定。
+- [x] protected observed Host identityからの明示parentとHost保持aggregate/individual Jobを実装。
+- [x] Root handleで自Host非所属を確認。Rootはbreakawayなし、anonymous、Hostのみ保持。
+- [x] 正常/異常終了はRootとaggregate双方0確認を維持。
+- [x] Windows native Host/RunSession/Worker既存checksとcompile/staging成功。
+- [x] native suspended fixtureでcaller Root所属、指定親/worker Root非所属、2 Job所属、個別peer維持、全回収を実確認。
+- [x] 親属性のみ旧状態へ戻すnegativeは同一fixtureでWin32 5により失敗。修正sourceをbyteExact復元。
+- [x] 関連75 tests/server build成功。製品差分とfixture/setupの独立レビュー必須指摘なし。
+- [ ] mainへ反映、現在の異常runを結果unknownのまま保存し、標準Upgradeで実導入。
+- [ ] actual service HostBinding/長時間接続/通知/再起動前ログインなしの検証。
+
+fixtureはOS動作検証用で、製品Host認証の成功とは分ける。固定sshdを保持handleで読取のみ確認して明示親にする。
+全workerはCREATE_SUSPENDEDのまま、一度もResumeしない。__FIXTURE_ROOT__はreview済みprivate rootへstage時に固定する。
+negativeのunchanged=falseは、意図した例外終了でverified markerを発行しなかったことを表す。鍵変更を表すものではない。
+直後のreadonly snapshotはtask0/unchanged=true、runtime digest d583496c...を確認した。

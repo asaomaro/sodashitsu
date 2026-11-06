@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-07",
+  "machine": "sr-pc",
+  "installedPackageSha256": "b38c76f6651efdd8de19f773910f3310717453ac4c59f87e73b04a055f4a780d",
+  "serviceState": "stopped",
+  "serviceExit": 1066,
+  "serviceSpecificExit": 107,
+  "probe": {
+    "created": false,
+    "stage": 11,
+    "operation": "CreateProcessAsUserW",
+    "win32": 5,
+    "taskResult": 0,
+    "taskRemoved": true,
+    "runtimeUnchanged": true
+  },
+  "interpretation": "The read-only presence worker creation was denied. Service startup has not been verified. No successful or clean run outcome is inferred."
+}

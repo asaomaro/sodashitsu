@@ -1,0 +1,16 @@
+{
+  "result": {
+    "ok": true,
+    "action": "recover",
+    "receipt": {
+      "state": "recovered",
+      "originalOutcome": "unknown",
+      "cleanExitClaimed": false,
+      "keysPreserved": true,
+      "started": false,
+      "runsArchive": "runs-postboot-normal-bfa3211df71a4bfc9479ed8f0ba5b6eb",
+      "receipt": "postboot-normal-bfa3211df71a4bfc9479ed8f0ba5b6eb.json"
+    }
+  },
+  "taskResult": 0
+}

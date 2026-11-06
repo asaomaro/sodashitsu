@@ -1,0 +1,17 @@
+stdout:
+{
+    "taskResult":  1,
+    "failure":  {
+                    "errorKind":  "InvalidOperationException"
+                },
+    "unchanged":  false,
+    "sddl":  "O:BAG:BAD:PAI(A;;FA;;;SY)(A;;FA;;;BA)",
+    "taskRemoved":  true,
+    "probe":  {
+                  "code":  1,
+                  "error":  "\"2\" 個の引数を指定して \"Run\" を呼び出し中に例外が発生しました: \"Native session Job check failed at 7: 5\"\r\n発生場所 C:\\Program Files\\Sodashitsu\\.vault-readonly-74719db532e24e1cbd5b16889c50424a\\start.ps1:6 文字:1\r\n+ [SodaFixedSessionJobsFixture]::Run([int]$svc.ProcessId,$parent.StartT ...\r\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException\r\n    + FullyQualifiedErrorId : InvalidOperationException\r\n \r\n",
+                  "probe":  null
+              }
+}
+
+stderr:
