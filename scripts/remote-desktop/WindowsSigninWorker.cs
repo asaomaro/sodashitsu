@@ -31,6 +31,14 @@ public static class SodaDesktopSigninWorker {
         if(purpose!=Purpose.Presence&&type=="configure"){Keys(message,"type","width","fps","quality");Integer(message,"width",320,1920);Integer(message,"fps",1,30);Integer(message,"quality",20,90);return;}
         Keys(message,"type");Require(type=="heartbeat"||type=="stop");
     }
+    // Presence has no pixels, coordinates or input. Its native desktop/WTS
+    // observer still revokes on display changes; each view/input worker binds
+    // and rechecks its own physical target independently.
+    static SodaDesktopSigninTarget.Snapshot InitialTarget(Purpose purpose,Func<SodaDesktopSigninTarget.Snapshot> read){PurposeName(purpose);return purpose==Purpose.Presence?null:read();}
+    static SodaDesktopSigninScope.Facts ReadScope(Purpose purpose,Func<bool> targetCurrent,Func<SodaDesktopSigninScope.Facts> nativeRead){
+        PurposeName(purpose);if(purpose==Purpose.Presence)return nativeRead();
+        if(!targetCurrent())return new SodaDesktopSigninScope.Facts();var facts=nativeRead();if(!targetCurrent())facts.Candidate=false;return facts;
+    }
     internal const string Owner="__SIGNIN_WORKER_OWNER_SID__";
     static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=3000000,RecursionLimit=8};
     static Exception Failure(){return new InvalidOperationException("Signin worker is unavailable");}
@@ -178,8 +186,8 @@ public static class SodaDesktopSigninWorker {
             SodaDesktopSigninScopeNative native;try{native=new SodaDesktopSigninScopeNative(Owner,session,brokerPid,brokerStarted,nonce);}catch(SodaDesktopSigninInactiveException){InactivePresence(purpose,type=>Send(writer,new{type}),()=>Line(reader,16384));return;}
             using(native)using(var self=Process.GetCurrentProcess()){
                 var clock=Stopwatch.StartNew();var scope=new SodaDesktopSigninScope(session,brokerPid,brokerStarted,self.Id,self.StartTime.ToUniversalTime().Ticks,nonce,input,()=>clock.ElapsedMilliseconds);
-                var initialTarget=Target();var target=new SodaDesktopSigninTarget(initialTarget,Target);
-                Func<SodaDesktopSigninScope.Facts> read=()=>{if(!target.Current())return new SodaDesktopSigninScope.Facts();var facts=native.Read();if(!target.Current())facts.Candidate=false;return facts;};
+                var initialTarget=InitialTarget(purpose,Target);var target=initialTarget==null?null:new SodaDesktopSigninTarget(initialTarget,Target);
+                Func<SodaDesktopSigninScope.Facts> read=()=>ReadScope(purpose,()=>target.Current(),native.Read);
                 Func<bool> current=()=>package.Current()&&scope.Current(read);var commands=new BlockingCollection<string>(32);var held=new HashSet<ushort>();var buttons=new HashSet<int>();bool stop=false,configured=false;long pending=0,lastBeat=0,next=0;int width=1280,fps=10,quality=65;
                 var presence=new SodaDesktopSigninPresence(()=>clock.ElapsedMilliseconds,current);
                 var thread=new Thread(()=>{try{string line;while((line=Line(reader,16384))!=null){if(!commands.TryAdd(line))break;}}catch{}finally{try{commands.CompleteAdding();}catch{}}}){IsBackground=true};thread.Start();
@@ -272,6 +280,17 @@ public static class SodaDesktopSigninWorker {
             catch(ObjectDisposedException){throw new InvalidOperationException("Pump reflushed a closed pipe");}
             order.Add("terminal");Generated(childStopped&&order.Count==2&&order[0]=="job-zero"&&order[1]=="terminal","Pump terminal preceded child cleanup");
             bool closed=false;try{pipe.ReadByte();}catch(ObjectDisposedException){closed=true;}Generated(closed,"Pump left pipe open");
+        }
+        int targetReads=0;var calls=new List<string>();Func<SodaDesktopSigninTarget.Snapshot> readTarget=()=>{targetReads++;return initial;};
+        Generated(InitialTarget(Purpose.Presence,readTarget)==null&&targetReads==0,"Presence enumerated physical target");
+        var presenceFacts=ReadScope(Purpose.Presence,()=>{calls.Add("target");return false;},()=>{calls.Add("native");return new SodaDesktopSigninScope.Facts{Candidate=true};});
+        Generated(presenceFacts.Candidate&&String.Join(",",calls)=="native","Presence blocked on physical target");
+        foreach(var normalPurpose in new[]{Purpose.View,Purpose.Input}){
+            int prior=targetReads;Generated(InitialTarget(normalPurpose,readTarget)==initial&&targetReads==prior+1,"Viewer skipped initial target");
+            calls.Clear();var checkedFacts=ReadScope(normalPurpose,()=>{calls.Add("target");return true;},()=>{calls.Add("native");return new SodaDesktopSigninScope.Facts{Candidate=true};});
+            Generated(checkedFacts.Candidate&&String.Join(",",calls)=="target,native,target","Viewer skipped target recheck");
+            calls.Clear();checkedFacts=ReadScope(normalPurpose,()=>{calls.Add("target");return false;},()=>{calls.Add("native");return new SodaDesktopSigninScope.Facts{Candidate=true};});Generated(!checkedFacts.Candidate&&calls.Count==1,"Viewer accepted missing target");
+            int checks=0;checkedFacts=ReadScope(normalPurpose,()=>++checks==1,()=>new SodaDesktopSigninScope.Facts{Candidate=true});Generated(!checkedFacts.Candidate&&checks==2,"Viewer accepted changed target");
         }
         int contextCalls=0;Generated(ContextRoute(new[]{"--context"},()=>contextCalls++)&&contextCalls==1,"Context route not dispatched");
         foreach(var argv in new[]{new string[0],new[]{"--context","input"},new[]{"--broker","presence"},new[]{"--worker"},new[]{"context"}})Generated(!ContextRoute(argv,()=>contextCalls++)&&contextCalls==1,"Context route accepted other purpose");

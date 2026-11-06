@@ -63,3 +63,11 @@ review_resource_monitorでPumpStartupCase・snapshot・receipt・17pinsを独立
 
 review_resource_monitorで共通WithPipeText/Pump/Run、陰性とbyte復元の結果を再点検。必須指摘なし。
 inactive return、Release→scope閉鎖→pipe閉鎖→読取thread joinは維持。workerの不要なFlush例外を除去する。
+
+## readonly切り分けとpresenceのTarget分離
+
+ConsoleFacts/Native launcherは固定sshd保持pin・個別/aggregate Job・固定readonly winexeのみResume。
+入力/画面取得/desktop switch/実状態変更は追加しない。元のTask.RunEx拒否は再利用せず無効化。
+独立レビューでprivate-copy不足と成功判定不足を指摘し、実行前に是正。実fixtureはtask0/Job0/handle復元を確認。
+Target分離の安全点検では、Presenceにpixels/座標/inputがなく後続workerが独立target検証することを確認。
+view/inputの初期と前後照合、native desktop/WTS/observer失効、既存期限は維持する。

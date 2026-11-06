@@ -124,3 +124,27 @@ Boot receiptの成功は起動観測ACKに限り、継続稼働や操作成功�
 - [x] 実NamedPipe回帰・共通helperのusingのみ戻す28controls・byte復元成功。独立レビュー必須指摘なし。
 - [x] package44060実boot更新/startACK成功、newSCM1272:134384635154411000、Host13176/runf2ee03df…、Running0/0を継続観測。
 - [ ] signin aliasはreconnecting。prelogin画面接続/通知は未検証。サービスRunningと接続成功を混同しない。
+
+## a841実更新とreadonly切り分け
+
+- [x] 73a088b4 package a84100a5…をreadonly Preview後、正常停止44060から標準Upgrade。待機側50秒の上限後に観測のみでtask0/receipt確認。再実行なし。
+- [x] fresh453d start一回、run d54273a2… ACK、実Host10260 Running0/0。
+- [x] readonly console fixture（GUI exe、入力/画面取得なし）を個別/aggregate Jobで実行。終了0/Job0/自身station/thread復元、task削除確認。
+- [x] 実Session1/WTSConnected/emptyuser/QueryToken1008/SystemTcb/WinSta0/Winlogon/Candidate/Targetすべて確認。private非表示windowのWinEvent markerも成功。
+- [ ] signin alias reconnectingの原因は継続調査。実Broker presence単独検査を準備。
+
+元Task.RunExはArgumentExceptionで実行前拒否。一回claimを再利用せず無効化。
+readonly console fixtureのtask上限は1分、子の上限は8秒。実行ファイル/親sshd実体を固定し、任意プログラムの入口はない。
+
+## presenceの遅延とTarget分離
+
+- [x] 実製品Brokerを固定presence専用・15秒heartbeatで検査、ctx1/pulse6/terminal1/exit0。capture/inputの起動なし。
+- [x] fresh18秒の時間計測でfirstContext283ms/firstPulse5173ms/最大gap12959ms/2pulseを確認。JS側1000ms期限では継続できない。
+- [x] 時間はPSの20ms polling時点。境界近傍の厳密判定とせず、今回の秒単位の差を観測する。
+- [x] Consoleの単独candidate3ms/marker59ms/Target44ms。Targetだけが主因とはまだ断定しない。
+- [x] PresenceのみInitialTarget/ReadScopeで物理target列挙・照合をしない。native WTS/desktop/observer/WM_DISPLAYCHANGEと1秒期限は保持。view/inputは従来の初期/前後target検証を維持。
+- [x] 30 native controls成功、2追加負例でpresenceの初期/継続target参照の退行を捕捉しbyte復元。
+- [ ] 実package更新後にpulse間隔・alias・画面を再確認。
+
+最初の負例if(false)はCodeDomのwarning-as-errorでassertに届かなかったため無効とし、分岐削除へ直して再実行した。
+検査setupは登録前の固定stage hash/privateコピーを独立点検し、missing copyの指摘を実行前に修正。

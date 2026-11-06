@@ -15,6 +15,8 @@ try {
     if($code -ne 0 -or -not (($output|Out-String).Contains('signin_worker_generated_data_and_abi_passed'))){throw 'Generated worker checks failed'}
     if($NegativeControls){
         $variants=@(
+            @('presence-target-initial','WindowsSigninWorker.cs','return purpose==Purpose.Presence?null:read();','return read();','Presence enumerated physical target'),
+            @('presence-target-read','WindowsSigninWorker.cs','if(purpose==Purpose.Presence)return nativeRead();','','Presence blocked on physical target'),
             @('pump-closed-writer','WindowsSigninWorker.cs','var writer=new StreamWriter(pipe,new UTF8Encoding(false),writeSize,true);action(reader,writer);','using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),writeSize,true)){action(reader,writer);}','Pump reflushed a closed pipe'),
             @('context-route','WindowsSigninWorker.cs','if(args.Length!=1||args[0]!="--context")return false;','if(args.Length!=1)return false;','Context route accepted other purpose'),
             @('control-reentry','WindowsSigninScope.cs','CurrentCore(read)||ended||revision!=controlRevision','CurrentCore(read)||ended','Reentrant release was overwritten'),
@@ -58,7 +60,7 @@ try {
         }
         $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object {Write-Output ([string]$_)}
         if($code -ne 0){throw 'Restored worker checks failed'}
-        'signin_worker_28_source_negative_controls_and_restore_passed'
+        'signin_worker_30_source_negative_controls_and_restore_passed'
     }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0
