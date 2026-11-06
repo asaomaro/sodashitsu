@@ -9,7 +9,7 @@
 - [x] native SYSTEM readonly fixtureで20.059秒継続、外側Abortまで有効。task削除/Jobzero/runtime不変。
 - [x] 統合版native通常non-admin token拒否、unknown op/foreign ACL path/oversize line拒否。
 - [x] 統合版も20秒継続+拒否3件成功（22.190秒）、task削除/Jobzero/runtime不変。
-- [ ] 実装最終レビュー、main push。
+- [x] 実装最終レビュー、1f7aff4eでmain push。
 - [ ] 既存鍵/viewer/enrollment/historyを保持してprotected package更新、サインイン前実接続と再起動検証。
 
 初回fixtureのStateDir過剰escapeはJSON.stringifyへ修正。修正後もwarmup timeout。
