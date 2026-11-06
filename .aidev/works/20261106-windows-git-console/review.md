@@ -1,0 +1,6 @@
+# 独立レビュー
+
+review_resource_monitorがwindowsHide以外の条件維持、旧/新hash、PID/creation/owner/Session/
+listener、CreateNew backup、書込失敗時の復元を確認。snapshot失敗時にもhandoffが続く
+初版wrapperには指摘があり、初回snapshot失敗時は終了、操作前CreateNew claimへ修正。
+再レビューで必須指摘なし。レビュー側では実機操作とテストの再実行を行っていない。

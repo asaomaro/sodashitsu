@@ -1,0 +1,43 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+ ❯ src/infra/GitRunner.windows.test.ts (1 test | 1 failed) 38ms
+   × runs background git without a Windows console and preserves its piped result 36ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/infra/GitRunner.windows.test.ts > runs background git without a Windows console and preserves its piped result
+AssertionError: expected { Object (cwd, stdio, ...) } to match object { windowsHide: true, stdio: [ …(3) ] }
+(69 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -2,7 +2,6 @@
+    "stdio": [
+      "ignore",
+      "pipe",
+      "pipe",
+    ],
+-   "windowsHide": true,
+  }
+
+ ❯ src/infra/GitRunner.windows.test.ts:11:62
+      9|  const result=new ChildProcessGitRunner().run('C:\\generated-repositor…
+     10|  // The Windows default terminal must not receive a new visible consol…
+     11|  const options=launch.mock.calls[0]?.[2];try{expect(options).toMatchOb…
+       |                                                              ^
+     12|  finally{child.stdout.write(' M example.txt\n');child.stderr.write('ge…
+     13|  await expect(result).resolves.toEqual({code:0,stdout:' M example.txt\…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:56:38
+   Duration  433ms (transform 50%, import 25%, tests 21%, worker 4%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/infra/GitRunner.windows.test.ts

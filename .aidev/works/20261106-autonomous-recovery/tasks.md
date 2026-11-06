@@ -76,3 +76,50 @@ SYSTEM task終了/削除、Jobzero、runtime digest不変を確認。正常な�
 
 利用者の復旧経路を用意する指示に基づき、接続元と専用鍵を限定したWindows標準SSHを
 別途準備中。秘密鍵はlocalstateの専用0600ファイルに置き、リポジトリへ含めない。
+
+
+## 利用者によるsr-pc操作の一時停止
+
+利用者が「sr-pcをしばらく使うので、一旦sr-pc側への操作は停止」と指示。
+sr-pcへの新規exec/照会/設定/検証は行わず、リモート画面のbrowserをcloseして切断済み。
+ローカルの既存receiptだけを確認したところ、SSH v7の昇格PowerShellは終了コード
+-1073741510 (0xC000013A)で中断終了していた。新しいremote照会はしていないため、
+Windows capability処理の完了/途中状態、SSH設定・サービスの有無は未確認。
+再開指示までsr-pcへのアクセスを停止する。次回は最初に現物状態を読み取ってから
+復旧経路の続行を判断し、同installerを盲目的に再実行しない。
+
+SSH最終sourceは/tmp/soda-install-recovery-ssh.ps1、stage名install-recovery-ssh-20261106-v7.ps1、
+結果予定rootはC:\Program Files\Sodashitsu\RecoverySsh20261106d。
+専用private keyはlocalstateのsrpc-recovery-20261106/identityに保持、非repo。
+public-statusはこの停止指示後には読み取っていない。
+
+ACL batchは13a9c668でmainへpush済み。残る期限切れ対策の案は
+../20261106-signin-readonly-source/design.md。ローカル案のみで実機未導入。
+
+
+## Terminal連続開閉の緊急停止
+
+利用者が「繋いで良いので停止させて」と、原因確認と停止に限り再接続を許可。
+Session1の通常Soda Node18040がgit.exeを繰り返し起動し、その直後にWindowsTerminalが
+新規作成されることを12秒のCIM追跡で確認。こちらのlocal実行controllerは残っていなかった。
+Gitだけ停止する既存APIがないため、端末内の子プロセスをkillせず、通常serverだけを
+NtSuspendProcessで一時停止。Boot(Session0)を経由し、host/owner/Session1/node/main.js/
+7780 listener/creationを検証し、保持したhandleでcreationを再照合後に実行。
+独立点検で必須指摘なし。receipt: PID18040 / createdFileTime134384363801563095。
+6秒間の再確認で新Git child 0、同じ通常serverの生存を確認。
+
+通常操舵室は一時停止中であり、その接続は応答しない。pane内プログラムは保持。
+新たなsr-pc操作はここで停止し、利用者の再開指示までresumeも行わない。
+再開はoperational/resume-normal-server.ps1のinstance束縛を使って、同一PID/creationだけに
+行うこと。OS再起動や別serverへは適用しない。保守接続は別PID3620/Session0。
+再開前にGitのWindows非表示spawn設定の不足を確認し、連続表示の修正を準備する。
+
+
+## 再開許可後の通常server復帰
+
+利用者の「作業再開してOK」でsr-pcの操作停止制約が解除された。
+GitRunnerのhidden指定欠落を修正し、期待SHAのdist moduleだけに最小反映。
+PID18040/creation134384363801563095を再検証してNtResumeProcessで復帰後、
+標準Windows handoff成功。pane UUID2件と親PID一致、実行中pane1件の維持を確認。
+16秒の観察でGit child2/新WindowsTerminal0。通常serverは現在一時停止中ではない。
+詳細は../20261106-windows-git-console/へ保存。

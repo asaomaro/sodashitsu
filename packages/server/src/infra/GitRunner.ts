@@ -14,7 +14,7 @@ export class ChildProcessGitRunner implements GitRunner {
   async run(cwd: string, args: string[], timeoutMs: number): Promise<{ code: number; stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       // `LC_ALL=C`：失敗の種類を git の**英語の**診断で見分けるため（訳されると判別が壊れる。herdr も同じ）。
-      const child = spawn("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, LC_ALL: "C" } });
+      const child = spawn("git", args, { cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, LC_ALL: "C" } });
       let stdout = "";
       let stderr = "";
       let settled = false;
