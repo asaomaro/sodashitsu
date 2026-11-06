@@ -65,15 +65,19 @@ public static class SodaDesktopSigninWorker {
     // exit, so its borrowed writer must not be disposed while that thread lives.
     // In particular, Dispose would Flush the already closed pipe even with
     // leaveOpen=true. Every transmitted line is explicitly flushed instead.
+    static void WithPipeText(Stream pipe,int readSize,int writeSize,Action<StreamReader,StreamWriter> action){
+        using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,readSize,true)){
+            var writer=new StreamWriter(pipe,new UTF8Encoding(false),writeSize,true);action(reader,writer);
+        }
+    }
     static void Pump(TextReader parentIn,TextWriter parentOut,Stream pipe,Func<bool> running,Func<bool> current,Func<bool> stopChild){
-        using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,65536,true))using(var stop=new ManualResetEvent(false)){
-            var writer=new StreamWriter(pipe,new UTF8Encoding(false),4096,true);
+        WithPipeText(pipe,65536,4096,(reader,writer)=>{using(var stop=new ManualResetEvent(false)){
             var inbound=new Thread(()=>{try{string line;while((line=Line(parentIn,16384))!=null){writer.WriteLine(line);writer.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
             var outbound=new Thread(()=>{try{string line;while((line=Line(reader,3000000))!=null){parentOut.WriteLine(line);parentOut.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
             inbound.Start();outbound.Start();var timer=Stopwatch.StartNew();while(!stop.WaitOne(50)&&running()&&current()&&timer.ElapsedMilliseconds<120000){}
             if(!stopChild())Environment.FailFast("Signin worker could not stop");pipe.Dispose();
             if(!outbound.Join(1000))Environment.FailFast("Signin output did not stop");
-        }
+        }});
     }
     // Context inspection verifies the installed SYSTEM image and private runtime
     // but never queries/opens a desktop or creates a Winlogon child.
@@ -170,7 +174,7 @@ public static class SodaDesktopSigninWorker {
         Require(SodaDesktopSigninVault.SystemPrimary());
         using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open())using(var pipe=new NamedPipeClientStream(".",SodaDesktopSigninWorkerNative.PipeName(Owner,nonce),PipeDirection.InOut,PipeOptions.None,System.Security.Principal.TokenImpersonationLevel.Anonymous)){
             pipe.Connect(5000);uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeServerProcessId(pipe.SafePipeHandle,out actual)&&actual==(uint)brokerPid);
-            using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,16384,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),65536,true)){
+            WithPipeText(pipe,16384,65536,(reader,writer)=>{
             SodaDesktopSigninScopeNative native;try{native=new SodaDesktopSigninScopeNative(Owner,session,brokerPid,brokerStarted,nonce);}catch(SodaDesktopSigninInactiveException){InactivePresence(purpose,type=>Send(writer,new{type}),()=>Line(reader,16384));return;}
             using(native)using(var self=Process.GetCurrentProcess()){
                 var clock=Stopwatch.StartNew();var scope=new SodaDesktopSigninScope(session,brokerPid,brokerStarted,self.Id,self.StartTime.ToUniversalTime().Ticks,nonce,input,()=>clock.ElapsedMilliseconds);
@@ -217,7 +221,7 @@ public static class SodaDesktopSigninWorker {
                         }});Thread.Sleep(2);
                     }
                 }finally{presence.Close();CleanupPurpose(purpose,()=>Release(held,buttons,current));scope.Close();pipe.Dispose();if(!thread.Join(1000))Environment.Exit(1);commands.Dispose();}
-            }}
+            }});
         }
     }
     static void Generated(bool value,string message){if(!value)throw new InvalidOperationException(message);}

@@ -1,0 +1,309 @@
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+signin_worker_generated_data_and_abi_passed
+negative pump-closed-writer
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Pump reflushed a closed pipe" ---> System.InvalidOperationException: Pump reflushed a closed pipe
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative context-route
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Context route accepted other purpose" ---> System.InvalidOperationException: Context route accepted other purpose
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative control-reentry
+System.Management.Automation.MethodInvocationException: Exception calling "Run" with "0" argument(s): "Reentrant release was overwritten" ---> System.InvalidOperationException: Reentrant release was overwritten
+   at SodaDesktopSigninScopeChecks.Run()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative frame-serial
+System.Management.Automation.MethodInvocationException: Exception calling "Run" with "0" argument(s): "Replaced frame ticket published" ---> System.InvalidOperationException: Replaced frame ticket published
+   at SodaDesktopSigninScopeChecks.Run()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative frame-age
+System.Management.Automation.MethodInvocationException: Exception calling "Run" with "0" argument(s): "Stale frame published" ---> System.InvalidOperationException: Stale frame published
+   at SodaDesktopSigninScopeChecks.Run()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative drawn-frame
+System.Management.Automation.MethodInvocationException: Exception calling "Run" with "0" argument(s): "Acknowledgement before publication accepted" ---> System.InvalidOperationException: Acknowledgement before publication accepted
+   at SodaDesktopSigninScopeChecks.Run()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative epoch
+System.Management.Automation.MethodInvocationException: Exception calling "Run" with "0" argument(s): "Changed signin facts published: epoch" ---> System.InvalidOperationException: Changed signin facts published: epoch
+   at SodaDesktopSigninScopeChecks.Run()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative input-permit-age
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Signin text continued past input freshness" ---> System.InvalidOperationException: Signin text continued past input freshness
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative pointer-event
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Invalid pointer event produced input" ---> System.InvalidOperationException: Invalid pointer event produced input
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative pointer-button
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Invalid pointer button produced input" ---> System.InvalidOperationException: Invalid pointer button produced input
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative target
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Changed target was accepted" ---> System.InvalidOperationException: Changed target was accepted
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative rotation
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Rotated primary was accepted" ---> System.InvalidOperationException: Rotated primary was accepted
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative unicode-cleanup
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Unicode keyup cleanup was omitted" ---> System.InvalidOperationException: Unicode keyup cleanup was omitted
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative broker-utf8-output
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Broker UTF8 output changed" ---> System.InvalidOperationException: Broker UTF8 output changed
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative broker-utf8-input
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Broker UTF8 input changed" ---> System.InvalidOperationException: Broker UTF8 input changed
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative presence-source-latch
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Presence source revived" ---> System.InvalidOperationException: Presence source revived
+   at SodaDesktopSigninPresence.VerifyGeneratedData()
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative presence-commands
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Presence accepted non-observer command" ---> System.InvalidOperationException: Presence accepted non-observer command
+   at SodaDesktopSigninPresence.VerifyGeneratedData()
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative presence-callback-age
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Presence callback extended deadline" ---> System.InvalidOperationException: Presence callback extended deadline
+   at SodaDesktopSigninPresence.VerifyGeneratedData()
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative presence-backward
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Presence backward clock accepted" ---> System.InvalidOperationException: Presence backward clock accepted
+   at SodaDesktopSigninPresence.VerifyGeneratedData()
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative presence-reentry
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Reentrant presence publication accepted" ---> System.InvalidOperationException: Reentrant presence publication accepted
+   at SodaDesktopSigninPresence.VerifyGeneratedData()
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative presence-clock-fault
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Presence clock exception revived" ---> System.InvalidOperationException: Presence clock exception revived
+   at SodaDesktopSigninPresence.VerifyGeneratedData()
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative presence-capture-route
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Presence dispatched capture" ---> System.InvalidOperationException: Presence dispatched capture
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative presence-cleanup-route
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Presence dispatched input cleanup" ---> System.InvalidOperationException: Presence dispatched input cleanup
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative presence-command-route
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Presence route accepted active command" ---> System.InvalidOperationException: Presence route accepted active command
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative inactive-classification
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Inactive candidate was not classified" ---> System.InvalidOperationException: Inactive candidate was not classified
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative inactive-auth-wait
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Inactive worker exited before broker authentication" ---> System.InvalidOperationException: Inactive worker exited before broker authentication
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative inactive-viewer-denial
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Viewer inactive promoted to presence" ---> System.InvalidOperationException: Viewer inactive promoted to presence
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative inactive-publication
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+System.Management.Automation.MethodInvocationException: Exception calling "VerifyGeneratedData" with "0" argument(s): "Inactive result not published before wait" ---> System.InvalidOperationException: Inactive result not published before wait
+   at SodaDesktopSigninWorker.<>c__DisplayClass7f.<VerifyGeneratedData>b__4d()
+   at SodaDesktopSigninWorker.InactivePresence(Purpose purpose, Action`1 publish, Func`1 receive)
+   at SodaDesktopSigninWorker.VerifyGeneratedData()
+   at CallSite.Target(Closure , CallSite , Type )
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+signin_scope_generated_epoch_expiry_frame_and_input_passed
+signin_presence_generated_readonly_expiry_and_commands_passed
+signin_worker_generated_data_and_abi_passed
+signin_worker_28_source_negative_controls_and_restore_passed
+
+stderr:

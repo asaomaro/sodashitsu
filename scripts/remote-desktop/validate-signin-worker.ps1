@@ -15,7 +15,7 @@ try {
     if($code -ne 0 -or -not (($output|Out-String).Contains('signin_worker_generated_data_and_abi_passed'))){throw 'Generated worker checks failed'}
     if($NegativeControls){
         $variants=@(
-            @('pump-closed-writer','WindowsSigninWorker.cs','if(!outbound.Join(1000))Environment.FailFast("Signin output did not stop");','if(!outbound.Join(1000))Environment.FailFast("Signin output did not stop");writer.Dispose();','Pump reflushed a closed pipe'),
+            @('pump-closed-writer','WindowsSigninWorker.cs','var writer=new StreamWriter(pipe,new UTF8Encoding(false),writeSize,true);action(reader,writer);','using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),writeSize,true)){action(reader,writer);}','Pump reflushed a closed pipe'),
             @('context-route','WindowsSigninWorker.cs','if(args.Length!=1||args[0]!="--context")return false;','if(args.Length!=1)return false;','Context route accepted other purpose'),
             @('control-reentry','WindowsSigninScope.cs','CurrentCore(read)||ended||revision!=controlRevision','CurrentCore(read)||ended','Reentrant release was overwritten'),
             @('frame-serial','WindowsSigninScope.cs','frame.Serial!=serial||','','Replaced frame ticket published'),

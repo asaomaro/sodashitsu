@@ -107,3 +107,20 @@ Boot receiptの成功は起動観測ACKに限り、継続稼働や操作成功�
 - [x] Broker Pumpのwriterを借用wrapperにし二重Flushを除去。Job0/pipe閉鎖/outboundJoin後terminalの条件は維持。
 - [x] 実pipe回帰テスト、Disposeのみ戻す負例を含む28 controls、byte exact復元後再成功。独立レビュー必須指摘なし。
 - [ ] 修正版packageを標準導入し実サービスを再検証。
+
+## pump修正版44060の新boot
+
+- [x] main 6b277690、Windows clean sourceからpackage44060f73…作成、native staging compile/read-only Preview成功。
+- [x] 実6e27/run8b7fのreadonly snapshot不変。Specific214/Host5140/SCM1268/owned receiptを固定したPumpStartupCaseを独立点検。
+- [x] inspect/recover各一回成功。元runをruns-startup214-4375c692f9714ff59299dc76e675f29bへunknownのまま保存、鍵保持、正常終了の主張なし。
+- [x] Coreは診断名214→107を戻すと旧検証済Coreとbyte一致。
+- [x] 新operator a15b/Boot ecedの全38pins/hash/old6e27→new44060/source/Prior1268を独立確認、guard compile-only成功。
+- [x] 旧Boot23bf disable。SSH Automatic/Running、ユーザー不在、runs initial/transitionなしを確認し/fなし再起動要求。
+- [ ] 新boot結果と長時間接続を確認。
+
+## worker側の同じpipe終了処理
+
+- [x] Runにも同じ閉鎖後Flush経路を確認。WithPipeTextを共通化しBroker/worker双方でpipe唯一所有と借用writerを維持。
+- [x] 実NamedPipe回帰・共通helperのusingのみ戻す28controls・byte復元成功。独立レビュー必須指摘なし。
+- [x] package44060実boot更新/startACK成功、newSCM1272:134384635154411000、Host13176/runf2ee03df…、Running0/0を継続観測。
+- [ ] signin aliasはreconnecting。prelogin画面接続/通知は未検証。サービスRunningと接続成功を混同しない。

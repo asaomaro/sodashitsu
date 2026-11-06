@@ -51,3 +51,15 @@ review_resource_monitorで旧1ba→新6e27、source v4、Prior SCM1352、meta SH
 review_resource_monitorで製品/実pipeテスト/validatorを独立点検、mustなし。
 借用writerを先にDisposeする案はstdin threadとの競合があるため不採用。広い例外の握りつぶしは追加しない。
 Windows native 28負例/復元を確認。実214停止がこの問題だけに由来するかは未確認。
+
+## pump実導入準備
+
+review_resource_monitorでPumpStartupCase・snapshot・receipt・17pinsを独立確認し必須指摘なし。
+6e27の既知214もHost finallyでRoot+aggregate停止確認後にのみ報告されることを確認。
+新Boot eced/operator a15bの38pins、固定元/先package、new critical SCM/1077条件も独立点検済み。
+実サービスの起動観測ACKと長時間稼働・prelogin操作の成否は区別する。
+
+## workerの共通pipe wrapper
+
+review_resource_monitorで共通WithPipeText/Pump/Run、陰性とbyte復元の結果を再点検。必須指摘なし。
+inactive return、Release→scope閉鎖→pipe閉鎖→読取thread joinは維持。workerの不要なFlush例外を除去する。
