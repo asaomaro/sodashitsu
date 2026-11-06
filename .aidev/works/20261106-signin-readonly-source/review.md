@@ -96,3 +96,13 @@ review_resource_monitorが固定view-only probeの入力なし/画像非保存/�
 実単独probeはReadyとframeを取得し正常終了。暗号化前後のtype-only観測ではgrant直後release、Readyなしを確認。
 WorkerProcessの準備中release破棄は未保持キーに限定し、期限・schema・stopと準備後転送を保持。
 最終独立レビュー必須指摘なし。旧WorkerProcessのみへ戻す負例とbyte exact復元の生記録を保存。
+
+## boot fallbackと実通知
+
+review_resource_monitorがcritical SCM保持・new boot限定・boot単位claim・標準start・timeout非再送と16pins/ACLを独立確認、mustなし。
+通常shutdown後unknownを自動復旧しない制限を受入条件へ明記。新bootの実検証は別途行う。
+通知の隔離root全体fresh性とhandoffでpane不一致をexit1にする指摘は実行前に反映、差分再レビューmustなし。
+
+最終独立レビューで、status表の古い「自動start未検証」と最新実boot結果の不一致を是正。
+SCM pinに署名検証があるとの誤記も、固定System32パス/SYSTEM/session0/critical/creation照合へ修正。
+19件の実検証evidenceに鍵・token・画像本体を含めないことを確認。新boot再認証は完了扱いしない。

@@ -1,6 +1,6 @@
 # リモートデスクトップの開発状況
 
-2026-11-04更新（R1〜R3の実機確認を追記）。Windows/WSL経路とLinux/macOS native実験版を区別します。「実装済み」は実機・実ドライバー・実サービスを組み合わせた動作確認の完了を意味しません。段階実装の作業記録は当時の検証証拠として保持し、現在の全残件は本書のR1〜R5/U1〜U12を使います。優先度にかかわらず未完了項目を残し、実装・方式調査・権限設計・更新/実機確認を区別します。
+2026-11-07更新（Windows通知、専用signin、sr-pc更新の実機確認を追記）。Windows/WSL経路とLinux/macOS native実験版を区別します。「実装済み」は実機・実ドライバー・実サービスを組み合わせた動作確認の完了を意味しません。段階実装の作業記録は当時の検証証拠として保持し、現在の全残件は本書のR1〜R5/U1〜U12を使います。優先度にかかわらず未完了項目を残し、実装・方式調査・権限設計・更新/実機確認を区別します。
 
 | 範囲 | 実装状況 |
 | --- | --- |
@@ -48,11 +48,11 @@
 
 | ID | 作業 | 現状・完了条件 |
 | --- | --- | --- |
-| R1 | sr-pcの更新 | 完了（2026-11-04、1701bfb4）。mainを反映しbuild/handoff、既存4paneの保持を確認。利用者のUAC承認でロック解除サービスも更新済み |
-| R2 | sr-pcとの通常接続・再接続・放置後の安定性確認 | 一部確認済み（2026-11-04、1701bfb4）。通常画面の閲覧・マウス操作、実ロック画面からPIN解除、通常画面への自動再接続・操作を確認。cold leaseとWindows proxy終了コード取得の不具合を修正。長時間放置・反復接続の安定性確認は残る |
-| R3 | Windows拡張機能の実機確認 | 一部確認済み（caaddccd）。実解像度変更/復元、H.264と音声buffer、text/PNG/HTMLのclipboard往復、ファイル送受信、同一monitorの2窓と操作排他、保護Default/UACの実画像、保護DefaultのH.264/ファイル転送を確認。仮想IDDの署名済み配布、物理複数monitor、仮想audio cable/マイク、実Explorer drop、昇格アプリ/UAC入力、専用signinサービスの導入承認/登録/実サインアウトは残る |
+| R1 | sr-pcの更新 | 更新済み（2026-11-07、8542306d）。Windows全体build/handoffに成功し、再起動後に復帰した既存2paneのIDを保持。専用signin package17a1も標準更新済み |
+| R2 | sr-pcとの通常接続・再接続・放置後の安定性確認 | 一部確認済み（2026-11-04、1701bfb4）。通常画面の閲覧・マウス操作、実ロック画面からPIN解除、通常画面への自動再接続・操作を確認。cold leaseとWindows proxy終了コード取得の不具合を修正。2026-11-07にはOS再起動後・未ログインの専用暗号化経路から実画面/PIN認証と通常desktop復帰を確認。高速入力の拒否、認証画面遷移時の再接続、長時間・反復の安定性確認は残る |
+| R3 | Windows拡張機能の実機確認 | 一部確認済み（caaddccd）。実解像度変更/復元、H.264と音声buffer、text/PNG/HTMLのclipboard往復、ファイル送受信、同一monitorの2窓と操作排他、保護Default/UACの実画像、保護DefaultのH.264/ファイル転送を確認。仮想IDDの署名済み配布、物理複数monitor、仮想audio cable/マイク、実Explorer drop、昇格アプリ/UAC入力、専用signinの次回起動時の自動復帰・実サインアウト/反復操作は残る |
 | R4 | Linux/macOS nativeの実機確認 | 未完了。対象デスクトップが現在利用できない。OSの許可/終了、monitor選択、Linux VIRTUAL、macOS mode復元、動画/音声/仮想出力へのマイク/clipboardを対応範囲で確認する。WSLや生成fixtureを実機の代わりにしない |
-| R5 | デスクトップアシスタントの実機確認 | 未完了。このPCでenabled/runningの復帰は確認済みだが、実GUIの配置/DPI・通知/返答・会話/フォーム・画像/録音/モデル・無効化/再起動/スリープを組み合わせた検証は別。詳細は[アシスタント](desktop-assistant.md) |
+| R5 | デスクトップアシスタントの実機確認 | 一部確認済み。2026-11-07のWindows nativeでは作業完了の吹き出しを音声off/system音声onの両設定で確認（別ポート・自前fixture）。別PC固有の設定と原因は未確定。実GUIの配置/DPI・返答・会話/フォーム・画像/録音/モデル・無効化/スリープ等の組合せ確認は残る。詳細は[アシスタント](desktop-assistant.md) |
 
 文書と設定案内の既知の矛盾は今回修正しました。監査対象の実装・既存テストと文書の照合では、現行対応範囲について追加のコード不具合を具体的な再現付きで確定していません。不具合が存在しないという保証ではありません。R2〜R5で見つかった不具合は必須修正へ追加し、再現条件・対象版・検証結果を残します。根拠と修正一覧は[整合検証記録](../.aidev/works/20261101-desktop-document-audit/findings.md)を参照してください。
 
@@ -97,7 +97,7 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 | --- | --- |
 | 一時仮想画面 | Sodashitsu専用IDDの署名済み配布物。リポジトリ/CIのunsigned artifactを導入可能な配布物とは扱わない |
 | マイク転送 | VB-Audio公式Pack45の署名済みx64 driverを導入済み（2026-11-05、installer exit0）。導入で変わった既定出力は元へ戻し、全6roleの一致を確認。OS再起動・明示した仮想render IDへの実マイク転送検証は未完了 |
-| サインアウト後の専用接続 | 元要求と鍵を保持した実再起動後のrecover、2viewer照合、enroll、通常起動まで確認。ログイン前の暗号化接続は未成立。readonly確認の周期を修正して生成テストを通過したが、修正版の実機導入・接続・サインイン検証は未完了。下記の最新追記を参照 |
+| サインアウト後の専用接続 | 元要求と鍵を保持した実再起動後のrecover、2viewer照合、enroll、標準更新と通常起動、ログイン前の暗号化接続/実画面/PINサインインを確認（2026-11-07、package17a1）。事前stop complete後のBoot自動start/実ロック画像まで確認。同bootの再認証・継続/反復は未確認。下記の最新追記を参照 |
 | 複数monitor / Explorer drop | 2台以上の実monitor・混在DPIの確認、Windowsブラウザと実Explorer間のOLE drop。1画面の2窓共有と補助プログラム準備成功だけでは完了にしない |
 
 2026-11-05追記: サインイン専用サービスは期限切れ未受理要求の取消とnative SCM修正版への更新が成功しました。その後、nativeとTypeScriptの状態保存先の不一致で管理モードが観測済みのまま異常終了したため、TypeScriptを修正（6da256c3）。新パッケージは隔離stageへ生成済みです。元の観測記録を保ったOS再起動境界の限定復旧を追加し、実機のBindと同一状態での拒否、生成取引・5中断を検証しました。再起動後の実Recover/更新/initialize/trust/enroll/通常起動・実サインアウトは未完了です。[現在の記録](../.aidev/works/20261105-signin-restart-recovery/verification.md)を参照してください。
@@ -115,3 +115,17 @@ PIN末尾の数字も認証専用workerで押下/解放を一括投入する追�
 2026-11-06追記: 既存鍵をSYSTEMで読み取り検証する限定復旧を追加し、実OS再起動後に鍵保持のrecover・修正版package更新・initialize・利用者browserのtrustまで確認しました。検証用viewerのtrust起動で停止しており、専用signinのenroll/通常起動・実サインインは未完了です。ログイン前の制限済み通常ユーザーSession0保守RPCは自動復帰しましたが、Winlogonの画面操作を許可するものではありません。[現在の検証記録](../.aidev/works/20261105-claimed-initialize-recovery/verification.md)。
 
 2026-11-06追加: 検証用viewerのtrustも保存済みだったため再送せず、元要求・鍵・履歴を固定した限定復旧を実再起動後に実施しました。SYSTEM taskでrecover/status(2viewer)/enroll/通常起動まで完了しています。ただし、ログイン前の暗号化接続は未成立です。認証情報を順次読み、完了後から次の確認を待つと5秒の有効期限に間に合わない事象を生成テストで再現し、独立したreadonly読取を並列化、次の確認を前回の読取開始時点から予定する修正を行いました。5秒の期限と失効後の復活禁止は維持します。旧コードで新規3ケースの失敗、修正後の関連103テスト成功を確認しました。実機の原因がこの周期だけかは未確定です。修正版の管理者導入にはログイン後の接続が必要です。[調査・復旧の記録](../.aidev/works/20261106-signin-trust-recovery/tasks.md)。
+
+
+## Windows実機の更新（2026-11-07）
+
+sr-pcで専用signinの暗号化接続、1280×800の実ロック/PIN画面、操作権、PIN認証による通常desktopへの遷移を確認しました。操舵室はログイン後に自動復帰し、既存2paneが戻っています。高速入力の一度目は認証が拒否され、入力間隔を空けた二度目にOSの自動認証が成功しました。高速入力の原因を解消したとは扱いません。画面切替では専用接続の再許可が必要な場合もあり、長時間の連続操作は残件です。
+
+Windows通常サーバーも8542306dから全体build/handoffを実施し、2paneのID保持を確認しました。別ポートのfresh環境で、自前の作業完了通知がvoice offで約1.0秒、system voice on/quietFullscreen有効で約2.6秒に表示されました。実モデルや普段のアシスタント設定は変更せず、検証環境は停止・削除済みです。音声が実際に聞こえた証明や、報告元の別PCの原因確定とは区別します。
+
+導入・回帰検査と残件は[実機記録](../.aidev/works/20261106-signin-readonly-source/tasks.md)にあります。過去の追記は各時点の記録として保持しています。
+
+
+同日の追加再起動では、事前の標準stop complete後、SYSTEMのBootTriggerから専用serviceの自動start/観測ACKと未ログイン時の実ロック画像・Enter操作まで確認しました。これは正常停止済みの管理された再起動に限るfallbackです。通常shutdown後のunknown記録を自動復旧する機能ではありません。
+
+その後、sr-pcから操舵室LANアドレスへのTCP接続がWindowsのAccessDenied/NodeのEACCESで失敗し、未ログイン時の継続接続と再認証は未確認です。画面取得単独は正常で、4分の一時保活中も通信拒否が残りました。Cato Networks VPNとESETは動作していますが、原因はまだ確定していません。VPN・セキュリティ機能やFirewall規則は変更していません。Catoには[Pre Loginの接続先制限](https://knowledge.catonetworks.com/v1/docs/using-windows-pre-login-and-the-sdp-client)があるため、適用設定の確認を進めています。

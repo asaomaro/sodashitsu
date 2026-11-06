@@ -1,0 +1,1 @@
+{"rootHost":"192.168.0.95","testedPorts":[443,7780],"sshLanReachable":true,"powershellSocketError":"AccessDenied","nodeSocketError":"EACCES","signinServiceState":"Running","signinServiceExitCode":0,"ordinaryUserPresent":false,"temporaryPowerRequestReleased":true,"firewallConfigurationChanged":false,"vpnOrSecuritySoftwareStopped":false}

@@ -194,3 +194,67 @@ readonly console fixtureのtask上限は1分、子の上限は8秒。実行フ�
 - [ ] 独立レビュー、標準更新後に実画像と入力を確認。
 
 37df導入成功を画像配信成功としない。view-only単独取得とservice/browser経由を区別する。
+
+## 17a1実画面とサインイン
+
+- [x] 473 tests/型検査/server build成功、独立点検必須指摘なし。8542306dをmain push。
+- [x] Windows buildでpackage17a1生成/readonly Preview成功。旧37dfは標準stopでjournal complete、標準Upgradeを一回実行しtask0/receipt確認。
+- [x] fresh start一回、run3793c5c5…ACK。許可grant直後releaseがあっても実Ready/1280x800画素/描画ACK継続を確認。
+- [x] 実ロック画面を目視、操作権取得後EnterでPIN画面へ。画面変更では専用接続が終わり、明示的な再接続/再許可が必要だった。
+- [x] 初回の高速入力では認証拒否。二回目はペースを落としEnterを追加せず、OSの自動認証で通常desktopへ遷移。入力値・画像はrepoへ保存しない。
+- [x] WMIでログインユーザーあり、通常machine online、既存2pane復帰、通常desktop画像を目視。既存serviceもrunning/observedを確認。
+- [ ] 高速入力の拒否原因・画面遷移時の接続継続・長時間/反復/次回再起動の自律復帰は別残件。
+- [ ] Windows通常serverの最新build/handoffと通知再確認。
+
+検証helperのwait-readyは「閲覧中」完全一致で「サインイン画面・閲覧中」を見落としてtimeoutした。
+実Ready/frame継続は別のtype-only trace/実bitmapで確認し、helperを末尾照合へ修正。製品のReady timeoutとは区別する。
+
+## 通常server更新とWindows通知の再確認
+
+- [x] 通常pnpm launcherはstoreのjunction検査で失敗。既存Corepackの9.15.9と一時shimを使い、依存/lock変更なしでWindows全体build成功。
+- [x] source8542306dのhandoff成功。親18888と既存2pane IDを保持。wrapperのsamePaneIds失敗条件を独立点検で修正してから実行。
+- [x] fresh専用root/17881/CDP17981のWindows native Electronで、自前fake agentの作業完了通知を確認。voice offでは1046ms、system voice on/quietFullscreen trueでは2551msでvisible/source一致。
+- [x] 使用したのは自前検証エージェント。実モデル/他作業者/通常assistantのprefsは使わない。音声が実際に耳へ届いた証明ではなく、読み上げ設定下の通知window確認。
+- [x] 認証server.stop後、専用2port待受0/ownedprocess0を確認し専用rootを削除。通常7780は維持。
+
+別Windows PCで報告された固有設定/原因の確定とは分ける。今回sr-pc Windows nativeで当該通知は再現せず表示できた。
+
+## 正常停止後のboot fallback
+
+- [x] 事前stop complete限定のSYSTEM BootTriggerを準備。critical SCMの保持handle・固定System32パス・SYSTEM/session0・critical・creationを照合し、旧1272 instanceを拒否。
+- [x] boot単位CreateNew claim後に標準control startだけを実行。unknown復旧・鍵変更・要求再送なし。timeoutは完了不明のまま保存。
+- [x] SYBA root/16hash pins/boot trigger15秒/IgnoreNew/4分上限/flags18を独立点検。child compile-only成功、未実行/有効を確認。
+- [x] 完了済Boot ecedのみ無効化。SSH Automatic/Runningと保守/logon task有効を確認。
+- [x] 専用serviceを標準stopしてjournal completeを取得、通常agent idle/2paneを確認して/fなし再起動要求（exit0）。
+- [ ] 新bootで手元ログインなしの起動・実画像・認証/通常復帰を確認する。
+
+通常shutdown後の未観測stop/unknown journalを自動修復する機能ではない。
+このfallbackの受入範囲は事前に標準stop completeを確認した管理された再起動。
+
+## boot fallbackの実起動
+
+- [x] 新boot 2026-11-06T20:58:31.5ZをSSHで確認、userPresent=false。新criticalSCM1340:134384723260061787。
+- [x] 恒久BootTriggerが手動実行なしで一回成功、taskResult0/instances0、rune0eb64e9… observed ACK。
+- [x] 保守・signin alias復帰、暗号化接続の実ロック画像とEnter操作でPIN画面への遷移を確認。
+- [ ] 最初の接続失敗/Ready後終了が繰り返され、現在は安定性を切り分け中。新bootでのPIN認証/通常復帰はまだ確認していない。
+
+検証helperが古いtabを残す可能性を除くため専用profileの既存tabを閉じるよう変更。
+新tab作成前に全tabを閉じた最初の修正はview待機でtimeoutしたため、先に新tabを作成してから旧tabを閉じる順へ修正。
+これを製品の修正とは数えない。view-only probeの初回は旧packageのNative hash pinで起動前拒否。
+新17a1の実Native hash45e395cd…へ固定しfresh taskで再検査する。拒否済みtaskは削除、再利用しない。
+
+## 新bootの接続断とネットワーク切り分け
+
+- [x] hash pinを17a1 Nativeへ修正したfresh view-only probeはready659ms/frame735ms、1280x800/37877bytes、18秒/exit0/terminal/task削除。起動前拒否した旧pin試行とは分ける。
+- [x] 全machineとSSHも同時に途切れた時点があり、Kernel-Power506 Reason12を確認。WOL送信後SSHへ再接続できたが因果を断定しない。
+- [x] 4分だけSystemRequired/ExecutionRequiredを保持する検査を独立点検し実行。DISPLAY要求/電源設定変更なし。finally解除/doneを確認。
+- [x] 保活中にも操舵室LAN192.168.0.95:443/7780への接続がSocket AccessDenied、NodeでもEACCES。省電力だけを原因としない。
+- [x] ネットワーク/既定FW outboundはAllow。既存Codex offline block規則は別SID1003向け、SSHはowner1001でoffline restricted SIDもなし。これらの規則は変更しない。
+- [x] Cato Networks VPN serviceとESETの存在を確認。原因確定ではなく、利用者へログイン前/LAN制限の有無を質問。VPN/保護機能の停止、例外追加、SSHのforward制限変更は行わない。
+- [ ] 新bootのPIN認証/通常復帰と継続安定性は未確認。SSHの読取とservice running/observedは維持。
+
+Power要求の意味はMicrosoft公式PowerSetRequest文書で確認。今回の一時保活は製品変更ではない。
+https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-powersetrequest
+
+追加readonly設定: CatoのローカルPreLoginは0、InitialAlwaysOn/ConnectOnBoot値は未設定。
+クラウド側のAlways-On/LANポリシーの有無やESETの判断理由は、この情報だけでは分からない。

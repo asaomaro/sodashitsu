@@ -1,0 +1,5 @@
+{
+  "exitCode": 0,
+  "stdout": "{\r\n    \"result\":  {\r\n                   \"stderrLength\":  0,\r\n                   \"action\":  \"status\",\r\n                   \"ok\":  true,\r\n                   \"code\":  0,\r\n                   \"receipt\":  {\r\n                                   \"state\":  \"running\",\r\n                                   \"journal\":  \"observed\"\r\n                               }\r\n               },\r\n    \"taskResult\":  0\r\n}\r\n",
+  "stderr": ""
+}
