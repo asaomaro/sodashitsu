@@ -50,3 +50,22 @@ fixtureはOS動作検証用で、製品Host認証の成功とは分ける。固�
 全workerはCREATE_SUSPENDEDのまま、一度もResumeしない。__FIXTURE_ROOT__はreview済みprivate rootへstage時に固定する。
 negativeのunchanged=falseは、意図した例外終了でverified markerを発行しなかったことを表す。鍵変更を表すものではない。
 直後のreadonly snapshotはtask0/unchanged=true、runtime digest d583496c...を確認した。
+
+
+## b38 Specific107固定caseと再起動準備
+
+- [x] 現b38/c12/started digest・PID15588/creation/owned start receipt・SCM1360を固定。
+- [x] retained process handle/不在87/別incarnationで元Host消滅を検査、生存/AccessDeniedを拒否。
+- [x] 生成データ正例9分岐・識別/SCM/Host/中断/identity guardを確認。started digestのみ除去する負例で失敗、source byteExact復元。
+- [x] caseとfixed operator setup独立レビュー、実inspect→recover成功。unknown保存・keys保持・started=false。
+- [x] 新c55 packageを生成。1ba65bb0…、readonly Preview validated=true。
+- [x] 標準Upgradeは旧SCM状態1066/107を拒否、before-marker/no transition/b38/initial維持を確認。拒否済taskは再使用しない。
+- [x] 復旧用SSH Automatic、保守接続、通常agent1名idleを確認。完了済旧BootRecovery3件はdisable、既存logon/保守taskは維持。
+- [x] fresh191 operatorとnew-critical-SCM/1077/manualの一回Boot workflowを準備し独立review。guard compile-only成功。
+- [ ] 許可済の再起動を/fなしで行い、ログイン前のSSH/BootMaintenance/標準Upgrade/実サービス起動を確認。
+
+固定case: runs-startup107-30f9b30c5bb8430ea8a52531764b4d45へ元runを保存。
+標準UpgradeScmのExit0/1077条件は緩和しない。再起動でOS状態が1077へ戻ったことを実確認して進む。
+Boot task c3efd99d901f43c7979ccbf358534579は15秒delay/12分上限、fresh191 Rootの標準toolだけを一回呼ぶ。
+鍵3ファイルのhashはupgrade前後で確認する。成功receiptは起動観測ACKであり、実接続・長時間健全性の確認とは分ける。
+再起動後の復旧経路は未検証であり、準備だけで成功としない。

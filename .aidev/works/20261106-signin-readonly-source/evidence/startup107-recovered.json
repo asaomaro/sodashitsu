@@ -1,0 +1,5 @@
+{
+  "exitCode": 0,
+  "stdout": "{\r\n    \"result\":  {\r\n                   \"ok\":  true,\r\n                   \"action\":  \"recover\",\r\n                   \"receipt\":  {\r\n                                   \"state\":  \"recovered\",\r\n                                   \"originalOutcome\":  \"unknown\",\r\n                                   \"cleanExitClaimed\":  false,\r\n                                   \"keysPreserved\":  true,\r\n                                   \"started\":  false,\r\n                                   \"runsArchive\":  \"runs-startup107-30f9b30c5bb8430ea8a52531764b4d45\",\r\n                                   \"receipt\":  \"startup107-30f9b30c5bb8430ea8a52531764b4d45.json\"\r\n                               }\r\n               },\r\n    \"taskResult\":  0\r\n}\r\n",
+  "stderr": ""
+}

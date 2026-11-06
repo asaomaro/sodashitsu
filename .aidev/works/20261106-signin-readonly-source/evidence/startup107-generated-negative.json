@@ -1,0 +1,12 @@
+{
+  "id": "9c93e317-8aa5-4afb-b088-9fdfac1a80c9",
+  "status": "exited",
+  "stdout": "",
+  "stderr": "Exception calling \"Run\" with \"0\" argument(s): \"Generated startup107 case check failed\"\r\nAt C:\\Users\\浅雄 進也＠大阪\\AppData\\Local\\sodashitsu\\signin-layout-check-20261104\\startup107-case-validate.ps1:8 char:1\r\n+ [Startup107CaseChecks]::Run()\r\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException\r\n    + FullyQualifiedErrorId : Exception\r\n \r\n",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 1,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

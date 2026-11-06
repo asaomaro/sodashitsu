@@ -1,0 +1,5 @@
+{
+  "exitCode": 0,
+  "stdout": "{\r\n    \"result\":  {\r\n                   \"stderrLength\":  220,\r\n                   \"ok\":  false,\r\n                   \"code\":  1,\r\n                   \"action\":  \"upgrade\",\r\n                   \"errorKind\":  \"RuntimeException\"\r\n               },\r\n    \"taskResult\":  1\r\n}\r\n",
+  "stderr": ""
+}

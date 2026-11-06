@@ -1,0 +1,9 @@
+stdout:
+
+stderr:
+Exception calling "Run" with "0" argument(s): "Generated startup107 case check failed"
+At C:\Users\浅雄 進也＠大阪\AppData\Local\sodashitsu\signin-layout-check-20261104\startup107-case-validate.ps1:8 char:1
++ [Startup107CaseChecks]::Run()
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : Exception

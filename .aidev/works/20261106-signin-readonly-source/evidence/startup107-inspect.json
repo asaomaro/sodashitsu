@@ -1,0 +1,5 @@
+{
+  "exitCode": 0,
+  "stdout": "{\r\n    \"result\":  {\r\n                   \"ok\":  true,\r\n                   \"action\":  \"inspect\",\r\n                   \"receipt\":  {\r\n                                   \"state\":  \"inspected\",\r\n                                   \"mutates\":  false,\r\n                                   \"runId\":  \"c12f3479-f16c-4cbb-815b-301387d036b6\",\r\n                                   \"scmInstance\":  \"1360:134384363526317122\"\r\n                               }\r\n               },\r\n    \"taskResult\":  0\r\n}\r\n",
+  "stderr": ""
+}

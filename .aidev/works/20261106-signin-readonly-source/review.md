@@ -22,3 +22,12 @@ RootをbrokerへOpenさせる案はself-held handleによるkill-on-close妨害�
 最終native fixtureはRoot handleを持つGateだけがmembershipを照合し、明示親とworker双方のRoot非所属を確認。
 positive task0、negativeは親属性のみ旧状態でCreateProcessAsUserWエラー5、source byteExact復元。
 詳細と生出力はevidence/session-jobs-*。実サービス導入成功はまだ主張しない。
+
+
+## Specific107 incidentと一回Boot workflow
+
+review_resource_monitorがcase・生成tests・固定operator SDK/pins/ACL/once tasksを確認し必須指摘なし。
+実caseはreadonly inspectの成功後にrecover一回だけを実行。結果unknown/cleanExitClaimed=false。
+標準Upgradeの失敗条件を調べ、107を一般許可する変更は採用しなかった。
+新critical SCMを保持するBoot Guard/標準toolsへの固定導線/鍵hash/once claim/BootTask ACLも独立点検済み。
+実bootと実サービスの健全性は引き続き未検証。

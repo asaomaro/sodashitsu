@@ -1,0 +1,12 @@
+{
+  "id": "58e14b2f-9e6a-4d03-9684-d08c74ac090b",
+  "status": "exited",
+  "stdout": "startup107_case_generated_host_scm_receipt_and_identity_guards_passed\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

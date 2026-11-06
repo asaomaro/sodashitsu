@@ -1,0 +1,4 @@
+stdout:
+startup107_case_generated_host_scm_receipt_and_identity_guards_passed
+
+stderr:
