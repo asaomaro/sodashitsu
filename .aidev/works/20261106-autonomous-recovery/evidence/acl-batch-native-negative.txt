@@ -1,0 +1,7 @@
+Unexpected batch ACL result: one-safe
+発生場所 C:\Users\makku\AppData\Local\Temp\soda-acl-fixed-4fb2bh11\validate-endpoint-acl-batch.ps1:13 文字:297
++ ... .Length -ne 0)){throw ('Unexpected batch ACL result: '+$name)};'acl_b ...
++                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Unexpected batch ACL result: one-safe:String) [], RuntimeException
+    + FullyQualifiedErrorId : Unexpected batch ACL result: one-safe
+ 

@@ -2,7 +2,7 @@ import {constants} from "node:fs";
 import {lstat,mkdir,mkdtemp,open,rename,rm} from "node:fs/promises";
 import type {Stats} from "node:fs";
 import {join,dirname,resolve} from "node:path";
-import {checkDesktopWindowsPath,commitDesktopWindowsVault} from "./DesktopEndpointAcl.node.js";
+import {checkDesktopWindowsPath,checkDesktopWindowsPaths,commitDesktopWindowsVault} from "./DesktopEndpointAcl.node.js";
 import {randomUUID} from "node:crypto";
 import {z} from "zod";
 import {DesktopEndpointIdentity} from "./DesktopE2e.js";
@@ -27,7 +27,7 @@ export class DesktopEndpointStore {
  private closed=false;
  private policyRevision=0;
  private queue:Promise<unknown>=Promise.resolve();
- constructor(private options:{stateDir:string;protector?:DesktopSecretProtector;platform?:NodeJS.Platform;checkWindowsPath?:(path:string,allowMissing?:boolean)=>Promise<void>;commitWindowsVault?:(source:string,destination:string)=>Promise<void>;revoke?:(peer:DesktopTrustedPeer)=>void;writeAllowed?:()=>boolean}) {
+ constructor(private options:{stateDir:string;protector?:DesktopSecretProtector;platform?:NodeJS.Platform;checkWindowsPath?:(path:string,allowMissing?:boolean)=>Promise<void>;checkWindowsPaths?:(paths:readonly string[])=>Promise<void>;commitWindowsVault?:(source:string,destination:string)=>Promise<void>;revoke?:(peer:DesktopTrustedPeer)=>void;writeAllowed?:()=>boolean}) {
   this.options={...options,stateDir:resolve(options.stateDir)};this.directory=join(this.options.stateDir,"desktop-endpoint");this.platform=options.platform??process.platform;this.protector=options.protector??desktopSecretProtector(this.platform);
   if(this.platform==="win32"&&this.protector.mode!=="dpapi-user")throw failure();
  }
@@ -52,6 +52,12 @@ export class DesktopEndpointStore {
    if((stat.mode&0o022)!==0&&!(stat.uid===0&&(stat.mode&0o1000)!==0))throw failure();
    const parent=dirname(current);if(parent===current)break;current=parent;
   }
+ }
+ private async pathPolicies(paths:readonly string[]):Promise<void> {
+  if(this.options.checkWindowsPaths){await this.options.checkWindowsPaths(paths);return;}
+  // Retain injected per-path policies used by existing local owners/tests.
+  if(this.options.checkWindowsPath){for(const path of paths)await this.options.checkWindowsPath(path);return;}
+  await checkDesktopWindowsPaths(paths);
  }
  private async syncDirectory(path:string):Promise<void> {
   if(this.platform==="win32")return;const handle=await open(path,constants.O_RDONLY|constants.O_DIRECTORY);try{await handle.sync();}finally{await handle.close();}
@@ -87,11 +93,11 @@ export class DesktopEndpointStore {
  async settled():Promise<void>{await this.queue;}
  private async load(ownedWrite=false):Promise<Vault|undefined> {
   if(this.closed)throw failure();
-  await this.pathPolicy(this.options.stateDir);if(!await this.directoryExists())return;
-  if(this.platform==="win32")await this.pathPolicy(this.directory);
+  if(this.platform!=="win32")await this.pathPolicy(this.options.stateDir);
+  if(!await this.directoryExists()){if(this.platform==="win32")await this.pathPolicy(this.options.stateDir);return;}
   if(!ownedWrite)await this.noWriter();
   const file=join(this.directory,"identity.json");let stat:Stats;
-  try{stat=await lstat(file);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return;throw failure();}this.check(stat,false);if(this.platform==="win32")await this.pathPolicy(file);if(stat.size>131072)throw failure();
+  try{stat=await lstat(file);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT"){if(this.platform==="win32")await this.pathPolicies([this.options.stateDir,this.directory]);return;}throw failure();}this.check(stat,false);if(this.platform==="win32")await this.pathPolicies([this.options.stateDir,this.directory,file]);if(stat.size>131072)throw failure();
   const handle=await open(file,constants.O_RDONLY|(this.platform!=="win32"?constants.O_NOFOLLOW:0));let clear:Uint8Array|undefined;
   try {
    const actual=await handle.stat();this.check(actual,false);if(actual.ino!==stat.ino||actual.dev!==stat.dev||actual.size>131072)throw failure();
@@ -109,9 +115,9 @@ export class DesktopEndpointStore {
   const data=await this.load(),marker=await this.readMarker();if(!data)return marker?{initialized:false,required:true}:{initialized:false};const identity=await this.identity(data);return {initialized:true,required:data.required||marker,fingerprint:await identity.fingerprint(),peers:data.peers.filter(peer=>!this.denied.has(peer.role+":"+peer.fingerprint)).map(peer=>({...peer}))};
  }
  private async readMarker():Promise<boolean> {
-  await this.pathPolicy(this.options.stateDir);const path=join(this.options.stateDir,"desktop-endpoint-required.json");
-  let stat:Stats;try{stat=await lstat(path);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return false;throw failure();}
-  this.check(stat,false);if(stat.size>256)throw failure();if(this.platform==="win32")await this.pathPolicy(path);
+  if(this.platform!=="win32")await this.pathPolicy(this.options.stateDir);const path=join(this.options.stateDir,"desktop-endpoint-required.json");
+  let stat:Stats;try{stat=await lstat(path);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT"){if(this.platform==="win32")await this.pathPolicy(this.options.stateDir);return false;}throw failure();}
+  this.check(stat,false);if(stat.size>256)throw failure();if(this.platform==="win32")await this.pathPolicies([this.options.stateDir,path]);
   const handle=await open(path,constants.O_RDONLY|(this.platform!=="win32"?constants.O_NOFOLLOW:0));
   try{const actual=await handle.stat();this.check(actual,false);if(actual.ino!==stat.ino||actual.dev!==stat.dev||actual.size>256)throw failure();return z.object({version:z.literal(1),required:z.boolean()}).strict().parse(JSON.parse(await handle.readFile("utf8"))).required;}catch{throw failure();}finally{await handle.close();}
  }

@@ -1,0 +1,72 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/client-core
+
+ ❯ src/desktop/DesktopEndpointStore.node.test.ts (15 tests | 2 failed | 13 skipped) 143ms
+   × checks every Windows vault/marker path in fresh batches before returning status 81ms
+   × rejects an unsafe marker batch after reading the vault and checks absent identity ancestors 60ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopEndpointStore.node.test.ts > checks every Windows vault/marker path in fresh batches before returning status
+AssertionError: expected [] to deeply equal [ [ …(3) ], [ …(2) ] ]
+
+- Expected
++ Received
+
+- [
+-   [
+-     "/tmp/soda-local-identity-7ZtqYg",
+-     "/tmp/soda-local-identity-7ZtqYg/desktop-endpoint",
+-     "/tmp/soda-local-identity-7ZtqYg/desktop-endpoint/identity.json",
+-   ],
+-   [
+-     "/tmp/soda-local-identity-7ZtqYg",
+-     "/tmp/soda-local-identity-7ZtqYg/desktop-endpoint-required.json",
+-   ],
+- ]
++ []
+
+ ❯ src/desktop/DesktopEndpointStore.node.test.ts:97:51
+     95|  const f=await windowsBatchFixture();
+     96|  expect(await f.store.status()).toMatchObject({initialized:true,requir…
+     97|  expect(f.batch.mock.calls.map(([paths])=>paths)).toEqual([[f.stateDir…
+       |                                                   ^
+     98|  expect(f.single).not.toHaveBeenCalled();expect(f.unprotect).toHaveBee…
+     99|  f.batch.mockRejectedValueOnce(Error('Changed ACL'));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/desktop/DesktopEndpointStore.node.test.ts > rejects an unsafe marker batch after reading the vault and checks absent identity ancestors
+AssertionError: promise resolved "{ initialized: true, …(3) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "fingerprint": "91cecddf079d739bbad0cac43362e6f629ba2b85c30111534ae05f21a1b5b791",
++   "initialized": true,
++   "peers": [],
++   "required": true,
+  }
+
+ ❯ src/desktop/DesktopEndpointStore.node.test.ts:104:32
+    102| it('rejects an unsafe marker batch after reading the vault and checks …
+    103|  const f=await windowsBatchFixture();f.batch.mockImplementation(async …
+    104|  await expect(f.store.status()).rejects.toThrow('Unsafe marker');expec…
+       |                                ^
+    105|  f.batch.mockReset();await rm(f.file);expect(await f.store.status()).t…
+    106|  expect(f.batch.mock.calls[0][0]).toEqual([f.stateDir,join(f.stateDir,…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 13 skipped (15)
+   Start at  19:09:08
+   Duration  437ms (tests 43%, transform 34%, import 21%, worker 1%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/client-core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/desktop/DesktopEndpointStore.node.test.ts -t checks every Windows|rejects an unsafe marker batch

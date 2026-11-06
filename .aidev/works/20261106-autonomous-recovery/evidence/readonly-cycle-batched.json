@@ -1,0 +1,74 @@
+{
+  "probe": {
+    "fixture": "readonly-cycle-with-generated-presence",
+    "ok": false,
+    "outcome": "ended",
+    "elapsedMs": 11632,
+    "traces": [
+      {
+        "operation": "enrollment",
+        "atMs": 1,
+        "ms": 2092,
+        "ok": true
+      },
+      {
+        "operation": "status",
+        "atMs": 32,
+        "ms": 2259,
+        "ok": true
+      },
+      {
+        "operation": "status",
+        "atMs": 2327,
+        "ms": 1312,
+        "ok": true
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 2300,
+        "ms": 1385,
+        "ok": true
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 4307,
+        "ms": 1561,
+        "ok": true
+      },
+      {
+        "operation": "status",
+        "atMs": 4346,
+        "ms": 1536,
+        "ok": true
+      },
+      {
+        "operation": "status",
+        "atMs": 6347,
+        "ms": 2146,
+        "ok": true
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 6312,
+        "ms": 2183,
+        "ok": true
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 8503,
+        "ms": 2943,
+        "ok": false
+      },
+      {
+        "operation": "status",
+        "atMs": 8554,
+        "ms": 3078,
+        "ok": true
+      }
+    ]
+  },
+  "taskRemoved": true,
+  "taskResult": 0,
+  "unchanged": true,
+  "sddl": "O:BAG:BAD:PAI(A;;FA;;;SY)(A;;FA;;;BA)"
+}

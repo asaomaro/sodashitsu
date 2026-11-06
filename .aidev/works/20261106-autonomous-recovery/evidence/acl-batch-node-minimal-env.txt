@@ -1,0 +1,1 @@
+{"stdout":"endpoint_acl_valid\r\n","stderr":""}

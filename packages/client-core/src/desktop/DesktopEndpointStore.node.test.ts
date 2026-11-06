@@ -83,3 +83,25 @@ it("requires viewer role and validates the required marker in a verified snapsho
  await writeFile(join(f.stateDir,"desktop-endpoint-required.json"),JSON.stringify({version:1,required:true}),{mode:0o600});expect((await f.store.verifiedEndpoint(fingerprint,"viewer")).status.required).toBe(true);
  await writeFile(join(f.stateDir,"desktop-endpoint-required.json"),'{"version":1,"required":"false"}',{mode:0o600});await expect(f.store.verifiedEndpoint(fingerprint,"viewer")).rejects.toThrow();
 });
+
+async function windowsBatchFixture(){
+ const f=await fixture();await f.store.initialize();await f.store.setRequired(true);f.store.close();
+ const file=join(f.stateDir,'desktop-endpoint','identity.json'),envelope=JSON.parse(await readFile(file,'utf8'));envelope.mode='dpapi-user';await writeFile(file,JSON.stringify(envelope));
+ const batch=vi.fn(async(_paths:readonly string[])=>{}),single=vi.fn(async()=>{}),unprotect=vi.fn(async(bytes:Uint8Array)=>new Uint8Array(bytes));
+ const store=new DesktopEndpointStore({stateDir:f.stateDir,platform:'win32',checkWindowsPath:single,checkWindowsPaths:batch,protector:{mode:'dpapi-user',protect:async()=>{throw Error('Readonly');},unprotect}});
+ return {...f,store,batch,single,unprotect,file};
+}
+it('checks every Windows vault/marker path in fresh batches before returning status',async()=>{
+ const f=await windowsBatchFixture();
+ expect(await f.store.status()).toMatchObject({initialized:true,required:true});
+ expect(f.batch.mock.calls.map(([paths])=>paths)).toEqual([[f.stateDir,join(f.stateDir,'desktop-endpoint'),f.file],[f.stateDir,join(f.stateDir,'desktop-endpoint-required.json')]]);
+ expect(f.single).not.toHaveBeenCalled();expect(f.unprotect).toHaveBeenCalledTimes(1);
+ f.batch.mockRejectedValueOnce(Error('Changed ACL'));
+ await expect(f.store.status()).rejects.toThrow('Changed ACL');expect(f.unprotect).toHaveBeenCalledTimes(1);f.store.close();
+});
+it('rejects an unsafe marker batch after reading the vault and checks absent identity ancestors',async()=>{
+ const f=await windowsBatchFixture();f.batch.mockImplementation(async paths=>{if(paths.some(path=>path.endsWith('desktop-endpoint-required.json')))throw Error('Unsafe marker');});
+ await expect(f.store.status()).rejects.toThrow('Unsafe marker');expect(f.unprotect).toHaveBeenCalledTimes(1);
+ f.batch.mockReset();await rm(f.file);expect(await f.store.status()).toMatchObject({initialized:false,required:true});
+ expect(f.batch.mock.calls[0]?.[0]).toEqual([f.stateDir,join(f.stateDir,'desktop-endpoint')]);f.store.close();
+});

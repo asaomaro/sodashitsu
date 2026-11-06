@@ -23,3 +23,11 @@ review_resource_monitorが追加差分を読み取り点検。101..109の範囲�
 範囲外・未分類1／正常0、後始末後のSTOPPED、許可・再試行条件の不変、
 秘密・例外本文を出力しないこと、文書表との一致を確認。必須指摘なし。
 レビュー側でWindows検証を重複実行していない。
+
+
+## ACL batchと再測定の点検
+
+review_resource_monitorがWindowspath一括化、秘密open前/不存在祖先/既存single hook、
+無cache・期限不変を確認。Base64/strictUTF8/長さ・型制限、PS配列直接代入とvalidatorの
+括弧修正も再点検し、必須指摘なし。readonly fixtureの7hash/明示ACL/Job/12秒Abort条件
+を確認。初期のfixtureとvalidatorの誤healthy判定はtasks.mdに訂正して記録した。

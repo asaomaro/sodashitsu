@@ -46,3 +46,33 @@ Windowsの通常アカウントでservice lifecycleと8つのソース変異の�
 始まる状態は残していない。S4U probeの応答receiptは得られておらず、登録・実行成功は
 未確認。再接続後はevidence/maintenance-unavailable.jsonの固定UUID taskを照会してから
 再試行を判断する。利用者へ手動ログインを再依頼していない。
+
+
+## PIN入力後の再開とACL確認の一括化
+
+2026-11-06に通常/保守接続がonlineへ復帰。前回のreadonly S4U UUID taskはQueryで
+不存在を確認。固定SYSTEM inspectionでb499停止1066/1を再確認した。
+
+readonly timing fixtureは実status/enrollment、生成presence、非通信endpoint/connectorを
+使う。元の初期statusは4875ms、enrollment3987ms。更新が元5秒期限に間に合わない。
+最初のfixtureはendedをhealthy扱いしてしまい、9.18秒で終了したものまでok=trueに
+なっていた。以降は外側12秒Abortまで続いた場合だけok=trueへ修正した。
+
+Windows ACLのroot/directory/identityとroot/markerを、毎読取の新規helper内で各々
+検査するbatchに変更。既存の祖先ACL/drive/reparse/file-handle検査とsingle hookを保持。
+秘密open前に全検査し、不存在時の祖先確認も保持。読取キャッシュと5秒期限の緩和はない。
+引数はUTF8 JSONをBase64化してquote処理に依存させず、厳密UTF8/配列/個数/長さを検査。
+
+実Windows Nodeの最小環境で、PS5 ConvertFrom-Json配列を@()で包むと配列が入れ子に
+なることを発見して直接代入へ修正。初回native validatorもPSの-and/-orの等価precedence
+による誤判定があったため明示括弧で修正し、one-safe成功ケースを追加した。
+最終native13ケース成功、旧配列包みに戻すとone-safeで意図して失敗、復元一致。
+Storeも旧実装差替で新2testsが意図失敗、復元一致。関連101tests、build/typecheck成功。
+
+一括化後の現物初期status2259ms/enrollment2092msへ短縮したが、後半の負荷時に
+policy期限が切れて11.632秒でended（ok=false）。この変更で問題が完治したとは言わない。
+SYSTEM task終了/削除、Jobzero、runtime digest不変を確認。正常なサインイン前接続には
+引き続き処理時間と起動状態の追加対応が必要。
+
+利用者の復旧経路を用意する指示に基づき、接続元と専用鍵を限定したWindows標準SSHを
+別途準備中。秘密鍵はlocalstateの専用0600ファイルに置き、リポジトリへ含めない。

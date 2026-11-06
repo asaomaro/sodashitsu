@@ -1,0 +1,14 @@
+acl_batch one-safe passed
+acl_batch all-safe passed
+acl_batch second-unsafe passed
+acl_batch first-unsafe passed
+acl_batch missing passed
+acl_batch invalid-shape passed
+acl_batch invalid-shape passed
+acl_batch invalid-shape passed
+acl_batch invalid-shape passed
+acl_batch invalid-shape passed
+acl_batch invalid-shape passed
+acl_batch invalid-shape passed
+acl_batch oversized passed
+endpoint_acl_batch_native_generated_passed

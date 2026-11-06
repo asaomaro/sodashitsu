@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+
+ Test Files  4 passed (4)
+      Tests  80 passed (80)
+   Start at  19:27:10
+   Duration  2.36s (transform 72%, import 23%, tests 5%, worker 1%)
+
+  Transform  transforming modules took 5.66s · 72% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

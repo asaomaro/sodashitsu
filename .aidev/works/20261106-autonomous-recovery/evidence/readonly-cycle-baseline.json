@@ -1,0 +1,38 @@
+{
+  "probe": {
+    "fixture": "readonly-cycle-with-generated-presence",
+    "ok": true,
+    "outcome": "ended",
+    "elapsedMs": 9180,
+    "traces": [
+      {
+        "operation": "enrollment",
+        "atMs": 2,
+        "ms": 3987,
+        "ok": true
+      },
+      {
+        "operation": "status",
+        "atMs": 47,
+        "ms": 4875,
+        "ok": true
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 4938,
+        "ms": 2424,
+        "ok": false
+      },
+      {
+        "operation": "status",
+        "atMs": 4978,
+        "ms": 4201,
+        "ok": true
+      }
+    ]
+  },
+  "taskRemoved": true,
+  "taskResult": 0,
+  "unchanged": true,
+  "sddl": "O:BAG:BAD:PAI(A;;FA;;;SY)(A;;FA;;;BA)"
+}
