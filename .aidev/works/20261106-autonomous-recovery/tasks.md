@@ -123,3 +123,14 @@ PID18040/creation134384363801563095を再検証してNtResumeProcessで復帰後
 標準Windows handoff成功。pane UUID2件と親PID一致、実行中pane1件の維持を確認。
 16秒の観察でGit child2/新WindowsTerminal0。通常serverは現在一時停止中ではない。
 詳細は../20261106-windows-git-console/へ保存。
+
+
+## 復旧用SSHの開通（再開許可後）
+
+空のProgramData\sshと停止ManualのWindows標準sshdを確認し、hash/署名/サービスimage/port22未使用を固定して採用した。capability追加は再実行していない。
+独立レビュー済みinstallerをUAC承認後に実行し、SYSTEM一時taskで秘密hostkeyをprivateRootへ作成、task終了削除を確認。
+秘密client keyはLinux localstate0600のみ。認証済みpublic-statusのhostkeyをpinし、専用鍵で実SSH接続に成功。
+SID一致、administrator=true、Session0、sshd Running/Automatic、source192.168.0.95/port22限定、default SSH rule無効を確認した。
+PasswordAuthenticationは無効。ログイン・PIN保存・自動ログイン設定の変更はない。
+復旧経路が実接続で確認できたため、利用者の手元ログインに依存せず次のSYSTEM診断を行える。
+サインイン専用serviceの不具合解消・再起動後試験は、これとは別に未完了。

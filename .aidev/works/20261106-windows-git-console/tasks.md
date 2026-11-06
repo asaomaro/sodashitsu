@@ -13,13 +13,15 @@
 - [x] 同一processをresume後、認証済みlocal snapshotで対象を照合して標準Windows handoff。
 - [x] before/afterのpane UUID2件一致、親PID18040維持、handoffは実行中pane1件の維持を返した。
 - [x] Windowsで16秒の継続観察。Git child2件の動作を確認し、WindowsTerminal新規0件。
-- [ ] main pushとWindows checkoutの恒久更新。
+- [x] d7254b84をmainへpush、Windows mainをbd9c6f2eからfast-forward。tracked clean確認。
+- [x] Windows full build成功。typecheckは実行上限に合わせ分割し全packagesとscripts成功。
+- [x] full source反映後の標準handoff成功、同じ親PID18040とpane UUID2件を維持。
 
 ## 実機反映の範囲
 
 最小反映はC:\git\sodashitsu\packages\server\dist\infra\GitRunner.jsだけ。
-既存TS checkoutは変更していない。backed-up moduleと実行receiptを保持している。
-恒久的なsourceの更新も、同commitを含むmainをWindows cloneへ取り込んで行う必要がある。
+初回は既存TS checkoutを変更せず、backed-up moduleと実行receiptを保持した。
+その後、同commitを含むmainをWindows cloneへ取り込み、full build/typecheckとhandoffを完了。
 一時停止/再開の記録は20261106-autonomous-recovery側に保存。
 
 

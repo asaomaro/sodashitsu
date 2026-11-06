@@ -1,0 +1,32 @@
+{
+  "sourceCommit": "d7254b84fee7c7ab0a821eb33d95793799d720ff",
+  "windowsFullBuild": {
+    "ok": true,
+    "startedAt": "2026-11-06T12:26:58.687Z",
+    "endedAt": "2026-11-06T12:30:33.419Z"
+  },
+  "combinedBuildThenTypecheckTimedOut": true,
+  "note": "Full build completed; combined job hit 300000ms during typecheck. Typechecks rerun separately, no repeated build.",
+  "checks": {
+    "client": {
+      "exitCode": 0,
+      "timedOut": false,
+      "cancelled": false
+    },
+    "web": {
+      "exitCode": 0,
+      "timedOut": false,
+      "cancelled": false
+    },
+    "other": {
+      "exitCode": 0,
+      "timedOut": false,
+      "cancelled": false
+    },
+    "server": {
+      "exitCode": 0,
+      "timedOut": false,
+      "cancelled": false
+    }
+  }
+}
