@@ -7,5 +7,9 @@ export async function main():Promise<void>{
  process.once("SIGTERM",stop);process.once("SIGINT",stop);
  try{
   await desktopSigninEntry(owner,process.stdin,controller);
+ }catch{
+  // Fixed code only; no exception text, paths, enrollment or keys leave Node.
+  // Entry has already awaited every owned teardown before rejecting.
+  controller.abort();process.exit(240);
  }finally{controller.abort();process.removeListener("SIGTERM",stop);process.removeListener("SIGINT",stop);}
 }

@@ -14,7 +14,7 @@ public static class SodaDesktopSigninHost {
     // child output never enter SCM status. Cleanup and admission stay unchanged.
     internal sealed class StartupFailure:Exception {
         internal readonly uint Code;
-        internal StartupFailure(uint code):base("Signin host is unavailable"){Code=code>=101&&code<=109?code:1u;}
+        internal StartupFailure(uint code):base("Signin host is unavailable"){Code=code>=101&&code<=109||code>=201&&code<=215||code==240?code:1u;}
     }
     internal sealed class Plan {
         internal readonly string Application,Arguments,WorkingDirectory,EnvironmentBlock;
@@ -85,7 +85,7 @@ public static class SodaDesktopSigninHost {
             stage=107;if(stop.WaitOne(0)){if(!child.TryGraceful())throw Failure();}
             else if(!retained()||!child.ExitedSuccessfully()||!child.TryGraceful())throw Failure();
             stage=108;run.CompleteCore(()=>child.TryGraceful()&&workers.Empty(),retained);stage=109;WaitAfterCompletion(run,stop,retained);
-        }catch{throw new StartupFailure(stage);}finally {
+        }catch{if(child!=null)stage=child.FailureStage(stage);throw new StartupFailure(stage);}finally {
             // Holding the entire package until ALL descendants stop is mandatory.
             // On an OS failure never release the leases to a surviving child.
             if(child!=null&&!child.Stop())Environment.FailFast("Signin host could not stop its child");

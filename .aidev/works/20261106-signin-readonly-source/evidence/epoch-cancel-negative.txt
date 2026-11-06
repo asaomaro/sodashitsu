@@ -1,0 +1,50 @@
+stdout:
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopSigninRuntime.test.ts (33 tests | 2 failed | 31 skipped) 73ms
+   × ends a proven native epoch lost during readonly source preparation only after teardown 15ms
+   × ends a native epoch lost during the initial readonly request without terminating startup 56ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 31 skipped (33)
+   Start at  02:35:01
+   Duration  2.23s (transform 73%, import 23%, tests 4%)
+
+
+stderr:
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninRuntime.test.ts > ends a proven native epoch lost during readonly source preparation only after teardown
+AssertionError: promise rejected "Error: Signin runtime is unavailable" instead of resolving
+ ❯ src/desktop/DesktopSigninRuntime.test.ts:92:19
+     90|  const source={store:f.store,ready:vi.fn(()=>ready),enrollment:vi.fn(a…
+     91|  f.deps.source=()=>source as never;const run=f.start();f.reveal();awai…
+     92|  await expect(run).resolves.toBe("ended");expect(source.settled).toHav…
+       |                   ^
+     93| });
+     94| it("ends a native epoch lost during the initial readonly request witho…
+
+Caused by: Error: Signin runtime is unavailable
+ ❯ failure src/desktop/DesktopSigninRuntime.ts:12:19
+ ❯ desktopSigninCycle src/desktop/DesktopSigninRuntime.ts:94:69
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninRuntime.test.ts > ends a native epoch lost during the initial readonly request without terminating startup
+AssertionError: promise rejected "Error: Signin runtime is unavailable" instead of resolving
+ ❯ src/desktop/DesktopSigninRuntime.test.ts:97:19
+
+
+Caused by: Error: Signin runtime is unavailable
+ ❯ failure src/desktop/DesktopSigninRuntime.ts:12:19
+ ❯ desktopSigninCycle src/desktop/DesktopSigninRuntime.ts:94:69
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯

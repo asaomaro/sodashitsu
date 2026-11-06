@@ -39,14 +39,18 @@ internal static class SodaDesktopSigninWorkerNative {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr OpenProcess(uint access,bool inherit,uint pid);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool GetProcessTimes(IntPtr process,out ulong created,out ulong exited,out ulong kernel,out ulong user);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern uint WaitForSingleObject(IntPtr process,uint timeout);
+    internal sealed class DiagnosticFailure:Exception {
+        internal readonly int Code;
+        internal DiagnosticFailure(int code):base("Signin worker is unavailable"){Code=code>=201&&code<=215?code:1;}
+    }
     internal sealed class HostBinding:IDisposable {
         internal IntPtr Parent,Aggregate;SodaDesktopSigninRunJournal journal;SodaDesktopSigninProcessEvidence.Pin host;SodaDesktopSigninRunRecord started;Func<bool> scope;
         internal static HostBinding Open(string owner,string package,string barrier,Func<bool> current){
-            var result=new HostBinding();try{result.scope=current;result.journal=SodaDesktopSigninRunStorage.OpenController(owner,package,barrier,SodaDesktopSigninRunJournal.Role.Reader,current);
-                Require(result.journal.State()=="observed");result.started=result.journal.StartedRecord();result.host=SodaDesktopSigninProcessEvidence.Open(owner,result.started,current);
-                result.Parent=OpenProcess(0x00101080,false,checked((uint)(long)result.started.Field("pid")));Require(result.Parent!=IntPtr.Zero&&result.Current());
-                result.Aggregate=OpenJobObjectW(0x0005,false,SodaDesktopSigninProcess.HostJobName(owner,result.started));Require(result.Aggregate!=IntPtr.Zero&&result.Current());return result;
-            }catch{result.Dispose();throw;}
+            var result=new HostBinding();int stage=203;try{result.scope=current;result.journal=SodaDesktopSigninRunStorage.OpenController(owner,package,barrier,SodaDesktopSigninRunJournal.Role.Reader,current);
+                stage=204;Require(result.journal.State()=="observed");result.started=result.journal.StartedRecord();stage=205;result.host=SodaDesktopSigninProcessEvidence.Open(owner,result.started,current);
+                stage=206;result.Parent=OpenProcess(0x00101080,false,checked((uint)(long)result.started.Field("pid")));Require(result.Parent!=IntPtr.Zero);stage=207;Require(result.Current());
+                stage=208;result.Aggregate=OpenJobObjectW(0x0005,false,SodaDesktopSigninProcess.HostJobName(owner,result.started));Require(result.Aggregate!=IntPtr.Zero);stage=209;Require(result.Current());return result;
+            }catch{result.Dispose();throw new DiagnosticFailure(stage);}
         }
         internal bool Current(){
             try{ulong created,exited,kernel,user;return scope!=null&&scope()&&host!=null&&host.Current()&&Parent!=IntPtr.Zero&&WaitForSingleObject(Parent,0)==258&&GetProcessTimes(Parent,out created,out exited,out kernel,out user)&&created.ToString(System.Globalization.CultureInfo.InvariantCulture)==(string)started.Field("createdFiletime")&&journal.State()=="observed"&&journal.StartedRecord().Digest()==started.Digest()&&scope()&&host.Current();}catch{return false;}

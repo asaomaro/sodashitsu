@@ -9,7 +9,7 @@ export interface DesktopSigninWorkerDependencies {
   platform:NodeJS.Platform;now():number;
   spawn(command:string,args:string[],options:SpawnOptions):Child;
   /** The dedicated Node main must terminate itself if native teardown cannot be proved. */
-  unsafeStop():void;
+  unsafeStop(diagnosticCode?:number):void;
 }
 const unavailable=()=>new Error("Signin worker is unavailable");
 const defaults:DesktopSigninWorkerDependencies={platform:process.platform,now:()=>performance.now(),spawn:(command,args,options)=>{

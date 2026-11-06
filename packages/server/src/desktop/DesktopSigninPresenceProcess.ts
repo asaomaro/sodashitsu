@@ -9,7 +9,7 @@ const contextSchema=z.object({type:z.literal("signin_context"),ownerSid:z.string
 const pulseSchema=z.object({type:z.literal("signin_presence"),seq:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),validForMs:z.number().int().min(1).max(1000)}).strict();
 export type DesktopSigninContext=Readonly<z.infer<typeof contextSchema>>;
 export interface DesktopSigninPresenceDependencies extends DesktopSigninWorkerDependencies {root():string;}
-const defaults:DesktopSigninPresenceDependencies={root:()=>win32.resolve(fileURLToPath(new URL("../../../../",import.meta.url))),platform:process.platform,now:()=>performance.now(),spawn:(command,args,options)=>spawn(command,args,options) as ReturnType<DesktopSigninWorkerDependencies["spawn"]>,unsafeStop:()=>process.exit(1)};
+const defaults:DesktopSigninPresenceDependencies={root:()=>win32.resolve(fileURLToPath(new URL("../../../../",import.meta.url))),platform:process.platform,now:()=>performance.now(),spawn:(command,args,options)=>spawn(command,args,options) as ReturnType<DesktopSigninWorkerDependencies["spawn"]>,unsafeStop:code=>process.exit(code!==undefined&&Number.isInteger(code)&&code>=201&&code<=215?code:1)};
 export function desktopSigninContext(raw:unknown,ownerSid:string,expectedRoot:string):DesktopSigninContext{
  const data=contextSchema.parse(raw),parts=ownerSid.split("-").slice(2);
  if(!/^S-1-[0-9]+(?:-[0-9]+){1,15}$/.test(ownerSid)||["S-1-5-18","S-1-5-19","S-1-5-20"].includes(ownerSid)||parts.some((p,i)=>!/^(?:0|[1-9][0-9]*)$/.test(p)||!Number.isSafeInteger(Number(p))||Number(p)>(i===0?0xffffffffffff:0xffffffff))||data.ownerSid!==ownerSid)throw failure();
@@ -73,7 +73,7 @@ export class DesktopSigninPresenceProcess {
   if(this.#done)return;let complete=false;try{complete=this.#decoder.decode().length===0&&this.#line.length===0&&this.#bytes===0;}catch{}
   this.#done=true;this.#closing=true;clearInterval(this.#health);clearInterval(this.#beat);clearTimeout(this.#stop);this.options.signal.removeEventListener("abort",this.#abort);this.#line="";this.#bytes=0;this.notify();
   if(code===0&&this.#proof&&!this.#tail&&complete){if(!this.#readyDone){this.#readyDone=true;this.#readyResolve(this.contextResult());}this.#resolve();return;}
-  if(!this.#readyDone){this.#readyDone=true;this.#readyReject(failure());}this.#reject(failure());try{this.deps.unsafeStop();}catch{}
+  if(!this.#readyDone){this.#readyDone=true;this.#readyReject(failure());}this.#reject(failure());try{this.deps.unsafeStop(code!==null&&Number.isInteger(code)&&code>=201&&code<=215?code:undefined);}catch{}
  }
  private contextResult():DesktopSigninContext|null{
   if(this.purpose!=="context"||!this.#context||this.#invalid||this.options.signal.aborted)return null;

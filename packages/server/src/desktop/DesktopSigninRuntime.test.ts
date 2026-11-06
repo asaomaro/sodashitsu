@@ -84,3 +84,24 @@ it("retains teardown ownership for an unconfirmed shared source",async()=>{
  vi.useFakeTimers();const f=fixture(),source={store:f.store,ready:vi.fn(async()=>{}),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(),settled:vi.fn(async()=>{throw Error("unconfirmed child");})};f.deps.source=()=>source as never;
  const run=f.start();f.reveal();await flush();f.lose();f.stopProof();await expect(run).rejects.toThrow();expect(f.deps.unsafeStop).toHaveBeenCalledOnce();
 });
+
+it("ends a proven native epoch lost during readonly source preparation only after teardown",async()=>{
+ const f=fixture();let reject!:(error:Error)=>void;const ready=new Promise<void>((_resolve,no)=>{reject=no;});
+ const source={store:f.store,ready:vi.fn(()=>ready),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(()=>reject(Error("generated cancellation"))),settled:vi.fn(async()=>{})};
+ f.deps.source=()=>source as never;const run=f.start();f.reveal();await flush();expect(source.ready).toHaveBeenCalledOnce();f.lose();f.stopProof();
+ await expect(run).resolves.toBe("ended");expect(source.settled).toHaveBeenCalledOnce();expect(f.deps.connector).not.toHaveBeenCalled();expect(f.deps.unsafeStop).not.toHaveBeenCalled();
+});
+it("ends a native epoch lost during the initial readonly request without terminating startup",async()=>{
+ const f=fixture();f.deps.enrollment=vi.fn<DesktopSigninRuntimeDependencies["enrollment"]>(async(_owner,scope)=>new Promise<DesktopSigninEnrollment>((_resolve,reject)=>{scope.signal.addEventListener("abort",()=>reject(Error("generated cancellation")),{once:true});}));
+ const run=f.start();f.reveal();await vi.waitFor(()=>expect(f.deps.enrollment).toHaveBeenCalledOnce());f.lose();f.stopProof();
+ await expect(run).resolves.toBe("ended");expect(f.store.close).toHaveBeenCalledOnce();expect(f.deps.connector).not.toHaveBeenCalled();expect(f.deps.unsafeStop).not.toHaveBeenCalled();
+});
+it("still rejects a source failure without native epoch loss",async()=>{
+ const f=fixture(),source={store:f.store,ready:vi.fn(async()=>{throw Error("generated malformed source");}),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(),settled:vi.fn(async()=>{})};
+ f.deps.source=()=>source as never;const run=f.start();f.reveal();await flush();f.stopProof();await expect(run).rejects.toThrow();expect(f.deps.connector).not.toHaveBeenCalled();
+});
+it("never treats native loss as completed teardown when stop proof is rejected",async()=>{
+ const f=fixture();f.deps.enrollment=vi.fn<DesktopSigninRuntimeDependencies["enrollment"]>(async(_owner,scope)=>new Promise<DesktopSigninEnrollment>((_resolve,reject)=>{scope.signal.addEventListener("abort",()=>reject(Error("generated cancellation")),{once:true});}));
+ f.presence.settled.mockImplementation(async()=>{throw Error("generated missing proof");});const run=f.start();f.reveal();await vi.waitFor(()=>expect(f.deps.enrollment).toHaveBeenCalledOnce());f.lose();
+ await expect(run).rejects.toThrow();expect(f.deps.unsafeStop).toHaveBeenCalledOnce();
+});

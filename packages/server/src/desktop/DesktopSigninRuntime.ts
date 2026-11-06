@@ -32,7 +32,7 @@ const digest=(enrollment:DesktopSigninEnrollment,status:Awaited<ReturnType<Store
  * before the caller may begin another epoch. */
 export async function desktopSigninCycle(ownerSid:string,signal:AbortSignal,deps:DesktopSigninRuntimeDependencies=defaults):Promise<"inactive"|"ended">{
  if(signal.aborted)return "ended";
- const controller=new AbortController();let failed=false,stopping=false,creating=false,policyUntil=Infinity;
+ const controller=new AbortController();let failed=false,stopping=false,creating=false,nativeLost=false,hadProof=false,policyUntil=Infinity;
  let presence:Presence|undefined,store:Store|undefined,identity:ReturnType<DesktopSigninRuntimeDependencies["identity"]>|undefined,endpoint:Endpoint|undefined,connector:ReturnType<DesktopSigninRuntimeDependencies["connector"]>|undefined;
  let timer:ReturnType<typeof setTimeout>|undefined;
  let source:ReturnType<NonNullable<DesktopSigninRuntimeDependencies["source"]>>|undefined;
@@ -45,14 +45,14 @@ export async function desktopSigninCycle(ownerSid:string,signal:AbortSignal,deps
  const read=async<T>(operation:()=>Promise<T>):Promise<T>=>{
   if(!active())throw failure();let wait:ReturnType<typeof setTimeout>|undefined;
   const work=Promise.resolve().then(()=>{if(!active())throw failure();return operation();});pending.add(work);void work.then(()=>pending.delete(work),()=>pending.delete(work));
-  try{return await Promise.race([work,new Promise<never>((_,reject)=>{wait=setTimeout(()=>{if(signal.aborted)stop();else fail();reject(failure());},5000);wait.unref();})]);}finally{clearTimeout(wait);}
+  try{return await Promise.race([work,new Promise<never>((_,reject)=>{wait=setTimeout(()=>{if(signal.aborted||nativeLost)stop();else fail();reject(failure());},5000);wait.unref();})]);}finally{clearTimeout(wait);}
  };
  let result:"inactive"|"ended"="inactive";
  try{
-  creating=true;try{presence=deps.presence({ownerSid,active:owned,signal:controller.signal,closed:stop});}finally{creating=false;if(!owned())presence?.close();}
+  creating=true;try{presence=deps.presence({ownerSid,active:owned,signal:controller.signal,closed:()=>{if(!stopping)nativeLost=true;stop();}});}finally{creating=false;if(!owned())presence?.close();}
   if(!owned())throw failure();const context=await presence.ready();
   if(!context){await presence.settled();return "inactive";}
-  if(!active())throw failure();
+  hadProof=true;if(!active())throw failure();
   if(deps.source){source=deps.source(context,{active,signal:controller.signal,closed:stop});if(!active()){source.close();throw failure();}await source.ready();if(!active())throw failure();}
   const enrollmentRead=()=>source?source.enrollment():deps.enrollment(ownerSid,{active,signal:controller.signal});
   const initialReadAt=deps.now();policyUntil=initialReadAt+5000;
@@ -87,11 +87,11 @@ export async function desktopSigninCycle(ownerSid:string,signal:AbortSignal,deps
      ]);
      if(!active()||digest(latestEnrollment,latestStatus)!==baseline||deps.now()>=checkUntil)throw failure();
      policyUntil=checkUntil;
-    })().catch(()=>{if(!signal.aborted)fail();}).finally(schedule);
+    })().catch(()=>{if(!signal.aborted&&!nativeLost)fail();}).finally(schedule);
    },Math.max(0,nextCheckAt-deps.now()));timer.unref();
   };schedule();
   await stopped;if(failed)throw failure();return result;
- }catch{if(signal.aborted&&!failed)return "ended";failed=true;throw failure();}
+ }catch{if((signal.aborted||nativeLost&&hadProof)&&!failed)return "ended";failed=true;throw failure();}
  finally{
   stop();clearTimeout(timer);signal.removeEventListener("abort",outer);connector?.close();identity?.close();if(!identity)store?.close();
   let timeout:ReturnType<typeof setTimeout>|undefined;

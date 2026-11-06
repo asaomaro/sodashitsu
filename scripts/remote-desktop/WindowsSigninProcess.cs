@@ -69,6 +69,7 @@ internal static class SodaDesktopSigninProcess {
         internal bool Owns(int pid){lock(gate){try{using(var item=Process.GetProcessById(pid)){bool owned;Require(IsProcessInJob(item.Handle,job,out owned));return owned;}}catch{return false;}}}
         internal bool Running(){lock(gate){return !stopped&&WaitForSingleObject(process,0)==258;}}
         internal bool ExitedSuccessfully(){lock(gate){uint code;return process!=IntPtr.Zero&&WaitForSingleObject(process,0)==0&&GetExitCodeProcess(process,out code)&&code==0;}}
+        internal uint FailureStage(uint fallback){lock(gate){uint code;return fallback==107&&process!=IntPtr.Zero&&WaitForSingleObject(process,0)==0&&GetExitCodeProcess(process,out code)&&(code>=201&&code<=215||code==240)?code:fallback;}}
         internal uint Active(){lock(gate){Accounting data=new Accounting();Require(job!=IntPtr.Zero&&QueryInformationJobObject(job,1,out data,(uint)Marshal.SizeOf(typeof(Accounting)),IntPtr.Zero));return data.Active;}}
         internal bool TryGraceful(int milliseconds=10000){lock(gate){
             if(milliseconds<1||milliseconds>10000||process==IntPtr.Zero||job==IntPtr.Zero)return false;if(stopped)return graceful;

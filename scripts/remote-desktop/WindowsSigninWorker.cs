@@ -38,20 +38,21 @@ public static class SodaDesktopSigninWorker {
     internal static string Line(TextReader reader,int maximum){var text=new StringBuilder();int value;while((value=reader.Read())!=-1){if(value==10){if(text.Length>0&&text[text.Length-1]==13)text.Length--;return text.ToString();}if(text.Length>=maximum)throw Failure();text.Append((char)value);}if(text.Length!=0)throw Failure();return null;}
     static void Send(TextWriter writer,object value){writer.WriteLine(Json.Serialize(value));writer.Flush();}
     internal static void Broker(Purpose purpose,TextReader parentIn,TextWriter parentOut){
+        int stage=201;try{
         Require(SodaDesktopSigninVault.SystemPrimary()&&Process.GetCurrentProcess().SessionId==0);
         using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open()){
-            uint console=SodaDesktopSigninWorkerNative.WTSGetActiveConsoleSessionId();Require(console>0&&console<=Int32.MaxValue);Guid nonce=Guid.NewGuid();
+            stage=202;uint console=SodaDesktopSigninWorkerNative.WTSGetActiveConsoleSessionId();Require(console>0&&console<=Int32.MaxValue);Guid nonce=Guid.NewGuid();
             if(purpose==Purpose.Presence){Require(package.Current());Send(parentOut,new{type="signin_context",ownerSid=Owner,packageRoot=Path.GetDirectoryName(package.Bootstrap),stateDir=runtime.Path});}
-            using(var host=SodaDesktopSigninWorkerNative.HostBinding.Open(Owner,package.ManifestSha256,runtime.BarrierSha256,()=>package.Current()&&runtime.Current()))
-            using(var pipe=SodaDesktopSigninWorkerNative.Server(SodaDesktopSigninWorkerNative.PipeName(Owner,nonce))){
-                uint pid;var child=SodaDesktopSigninWorkerNative.Start(Owner,nonce,(int)console,purpose,runtime.Path,host,out pid);
+            using(var host=SodaDesktopSigninWorkerNative.HostBinding.Open(Owner,package.ManifestSha256,runtime.BarrierSha256,()=>package.Current()&&runtime.Current())){
+            stage=210;using(var pipe=SodaDesktopSigninWorkerNative.Server(SodaDesktopSigninWorkerNative.PipeName(Owner,nonce))){
+                stage=211;uint pid;var child=SodaDesktopSigninWorkerNative.Start(Owner,nonce,(int)console,purpose,runtime.Path,host,out pid);
                 try{
-                    var pending=Task.Factory.FromAsync(pipe.BeginWaitForConnection,pipe.EndWaitForConnection,null);var timer=Stopwatch.StartNew();
+                    stage=212;var pending=Task.Factory.FromAsync(pipe.BeginWaitForConnection,pipe.EndWaitForConnection,null);var timer=Stopwatch.StartNew();
                     pending.ContinueWith(failed=>failed.Exception.Handle(error=>true),TaskContinuationOptions.OnlyOnFaulted|TaskContinuationOptions.ExecuteSynchronously);
                     while(!pending.IsCompleted){Require(timer.ElapsedMilliseconds<5000&&package.Current()&&child.Running());Thread.Sleep(20);}Require(timer.ElapsedMilliseconds<5000);pending.GetAwaiter().GetResult();
-                    uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeClientProcessId(pipe.SafePipeHandle,out actual)&&actual==pid&&child.Running());
+                    stage=213;uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeClientProcessId(pipe.SafePipeHandle,out actual)&&actual==pid&&child.Running());
                     using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,65536,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),4096,true))using(var stop=new ManualResetEvent(false)){
-                        var inbound=new Thread(()=>{try{string line;while((line=Line(parentIn,16384))!=null){writer.WriteLine(line);writer.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
+                        stage=214;var inbound=new Thread(()=>{try{string line;while((line=Line(parentIn,16384))!=null){writer.WriteLine(line);writer.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
                         var outbound=new Thread(()=>{try{string line;while((line=Line(reader,3000000))!=null){parentOut.WriteLine(line);parentOut.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
                         inbound.Start();outbound.Start();timer.Restart();while(!stop.WaitOne(50)&&child.Running()&&package.Current()&&timer.ElapsedMilliseconds<120000){}
                         if(!child.Stop())Environment.FailFast("Signin worker could not stop");pipe.Dispose();
@@ -61,10 +62,12 @@ public static class SodaDesktopSigninWorker {
                     }
                 }finally{if(!child.Stop())Environment.FailFast("Signin worker could not stop");child.Dispose();}
             }
+            }
         }
         // Emitted only after Job zero-active confirmation, output pump join,
         // and all native child/package/runtime leases have been released.
-        parentOut.WriteLine("{\"type\":\"signin_stopped\"}");parentOut.Flush();
+        stage=215;parentOut.WriteLine("{\"type\":\"signin_stopped\"}");parentOut.Flush();
+        }catch(SodaDesktopSigninWorkerNative.DiagnosticFailure){throw;}catch{throw new SodaDesktopSigninWorkerNative.DiagnosticFailure(stage);}
     }
     // Context inspection verifies the installed SYSTEM image and private runtime
     // but never queries/opens a desktop or creates a Winlogon child.
@@ -250,6 +253,8 @@ public static class SodaDesktopSigninWorker {
         }
         int contextCalls=0;Generated(ContextRoute(new[]{"--context"},()=>contextCalls++)&&contextCalls==1,"Context route not dispatched");
         foreach(var argv in new[]{new string[0],new[]{"--context","input"},new[]{"--broker","presence"},new[]{"--worker"},new[]{"context"}})Generated(!ContextRoute(argv,()=>contextCalls++)&&contextCalls==1,"Context route accepted other purpose");
+        foreach(int code in new[]{201,203,208,215})Generated(new SodaDesktopSigninWorkerNative.DiagnosticFailure(code).Code==code,"Fixed diagnostic code was lost");
+        foreach(int code in new[]{0,1,107,200,216,240,Int32.MaxValue})Generated(new SodaDesktopSigninWorkerNative.DiagnosticFailure(code).Code==1,"Unknown diagnostic code accepted");
         SodaDesktopSigninWorkerNative.VerifyLayouts();Console.WriteLine("signin_worker_generated_data_and_abi_passed");
     }
     public static void Main(string[] args){
@@ -260,6 +265,6 @@ public static class SodaDesktopSigninWorker {
             if(args.Length==2&&args[0]=="--broker"&&(args[1]=="input"||args[1]=="view"||args[1]=="presence")){using(var input=Utf8Reader(Console.OpenStandardInput()))using(var output=Utf8Writer(Console.OpenStandardOutput()))Broker(ParsePurpose(args[1]),input,output);return;}
             Require(args.Length==6&&args[0]=="--worker");Guid nonce=Guid.Empty;int broker=0,session=0;long started=0;Require(Guid.TryParseExact(args[1],"D",out nonce)&&nonce!=Guid.Empty&&args[1]==nonce.ToString("D")&&Int32.TryParse(args[2],out broker)&&broker>0&&Int64.TryParse(args[3],out started)&&started>0&&Int32.TryParse(args[4],out session)&&session>0&&(args[5]=="input"||args[5]=="view"||args[5]=="presence"));
             Run(nonce,broker,started,session,ParsePurpose(args[5]));
-        }catch{Environment.Exit(1);}
+        }catch(Exception error){var diagnostic=error as SodaDesktopSigninWorkerNative.DiagnosticFailure;Environment.Exit(diagnostic==null?1:diagnostic.Code);}
     }
 }

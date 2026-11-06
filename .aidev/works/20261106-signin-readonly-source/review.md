@@ -31,3 +31,11 @@ review_resource_monitorがcase・生成tests・固定operator SDK/pins/ACL/once 
 標準Upgradeの失敗条件を調べ、107を一般許可する変更は採用しなかった。
 新critical SCMを保持するBoot Guard/標準toolsへの固定導線/鍵hash/once claim/BootTask ACLも独立点検済み。
 実bootと実サービスの健全性は引き続き未検証。
+
+
+## epoch取消と固定phase
+
+11filesの独立reviewで必須指摘なし。native closedの最初の発火とhadProofだけを回復条件にし、
+source自身のclose・own stop・未確認teardownを回復扱いしないことを確認。
+phaseは既知値のみ、Hostが保持する終了childのstage107時だけ採用し、finally清掃後に報告。
+負例の生出力と復元hashはevidenceへ保存。実1ba serviceの失敗がこのraceだけとはまだ断定しない。

@@ -66,13 +66,13 @@ public static class SodaDesktopSigninHostChecks {
                     else{var last=states[states.Count-1];Check(last.State==1&&last.Exit==1066&&last.Specific==1,"Service failure reported clean stop");}
                 }
             }
-            foreach(uint code in new uint[]{0,1,100,101,102,103,104,105,106,107,108,109,110,UInt32.MaxValue}){
+            foreach(uint code in new uint[]{0,1,100,101,102,103,104,105,106,107,108,109,110,200,201,203,208,215,216,240,241,UInt32.MaxValue}){
                 bool cleaned=false;var states=new System.Collections.Generic.List<SodaDesktopSigninHost.ServiceStatus>();
                 using(var service=new SodaDesktopSigninHost.Service((name,handler)=>new IntPtr(7),
                     delegate(IntPtr handle,ref SodaDesktopSigninHost.ServiceStatus value){if(value.State==1)Check(cleaned,"Diagnostic reported before cleanup");states.Add(value);return true;},
                     stop=>{try{throw new SodaDesktopSigninHost.StartupFailure(code);}finally{cleaned=true;}})){
                     ServiceEntry(service,1,service.Name);var last=states[states.Count-1];
-                    Check(service.ExitCode==1&&Environment.ExitCode==1&&last.State==1&&last.Exit==1066&&last.Specific==(code>=101&&code<=109?code:1u),"Fixed startup stage lost or unbounded");
+                    Check(service.ExitCode==1&&Environment.ExitCode==1&&last.State==1&&last.Exit==1066&&last.Specific==(code>=101&&code<=109||code>=201&&code<=215||code==240?code:1u),"Fixed startup stage lost or unbounded");
                 }
             }
             Action alarm=null;int expired=0;var canceled=new DeadlineLease();
@@ -107,8 +107,8 @@ public static class SodaDesktopSigninHostChecks {
         }
         using(var forced=SodaDesktopSigninProcess.Start(Fixture(exe,directory,"--generated-stop-hang"),()=>true)){Check(forced.Stop(),"Generated force stop failed");Check(!forced.TryGraceful(100),"Forced child was misclassified as clean");}
         File.Delete(Path.Combine(directory,"descendant"));
-        foreach(string mode in new[]{"--generated-exit-success","--generated-exit-failure"})using(var child=SodaDesktopSigninProcess.Start(Fixture(exe,directory,mode),()=>true)){
-            Wait(()=>!child.Running(),"Generated finite child did not exit");Check(child.ExitedSuccessfully()==(mode=="--generated-exit-success"),"Finite child exit code was ignored");Check(child.Stop()&&child.Active()==0,"Finite child cleanup failed");
+        foreach(string mode in new[]{"--generated-exit-success","--generated-exit-failure","--generated-exit-diagnostic","--generated-exit-entry-failure"})using(var child=SodaDesktopSigninProcess.Start(Fixture(exe,directory,mode),()=>true)){
+            Wait(()=>!child.Running(),"Generated finite child did not exit");Check(child.ExitedSuccessfully()==(mode=="--generated-exit-success"),"Finite child exit code was ignored");Check(child.FailureStage(107)==(mode=="--generated-exit-diagnostic"?208u:mode=="--generated-exit-entry-failure"?240u:107u)&&child.FailureStage(105)==105,"Closed child diagnostic was lost or accepted in wrong stage");Check(child.Stop()&&child.Active()==0,"Finite child cleanup failed");
         }
         using(var sentinel=new EventWaitHandle(false,EventResetMode.ManualReset)){
         sentinelValue=sentinel.SafeWaitHandle.DangerousGetHandle().ToInt64();
@@ -161,6 +161,8 @@ public static class SodaDesktopSigninHostChecks {
         }
         if(args[0]=="--generated-exit-success")return;
         if(args[0]=="--generated-exit-failure"){Environment.Exit(7);return;}
+        if(args[0]=="--generated-exit-diagnostic"){Environment.Exit(208);return;}
+        if(args[0]=="--generated-exit-entry-failure"){Environment.Exit(240);return;}
         if(args[0]=="--generated-descendant"){Publish(Path.Combine(args[1],"descendant"),Process.GetCurrentProcess().Id.ToString());Thread.Sleep(30000);return;}
         if(args[0]!="--generated-child"||args.Length!=3)Environment.Exit(2);
         SetEvent(new IntPtr(Int64.Parse(args[2],System.Globalization.CultureInfo.InvariantCulture)));

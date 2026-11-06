@@ -69,3 +69,21 @@ negativeのunchanged=falseは、意図した例外終了でverified markerを発
 Boot task c3efd99d901f43c7979ccbf358534579は15秒delay/12分上限、fresh191 Rootの標準toolだけを一回呼ぶ。
 鍵3ファイルのhashはupgrade前後で確認する。成功receiptは起動観測ACKであり、実接続・長時間健全性の確認とは分ける。
 再起動後の復旧経路は未検証であり、準備だけで成功としない。
+
+
+## 実boot結果とepoch取消
+
+- [x] 実rebootは/fなしで要求し、手元ログインなしでSSH再接続（新boot 2026-11-06T17:05:45.5Z/Session0/SID一致）。
+- [x] 新SCM1352:134384583610655456を実確認。Boot task c3は標準Upgrade b38→1ba/起動観測ACK1回まで成功。
+- [ ] 実serviceはその後再び1066/107で停止。run217a29bb...の結果はunknownであり、起動成功とはしない。
+- [x] readonly snapshotでHost8104/creation・started digest・runtime d583…不変を確認。まだrun再利用なし。
+- [x] native証明後のsource準備/初回read中のepoch喪失を、確認済みteardown後にfresh probeへ戻す修正。
+- [x] source単独不正/未確認native終了は引き続き拒否。4追加tests、旧Runtimeのみ戻す負例2件失敗→byteExact復元。
+- [x] 固定201..215/240の診断番号を追加し、text/paths/keysを出さず停止原因を伝播。旧Presenceのみ戻す負例4件失敗→復元。
+- [x] 関連26files/465tests、server typecheck/build、native Host/RunSession/Worker checks成功。独立レビュー必須指摘なし。
+- [ ] epoch修正版を標準更新して実serviceとprelogin接続を再検証。
+
+新診断番号: 201 package/runtime、202 console、203 journal open、204 journal照合、205 Host pin、
+206 parent handle、207 parent照合、208 aggregate open、209 aggregate照合、210 pipe、211 worker create、
+212 connect待ち、213 pipe認証、214 pump、215終了行、240 Node entryのreject。
+番号は失敗状態の説明だけで、正常終了や入力解放ACKを意味しない。Specific報告は従来同様全Job清掃後。
