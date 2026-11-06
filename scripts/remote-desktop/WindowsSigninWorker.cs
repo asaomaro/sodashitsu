@@ -177,10 +177,13 @@ public static class SodaDesktopSigninWorker {
         foreach(ushort key in held)if(current())Emit(KeyEvent(key,false),current);held.Clear();
         foreach(int button in buttons)if(current()){var click=new Input();click.Data.Mouse.Flags=button==0?4u:button==1?64u:button==2?16u:256u;click.Data.Mouse.Data=button>=3?(uint)(button-2):0u;Emit(click,current);}buttons.Clear();
     }
+    // Overlapped I/O lets the pending command reader coexist with outgoing
+    // presence, frames and acknowledgements without waiting for more input.
+    internal static NamedPipeClientStream OpenPipe(string name){return new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous,System.Security.Principal.TokenImpersonationLevel.Anonymous);}
     static void Run(Guid nonce,int brokerPid,long brokerStarted,int session,Purpose purpose){
         bool input=purpose==Purpose.Input;Require(PurposeName(purpose)!=null);
         Require(SodaDesktopSigninVault.SystemPrimary());
-        using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open())using(var pipe=new NamedPipeClientStream(".",SodaDesktopSigninWorkerNative.PipeName(Owner,nonce),PipeDirection.InOut,PipeOptions.None,System.Security.Principal.TokenImpersonationLevel.Anonymous)){
+        using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open())using(var pipe=OpenPipe(SodaDesktopSigninWorkerNative.PipeName(Owner,nonce))){
             pipe.Connect(5000);uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeServerProcessId(pipe.SafePipeHandle,out actual)&&actual==(uint)brokerPid);
             WithPipeText(pipe,16384,65536,(reader,writer)=>{
             SodaDesktopSigninScopeNative native;try{native=new SodaDesktopSigninScopeNative(Owner,session,brokerPid,brokerStarted,nonce);}catch(SodaDesktopSigninInactiveException){InactivePresence(purpose,type=>Send(writer,new{type}),()=>Line(reader,16384));return;}

@@ -1,20 +1,21 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Generated data/clock/topology/input sinks only. No privileged entry point is run.
-$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunAdmission.cs','WindowsSigninRunJournal.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninControllerMutex.cs','WindowsSigninRunStorage.cs','WindowsSigninRunSession.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsProtectedEpoch.cs','WindowsSigninCandidate.cs','WindowsSigninCandidateNative.cs','WindowsSigninScope.cs','WindowsSigninScopeNative.cs','WindowsSigninWorkerNative.cs','WindowsSigninWorker.cs','WindowsSigninPresence.cs','WindowsSigninTarget.cs','WindowsSigninScopeChecks.cs')
+$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunAdmission.cs','WindowsSigninRunJournal.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninControllerMutex.cs','WindowsSigninRunStorage.cs','WindowsSigninRunSession.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsProtectedEpoch.cs','WindowsSigninCandidate.cs','WindowsSigninCandidateNative.cs','WindowsSigninScope.cs','WindowsSigninScopeNative.cs','WindowsSigninWorkerNative.cs','WindowsSigninWorker.cs','WindowsSigninPresence.cs','WindowsSigninTarget.cs','WindowsSigninScopeChecks.cs','WindowsSigninDuplexChecks.cs')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('soda-signin-worker-checks-'+[guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($root)|Out-Null
 $original=@{};$bytes=@{}
 foreach($name in $files){$bytes[$name]=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name));$original[$name]=[Text.Encoding]::UTF8.GetString($bytes[$name]);[IO.File]::WriteAllBytes((Join-Path $root $name),$bytes[$name])}
 $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
 $paths=($files|ForEach-Object {"'"+(Join-Path $root $_).Replace("'","''")+"'"}) -join ','
-$program="`$ErrorActionPreference='Stop';try{Add-Type -Path @($paths) -ReferencedAssemblies System.dll,System.Core.dll,System.Security.dll,System.Web.Extensions.dll,System.ServiceProcess.dll,System.Drawing.dll,System.Windows.Forms.dll;[SodaDesktopSigninScopeChecks]::Run();[SodaDesktopSigninWorker]::VerifyGeneratedData()}catch{[Console]::Out.WriteLine(`$_.Exception.ToString());exit 1};exit 0"
+$program="`$ErrorActionPreference='Stop';try{Add-Type -Path @($paths) -ReferencedAssemblies System.dll,System.Core.dll,System.Security.dll,System.Web.Extensions.dll,System.ServiceProcess.dll,System.Drawing.dll,System.Windows.Forms.dll;[SodaDesktopSigninScopeChecks]::Run();[SodaDesktopSigninDuplexChecks]::Run();[SodaDesktopSigninWorker]::VerifyGeneratedData()}catch{[Console]::Out.WriteLine(`$_.Exception.ToString());exit 1};exit 0"
 $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($program))
 try {
     $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object {Write-Output ([string]$_)}
     if($code -ne 0 -or -not (($output|Out-String).Contains('signin_worker_generated_data_and_abi_passed'))){throw 'Generated worker checks failed'}
     if($NegativeControls){
         $variants=@(
+            @('duplex-pipe','WindowsSigninWorker.cs','name,PipeDirection.InOut,PipeOptions.Asynchronous,','name,PipeDirection.InOut,PipeOptions.None,','Signin pipe writes waited for incoming data'),
             @('presence-target-initial','WindowsSigninWorker.cs','return purpose==Purpose.Presence?null:read();','return read();','Presence enumerated physical target'),
             @('presence-target-read','WindowsSigninWorker.cs','if(purpose==Purpose.Presence)return nativeRead();','','Presence blocked on physical target'),
             @('pump-closed-writer','WindowsSigninWorker.cs','var writer=new StreamWriter(pipe,new UTF8Encoding(false),writeSize,true);action(reader,writer);','using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),writeSize,true)){action(reader,writer);}','Pump reflushed a closed pipe'),
@@ -60,7 +61,7 @@ try {
         }
         $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object {Write-Output ([string]$_)}
         if($code -ne 0){throw 'Restored worker checks failed'}
-        'signin_worker_30_source_negative_controls_and_restore_passed'
+        'signin_worker_31_source_negative_controls_and_restore_passed'
     }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0

@@ -148,3 +148,15 @@ readonly console fixtureのtask上限は1分、子の上限は8秒。実行フ�
 
 最初の負例if(false)はCodeDomのwarning-as-errorでassertに届かなかったため無効とし、分岐削除へ直して再実行した。
 検査setupは登録前の固定stage hash/privateコピーを独立点検し、missing copyの指摘を実行前に修正。
+
+## 実ad9のpulseと同期pipe
+
+- [x] d8694c18 package ad9fdc50…を標準更新、run2425c26d…のACK。Host11744 Running0/0、aliasは未接続。
+- [x] Target分離後firstpulse1090msへ短縮。ただしmaxgap9130ms/18秒6pulse。主因が残ることを確認。
+- [x] 実Nodeと同じ2秒heartbeatでも時刻[4099,8160,14214,16237,18065]、6秒gap。定期入力へ偏る出力を観測。
+- [x] Windowsの同期client pipeでpending ReadFileがWriteFileを妨げることを、実duplex pipe/OS読取待機で回帰検証。
+- [x] worker pipeのみAsynchronousへ変更、匿名token/PID認証/Scope/期限/清掃は維持。31 controls成功、Noneのみ戻す負例で意図assert失敗、byte復元。
+- [ ] 修正版の標準導入と実pulse/alias/画面確認。
+
+初版テストはserver出力読取なしのbackpressureを作ったため無効。server readを先に待機し、clientへの入力は独立出力判定後だけ送る形へ是正した。
+実fixture終了とJob0/復元を確認し、検査失敗を製品成功扱いしない。

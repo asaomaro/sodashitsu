@@ -71,3 +71,9 @@ ConsoleFacts/Native launcherは固定sshd保持pin・個別/aggregate Job・固�
 独立レビューでprivate-copy不足と成功判定不足を指摘し、実行前に是正。実fixtureはtask0/Job0/handle復元を確認。
 Target分離の安全点検では、Presenceにpixels/座標/inputがなく後続workerが独立target検証することを確認。
 view/inputの初期と前後照合、native desktop/WTS/observer失効、既存期限は維持する。
+
+## duplex pipe
+
+review_resource_monitorで接続先/匿名token/PID認証/清掃を変えないAsynchronous指定と実duplex回帰を独立点検。
+初版のbackpressureを除去し、server側出力読取が待機する中でclient入力なしに書込み完了することを確認する。
+旧指定だけ戻す負例は、入力を与えて両threadを終了させた後に意図したassertionで失敗する。

@@ -1,0 +1,1 @@
+{"exitCode": 0, "stdout": "{\"taskRemoved\":true,\"taskResult\":0,\"result\":{\"durationMs\":18078,\"maxPulseGapMs\":6054,\"firstContextMs\":263,\"pulseTimesMs\":[4099,8160,14214,16237,18065],\"terminal\":true,\"ok\":true,\"firstPulseMs\":4099,\"exitCode\":0,\"counts\":{\"signin_context\":1,\"signin_presence\":5,\"signin_stopped\":1}}}\r\n", "stderr": ""}
