@@ -182,3 +182,15 @@ readonly console fixtureのtask上限は1分、子の上限は8秒。実行フ�
 - [x] 失効・partial0/1・遷移中neutral・別keyup抑止・chord・TTL・target失効を生成dataで確認。実OS入力を出さず33controls/byte復元成功。
 - [x] 関連474tests/26files、server typecheck/build成功。両差分独立レビューmustなし。
 - [ ] 実パッケージ更新、画像とPINサインインを再検証。
+
+## 37df実導入と許可ボタンのfocus release
+
+- [x] c2e269f6 package37dfを標準Upgrade、task0/receipt確認。50秒待機上限後は観測だけで確認し再実行なし。
+- [x] fresh start一回、run bc457577…の起動観測ACK。
+- [x] 固定SYSTEM view-only probeはready681ms/frame762ms、1280x800、37256 bytes、18秒後exit0/terminal1/task削除。入力なし、画像保存なし。
+- [x] 実ブラウザの暗号化前後でtypeと方向だけを観測。signin_grant直後の同時刻releaseを確認、ready前に切断。
+- [x] native ready前はキーを保持していないためreleaseを破棄。期限/失効/schema不正は拒否、ready後は従来通り転送。
+- [x] WorkerProcessのみ旧HEADへ戻す負例でfocus-release回帰が失敗、byte exact復元。
+- [ ] 独立レビュー、標準更新後に実画像と入力を確認。
+
+37df導入成功を画像配信成功としない。view-only単独取得とservice/browser経由を区別する。

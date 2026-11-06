@@ -89,3 +89,10 @@ strict ws loopback hintは受け取るだけで接続先には使わず、canoni
 review_resource_monitorが認証pair、部分成功拒否、期限とchord維持、後desktopへの救済なしを点検。33負例/復元も確認、mustなし。
 準備heartbeatは破棄だけでnativeへ転送せず期限も延ばさない。stop即閉鎖/その他の早期指示拒否を維持する。
 暗号化handshakeの実成功と画面取得成功は区別し、未取得画像やPIN検証を完了扱いしない。
+
+## 許可ボタンのfocus release
+
+review_resource_monitorが固定view-only probeの入力なし/画像非保存/停止証明とprivate setupを独立点検、mustなし。
+実単独probeはReadyとframeを取得し正常終了。暗号化前後のtype-only観測ではgrant直後release、Readyなしを確認。
+WorkerProcessの準備中release破棄は未保持キーに限定し、期限・schema・stopと準備後転送を保持。
+最終独立レビュー必須指摘なし。旧WorkerProcessのみへ戻す負例とbyte exact復元の生記録を保存。

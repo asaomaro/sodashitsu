@@ -1,0 +1,39 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+ ❯ src/desktop/DesktopSigninWorkerProcess.test.ts (31 tests | 1 failed) 57ms
+   × ignores grant-button focus release until native ready and forwards later releases 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopSigninWorkerProcess.test.ts > ignores grant-button focus release until native ready and forwards later releases
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array []
+
+
+Number of calls: 1
+
+ ❯ src/desktop/DesktopSigninWorkerProcess.test.ts:92:95
+     90|
+     91| it("ignores grant-button focus release until native ready and forwards…
+     92|  const f=fixture();f.child.stdin.read();f.process.send({type:"release"…
+       |                                                                                               ^
+     93|  f.output(ready);f.output(image());expect(f.records).toHaveLength(2);f…
+     94|  f.finish();await expect(f.process.settled()).resolves.toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 30 passed (31)
+   Start at  05:30:01
+   Duration  1.32s (transform 74%, import 21%, tests 5%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/desktop/DesktopSigninWorkerProcess.test.ts

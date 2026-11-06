@@ -75,8 +75,9 @@ export class DesktopSigninWorkerProcess {
       const message=RemoteDesktopViewerMessage.parse(raw);if(!allowed.has(message.type))throw unavailable();
       if(message.type==="stop"){this.close();return;}
       // The viewer keeps its channel alive while native startup is pending.
-      // Our own native heartbeat already runs; this grants no early commands.
-      if(!this.#ready){if(message.type==="heartbeat"&&this.deps.now()<this.#readyUntil)return;throw unavailable();}
+      // Focus changes also release keys before native startup has held any.
+      // Drop both notifications; this grants no early native commands.
+      if(!this.#ready){if((message.type==="heartbeat"||message.type==="release")&&this.deps.now()<this.#readyUntil)return;throw unavailable();}
       if(message.type==="control"&&message.enabled&&!this.options.control)throw unavailable();
       if(message.type==="ack"){if(message.seq!==this.#pending)throw unavailable();this.#drawn=message.seq;this.#pending=0;}
       if(message.type==="input"){if(!this.options.control||message.seq<=this.#input||message.frameSeq!==this.#drawn||this.#inputs.size>=32)throw unavailable();this.#input=message.seq;this.#inputs.add(message.seq);}

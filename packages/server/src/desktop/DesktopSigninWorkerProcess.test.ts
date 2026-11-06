@@ -81,9 +81,18 @@ it("keeps viewer heartbeats harmless while native startup is pending",async()=>{
  f.clock(2000);await vi.advanceTimersByTimeAsync(2000);expect(f.child.stdin.read().toString()).toBe('{"type":"heartbeat"}\n');
  f.process.send({type:"heartbeat"});f.output(ready);f.output(image());expect(f.records).toHaveLength(2);expect(f.closed).not.toHaveBeenCalled();f.finish();await expect(f.process.settled()).resolves.toBeUndefined();
 });
-it.each([{type:"control",enabled:true},{type:"release"},{type:"ack",seq:1},{type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"Space",down:true}},{type:"keyframe"}])("still rejects pre-ready command $type",message=>{
+it.each([{type:"control",enabled:true},{type:"ack",seq:1},{type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"Space",down:true}},{type:"keyframe"}])("still rejects pre-ready command $type",message=>{
  const f=fixture();f.child.stdin.read();f.process.send(message);expect(f.closed).toHaveBeenCalledOnce();expect(f.records).toHaveLength(0);f.finish();
 });
 it("does not let waiting heartbeats extend the native ready deadline",()=>{
  const f=fixture();f.clock(10000);f.process.send({type:"heartbeat"});expect(f.closed).toHaveBeenCalledOnce();f.output(ready);expect(f.records).toHaveLength(0);f.finish();
+});
+
+it("ignores grant-button focus release until native ready and forwards later releases",async()=>{
+ const f=fixture();f.child.stdin.read();f.process.send({type:"release"});expect(f.closed).not.toHaveBeenCalled();expect(f.child.stdin.read()).toBeNull();
+ f.output(ready);f.output(image());expect(f.records).toHaveLength(2);f.process.send({type:"release"});expect(f.child.stdin.read().toString()).toBe('{"type":"release"}\n');
+ f.finish();await expect(f.process.settled()).resolves.toBeUndefined();
+});
+it("does not let pre-ready release bypass startup expiry or schema validation",()=>{
+ for(const expired of [false,true]){const f=fixture();if(expired)f.clock(10000);f.process.send(expired?{type:"release"}:{type:"release",extra:true});expect(f.closed).toHaveBeenCalledOnce();f.finish();}
 });
