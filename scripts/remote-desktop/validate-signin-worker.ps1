@@ -30,7 +30,9 @@ try {
             @('pointer-button','WindowsSigninWorker.cs','Integer(value,"button",0,4)','Integer(value,"button",0,5)','Invalid pointer button produced input'),
             @('target','WindowsSigninTarget.cs','initial.Same(read())','read()!=null','Changed target was accepted'),
             @('rotation','WindowsSigninWorker.cs','.Append(mode.Orientation)','','Rotated primary was accepted'),
-            @('unicode-cleanup','WindowsSigninWorker.cs','cleanup(key);','{}','Unicode keyup cleanup was omitted'),
+            @('unicode-pair','WindowsSigninWorker.cs','batch(new[]{key,up});','batch(new[]{key});','Unicode pair omitted matching keyup'),
+            @('authentication-pair','WindowsSigninWorker.cs','return down&&(key==13','return !down&&(key==13','Authentication key was not neutral at desktop transition'),
+            @('authentication-pair-count','WindowsSigninWorker.cs','Require(sent==2);','Require(sent>0);','Partial authentication pair accepted'),
             @('broker-utf8-output','WindowsSigninWorker.cs','new StreamWriter(stream,new UTF8Encoding(false),65536,true)','new StreamWriter(stream,new ASCIIEncoding(),65536,true)','Broker UTF8 output changed'),
             @('broker-utf8-input','WindowsSigninWorker.cs','new StreamReader(stream,new UTF8Encoding(false,true),false,16384,true)','new StreamReader(stream,new ASCIIEncoding(),false,16384,true)','Broker UTF8 input changed'),
             @('presence-source-latch','WindowsSigninPresence.cs','if(ended)return false;','ended=false;','Presence source revived'),
@@ -61,7 +63,7 @@ try {
         }
         $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object {Write-Output ([string]$_)}
         if($code -ne 0){throw 'Restored worker checks failed'}
-        'signin_worker_31_source_negative_controls_and_restore_passed'
+        'signin_worker_33_source_negative_controls_and_restore_passed'
     }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0

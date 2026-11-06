@@ -70,10 +70,13 @@ export class DesktopSigninWorkerProcess {
     try{child.stdin.write(text);}catch{this.close();}
   }
   send(raw:unknown):void {
-    if(!this.live()||!this.#ready){this.close();return;}
+    if(!this.live()){this.close();return;}
     try{
       const message=RemoteDesktopViewerMessage.parse(raw);if(!allowed.has(message.type))throw unavailable();
       if(message.type==="stop"){this.close();return;}
+      // The viewer keeps its channel alive while native startup is pending.
+      // Our own native heartbeat already runs; this grants no early commands.
+      if(!this.#ready){if(message.type==="heartbeat"&&this.deps.now()<this.#readyUntil)return;throw unavailable();}
       if(message.type==="control"&&message.enabled&&!this.options.control)throw unavailable();
       if(message.type==="ack"){if(message.seq!==this.#pending)throw unavailable();this.#drawn=message.seq;this.#pending=0;}
       if(message.type==="input"){if(!this.options.control||message.seq<=this.#input||message.frameSeq!==this.#drawn||this.#inputs.size>=32)throw unavailable();this.#input=message.seq;this.#inputs.add(message.seq);}

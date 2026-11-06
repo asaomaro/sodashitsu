@@ -83,3 +83,9 @@ review_resource_monitorで接続先/匿名token/PID認証/清掃を変えないA
 review_resource_monitorでprovider側の登録済みURL固定を採用。Root側で公開URLを推測しない。
 strict ws loopback hintは受け取るだけで接続先には使わず、canonical enrollment URL/CA/TLS検証/署名peer照合を維持。
 独立点検の空query/fragment指摘を反映、両負例と復元hashが現sourceに一致することも確認。mustなし。
+
+## 認証pairと準備heartbeat
+
+review_resource_monitorが認証pair、部分成功拒否、期限とchord維持、後desktopへの救済なしを点検。33負例/復元も確認、mustなし。
+準備heartbeatは破棄だけでnativeへ転送せず期限も延ばさない。stop即閉鎖/その他の早期指示拒否を維持する。
+暗号化handshakeの実成功と画面取得成功は区別し、未取得画像やPIN検証を完了扱いしない。

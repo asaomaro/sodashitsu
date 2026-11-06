@@ -171,3 +171,14 @@ readonly console fixtureのtask上限は1分、子の上限は8秒。実行フ�
 - [x] 実socket fixtureでrawhint127:1ではなく登録済みfixtureへ暗号化handshake。467 tests/26files、server typecheck/build成功。
 - [x] 旧Enrollmentのみ/旧Endpointのみ戻す負例それぞれ意図case失敗、byte exact復元。独立レビューmustなし、空?/＃も拒否追加。
 - [ ] 修正版の実適用・画面表示・サインインを確認。
+
+## 実4924と認証/準備待ち
+
+- [x] e50d50ac package49241f17…を標準更新、run0481c2d0…のACK。owned Browserで暗号化接続が成立しsignin許可待ちまで確認。
+- [ ] 閲覧grant後Ready前に終了、画像はまだ確認できていない。PIN未入力。
+- [x] viewerは準備中も2秒heartbeatを送るがworker.send旧gateがReady前のheartbeatで閉鎖する経路を修正。10秒Ready期限内のheartbeatだけ無害に破棄、内部native beat継続、その他早期操作は拒否。
+- [x] 旧workerprocessのみ戻した新caseが失敗、byte exact復元。
+- [x] 認証完了がkeydownでdesktopを変える競合に対し、既存認証workerと同じUnicode各char/bareEnter/数字の2INPUT一括投入へ。直前権限検査/完全2件のみ成功/文字間再検査、通常chord維持。後desktopへの別呼出し救済はしない。
+- [x] 失効・partial0/1・遷移中neutral・別keyup抑止・chord・TTL・target失効を生成dataで確認。実OS入力を出さず33controls/byte復元成功。
+- [x] 関連474tests/26files、server typecheck/build成功。両差分独立レビューmustなし。
+- [ ] 実パッケージ更新、画像とPINサインインを再検証。

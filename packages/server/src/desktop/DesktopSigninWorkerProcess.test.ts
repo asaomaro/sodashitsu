@@ -75,3 +75,15 @@ it.each(["unissued","duplicate","quota"])("bounds native input acknowledgements 
 });
 
 it("ends a missing native source before ready without losing confirmed teardown",async()=>{const f=fixture();f.output({type:"signin_unavailable"});expect(f.closed).toHaveBeenCalledOnce();f.finish();await expect(f.process.settled()).resolves.toBeUndefined();expect(f.unsafeStop).not.toHaveBeenCalled();});
+
+it("keeps viewer heartbeats harmless while native startup is pending",async()=>{
+ vi.useFakeTimers();const f=fixture();f.child.stdin.read();f.process.send({type:"heartbeat"});expect(f.closed).not.toHaveBeenCalled();expect(f.child.stdin.read()).toBeNull();
+ f.clock(2000);await vi.advanceTimersByTimeAsync(2000);expect(f.child.stdin.read().toString()).toBe('{"type":"heartbeat"}\n');
+ f.process.send({type:"heartbeat"});f.output(ready);f.output(image());expect(f.records).toHaveLength(2);expect(f.closed).not.toHaveBeenCalled();f.finish();await expect(f.process.settled()).resolves.toBeUndefined();
+});
+it.each([{type:"control",enabled:true},{type:"release"},{type:"ack",seq:1},{type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"Space",down:true}},{type:"keyframe"}])("still rejects pre-ready command $type",message=>{
+ const f=fixture();f.child.stdin.read();f.process.send(message);expect(f.closed).toHaveBeenCalledOnce();expect(f.records).toHaveLength(0);f.finish();
+});
+it("does not let waiting heartbeats extend the native ready deadline",()=>{
+ const f=fixture();f.clock(10000);f.process.send({type:"heartbeat"});expect(f.closed).toHaveBeenCalledOnce();f.output(ready);expect(f.records).toHaveLength(0);f.finish();
+});
