@@ -258,3 +258,25 @@ https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-powersetr
 
 追加readonly設定: CatoのローカルPreLoginは0、InitialAlwaysOn/ConnectOnBoot値は未設定。
 クラウド側のAlways-On/LANポリシーの有無やESETの判断理由は、この情報だけでは分からない。
+
+## 再開後の同bootサインイン成功（2026-11-07）
+
+- [x] 新たな再起動や設定変更なしで、保守/signin aliasがonlineに復帰していた。同boot 20:58:31.5Z、未ログインを確認。
+- [x] fresh暗号化接続の実ロック/PIN画面を目視し、許可済み入力で認証。利用者のWindows手元操作なしにuserPresent=trueへ遷移。
+- [x] 通常操舵室の自動復帰・既存2pane・通常desktopの実画像を確認。signin aliasはログイン後にinactiveとなる。
+- [x] Root443のTCPとGitHub DNSも成功。Windows Cgitは22647015へfast-forward更新。前の失敗原因を解消したとは断定しない。
+- [x] 復帰後のheadless/UIA継続検証は下記の130秒で成功。
+
+正常停止後の管理されたboot→サービス自動起動→未ログイン実画面→PIN認証→通常復帰の工程を同bootで確認できた。
+途中に通信拒否と時間を空けた再試行があり、無停止/即時接続の成功とは区別する。
+
+## 復帰後のheadlessと仮想マイク
+
+- [x] 新しいWinExeの自前WinFormsを作成。remote headlessのUIA set_value/invokeとimage fallback成功、130秒後も同じfixtureを観測しrelease。expiresAt=0。値とclick数も実fixture側の記録と一致。
+- [x] 初回のPSフォームではUI照合に失敗したため成功扱いせず、GUI専用exeのfreshフォームで検証。両fixtureは停止し、専用root除去を確認。
+- [x] VB-Audio CABLEのInput/Output/16chがOS再起動後もPresent/OK、既知の固定render GUIDを確認。
+- [x] マイク許可/endpointの2項目だけ新規backup後、一時的にCABLE Inputへ固定。既存wireで440Hz生成PCMを6秒300frame送信、ACK249、starting/running/stopped、errorなし。物理マイク未使用。
+- [x] マイクの2項目は元の値と省略状態を復元し確認。他設定は最新値を保持。Default audio deviceやVPN/Firewallは変更しない。
+
+busy時は中間frameを最新frameへ置き換え、期限切れframeにもACKを返すため、ACK数は300frame全ての再生/受音を証明しない。
+CABLE Outputからの受音測定・実通話は残件。通常Windowsサーバーのheadless130秒とsignin workerの120秒境界を混同しない。

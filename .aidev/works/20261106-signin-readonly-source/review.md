@@ -106,3 +106,9 @@ review_resource_monitorがcritical SCM保持・new boot限定・boot単位claim�
 最終独立レビューで、status表の古い「自動start未検証」と最新実boot結果の不一致を是正。
 SCM pinに署名検証があるとの誤記も、固定System32パス/SYSTEM/session0/critical/creation照合へ修正。
 19件の実検証evidenceに鍵・token・画像本体を含めないことを確認。新boot再認証は完了扱いしない。
+
+## 再開後の完了工程と実機検証
+
+review_resource_monitorが同bootサインイン/通常復帰、UIA継続130秒、仮想音声ACKと受音の区別、
+Mic2fieldsの値/省略状態の復元を独立点検。status表の旧未確認状態とtasks実施中を実結果へ是正。
+新規evidenceに秘密・画像本体を含めないことを確認。通信拒否原因の解消とは主張しない。

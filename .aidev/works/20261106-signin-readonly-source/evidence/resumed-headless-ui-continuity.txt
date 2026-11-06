@@ -1,0 +1,6 @@
+{"headlessConnected":true,"expiresAt":0}
+{"remoteUiSetValue":true,"remoteUiInvoke":true,"imageFallback":true}
+{"stillConnected":true,"elapsedSeconds":51,"fixtureVerified":true}
+{"stillConnected":true,"elapsedSeconds":96,"fixtureVerified":true}
+{"stillConnected":true,"elapsedSeconds":130,"fixtureVerified":true}
+{"released":true}

@@ -1,0 +1,21 @@
+{
+  "recordedAtUtc": "2026-11-06T23:12:21.769299+00:00",
+  "boot": "2026-11-06T20:58:31.5000000Z",
+  "manualWindowsLoginByUser": false,
+  "settingsChangedForRecovery": false,
+  "signinServiceAutoStarted": true,
+  "encryptedSigninView": true,
+  "secureInputAllowed": true,
+  "pinAuthenticationSucceeded": true,
+  "regularDesktopVisuallyConfirmed": true,
+  "regularMachineOnline": true,
+  "restoredPaneIds": [
+    "42698ad1-6bc6-40f6-961a-9639e034fc99",
+    "95b339e7-e697-415f-938c-d5f6edff4c0b"
+  ],
+  "root443Reachable": true,
+  "githubDnsResolved": true,
+  "windowsSourceUpdatedTo": "22647015",
+  "networkRefusalRootCauseResolved": false,
+  "credentialsOrImagesIncluded": false
+}

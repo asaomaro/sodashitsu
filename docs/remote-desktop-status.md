@@ -97,7 +97,7 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 | --- | --- |
 | 一時仮想画面 | Sodashitsu専用IDDの署名済み配布物。リポジトリ/CIのunsigned artifactを導入可能な配布物とは扱わない |
 | マイク転送 | VB-Audio公式Pack45の署名済みx64 driverを導入済み（2026-11-05、installer exit0）。導入で変わった既定出力は元へ戻し、全6roleの一致を確認。OS再起動・明示した仮想render IDへの実マイク転送検証は未完了 |
-| サインアウト後の専用接続 | 元要求と鍵を保持した実再起動後のrecover、2viewer照合、enroll、標準更新と通常起動、ログイン前の暗号化接続/実画面/PINサインインを確認（2026-11-07、package17a1）。事前stop complete後のBoot自動start/実ロック画像まで確認。同bootの再認証・継続/反復は未確認。下記の最新追記を参照 |
+| サインアウト後の専用接続 | 元要求と鍵を保持した実再起動後のrecover、2viewer照合、enroll、標準更新と通常起動、ログイン前の暗号化接続/実画面/PINサインインを確認（2026-11-07、package17a1）。事前stop complete後のBoot自動start/実ロック画像まで確認。同bootでPIN認証/通常復帰まで確認。継続/反復と通信拒否原因は未解決。下記の最新追記を参照 |
 | 複数monitor / Explorer drop | 2台以上の実monitor・混在DPIの確認、Windowsブラウザと実Explorer間のOLE drop。1画面の2窓共有と補助プログラム準備成功だけでは完了にしない |
 
 2026-11-05追記: サインイン専用サービスは期限切れ未受理要求の取消とnative SCM修正版への更新が成功しました。その後、nativeとTypeScriptの状態保存先の不一致で管理モードが観測済みのまま異常終了したため、TypeScriptを修正（6da256c3）。新パッケージは隔離stageへ生成済みです。元の観測記録を保ったOS再起動境界の限定復旧を追加し、実機のBindと同一状態での拒否、生成取引・5中断を検証しました。再起動後の実Recover/更新/initialize/trust/enroll/通常起動・実サインアウトは未完了です。[現在の記録](../.aidev/works/20261105-signin-restart-recovery/verification.md)を参照してください。
@@ -128,4 +128,11 @@ Windows通常サーバーも8542306dから全体build/handoffを実施し、2pan
 
 同日の追加再起動では、事前の標準stop complete後、SYSTEMのBootTriggerから専用serviceの自動start/観測ACKと未ログイン時の実ロック画像・Enter操作まで確認しました。これは正常停止済みの管理された再起動に限るfallbackです。通常shutdown後のunknown記録を自動復旧する機能ではありません。
 
-その後、sr-pcから操舵室LANアドレスへのTCP接続がWindowsのAccessDenied/NodeのEACCESで失敗し、未ログイン時の継続接続と再認証は未確認です。画面取得単独は正常で、4分の一時保活中も通信拒否が残りました。Cato Networks VPNとESETは動作していますが、原因はまだ確定していません。VPN・セキュリティ機能やFirewall規則は変更していません。Catoには[Pre Loginの接続先制限](https://knowledge.catonetworks.com/v1/docs/using-windows-pre-login-and-the-sdp-client)があるため、適用設定の確認を進めています。
+前回作業時点では、sr-pcから操舵室LANアドレスへのTCP接続がWindowsのAccessDenied/NodeのEACCESで失敗し、未ログイン時の継続接続と再認証は未確認でした。画面取得単独は正常で、4分の一時保活中も通信拒否が残りました。Cato Networks VPNとESETは動作していますが、原因はまだ確定していません。VPN・セキュリティ機能やFirewall規則は変更していません。Catoには[Pre Loginの接続先制限](https://knowledge.catonetworks.com/v1/docs/using-windows-pre-login-and-the-sdp-client)があるため、適用設定の確認を進めています。
+
+
+### 再開後の確認（2026-11-07）
+
+設定変更や追加の再起動なしで通信が復帰し、同じbootの未ログイン画面からPIN認証と通常desktopへの移行、通常操舵室・既存2paneの自動復帰を確認しました。RootへのTCPとGitHub DNSも成功し、Windows側のソースを22647015へ更新しました。先の通信拒否の根本原因や再発防止を確定したものではありません。
+
+通常Windowsのheadless接続では、自前GUIに対するUI情報での値設定・ボタン実行・画像fallbackが成功し、130秒後も同一接続で観測・releaseできました。仮想マイクでは、再起動後の実VB-Audio deviceへ固定して生成音を300frame転送し、running/停止と249件のACKを確認。物理マイクは使わず、設定は復元しました。ACKは全frameの受音を保証しないため、仮想capture側の測定と実通話は残ります。
