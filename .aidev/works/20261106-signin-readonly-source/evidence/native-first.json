@@ -1,0 +1,20 @@
+{
+    "probe":  {
+                  "fixture":  "readonly-shared-source-generated-presence",
+                  "ok":  false,
+                  "outcome":  "failure",
+                  "elapsedMs":  10831,
+                  "traces":  [
+                                 {
+                                     "operation":  "warmup",
+                                     "atMs":  31,
+                                     "ms":  10012,
+                                     "ok":  false
+                                 }
+                             ]
+              },
+    "taskRemoved":  true,
+    "taskResult":  0,
+    "unchanged":  true,
+    "sddl":  "O:BAG:BAD:PAI(A;;FA;;;SY)(A;;FA;;;BA)"
+}

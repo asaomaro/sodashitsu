@@ -1,0 +1,14 @@
+# 独立レビュー
+
+review_resource_monitorの別コンテキストで、Source/Runtime/readers/RequiredPathsの全差分、
+monotonic期限補強、raw pipe切替、private SYSTEM fixtureとsetupを点検。最終必須指摘なし。
+固定path・毎回のfresh検査・write拒否・私有pipe・上限・終了確認を維持。
+120秒timerの指摘は既存Presenceが先にepochを終える関係を再確認して撤回された。
+その既存2分境界自体の改善は本変更の範囲外として未完了に残している。
+
+旧Runtime差替negativeの生ログと、旧Console.Out native failure、新rawpipe成功の
+evidenceを保存。旧Runtimeはbyteexact復元。実機での本番サービス導入は未実施。
+
+統合版も別contextで全差分再レビュー、mustなし。既存oneoff/固定共有分岐のguardを確認。
+package path集合は変更せず、旧manifestからのstrict Upgradeを維持する構成にした。
+統合版native最終fixtureは20秒継続＋3拒否ケース成功、runtime不変/Jobzero/task削除。

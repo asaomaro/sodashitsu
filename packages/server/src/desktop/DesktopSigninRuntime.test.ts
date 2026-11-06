@@ -67,3 +67,20 @@ it("starts the next policy check from the previous start rather than its complet
  await vi.advanceTimersByTimeAsync(12000);expect(f.connectorOptions()!.active()).toBe(true);expect(f.connector.close).not.toHaveBeenCalled();
  f.abort.abort();f.stopProof();await vi.advanceTimersByTimeAsync(2000);await expect(run).resolves.toBe("ended");
 });
+
+it("prepares one readonly source before starting the five-second policy lease",async()=>{
+ const f=fixture();let ready!:()=>void;const preparing=new Promise<void>(resolve=>{ready=resolve;});
+ const source={store:f.store,ready:vi.fn(()=>preparing),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(),settled:vi.fn(async()=>{})};
+ f.deps.source=vi.fn(()=>source as never);const run=f.start();f.reveal();await flush();expect(source.enrollment).not.toHaveBeenCalled();expect(f.deps.connector).not.toHaveBeenCalled();
+ f.clock(7000);ready();await flush();expect(f.deps.enrollment).not.toHaveBeenCalled();expect(f.deps.store).not.toHaveBeenCalled();expect(source.enrollment).toHaveBeenCalledOnce();expect(f.deps.connector).toHaveBeenCalledOnce();expect(f.connectorOptions()!.active()).toBe(true);
+ f.lose();f.stopProof();await expect(run).resolves.toBe("ended");expect(source.close).toHaveBeenCalled();expect(source.settled).toHaveBeenCalledOnce();
+});
+it("reads enrollment from the shared source on every policy poll",async()=>{
+ vi.useFakeTimers();const f=fixture(),source={store:f.store,ready:vi.fn(async()=>{}),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(),settled:vi.fn(async()=>{})};f.deps.source=()=>source as never;
+ const run=f.start();f.reveal();await flush();expect(source.enrollment).toHaveBeenCalledOnce();f.clock(2000);await vi.advanceTimersByTimeAsync(2000);expect(source.enrollment).toHaveBeenCalledTimes(2);expect(f.deps.enrollment).not.toHaveBeenCalled();
+ f.lose();f.stopProof();await expect(run).resolves.toBe("ended");
+});
+it("retains teardown ownership for an unconfirmed shared source",async()=>{
+ vi.useFakeTimers();const f=fixture(),source={store:f.store,ready:vi.fn(async()=>{}),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(),settled:vi.fn(async()=>{throw Error("unconfirmed child");})};f.deps.source=()=>source as never;
+ const run=f.start();f.reveal();await flush();f.lose();f.stopProof();await expect(run).rejects.toThrow();expect(f.deps.unsafeStop).toHaveBeenCalledOnce();
+});

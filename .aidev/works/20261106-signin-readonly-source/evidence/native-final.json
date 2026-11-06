@@ -1,0 +1,376 @@
+{
+  "probe": {
+    "fixture": "readonly-shared-source-generated-presence",
+    "ok": true,
+    "cases": [
+      {
+        "name": "unknown-write-operation",
+        "ok": true,
+        "code": 1,
+        "ready": true,
+        "timedOut": false,
+        "ms": 628
+      },
+      {
+        "name": "foreign-acl-path",
+        "ok": true,
+        "code": 1,
+        "ready": true,
+        "timedOut": false,
+        "ms": 644
+      },
+      {
+        "name": "oversize-line",
+        "ok": true,
+        "code": 1,
+        "ready": true,
+        "timedOut": false,
+        "ms": 747
+      }
+    ],
+    "outcome": "ended",
+    "elapsedMs": 22190,
+    "traces": [
+      {
+        "operation": "stdout-size",
+        "size": 15,
+        "atMs": 645
+      },
+      {
+        "operation": "warmup",
+        "atMs": 28,
+        "ms": 617,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 888,
+        "atMs": 798
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 645,
+        "ms": 155,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 20,
+        "atMs": 818
+      },
+      {
+        "operation": "stdout-size",
+        "size": 872,
+        "atMs": 830
+      },
+      {
+        "operation": "stdout-size",
+        "size": 20,
+        "atMs": 836
+      },
+      {
+        "operation": "status",
+        "atMs": 646,
+        "ms": 195,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 888,
+        "atMs": 2663
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 2648,
+        "ms": 15,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 20,
+        "atMs": 2686
+      },
+      {
+        "operation": "stdout-size",
+        "size": 872,
+        "atMs": 2690
+      },
+      {
+        "operation": "stdout-size",
+        "size": 20,
+        "atMs": 2694
+      },
+      {
+        "operation": "status",
+        "atMs": 2649,
+        "ms": 47,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 888,
+        "atMs": 4698
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 4652,
+        "ms": 47,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 4731
+      },
+      {
+        "operation": "stdout-size",
+        "size": 873,
+        "atMs": 4745
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 4770
+      },
+      {
+        "operation": "status",
+        "atMs": 4652,
+        "ms": 124,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 889,
+        "atMs": 6687
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 6657,
+        "ms": 31,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 6746
+      },
+      {
+        "operation": "stdout-size",
+        "size": 873,
+        "atMs": 6759
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 6778
+      },
+      {
+        "operation": "status",
+        "atMs": 6661,
+        "ms": 122,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 889,
+        "atMs": 8710
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 8666,
+        "ms": 45,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 8737
+      },
+      {
+        "operation": "stdout-size",
+        "size": 873,
+        "atMs": 8758
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 8791
+      },
+      {
+        "operation": "status",
+        "atMs": 8666,
+        "ms": 131,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 889,
+        "atMs": 10707
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 10675,
+        "ms": 33,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 10735
+      },
+      {
+        "operation": "stdout-size",
+        "size": 873,
+        "atMs": 10766
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 10784
+      },
+      {
+        "operation": "status",
+        "atMs": 10675,
+        "ms": 115,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 889,
+        "atMs": 12713
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 12683,
+        "ms": 31,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 12743
+      },
+      {
+        "operation": "stdout-size",
+        "size": 873,
+        "atMs": 12754
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 12772
+      },
+      {
+        "operation": "status",
+        "atMs": 12687,
+        "ms": 89,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 889,
+        "atMs": 14722
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 14689,
+        "ms": 33,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 14751
+      },
+      {
+        "operation": "stdout-size",
+        "size": 873,
+        "atMs": 14766
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 14786
+      },
+      {
+        "operation": "status",
+        "atMs": 14693,
+        "ms": 100,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 889,
+        "atMs": 16727
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 16697,
+        "ms": 31,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 16758
+      },
+      {
+        "operation": "stdout-size",
+        "size": 873,
+        "atMs": 16770
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 16789
+      },
+      {
+        "operation": "status",
+        "atMs": 16701,
+        "ms": 93,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 889,
+        "atMs": 18766
+      },
+      {
+        "operation": "enrollment",
+        "atMs": 18706,
+        "ms": 61,
+        "ok": true
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 18798
+      },
+      {
+        "operation": "stdout-size",
+        "size": 873,
+        "atMs": 18811
+      },
+      {
+        "operation": "stdout-size",
+        "size": 21,
+        "atMs": 18830
+      },
+      {
+        "operation": "status",
+        "atMs": 18706,
+        "ms": 130,
+        "ok": true
+      },
+      {
+        "operation": "child-close",
+        "code": 0,
+        "atMs": 20070
+      }
+    ]
+  },
+  "taskRemoved": true,
+  "taskResult": 0,
+  "unchanged": true,
+  "sddl": "O:BAG:BAD:PAI(A;;FA;;;SY)(A;;FA;;;BA)"
+}
