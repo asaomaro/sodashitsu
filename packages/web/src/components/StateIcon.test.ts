@@ -86,3 +86,14 @@ describe("StateIcon — 呼ぶ側のクラス", () => {
     expect(w.find('.sidebar-state-icon.state-icon[data-state="blocked"]').exists()).toBe(true);
   });
 });
+
+describe('StateIcon — child unknown variant',()=>{
+ it('uses an accessible question only for the child unknown state, preserving parent glyphs',()=>{
+  const child=mount(StateIcon,{props:{state:'unknown',variant:'subagent'},global:{plugins:[pinia]}});
+  expect(child.text()).toBe('?');expect(child.attributes('data-variant')).toBe('subagent');expect(child.attributes('aria-label')).toBe('状態不明');expect(child.attributes('title')).toBe('状態不明');expect(child.attributes('role')).toBe('img');
+  expect(mountIcon('unknown').text()).toBe('·');
+  for(const state of ['working','idle'] as const)expect(mount(StateIcon,{props:{state,variant:'subagent'},global:{plugins:[pinia]}}).text()).toBe(state==='working'?'◐':'○');
+  useSettingsStore(pinia).setStatusSymbols(false);
+  return child.vm.$nextTick().then(()=>{expect(child.text()).toBe('');expect(child.attributes('data-symbols')).toBe('off');expect(child.attributes('aria-label')).toBe('状態不明');});
+ });
+});

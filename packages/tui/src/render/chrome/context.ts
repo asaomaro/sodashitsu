@@ -47,7 +47,8 @@ export interface ChromeContext {
  * 状態の記号（共有の設定 `statusSymbols` が切なら形を出さず色の点だけ。web の `StateIcon` が記号を消して色の点だけにするのと同じ。
  * herdr の `ui.status_indicators = "dots"`）。
  */
-export function glyphFor(state: DisplayState | null, symbols: boolean): string {
+export function glyphFor(state: DisplayState | null, symbols: boolean, variant?: "subagent"): string {
+  if (symbols && variant === "subagent" && state === "unknown") return "(?)";
   const g = stateGlyph(state);
   return g === "" || symbols ? g : "●";
 }

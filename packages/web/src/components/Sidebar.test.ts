@@ -737,7 +737,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
   it.each(["claude","codex","muse","copilot","agy"])("shows %s children using their state and membership basis",async kind=>{
     setup(makeAgent({kind,subagents:{count:3,countBasis:"alive",items:[{id:"u",startedAt:0,state:"unknown"},{id:"i",startedAt:0,state:"idle"},{id:"w",startedAt:0}]}}));const w=mountSidebar(makeConnection());
     expect(btn(w).attributes("aria-label")).toContain("所属 3 件");await btn(w).trigger("click");
-    expect(w.get('[data-subagent-id="u"] .state-icon').attributes("aria-label")).toBe("状態不明");expect(w.get('[data-subagent-id="u"]').text()).not.toContain("状態不明");
+    expect(w.get('[data-subagent-id="u"] .state-icon').attributes("aria-label")).toBe("状態不明");expect(w.get('[data-subagent-id="u"] .state-icon').text()).toBe("?");expect(w.get('[data-subagent-id="u"]').text()).not.toContain("状態不明");
     expect(w.get('[data-subagent-id="i"] .state-icon').attributes("data-state")).toBe("idle");expect(w.get('[data-subagent-id="w"] .state-icon').attributes("data-state")).toBe("working");
     expect(w.text()).not.toContain("所属する子（作業中の件数ではありません）");
   });

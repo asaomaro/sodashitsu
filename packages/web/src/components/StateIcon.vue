@@ -19,17 +19,18 @@ import { stateGlyph, stateLabel } from "@sodashitsu/client-core";
  *   畳んだサイドバーの行は点だけなので、エージェントの居ない workspace の行に何も描かれなくなる）。
  * - **読み上げの名前は記号の入／切にかかわらず付ける**（色の丸にも無かった。WCAG 1.1.1）。居ない行は `aria-hidden`。
  */
-const props = defineProps<{ state: DisplayState | null }>();
+const props = defineProps<{ state: DisplayState | null; variant?: "subagent" }>();
 const settings = useSettingsStore();
 
 const label = computed(() => stateLabel(props.state));
-const glyph = computed(() => (settings.statusSymbols ? stateGlyph(props.state) : ""));
+const glyph = computed(() => (settings.statusSymbols ? props.variant === "subagent" && props.state === "unknown" ? "?" : stateGlyph(props.state) : ""));
 </script>
 
 <template>
   <span
     class="state-icon"
     :data-state="state ?? 'none'"
+    :data-variant="variant"
     :data-symbols="settings.statusSymbols ? 'on' : 'off'"
     :role="state ? 'img' : undefined"
     :aria-label="label ?? undefined"
@@ -95,5 +96,12 @@ const glyph = computed(() => (settings.statusSymbols ? stateGlyph(props.state) :
  */
 .state-icon[data-symbols="on"] {
   font-weight: bold;
+}
+/* A child has no separate pane to inspect: make unknown visibly distinct without changing parent glyphs.
+ * Keep the same 1em box and honor symbols-off; callers do not duplicate icon styles. */
+.state-icon[data-variant="subagent"][data-state="unknown"][data-symbols="on"] {
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
 }
 </style>

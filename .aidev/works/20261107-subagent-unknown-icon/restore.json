@@ -1,0 +1,9 @@
+{
+  "byteExact": true,
+  "sha256": {
+    "packages/web/src/components/StateIcon.vue": "6a5750a2e740fb8d678233167dd1c2e2519acf95e4396dd989ac1847d51b910c",
+    "packages/web/src/components/Sidebar.vue": "31e47441590716b8d5c4f97b3c924a93b897991be65ce498a0f10b4cc5213b46",
+    "packages/tui/src/render/chrome/context.ts": "97b756a595cf36069542f5c402f0adc48ea588223355608c29f945864286926e",
+    "packages/tui/src/render/chrome/sidebar.ts": "c9711bca034d6f20e1cc2c5034364a844f47740f7f18f3f4ebdb8a73ca24a63d"
+  }
+}

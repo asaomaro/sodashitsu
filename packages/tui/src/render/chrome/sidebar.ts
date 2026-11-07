@@ -598,9 +598,9 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
         const items=subs.items.slice(0,64);
         const plain=(value:string)=>value.replace(/[\x00-\x1f\x7f-\x9f\u2028-\u202e\u2066-\u2069]/g," ");
         for(const child of items){
-          const state=child.state??"working";
-          agentLines.push({indent:2,selected:false,rows:[[
-            {text:glyphFor(state,prefs.statusSymbols),fg:stateColor(ctx.theme,state)},
+          const state=child.state??"working",glyph=glyphFor(state,prefs.statusSymbols,"subagent");
+          agentLines.push({indent:2,subIndent:stringWidth(glyph)+1,selected:false,rows:[[
+            {text:glyph,fg:stateColor(ctx.theme,state)},
             {text:` ${plain(child.type??"サブエージェント")}${child.background?"（裏実行）":""}`},
           ],...(child.description?[[{text:plain(child.description)}]]:[])]});
         }

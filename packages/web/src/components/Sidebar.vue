@@ -1117,7 +1117,7 @@ watchDragInterrupt(view, () => {
       </div>
       <div v-if="!view.sidebarCollapsed && subagentCount(agent)>0 && subagentsExpanded(agent)" :id="`sidebar-subagents-${pane.id}`" class="sidebar-subagents" role="group" :aria-label="`${agent.label} のサブエージェント`">
         <div v-for="child in agent.subagents!.items.slice(0,64)" :key="child.id" class="sidebar-row sidebar-subagent-row" :data-subagent-id="child.id" :title="childTitle(child)">
-          <div class="sidebar-row-line1"><StateIcon class="sidebar-state-icon sidebar-subagent-status" :state="child.state ?? 'working'" /><span class="sidebar-label">{{ child.type || 'サブエージェント' }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
+          <div class="sidebar-row-line1"><StateIcon class="sidebar-state-icon sidebar-subagent-status" variant="subagent" :state="child.state ?? 'working'" /><span class="sidebar-label">{{ child.type || 'サブエージェント' }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
           <div v-if="child.description" class="sidebar-row-line2 sidebar-label">{{ child.description }}</div>
         </div>
         <div v-if="subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)})" class="sidebar-subagent-more">{{ subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)}) }}</div>
