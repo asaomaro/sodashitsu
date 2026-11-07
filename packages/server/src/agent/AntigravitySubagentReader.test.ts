@@ -37,7 +37,7 @@ describe("Antigravity official direct-child snapshots", () => {
     const pane = { id: "pane", agent: { kind: "agy", instanceId: "instance" }, agentSession: { kind: "agy", sessionId: parent } } as unknown as Pane;
     const service = new NativeSubagentService({ reader: f.reader, bus: { subscribe: () => ({ dispose() {} }) }, session: {
       snapshot: () => ({ panes: [pane] }), getPane: () => pane, hasVerifiedAgentSession: () => true,
-      setAgentSubagents: (_id, value) => { pane.agent!.subagents = value; return true; },
+      setAgentSubagents: (_id, value) => { if (value === undefined) delete pane.agent!.subagents; else pane.agent!.subagents = value; return true; },
     } });
     await service.refresh();
     expect(JSON.parse(JSON.stringify(pane)).agent.subagents).toMatchObject({ count: 1, countBasis: "alive", items: [{ state: "unknown", startedAt: Date.parse("2026-11-07T04:11:23Z") }] });
