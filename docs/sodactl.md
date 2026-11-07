@@ -493,7 +493,7 @@ pane の中で検出されたコーディングエージェント（Claude Code�
   サブエージェントの記録を読む RPC（`agent.subagent_transcript`。グラフの「記録を読むだけの窓」が使う）には、`sodactl` のコマンドは無い。ログイン済みの接続（`external` を含む）からは、`agent read` と同じ扱いで呼べるが、ログイン不要の受け口（`pane.sock`）には載せていない。仕組みと安全の作りは `docs/agent-graph.md`「サブエージェントの記録を読むだけの窓」。
   `description` はエージェントが書いた短い説明で、そのまま文字として扱う（画面でも HTML としては出さない）。
 
-AGYの`countBasis: "alive"`はALIVEの所属数（KILLEDを除外）で、各子の`state: "unknown"`は現在の作業状態が未取得であることを表します。`countBasis`省略（または`working`）と`state`省略は従来の実行中の意味を保ちます。所属数は実行中件数や親子トークン利用率とは別です。
+`countBasis: "alive"`は作業中件数ではなく、確認できた所属数です。Codexでは正式startedの所属が確認済みで、completed後にinteractedで再参照された子を`state: "unknown"`として表示します。入力の配達だけでは実行中とは断定しません。AGYでは正式descriptorのALIVEを数え、KILLEDは除外します。各子の`state: "unknown"`は現在の作業状態が未取得であることを表します。`countBasis`省略（または`working`）と`state`省略は従来の実行中の意味を保ちます。所属数は実行中件数や親子トークン利用率とは別です。
 
 `agent wait` の `--until` や待ちの判定は、`subagents` の変化では動かない（状態の変化だけで動く）。「作業中」の中身（並行で何件動いているか）を知りたいときに読む。
 Codex・Museは隔離実CLIで開始/終了の記録を確認。CopilotはSDK schemaと生成fixtureの確認で、実CLI往復は未検証。仕組み・対象外・制約は `docs/agent-graph.md`「サブエージェントの表示の仕組みと制約」と[取得経路](nonclaude-subagents.md)。

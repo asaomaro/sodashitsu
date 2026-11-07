@@ -1,0 +1,9 @@
+# Public count positive → actual browser rendering
+
+Product source is exact1f0994fa (no edits). Root supplied an authenticated public-API positive Codex count2/countBasisalive/items unknown2. This metadata was anonymously reproduced in the production Sidebar/PaneStatusline mounted by Vite/Chromium: footer所属2, collapsed badge2, expanded2 readonly rows/unknown states all observed in browser DOM and screenshot public-two.png.
+
+A fresh read-only public client.hello through FsSessionStore/withSession found the count had legitimately advanced to3/alive/unknown3. Only count/basis/states were retained. Real IDs, instance/pane/session labels, paths, descriptions and times are not persisted or printed. IDs/types/labels and timestamps in public-anonymous.json are fixture replacements; count/basis/states are actual API values. No raw user record or terminal screen was read.
+
+The browser then applies that newer anonymous metadata to the actual stores and observes footer3, expanded3 rows, and collapsed badge3 (public-latest.png). browser.json/log capture both snapshots and pageerrors0. Screenshot inspected. No production pane/input/settings operation, CLI/model execution, sr-pc or OS/driver/service change occurred. This proves the actual frontend renders the published count metadata, not an inspection of the live user's browser. Node24, own-worktree protocol/client-core prerequisite builds only, no duplicated whole CI.
+
+Documentation-only follow-up aligns working vs alive semantics with the already implemented count fix: an explicitly started/owned Codex child completed then referenced by interacted is an unknown-state member, not inferred working. A completed historic child alone is not restored; unproved/invalid/interrupt cases remain unknown/unavailable according to nonclaude-subagents.md. No product source is changed by this follow-up.

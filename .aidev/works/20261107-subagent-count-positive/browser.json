@@ -1,0 +1,24 @@
+{
+  "sourceHead": "1f0994fa",
+  "rootSuppliedPublicPositive": {
+    "count": 2,
+    "countBasis": "alive",
+    "states": [
+      "unknown",
+      "unknown"
+    ]
+  },
+  "freshPublicPositive": {
+    "count": 3,
+    "countBasis": "alive",
+    "states": [
+      "unknown",
+      "unknown",
+      "unknown"
+    ]
+  },
+  "defaultFooterVisible": true,
+  "badgeAndExpandedRowsObserved": true,
+  "liveMetadataUpdateObserved": true,
+  "pageErrors": []
+}

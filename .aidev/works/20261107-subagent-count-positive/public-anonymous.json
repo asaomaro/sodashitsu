@@ -1,0 +1,31 @@
+{
+  "kind": "codex",
+  "subagents": {
+    "count": 3,
+    "countBasis": "alive",
+    "items": [
+      {
+        "id": "generated-child-0",
+        "type": "Generated worker 1",
+        "startedAt": 0,
+        "state": "unknown"
+      },
+      {
+        "id": "generated-child-1",
+        "type": "Generated worker 2",
+        "startedAt": 0,
+        "state": "unknown"
+      },
+      {
+        "id": "generated-child-2",
+        "type": "Generated worker 3",
+        "startedAt": 0,
+        "state": "unknown"
+      }
+    ]
+  },
+  "provenance": {
+    "route": "public authenticated client.hello",
+    "actualIdsLabelsTimesOmitted": true
+  }
+}
