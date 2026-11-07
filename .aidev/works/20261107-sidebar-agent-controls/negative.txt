@@ -1,0 +1,123 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-agent-controls
+
+ ❯ |@sodashitsu/tui| src/app/TuiApp.subagents.test.ts (23 tests | 2 failed) 2037ms
+   ❯ 端末版のサブエージェントの表示 (23)
+     × puts expansion on the first row without sidebar info and preserves the pane information action 61ms
+     × keeps a single-row fallback and watches usage independently from disabled footer 60ms
+ ❯ |@sodashitsu/web| src/components/Sidebar.test.ts (205 tests | 4 failed) 2085ms
+   ❯ Sidebar — サブエージェントの件数のボタン (20)
+     × 1 行目の右端に置き、行の数を増やさない 13ms
+     × 別のマシンを選んでいるときは、そのマシンの対象として開く（machineId は選んでいるマシンの ID） 12ms
+     × keeps observed effort independent of footer visibility, with expansion first and no sidebar info 7ms
+     × keeps expansion on a custom single row without sidebar info 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > 1 行目の右端に置き、行の数を増やさない
+AssertionError: expected null not to be null
+ ❯ src/components/Sidebar.test.ts:640:62
+    638|     setup(makeAgent({ subagents: subs(2) }));
+    639|     const w = mountSidebar(makeConnection());
+    640|     expect(btn(w).element.closest(".sidebar-row-line1")).not.toBeNull(…
+       |                                                              ^
+    641|     const rows = w.findAll(".sidebar-agents .sidebar-row");
+    642|     expect(rows).toHaveLength(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  |@sodashitsu/web| src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > 別のマシンを選んでいるときは、そのマシンの対象として開く（machineId は選んでいるマシンの ID）
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/Sidebar.test.ts:681:52
+    679|     expect(btn(w).attributes("aria-expanded")).toBe("true");
+    680|     expect(w.find(".sidebar-subagent-details").exists()).toBe(false);
+    681|     expect(w.find(".sidebar-agent-info").exists()).toBe(false);expect(…
+       |                                                    ^
+    682|   });
+    683|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  |@sodashitsu/web| src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > keeps observed effort independent of footer visibility, with expansion first and no sidebar info
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/Sidebar.test.ts:757:188
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  |@sodashitsu/web| src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > keeps expansion on a custom single row without sidebar info
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/Sidebar.test.ts:763:52
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  |@sodashitsu/tui| src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > puts expansion on the first row without sidebar info and preserves the pane information action
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/app/TuiApp.subagents.test.ts:366:47
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  |@sodashitsu/tui| src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > keeps a single-row fallback and watches usage independently from disabled footer
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/app/TuiApp.subagents.test.ts:369:268
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 222 passed (228)
+   Start at  22:17:37
+   Duration  7.63s (transform 60%, tests 31%, import 8%, environment 1%)
+
+  Transform  |@sodashitsu/web| transforming modules took 4.63s · 62% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+  Transform  |@sodashitsu/tui| transforming modules took 3.37s · 57% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

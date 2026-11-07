@@ -590,10 +590,9 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
         ),
         selected: id === model.focusedPaneId,
         hit: { kind: "agent", paneId: id },
-        info:{paneId:id},
         // サブエージェントの件数（1 件以上のとき。20261004-subagent-display）。`⤷` は unicode11 で 1 桁（環境で崩れるなら別の記号にする。decisions D11）。
         ...((p.agent?.subagents?.count ?? 0) > 0
-          ? { badge: { text: ctx.sidebarScroll?.expandedSubagents?.has(`${ctx.machines?.selectedId??LOCAL_MACHINE_ID}:${p.agent!.instanceId}`) ? "▾" : `▸${p.agent!.subagents!.count}`, paneId: id,row:1 } }
+          ? { badge: { text: ctx.sidebarScroll?.expandedSubagents?.has(`${ctx.machines?.selectedId??LOCAL_MACHINE_ID}:${p.agent!.instanceId}`) ? "▾" : `▸${p.agent!.subagents!.count}`, paneId: id,row:0 } }
           : {}),
       });
       const subs=p.agent!.subagents;

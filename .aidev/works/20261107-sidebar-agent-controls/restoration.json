@@ -1,0 +1,10 @@
+{
+  "packages/web/src/components/Sidebar.vue": {
+    "sha256": "9d2a49ca528906ed50f636438c06431b7faa6834b126f1c983c89c72f00e1efe",
+    "exact": true
+  },
+  "packages/tui/src/render/chrome/sidebar.ts": {
+    "sha256": "d5b7b61e7b4745c563e2e283cc42a63e9184b242122b572da155665baccb4c67",
+    "exact": true
+  }
+}

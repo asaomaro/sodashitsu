@@ -634,10 +634,10 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     expect(b.attributes("aria-label")).toBe("サブエージェント 3件を展開");
   });
 
-  it("2 行目の中に移し、行の数を増やさない", () => {
+  it("1 行目の右端に置き、行の数を増やさない", () => {
     setup(makeAgent({ subagents: subs(2) }));
     const w = mountSidebar(makeConnection());
-    expect(btn(w).element.closest(".sidebar-row-line2")).not.toBeNull();
+    expect(btn(w).element.closest(".sidebar-row-line1")).not.toBeNull();
     const rows = w.findAll(".sidebar-agents .sidebar-row");
     expect(rows).toHaveLength(1);
     expect(rows[0]!.findAll(".sidebar-row-line1")).toHaveLength(1);
@@ -678,8 +678,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     await btn(w).trigger("click");
     expect(btn(w).attributes("aria-expanded")).toBe("true");
     expect(w.find(".sidebar-subagent-details").exists()).toBe(false);
-    await w.get(".sidebar-agent-info").trigger("click");
-    expect(useViewStore(pinia).paneInfoPaneId).toBe("p1");expect(useViewStore(pinia).dialogContext).toBeNull();
+    expect(w.find(".sidebar-agent-info").exists()).toBe(false);expect(useViewStore(pinia).dialogContext).toBeNull();
   });
 
   it("古いサーバ（subagents の項目が無い）のエージェントの行は、ボタンが無いだけで、ほかは変わらない", () => {
@@ -751,17 +750,17 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     usage.panes.p1={...usage.panes.p1!,kind:"claude"};await nextTick();expect(w.get('[data-agent-pane="p1"]').text()).not.toContain("gpt-observed-model");
     delete usage.panes.p1;await nextTick();expect(w.get('[data-agent-pane="p1"]').text()).toContain("Codex");
   });
-  it("keeps observed effort independent of footer visibility, with info first and expansion second",async()=>{
+  it("keeps observed effort independent of footer visibility, with expansion first and no sidebar info",async()=>{
     setup(makeAgent({kind:"codex",subagents:{count:1,items:[{id:"child",startedAt:0,type:"child-model",description:"child-session",reasoningEffort:"low",reasoningEffortBasis:"creation"}]}}));
     useSettingsStore(pinia).statuslineSettings.enabled=false;
     const store=useUsageStore(pinia);store.panes.p1={paneId:"p1",kind:"codex",model:"parent-model",reasoningEffort:"high",tokens:{basis:"context"},source:"rollout",updatedAt:1};
-    const w=mountSidebar(makeConnection()),parent=w.get('[data-agent-pane="p1"]');expect(parent.text()).toContain("parent-model high");expect(parent.find('.sidebar-row-line1 .sidebar-agent-info').exists()).toBe(true);expect(parent.find('.sidebar-row-line2 .sidebar-subagent-btn').exists()).toBe(true);
+    const w=mountSidebar(makeConnection()),parent=w.get('[data-agent-pane="p1"]');expect(parent.text()).toContain("parent-model high");expect(parent.find('.sidebar-agent-info').exists()).toBe(false);expect(parent.find('.sidebar-row-line1 .sidebar-subagent-btn').exists()).toBe(true);
     await btn(w).trigger('click');expect(w.get('[data-subagent-id="child"] .sidebar-row-line2').text()).toBe('child-model low（開始時）');expect(w.get('[data-subagent-id="child"]').attributes('title')).toContain('開始時のeffort');expect(w.find('.sidebar-subagent-details').exists()).toBe(false);
-    await parent.get('.sidebar-agent-info').trigger('click');expect(useViewStore(pinia).paneInfoPaneId).toBe('p1');await parent.get('.sidebar-agent-info').trigger('click');expect(useViewStore(pinia).paneInfoPaneId).toBeNull();
+    expect(useViewStore(pinia).paneInfoPaneId).toBeNull();
   });
-  it("keeps both controls on a custom single row",()=>{
+  it("keeps expansion on a custom single row without sidebar info",()=>{
     setup(makeAgent({subagents:subs(1)}));useSettingsStore(pinia).setSidebarLayout("agents",[[{token:"agent"}]]);const w=mountSidebar(makeConnection());
-    expect(w.get('.sidebar-agent-info').element.closest('.sidebar-row-line1')).not.toBeNull();expect(btn(w).element.closest('.sidebar-row-line1')).not.toBeNull();expect(w.find('.sidebar-agents .sidebar-row-line2').exists()).toBe(false);
+    expect(w.find('.sidebar-agent-info').exists()).toBe(false);expect(btn(w).element.closest('.sidebar-row-line1')).not.toBeNull();expect(w.find('.sidebar-agents .sidebar-row-line2').exists()).toBe(false);
   });
   it("keeps child session/model fallback readable without empty second lines",async()=>{
     setup(makeAgent({subagents:{count:3,items:[{id:"model",type:"model-only",startedAt:0},{id:"session",description:"session-only",startedAt:0},{id:"empty",startedAt:0}]}}));const w=mountSidebar(makeConnection());await btn(w).trigger("click");

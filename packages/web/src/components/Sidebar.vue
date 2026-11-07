@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import PaneInfoIcon from "./PaneInfoIcon.vue";
 import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { AgentInfo, ItemTarget, SubagentInfo, Workspace } from "@sodashitsu/protocol";
@@ -1097,10 +1096,9 @@ watchDragInterrupt(view, () => {
               <StateIcon v-if="t.kind === 'state_icon'" class="sidebar-state-icon" :state="state" :style="tokenStyleAttr(t.style)" />
               <span v-else-if="t.kind === 'text'" v-bind="textTokenAttrs(t, i)">{{ t.text }}</span>
             </template>
-            <button v-if="i===0" data-assistant-feature data-pane-action="info" type="button" class="sidebar-agent-info" :aria-label="`${agent.name||agent.label}の利用状況（情報）`" title="利用状況（情報）" :aria-pressed="view.paneInfoPaneId===pane.id" @pointerdown.stop @click.stop="focusPane(pane.id,pane.tabId,workspace?.id??'');view.togglePaneInfo(pane.id)" @keydown="onButtonKeydown"><PaneInfoIcon /></button>
-            <!-- 子の開閉は2行目。1行設定では同じ行へ収める。 -->
+            <!-- 子の開閉は1行目の右端。 -->
             <button data-assistant-feature
-              v-if="i === Math.min(1,lines.length-1) && subagentCount(agent) > 0"
+              v-if="i === 0 && subagentCount(agent) > 0"
               type="button"
               class="sidebar-subagent-btn"
               :data-subagent-pane="pane.id"
@@ -1402,7 +1400,7 @@ watchDragInterrupt(view, () => {
   align-items: center;
   gap: 0.5em;
 }
-/* サブエージェントの件数のボタン。2 行目（1 行設定ならその行）の右端に置く（枠線・余白を最小に。文字の高さに収める）。 */
+/* サブエージェントの件数のボタン。1 行目の右端に置く（枠線・余白を最小に。文字の高さに収める）。 */
 .sidebar-subagent-btn {
   display: inline-flex;
   align-items: center;
@@ -1419,8 +1417,7 @@ watchDragInterrupt(view, () => {
   color: inherit;
   cursor: pointer;
 }
-.sidebar-agent-info { flex:none; display:inline-flex; align-items:center; justify-content:center; margin-left:auto; width:24px; height:24px; padding:0; border:none; border-radius:var(--soda-shape-radius-s); background:none; color:var(--soda-fg,#f8f8f2); cursor:pointer; }
-.sidebar-agent-info:hover, .sidebar-subagent-btn:hover {
+.sidebar-subagent-btn:hover {
   background: var(--soda-menu-hover-bg, #343746);
 }
 .sidebar-subagent-icon { display:inline-block; transition:transform .15s; }
