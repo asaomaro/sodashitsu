@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { AgentInfo, ItemTarget, Workspace } from "@sodashitsu/protocol";
+import type { AgentInfo, ItemTarget, SubagentInfo, Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../injection.js";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { type SectionBox, clampRatio, ratioFromOffset, ratioPercent, stepRatio } from "../sidebar/sectionSizing.js";
 import { useSessionStore } from "../store/session.js";
+import { useUsageStore } from "../store/usage.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
 import { subagentStateLabel, subagentCountLabel, subagentsMoreLabel, orderedAgentPaneIds, paneMoveBlock } from "@sodashitsu/client-core";
 import { type DropAnchor, type ItemRow, dropBefore, nextAnchorOf, sameItemTarget, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfUngrouped, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
@@ -39,6 +40,7 @@ import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
  * 取り消し）をそのまま踏襲する。
  */
 const session = useSessionStore();
+const usage = useUsageStore();
 const seen = useSeenStore();
 const view = useViewStore();
 const settings = useSettingsStore();
@@ -366,8 +368,10 @@ const agents = computed(() => {
       const ws = tab ? session.workspaces.get(tab.workspaceId) : undefined;
       const agent = p.agent!;
       const state = displayStateFor(agent, seen.getSeenSeq(agent.instanceId, agent.serverSeenSeq));
-      const lines = resolveAgentLines(settings.agentsLayout, { pane: p, tab, workspace: ws, agent, state });
-      return { pane: p, tab, workspace: ws, agent, state, lines };
+      const observed = usage.panes[p.id];
+      const model = observed?.kind === agent.kind ? observed.model?.trim() || undefined : undefined;
+      const lines = resolveAgentLines(settings.agentsLayout, { pane: p, tab, workspace: ws, agent, state, model });
+      return { pane: p, tab, workspace: ws, agent, state, lines, model };
     });
   const rowsByPaneId = new Map(rows.map((r) => [r.pane.id, r]));
   // 並び順は `orderedAgentPaneIds`（`ActionDispatcher` の `previous_agent`/`next_agent`/`focus_agent` と
@@ -497,6 +501,7 @@ function toggleSubagents(agent:AgentInfo):void {
 }
 function subagentCount(agent:AgentInfo):number {return agent.subagents?.count??0;}
 function subagentStatus(agent:AgentInfo):string {return subagentCountLabel(agent.subagents);}
+function childTitle(child:SubagentInfo):string {return [child.type,child.description,subagentStateLabel(child),"親エージェント内（独立した端末はありません）"].filter(Boolean).join(" · ");}
 
 /** その pane のエージェントのサブエージェントの一覧を開く（ダイアログ。対象は選んでいるマシンの pane）。 */
 function openSubagents(paneId: string): void {
@@ -1078,8 +1083,8 @@ watchDragInterrupt(view, () => {
       </div>
       <div id="sidebar-agents-body" class="sidebar-section-body">
       <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
-      <template v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id">
-      <div class="sidebar-row" :title="subagentStatus(agent)" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
+      <template v-for="{ pane, workspace, state, lines, agent, model } in agents" :key="pane.id">
+      <div class="sidebar-row" :title="`${agent.name || agent.label}${model ? ` ${model}` : ''} · ${subagentStatus(agent)}`" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
         <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
         <ShortcutNumber :number="agentNumbers.get(pane.id)" target="agent" />
         <div v-if="view.sidebarCollapsed" class="sidebar-row-line1">
@@ -1111,9 +1116,8 @@ watchDragInterrupt(view, () => {
         </template>
       </div>
       <div v-if="!view.sidebarCollapsed && subagentCount(agent)>0 && subagentsExpanded(agent)" :id="`sidebar-subagents-${pane.id}`" class="sidebar-subagents" role="group" :aria-label="`${agent.label} のサブエージェント`">
-        <div v-if="agent.subagents?.countBasis==='alive'" class="sidebar-subagent-more">所属する子（作業中の件数ではありません）</div>
-        <div v-for="child in agent.subagents!.items.slice(0,64)" :key="child.id" class="sidebar-row sidebar-subagent-row" :data-subagent-id="child.id" :title="`親エージェント内・${subagentStateLabel(child)}（独立した端末はありません）`">
-          <div class="sidebar-row-line1"><span class="sidebar-subagent-status" :data-state="child.state ?? 'working'">{{ subagentStateLabel(child) }}</span><span class="sidebar-label">{{ child.type || 'サブエージェント' }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
+        <div v-for="child in agent.subagents!.items.slice(0,64)" :key="child.id" class="sidebar-row sidebar-subagent-row" :data-subagent-id="child.id" :title="childTitle(child)">
+          <div class="sidebar-row-line1"><StateIcon class="sidebar-state-icon sidebar-subagent-status" :state="child.state ?? 'working'" /><span class="sidebar-label">{{ child.type || 'サブエージェント' }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
           <div v-if="child.description" class="sidebar-row-line2 sidebar-label">{{ child.description }}</div>
         </div>
         <div v-if="subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)})" class="sidebar-subagent-more">{{ subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)}) }}</div>
@@ -1422,8 +1426,8 @@ watchDragInterrupt(view, () => {
 .sidebar-subagent-count { border-radius:1em; padding-inline:.2em; background:var(--soda-menu-hover-bg); }
 .sidebar-subagents { margin-left:1.1em; border-left:1px solid var(--soda-menu-border); }
 .sidebar-subagent-row { cursor:default; }
-.sidebar-subagent-status { color:var(--soda-accent); font-size:.8em; flex:none; }
-.sidebar-subagent-status[data-state="unknown"],.sidebar-subagent-status[data-state="idle"] { color:inherit; opacity:.8; }
+.sidebar-subagent-row .sidebar-row-line1 { font-size:.85em; }
+.sidebar-subagent-row .sidebar-row-line2 { padding-left:1.5em; }
 .sidebar-subagent-more,.sidebar-subagent-details { margin:.3em .8em; font-size:.85em; }
 @media(prefers-reduced-motion:reduce) { .sidebar-subagent-icon { transition:none; } }
 .sidebar-row-line2 {

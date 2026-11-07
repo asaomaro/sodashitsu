@@ -1,0 +1,46 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-subagent-compact/packages/client-core
+
+ ❯ src/sidebar/resolveRows.test.ts (18 tests | 1 failed) 13ms
+   × appends an observed model to the agent-name token without inserting new rows or changing styles 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/sidebar/resolveRows.test.ts > appends an observed model to the agent-name token without inserting new rows or changing styles
+AssertionError: expected [ [ { kind: 'text', …(3) } ] ] to deeply equal [ [ { kind: 'text', …(3) } ] ]
+
+- Expected
++ Received
+
+@@ -3,10 +3,10 @@
+      {
+        "kind": "text",
+        "style": {
+          "bold": true,
+        },
+-       "text": "Codex gpt-observed",
++       "text": "Codex",
+        "token": "agent",
+      },
+    ],
+  ]
+
+ ❯ src/sidebar/resolveRows.test.ts:340:81
+    338| it("appends an observed model to the agent-name token without insertin…
+    339|  const ctx={pane:pane(),tab:tab(),workspace:ws(),agent:agent({label:"C…
+    340|  const lines=resolveAgentLines([[{token:"agent",bold:true}]],ctx);expe…
+       |                                                                                 ^
+    341|  expect(resolveAgentLines([[{token:"agent"}]],{...ctx,model:undefined}…
+    342|  expect(resolveAgentLines([[{token:"agent",rules:[{when:"equals",value…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+   Start at  15:59:23
+   Duration  169ms (transform 67%, import 16%, tests 15%, worker 3%)
+
+undefined
+/workspaces/sodashitsu-sidebar-subagent-compact/packages/client-core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/sidebar/resolveRows.test.ts

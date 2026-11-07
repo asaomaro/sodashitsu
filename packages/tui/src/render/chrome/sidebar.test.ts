@@ -542,3 +542,11 @@ describe("サイドバーの区画の折りたたみ", () => {
     expect(r.text(0)).toMatch(/^ ▸ Spaces\s+\+$/);
   });
 });
+
+
+it("shows an observed same-kind model after the parent agent name and omits other kinds",()=>{
+ const h=setup([ws("w")],{states:{w:{kind:"codex",label:"Codex",state:"idle"}}});
+ h.ctx.paneUsage={"p-w":{paneId:"p-w",kind:"codex",model:"gpt-observed",tokens:{basis:"context"},source:"rollout",updatedAt:1}};
+ const screen=()=>{const {grid}=h.paint();return Array.from({length:24},(_,y)=>grid.rowText(y)).join("\n")};
+ expect(screen()).toContain("Codex gpt-observed");h.ctx.paneUsage={"p-w":{...h.ctx.paneUsage["p-w"]!,kind:"claude"}};expect(screen()).not.toContain("gpt-observed");
+});

@@ -1,0 +1,13 @@
+# Compact subagent sidebar
+
+User-confirmed list now renders. Requested UI-only refinement: remove membership explanation row, show states by icons, align child model/session text sizes, show observed model after the parent agent name.
+
+Web removes the explanation row, reuses StateIcon (state/title/aria preserved), uses .85em on child model and session rows, matching the parent agent information row. Row titles include full child model/type, session description, state and readonly context. Parent title retains full model and count semantics. Count basis remains in button aria/title/footer; data count/items/unknown meanings, collapse persistence and limits are unchanged.
+
+The shared resolveAgentLines accepts an optional already-observed model and appends it to the existing agent-name token. Existing token visibility/style rules still match the original name; omitted agent tokens are respected and no arbitrary row is inserted. Web reads existing UsageStore only, TUI receives existing UsageModel panes through ChromeContext; kind mismatch or missing model is omitted. No fetching, CLI/model start or launch-profile inference is added. TUI uses glyphFor/stateColor instead of state words, retaining its existing same-sized terminal cells and membership annotation.
+
+Related client-core18, Web202, TUI45 tests pass. Web/TUI typechecks pass after matching exactOptionalPropertyTypes and existing nullable usage entries; these were type-only corrections, no behavior changed after negative controls. Protocol/client-core prerequisites only, no whole-repo CI repeated.
+
+Real Vite/Chromium mounts actual Sidebar/PaneStatusline with generated Codex alive2/unknown2 and observed parent model. It confirms parent label+model order/full title, child icon role/aria without state prose, full child title, missing membership explanation, count semantics and model/session/parent-info fonts all13.6px. Page errors0. Screenshot inspected. Actual production panes/settings and sr-pc are untouched. This is display verification, not a new provider readback claim.
+
+Negative controls restore only the three changed shared/Web/TUI sidebar product files to base1f0994fa. The new shared-model test and Web sidebar tests fail, then client-core is rebuilt with old code and browser fails to observe the parent model. Vite serves current source, not old build cache. Files restored byte-exact with SHA256 in restore.json; client-core rebuild + final related unit/browser pass. Type-only final annotations are explicitly recorded in restore.json. Raw positive/negative/build/type logs are retained. Existing detail/record links and readonly child semantics remain.

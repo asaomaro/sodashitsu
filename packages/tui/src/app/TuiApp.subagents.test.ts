@@ -78,7 +78,7 @@ describe("端末版のサブエージェントの表示", () => {
     const h=await start({subagents:subs(2)});let b=h.badge()!;
     h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();
     expect(h.app.ui.dialogContext).toBeNull();expect(h.app.model.focusedPaneId).toBe("p1");
-    let screen=await h.screen();expect(screen).toContain("実行中");expect(screen).toContain("説明0");expect(screen).not.toContain("▸2");expect(h.badge()!.w).toBe(1);
+    let screen=await h.screen();expect(screen).not.toContain("実行中");expect(screen).toContain("Explore");expect(screen).toContain("説明0");expect(screen).not.toContain("▸2");expect(h.badge()!.w).toBe(1);
     h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({state:"working",subagents:subs(1,"更新")})});h.app.renderNow();expect(await h.screen()).toContain("更新");
     b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();screen=await h.screen();expect(screen).toContain("▸1");expect(screen).not.toContain("説明0");
     b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({instanceId:"new",subagents:subs(2)})});h.app.renderNow();expect(await h.screen()).toContain("▸2");
@@ -88,7 +88,7 @@ describe("端末版のサブエージェントの表示", () => {
   it.each(["codex","muse","copilot","agy"])("renders %s membership and unknown children without claiming work",async kind=>{
     const h=await start({kind,subagents:{count:1,countBasis:"alive",items:[sub("unknown",{state:"unknown",type:"所属する子"})]}});
     const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();
-    let screen=await h.screen();expect(screen).toContain("所属");expect(screen).toContain("状態不明");expect(screen).not.toContain("実行中");
+    let screen=await h.screen();expect(screen).toContain("所属");expect(screen).not.toContain("状態不明");expect(screen).not.toContain("実行中");
     dispatcherOf(h.app).showSubagentsOf("p3");h.app.renderNow();screen=await h.screen();expect(screen).toContain("（所属）");expect(screen).toContain("状態不明");
   });
   it("展開行の上限と残り件数をsidebarスクロールで確認できる",async()=>{

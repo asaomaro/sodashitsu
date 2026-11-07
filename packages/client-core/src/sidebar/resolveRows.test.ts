@@ -333,3 +333,12 @@ describe("tokenStyleAttr（AC9・AC13）", () => {
     expect(tokenStyleAttr({ fg: "red;background:url(x)" })).toBeUndefined();
   });
 });
+
+
+it("appends an observed model to the agent-name token without inserting new rows or changing styles",()=>{
+ const ctx={pane:pane(),tab:tab(),workspace:ws(),agent:agent({label:"Codex"}),state:"idle" as const,model:"gpt-observed"};
+ const lines=resolveAgentLines([[{token:"agent",bold:true}]],ctx);expect(lines).toEqual([[{kind:"text",token:"agent",text:"Codex gpt-observed",style:{bold:true}}]]);
+ expect(resolveAgentLines([[{token:"agent"}]],{...ctx,model:undefined})[0]![0]).toMatchObject({text:"Codex"});
+ expect(resolveAgentLines([[{token:"agent",rules:[{when:"equals",value:"Codex",fg:"#ff0000"}]}]],ctx)[0]![0]).toMatchObject({text:"Codex gpt-observed",style:{fg:"#ff0000"}});
+ expect(resolveAgentLines([[{token:"agent",rules:[{when:"equals",value:"Codex",hide:true}]}]],ctx).flat().some(t=>t.kind==="text"&&t.token==="agent")).toBe(false);
+});

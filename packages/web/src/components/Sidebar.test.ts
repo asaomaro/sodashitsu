@@ -8,6 +8,7 @@ import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useMachinesStore } from "../store/machines.js";
 import { useSessionStore } from "../store/session.js";
 import { readPrefs, useViewStore, writePrefs } from "../store/view.js";
+import { useUsageStore } from "../store/usage.js";
 import { useSettingsStore } from "../store/settings.js";
 import Sidebar from "./Sidebar.vue";
 import { currentVisibleWorkspaceIds } from "../store/sidebarTree.js";
@@ -736,8 +737,17 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
   it.each(["claude","codex","muse","copilot","agy"])("shows %s children using their state and membership basis",async kind=>{
     setup(makeAgent({kind,subagents:{count:3,countBasis:"alive",items:[{id:"u",startedAt:0,state:"unknown"},{id:"i",startedAt:0,state:"idle"},{id:"w",startedAt:0}]}}));const w=mountSidebar(makeConnection());
     expect(btn(w).attributes("aria-label")).toContain("所属 3 件");await btn(w).trigger("click");
-    expect(w.get('[data-subagent-id="u"]').text()).toContain("状態不明");expect(w.get('[data-subagent-id="u"]').text()).not.toContain("実行中");
-    expect(w.get('[data-subagent-id="i"]').text()).toContain("待機中");expect(w.get('[data-subagent-id="w"]').text()).toContain("実行中");
+    expect(w.get('[data-subagent-id="u"] .state-icon').attributes("aria-label")).toBe("状態不明");expect(w.get('[data-subagent-id="u"]').text()).not.toContain("状態不明");
+    expect(w.get('[data-subagent-id="i"] .state-icon').attributes("data-state")).toBe("idle");expect(w.get('[data-subagent-id="w"] .state-icon').attributes("data-state")).toBe("working");
+    expect(w.text()).not.toContain("所属する子（作業中の件数ではありません）");
+  });
+  it("appends only an already observed same-kind parent model and preserves full child titles",async()=>{
+    setup(makeAgent({kind:"codex",label:"Codex",subagents:{count:1,countBasis:"alive",items:[{id:"child",startedAt:0,state:"unknown",type:"gpt-child-model",description:"/generated/full/session/path"}]}}));
+    const usage=useUsageStore(pinia);usage.panes.p1={paneId:"p1",kind:"codex",model:"gpt-observed-model",tokens:{basis:"context"},source:"rollout",updatedAt:1};
+    const w=mountSidebar(makeConnection());expect(w.get('[data-agent-pane="p1"]').text()).toContain("Codex gpt-observed-model");expect(w.get('[data-agent-pane="p1"]').attributes("title")).toContain("gpt-observed-model");
+    await btn(w).trigger("click");const child=w.get('[data-subagent-id="child"]');expect(child.attributes("title")).toContain("gpt-child-model · /generated/full/session/path · 状態不明");expect(child.findAll('[role="img"]')).toHaveLength(1);expect(child.text()).not.toContain("状態不明");
+    usage.panes.p1={...usage.panes.p1!,kind:"claude"};await nextTick();expect(w.get('[data-agent-pane="p1"]').text()).not.toContain("gpt-observed-model");
+    delete usage.panes.p1;await nextTick();expect(w.get('[data-agent-pane="p1"]').text()).toContain("Codex");
   });
   it("展開状態は更新/並び替えで保持、別instanceでは閉じ、上限と残り件数を表示する",async()=>{
     const session=setup(makeAgent({subagents:subs(70)}));const w=mountSidebar(makeConnection());

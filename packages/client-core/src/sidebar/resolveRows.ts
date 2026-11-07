@@ -34,6 +34,8 @@ export interface AgentTokenContext {
   tab: Tab | undefined;
   workspace: Workspace | undefined;
   agent: AgentInfo;
+  /** Already observed model for this same agent kind; omitted when unavailable. */
+  model?: string | undefined;
   /** `displayStateFor` の結果（エージェントが居る行なので実際には null にならないが、型は null を含む）。 */
   state: DisplayState | null;
 }
@@ -117,8 +119,11 @@ function resolveAgentToken(spec: TokenSpec, ctx: AgentTokenContext): ResolvedTok
       return textToken(spec, ctx.tab?.label ?? "");
     case "pane":
       return textToken(spec, ctx.pane.label ? ctx.pane.label : undefined);
-    case "agent":
-      return textToken(spec, ctx.agent.label);
+    case "agent": {
+      // Agent-name rules keep matching the name, not the newly appended model.
+      const token=textToken(spec,ctx.agent.label);
+      return token?.kind==="text"&&ctx.model?{...token,text:`${token.text} ${ctx.model}`}:token;
+    }
     case "name":
       return textToken(spec, ctx.agent.name ? ctx.agent.name : undefined);
     case "unverified":

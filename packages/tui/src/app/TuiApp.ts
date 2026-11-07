@@ -1754,6 +1754,7 @@ export class TuiApp {
     this.revealChanges();
     const ctx: ChromeContext = {
       model: this.model,
+      paneUsage: this.usage.data.panes,
       screen: this.ui.screen,
       chromeControls: true,
       notificationCount: this.notify.queued.length,

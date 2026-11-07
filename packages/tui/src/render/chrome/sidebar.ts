@@ -2,7 +2,7 @@ import { scrollbarThumb, type ScrollMetrics, type Track } from "../scrollbar.js"
 import type { DisplayState, ItemTarget, MachineState, Pane, Workspace } from "@sodashitsu/protocol";
 import { remoteKey, type MachineSection } from "../../model/MachinesModel.js";
 import {
-  subagentStateLabel, subagentsMoreLabel,
+  subagentsMoreLabel,
   aggregate,
   themeModeOf,
   sameItemTarget,
@@ -581,7 +581,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       agentLines.push({
         indent: 0,
         rows: segsOf(
-          resolveAgentLines(agentsLayout, { pane: p, tab, workspace: ws, agent: p.agent!, state }),
+          resolveAgentLines(agentsLayout, { pane: p, tab, workspace: ws, agent: p.agent!, state, model:ctx.paneUsage?.[p.id]?.kind===p.agent!.kind?ctx.paneUsage[p.id]?.model?.trim()||undefined:undefined }),
           state,
           ctx,
         ),
@@ -597,9 +597,13 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       if(subs&&subs.count>0&&ctx.sidebarScroll?.expandedSubagents?.has(`${ctx.machines?.selectedId??LOCAL_MACHINE_ID}:${p.agent!.instanceId}`)){
         const items=subs.items.slice(0,64);
         const plain=(value:string)=>value.replace(/[\x00-\x1f\x7f-\x9f\u2028-\u202e\u2066-\u2069]/g," ");
-        for(const child of items)agentLines.push({indent:2,selected:false,rows:[[
-          {text:`↳ ${plain(child.type??"サブエージェント")}${child.background?"（裏実行）":""}`},
-        ],[{text:`${subagentStateLabel(child)}${child.description?` · ${plain(child.description)}`:""}`,fg:stateColor(ctx.theme,child.state===undefined||child.state==="working"?"working":child.state==="idle"?"idle":"unknown")}]]});
+        for(const child of items){
+          const state=child.state??"working";
+          agentLines.push({indent:2,selected:false,rows:[[
+            {text:glyphFor(state,prefs.statusSymbols),fg:stateColor(ctx.theme,state)},
+            {text:` ${plain(child.type??"サブエージェント")}${child.background?"（裏実行）":""}`},
+          ],...(child.description?[[{text:plain(child.description)}]]:[])]});
+        }
         const more=subagentsMoreLabel({...subs,items});
         if(more)agentLines.push({indent:2,selected:false,rows:[[{text:more}]]});
       }

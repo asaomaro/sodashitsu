@@ -1,4 +1,4 @@
-import type { DisplayState } from "@sodashitsu/protocol";
+import type { AgentUsage, DisplayState } from "@sodashitsu/protocol";
 import { stateGlyph, type ConnectionState, type Mode } from "@sodashitsu/client-core";
 import type { SessionModel } from "../../model/SessionModel.js";
 import type { MachinesModel } from "../../model/MachinesModel.js";
@@ -10,6 +10,8 @@ import type { TabScroll } from "./tabBar.js";
 /** chrome（サイドバー・tab バー・枠）を描くのに要るもの。 */
 export interface ChromeContext {
   model: SessionModel;
+  /** Already observed usage for the active machine; no requests are made while rendering. */
+  paneUsage?: Readonly<Record<string,AgentUsage | null>>;
   screen?: "base" | "dashboard" | "schedule" | "graph" | "history" | "connections" | "analytics" | "resources";
   notificationCount?: number;
   pendingConnectionRequests?:number;

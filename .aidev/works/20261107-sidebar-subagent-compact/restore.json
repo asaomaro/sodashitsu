@@ -1,0 +1,11 @@
+{
+  "byteExact": true,
+  "sha256": {
+    "packages/client-core/src/sidebar/resolveRows.ts": "378e7fac13dd71baeba9168c84b6920cc1e5b927686d55a87f247eb70e9a5222",
+    "packages/web/src/components/Sidebar.vue": "7b0e58ede131b868b34ae3afac1d811a49365c01816e5b4b24491db1889272b7",
+    "packages/tui/src/render/chrome/sidebar.ts": "172161f67c87ef8fd88a21ac5781dda21f3893d8acee1253601cd77db963d816"
+  },
+  "negative": "only changed shared-row/Web/TUI sidebar product files restored to base; client-core rebuilt before browser negative and after restore",
+  "finalTypeOnlyAdjustment": "AgentTokenContext optional model explicitly accepts undefined; ChromeContext paneUsage admits existing null entries. No runtime change after negative control.",
+  "finalSharedSourceSha256": "82a7300a7f2b92853a1d0b7ca7f79b17826549825d95d70dd0a5e0fa50bca4ba"
+}
