@@ -1,0 +1,55 @@
+dispose_pending
+contended
+contended
+disposed
+acquired
+acquired
+same-thread sink retirement before cross-thread/process normal+protected reacquisition passed
+dispose_pending
+contended
+contended
+disposed
+acquired
+acquired
+same-thread sink retirement before cross-thread/process normal+protected reacquisition passed
+dispose_pending
+keeper_ready
+contended
+contended
+acquired
+old actor process death, abandoned rejection and later explicit reacquisition passed
+sink_activated
+acquired
+sink_activated
+acquired
+unconfirmed sink Dispose kills only its owning fixture process before permitting a new start
+negative: remove native endpoint lease admission
+System.Exception: Same-process normal contender acquired before old sink retirement
+expected negative assertion: 
+dispose_pending
+contended
+contended
+disposed
+acquired
+acquired
+same-thread sink retirement before cross-thread/process normal+protected reacquisition passed
+dispose_pending
+contended
+contended
+disposed
+acquired
+acquired
+same-thread sink retirement before cross-thread/process normal+protected reacquisition passed
+dispose_pending
+keeper_ready
+contended
+contended
+acquired
+old actor process death, abandoned rejection and later explicit reacquisition passed
+sink_activated
+acquired
+sink_activated
+acquired
+unconfirmed sink Dispose kills only its owning fixture process before permitting a new start
+native lease source negative and byte-exact fixture restore passed
+production source SHA256 unchanged: 3b838cb7eb72c0b68a2a8441a0471ee1e485d14d8a318fadc5a9dce17c568581

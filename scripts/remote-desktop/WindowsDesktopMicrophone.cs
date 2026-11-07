@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
 public sealed class SodaDesktopMicrophone : IDisposable {
@@ -24,15 +25,36 @@ public sealed class SodaDesktopMicrophone : IDisposable {
     }
     [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe,out uint pid);
     bool Alive(){return !stopping&&allowed();}
+    // The kernel object survives a Node worker/module replacement. Local is scoped
+    // to this Windows session; SID isolates users. All endpoints share one owner.
+    static bool TakeEndpointLease(out Mutex lease) {
+        using(var identity=WindowsIdentity.GetCurrent()) {
+            if(identity.User==null)throw new InvalidOperationException("Microphone user required");
+            lease=new Mutex(false,@"Local\SodashitsuMicrophone-"+identity.User.Value);
+        }
+        try{return lease.WaitOne(0);}
+        catch(AbandonedMutexException){
+            // Abandonment alone is not a device-retirement receipt. Reject this start.
+            lease.ReleaseMutex();return false;
+        }
+    }
+    static void StopUnretiredOwner() {
+        // Never let this thread leave an uncertain sink behind in a live process.
+        // Kill only the dedicated helper/actor which owns the audio device.
+        try{using(var self=Process.GetCurrentProcess())self.Kill();}catch{}
+        while(true)Thread.Sleep(1000);
+    }
     void Run() {
-        NamedPipeServerStream server=null;byte[] packet=new byte[1932],pcm=new byte[1920];
+        Mutex endpointLease=null;bool endpointOwned=false;NamedPipeServerStream server=null;byte[] packet=new byte[1932],pcm=new byte[1920];
         try {
             if(!Alive())return;
             server=new NamedPipeServerStream(name,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous,4096,4096,SodaDesktopPipeSecurity.OwnerSecurity());pipe=server;
             Complete(callback=>server.BeginWaitForConnection(callback,null),2000,value=>{server.EndWaitForConnection(value);return 0;});
             uint pid;if(!Alive()||!GetNamedPipeClientProcessId(server.SafePipeHandle,out pid)||pid!=(uint)clientPid||peerGuard!=null&&!peerGuard((int)pid)||!Alive())return;
             // Enumerate/activate no endpoint before the private pipe is authenticated.
-            using(var sink=factory()) {
+            endpointOwned=TakeEndpointLease(out endpointLease);if(!endpointOwned||!Alive())return;
+            var sink=factory();
+            try {
                 if(!Alive())return;
                 Complete(callback=>server.BeginWrite(Hello,0,Hello.Length,callback,null),100,value=>{server.EndWrite(value);return 0;});
                 uint previous=0;
@@ -46,9 +68,12 @@ public sealed class SodaDesktopMicrophone : IDisposable {
                     if(!Alive())return;
                     if(expiry>=now){Buffer.BlockCopy(packet,12,pcm,0,pcm.Length);sink.Write(pcm,()=>Alive()&&expiry>=(DateTime.UtcNow-new DateTime(1970,1,1,0,0,0,DateTimeKind.Utc)).TotalMilliseconds);}Array.Clear(pcm,0,pcm.Length);Array.Clear(packet,0,packet.Length);
                 }
+            } finally {
+                try{if(sink!=null)sink.Dispose();}
+                catch{Array.Clear(packet,0,packet.Length);Array.Clear(pcm,0,pcm.Length);StopUnretiredOwner();}
             }
         } catch { /* No endpoint IDs or audio contents in logs. */ }
-        finally {stopping=true;Array.Clear(packet,0,packet.Length);Array.Clear(pcm,0,pcm.Length);pipe=null;if(server!=null)server.Dispose();}
+        finally {stopping=true;Array.Clear(packet,0,packet.Length);Array.Clear(pcm,0,pcm.Length);pipe=null;try{if(server!=null)server.Dispose();}finally{try{if(endpointOwned)endpointLease.ReleaseMutex();}finally{if(endpointLease!=null)endpointLease.Dispose();}}}
     }
     T Complete<T>(Func<AsyncCallback,IAsyncResult> begin,int timeout,Func<IAsyncResult,T> finish,byte[] clearWhenRetired=null) {
         return SodaDesktopPipeOperation.Wait(begin,finish,timeout,Alive,()=>{if(stopping&&clearWhenRetired!=null)Array.Clear(clearWhenRetired,0,clearWhenRetired.Length);});
@@ -81,7 +106,7 @@ public sealed class SodaDesktopMicrophone : IDisposable {
                 var format=new Format{tag=1,channels=1,rate=48000,average=96000,alignment=2,bits=16};
                 Check(Method<Initialize>(client,3)(client,0,0x88000000u,600000,0,ref format,IntPtr.Zero));Check(Method<Size>(client,4)(client,out capacity));if(capacity<960||capacity>48000)throw new InvalidDataException("Microphone buffer");
                 iid=new Guid("f294acfc-3146-4483-a7bf-addca7c260e2");Check(Method<Service>(client,14)(client,ref iid,out render));Check(Method<Action>(client,10)(client));started=true;
-            } catch{Dispose();throw;}finally{Release(ref device);Release(ref enumerator);}
+            } catch{try{Dispose();}catch{StopUnretiredOwner();}throw;}finally{Release(ref device);Release(ref enumerator);}
         }
         public void Write(byte[] pcm,Func<bool> allowed) {
             if(disposed||pcm.Length!=1920)throw new InvalidOperationException();var clock=Stopwatch.StartNew();uint padding;

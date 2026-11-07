@@ -12,6 +12,10 @@ Windowsの管理者アプリ画面とUAC画面を単独で共有している間�
 
 独立した`allowProtectedMicrophone`許可と、接続の`protectedMicrophone` feature bitを使います。PCMは通常ユーザーの固定`user-microphone` actorだけへ送り、SYSTEMの保護workerには送りません。actorはnonce・stream ID・私有pipeの実client PIDと同SID/logon/session・非昇格を確認してから、固定endpointを開きます。WTSのロック状態を検査し、一度失効したscopeを復活させません。
 
+通常画面と管理者画面のマイクは、Windowsのsession-local kernel mutexを共用します。同じ利用者SID・Windowsセッション内では、endpointや操舵室のworkerが変わっても、以前のdevice threadがsinkの終了を完了するまで新しいsinkを開きません。mutexはpipeのPID/peer確認後に待ち時間なしで取得し、sink.Disposeの正常完了後に同じthreadで解放します。競合した開始は利用不可となり、自動的には再取得しません。Global namespaceやACLの追加、管理者権限は使いません。
+
+sinkの終了処理が例外で完了しなかった場合は、mutexを明示解放せず、その音声を所有する補助process自身を終了させ、OSによるdevice handleの終了を境界にします。通常画面の補助processの場合、そのprocessが配信していた画面・動画・他の共有窓も終了します。abandoned mutexそのものを終了確認の代わりにはせず、その開始を拒否して音声を開きません。自作actorの通常終了・例外処理・worker入替・process終了を対象とする保証であり、外部からの任意コード注入や音声threadだけの強制破壊は対象外です。
+
 音声は48kHz・mono・16bit PCM・20ms固定です。この経路では追加codec・UDP・自動品質調整を有効にしません。普通の画面共有のマイク設定やcodecは変更しません。
 
 ## 確認範囲
