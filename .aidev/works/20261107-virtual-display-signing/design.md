@@ -1,0 +1,3 @@
+# 設計
+
+既存の専用HWID・所有lease境界を維持。インストーラーの署名要件は緩めず、unsigned提出準備とsigned返却物の配布準備を別ツールにする。提出は4fileのSHAとsourceCommit、x64 PE/stamped INF/HWIDを確認し新しいfolderへstage。makecab用DDFは固定名の相対パスのみ。返却物は既存installerのValid catalogとMicrosoft SDK SignToolでmembershipを検査し、厳密manifest/hash/DER signer hashを出す。署名鍵・送信APIや認証は扱わない。

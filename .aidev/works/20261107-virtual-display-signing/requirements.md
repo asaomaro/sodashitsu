@@ -1,0 +1,3 @@
+# Windows仮想画面ドライバーの署名準備
+
+既存専用IDDを利用者指定のsr-pcへ導入して実機検査する。署名済みpackageが得られない場合も、提出用packageと配布manifest・検証・必要条件を準備する。署名回避/未知CA追加/SecureBoot変更はしない。driver導入/表示変更/再起動は親agentと調整する。

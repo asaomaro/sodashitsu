@@ -1,0 +1,10 @@
+test_material_and_manifest_keep_bytes_and_no_installable_claim (__main__.SubmissionChecks.test_material_and_manifest_keep_bytes_and_no_installable_claim) ... ok
+test_reject_ambiguous_revision (__main__.SubmissionChecks.test_reject_ambiguous_revision) ... ok
+test_reject_redirected_inputs_and_outputs (__main__.SubmissionChecks.test_reject_redirected_inputs_and_outputs) ... ok
+test_reject_template_and_foreign_hardware_before_creating_output (__main__.SubmissionChecks.test_reject_template_and_foreign_hardware_before_creating_output) ... ok
+test_wrong_binary_or_missing_symbols_cannot_prepare (__main__.SubmissionChecks.test_wrong_binary_or_missing_symbols_cannot_prepare) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.007s
+
+OK

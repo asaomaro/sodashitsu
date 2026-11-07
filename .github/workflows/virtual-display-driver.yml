@@ -18,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - run: python3 scripts/remote-desktop/virtual-display-driver/validate-modes.py
+      - run: python3 scripts/remote-desktop/virtual-display-driver/test-prepare-signing.py
   build:
     runs-on: windows-2025-vs2026
     timeout-minutes: 30
@@ -42,6 +43,24 @@ jobs:
           $tool = Join-Path $env:RUNNER_TEMP 'soda-nuget-6.14.0.exe'
           Invoke-WebRequest 'https://dist.nuget.org/win-x86-commandline/v6.14.0/nuget.exe' -OutFile $tool
           scripts/remote-desktop/virtual-display-driver/build.ps1 -NuGetPath $tool -MSBuildPath (Get-Command MSBuild.exe).Source
+      - name: Prepare unsigned signing submission, without submitting
+        shell: powershell
+        run: |
+          $driver = Join-Path $env:GITHUB_WORKSPACE 'scripts/remote-desktop/virtual-display-driver'
+          $output = Join-Path $env:RUNNER_TEMP 'virtual-display-unsigned-submission'
+          python "$driver/prepare-signing.py" --package "$driver/x64/Release/SodaVirtualDisplay" --symbols "$driver/x64/Release/SodaVirtualDisplay.pdb" --output $output --source-commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Unsigned submission preparation failed' }
+          Push-Location $output
+          try {
+            & "$env:windir/System32/makecab.exe" /F submission.ddf
+            if ($LASTEXITCODE -ne 0) { throw 'Unsigned CAB preparation failed' }
+          } finally { Pop-Location }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: virtual-display-unsigned-submission
+          path: ${{ runner.temp }}/virtual-display-unsigned-submission/
+          retention-days: 7
+          if-no-files-found: error
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: virtual-display-unsigned-build-only

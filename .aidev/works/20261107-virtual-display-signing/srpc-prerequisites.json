@@ -1,0 +1,5 @@
+{
+  "exitCode": 0,
+  "stdout": "{\r\n    \"Caption\":  \"Microsoft Windows 11 Pro\",\r\n    \"Version\":  \"10.0.26200\",\r\n    \"Build\":  \"26200\",\r\n    \"Architecture\":  \"X64\",\r\n    \"SecureBoot\":  true,\r\n    \"IddCx\":  \"10.0.26100.4202 (WinBuild.160101.0800)\",\r\n    \"IndirectKmd\":  \"10.0.26100.1 (WinBuild.160101.0800)\",\r\n    \"UmdfReflector\":  \"Running\",\r\n    \"DisplayDevices\":  [\r\n                           {\r\n                               \"Status\":  \"OK\",\r\n                               \"FriendlyName\":  \"Intel(R) Iris(R) Xe Graphics\",\r\n                               \"InstanceId\":  \"PCI\\\\VEN_8086\\u0026DEV_A7A1\\u0026SUBSYS_50C717AA\\u0026REV_04\\\\3\\u002611583659\\u00261\\u002610\"\r\n                           }\r\n                       ],\r\n    \"CodeSigningCertificates\":  0\r\n}\r\n",
+  "stderr": ""
+}
