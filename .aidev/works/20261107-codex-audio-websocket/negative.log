@@ -1,0 +1,30 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-current-state/packages/server
+
+ ❯ src/assistant/CodexAudio.test.ts (12 tests | 1 failed | 11 skipped) 5ms
+   × sends localAudio only to an existing idle matching thread, with no CLI or model/effort override 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/assistant/CodexAudio.test.ts > sends localAudio only to an existing idle matching thread, with no CLI or model/effort override
+Error: legacy CLI proxy must not launch
+ ❯ spawn src/assistant/CodexAudio.test.ts:2:53
+      1| import { expect,it,vi } from "vitest";
+      2| vi.mock("node:child_process",()=>({spawn:()=>{throw Error("legacy CLI …
+       |                                                     ^
+      3| import { sendCodexAudio } from "./CodexAudio.js";
+      4| import type {CodexChannelTarget,CodexControlChannel} from "../agent/Co…
+ ❯ Module.sendCodexAudio src/assistant/CodexAudio.ts:29:50
+ ❯ src/assistant/CodexAudio.test.ts:23:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 skipped (12)
+   Start at  17:02:33
+   Duration  928ms (transform 75%, import 24%, tests 1%, worker 1%)
+
+undefined
+/workspaces/sodashitsu-codex-current-state/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/assistant/CodexAudio.test.ts -t sends localAudio only

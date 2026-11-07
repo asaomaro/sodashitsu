@@ -6,7 +6,7 @@
 
 | 種類 | 直接音声の連携 | 確認して文章を送る経路 |
 | --- | --- | --- |
-| Codex | 既存専用threadへのapp-server proxy。送信時の検証が必要 | ローカル文字起こし |
+| Codex | 既存専用threadへの正式Unix WebSocket。現transportはLinuxのみ。送信時の検証が必要 | ローカル文字起こし |
 | Claude Code | 既存専用会話への直接送信は未実装・未検証 | ローカル文字起こし |
 | Muse Code | MSP安定・実験schemaに音声入力なし。voice transcribeは別の文字起こし経路 | ローカル文字起こし |
 | Antigravity CLI | upstreamは音声添付対応。導入済み1.4.12のPTYへWAV/MP3を貼っても添付にならず、既存会話への直接経路は未検証 | ローカル文字起こし |
@@ -16,8 +16,17 @@
 
 音声ファイルの既存保護（接続所有者・専用会話への固定、容量と並行数、TTL、取消、送信結果不明時の自動再送禁止、一時ファイルの保持と削除）は変更しない。Codexでは別threadの作成や再開を行わない。
 
+## Codexの正式transport
+
+導入CLI/daemonのcontrol socketはHTTP UpgradeによるUnix WebSocketです。JSONLを単純にproxyへ流す経路を廃止し、状態取得と所有socket/PID世代確認を共通化しました。read-onlyの状態取得・モデル一覧とは別のtyped/runtime allowlistで、音声だけ`turn/start`を1回許可します。既存loaded thread・idle・会話ID・canonical作業先・instance/許可/期限/取消を送信直前に再検証します。モデル・effortは変更せず、応答喪失・失敗・終了不明を自動再送しません。
+
+同時接続は状態取得等と共通で最大2、同じ用途/会話の重複を防ぎます。接続作成直後から実socketのcloseまで所有枠を保持し、handoffのsuspendも終了不明のsocketを見落としません。音声ファイルの保存/保持/削除は従来の仕組みです。Windows等の正式transportは未実装で明示エラーにし、共通文字起こし経路を案内します。
+
+生成の偽サーバーとの実Unix WebSocketでlocalAudio入力のframeとACK、ACK喪失時1回だけの送信、世代変更時の非送信を確認しています。利用者の会話への実音声モデル送信を行ったという検証ではありません。
+
 ## 確認した一次資料
 
+- [Codex App Server](https://learn.chatgpt.com/docs/app-server#protocol): Unix WebSocket framingとloaded/thread metadata API。
 - [Antigravity CLI changelog](https://github.com/google-antigravity/antigravity-cli/blob/main/CHANGELOG.md): 音声添付対応と形式修正。
 - [Antigravity CLI mentions](https://antigravity.google/docs/at-mentions/): 手入力のパスと候補から選択したパスは挙動が異なる。
 - [Muse Code SDK](https://meta-models.github.io/muse-code-sdk/): 導入済みMuse 1.4.14-R7309.1のschema generate-json-schemaで安定版・experimental版を確認。

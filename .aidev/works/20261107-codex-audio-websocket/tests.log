@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-current-state/packages/server
+
+
+ Test Files  5 passed (5)
+      Tests  84 passed (84)
+   Start at  17:02:03
+   Duration  1.95s (tests 64%, transform 25%, import 10%)
+

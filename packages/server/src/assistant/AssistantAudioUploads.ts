@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readdir, lstat, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import type { ChildProcess } from "node:child_process";
 import type { Stats } from "node:fs";
 import { AssistantAudioBeginParams,AssistantAudioChunkParams,AssistantAudioIdParams,RpcError } from "@sodashitsu/protocol";
 import {AssistantPersonaPrompts} from "./AssistantPersonaPrompts.js";
@@ -23,7 +22,7 @@ const RETAIN_MS=5*60*1000;
  */
 export class AssistantAudioUploads {
  private readonly uploads=new Map<string,Upload>();
- private readonly owned=new Set<ChildProcess>();
+ private readonly owned=new Set<Promise<void>>();
  private readonly pending=new Set<Promise<unknown>>();
  private readonly retained=new Map<string,Stored>();
  private readonly deleting=new Set<Promise<void>>();
@@ -139,7 +138,7 @@ export class AssistantAudioUploads {
   for(const u of this.uploads.values())this.cancel(u.owner,{uploadId:u.id});
   await Promise.allSettled([...this.pending]);
   while(this.deleting.size)await Promise.allSettled([...this.deleting]);
-  if(this.owned.size)throw Error("音声proxyの終了を確認できません");
+  if(this.owned.size)throw Error("音声socketの終了を確認できません");
  }
  resume():void{this.closed=false;for(const saved of this.retained.values())this.arm(saved);}
  async close():Promise<void>{try{await this.suspend();}finally{this.retained.clear();}}

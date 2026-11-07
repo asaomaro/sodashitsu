@@ -149,3 +149,13 @@ it("holds the physical upload slot until unsent file cleanup settles",async()=>{
   release();await rejected;expect(()=>uploads.begin("owner",begin,()=>target)).not.toThrow();
  }finally{release();await uploads.close();await rm(dir,{recursive:true,force:true});}
 });
+it("refuses to finish suspend while a physical audio socket is still unconfirmed",async()=>{
+ const physical=new Promise<void>(()=>{});let owned:Set<Promise<void>>|undefined;
+ const f=await fixture(vi.fn<typeof sendCodexAudio>(async(_target,_signal,_expires,_guard,options)=>{owned=options?.owned;owned!.add(physical);throw Error("socket close unconfirmed");}));
+ try{
+  const id=f.uploads.begin("owner",begin,()=>target);f.uploads.chunk("owner",chunk(id.uploadId));
+  await expect(f.uploads.commit("owner",id)).rejects.toThrow("unconfirmed");
+  await expect(f.uploads.suspend()).rejects.toThrow("socketの終了");
+  expect(owned?.has(physical)).toBe(true);
+ }finally{owned?.delete(physical);await f.close()}
+});

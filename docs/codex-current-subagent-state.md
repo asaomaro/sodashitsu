@@ -12,7 +12,7 @@
 
 - CODEX_HOMEの実体、control/daemonフォルダの所有者・書込権限、providerが作るcontrol socketリンクと実体（所有者・privateフォルダ・socket権限）を検証します。
 - daemon PIDファイルをnofollow・単一の通常ファイル・16KiB以内で読み、同ユーザーの生存PIDとkernel開始時刻、前後のPIDメタデータ・socket dev/inoを照合します。daemonの入替中や別所有者は不明にします。
-- 1 batchは最大64子・66リクエスト、応答1MiB/フレーム・合計4MiB、loaded一覧1万件、全体1500ms・各リクエスト1000ms以内。同時接続は最大2、同じhome/親の重複照合はしません。枠が使用中なら不明です。接続枠は実socketのcloseまで保持します。
+- 1 batchは最大64子・66リクエスト、応答1MiB/フレーム・合計4MiB、loaded一覧1万件、通信予算1500ms・各リクエスト1000ms以内（終了確認は別に最大1250ms）。同時接続は最大2、同じhome/親の重複照合はしません。枠が使用中なら不明です。接続枠は実socketのcloseまで保持します。
 - 状態の前後で親記録の同じfdとpathのdev/ino/size/mtimeNs/ctimeNsを確認し、追記・縮小・置換・metadataが変化する同サイズの変更で破棄します。pane、instance、kind、会話が変わる・forget/closeになると取消し、サーバー側のfresh session検証も維持します。
 - providerのappend/rotateを想定しています。全履歴の再hashは行わず、同サイズ・同一metadataを保つ任意のin-place改変の検出までは保証しません。
 - 本文・preview・cwdや通知内容を公開・保存しません。status応答の本文をログへ転送せず、正式IDは照合のためのメモリ内だけに保持します。
