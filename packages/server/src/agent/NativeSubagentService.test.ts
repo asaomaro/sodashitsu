@@ -17,8 +17,8 @@ describe("native activity publication", () => {
     const f = setup(); f.set(pane(kind)); await f.service.refresh();
     expect(f.reader.read).not.toHaveBeenCalled(); expect(f.publish).not.toHaveBeenCalled(); f.service.close();
   });
-  it("publishes AGY membership without disguising it as working and requires fresh verification", async () => {
-    const f = setup(); f.set(pane("agy"));
+  it.each(["agy", "codex"])("publishes %s membership without disguising it as working and requires fresh verification", async kind => {
+    const f = setup(); f.set(pane(kind));
     const value: Subagents = { count: 1, countBasis: "alive", items: [{ id: "child", state: "unknown", startedAt: 0 }] };
     f.reader.read.mockResolvedValue(value); await f.service.refresh();
     expect(f.publish).toHaveBeenLastCalledWith("pane", value);

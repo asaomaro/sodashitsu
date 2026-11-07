@@ -1,0 +1,54 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-member-unknown
+
+ ❯ |@sodashitsu/server| src/agent/NativeSubagentRecords.test.ts (9 tests | 1 failed | 8 skipped) 8ms
+   ❯ native subagent lifecycle records (9)
+     × exposes three formally owned completed children referenced again as membership with unknown tasks 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/NativeSubagentRecords.test.ts > native subagent lifecycle records > exposes three formally owned completed children referenced again as membership with unknown tasks
+AssertionError: expected undefined to match object { count: 3, countBasis: 'alive', …(1) }
+
+- Expected:
+{
+  "count": 3,
+  "countBasis": "alive",
+  "items": [
+    {
+      "state": "unknown",
+    },
+    {
+      "state": "unknown",
+    },
+    {
+      "state": "unknown",
+    },
+  ],
+}
+
++ Received:
+undefined
+
+ ❯ src/agent/NativeSubagentRecords.test.ts:43:29
+     41|     const rows = await fixture("codex-referenced-members"), fold = new…
+     42|     rows.forEach(row => fold.consume(row));
+     43|     expect(fold.snapshot()).toMatchObject({ count: 3, countBasis: "ali…
+       |                             ^
+     44|     expect(fold.snapshot()?.items.map(i => i.startedAt)).toEqual(rows.…
+     45|     rows.forEach(row => fold.consume(row)); expect(fold.snapshot()?.co…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 skipped (9)
+   Start at  15:16:48
+   Duration  133ms (transform 64%, import 17%, tests 15%, worker 4%)
+

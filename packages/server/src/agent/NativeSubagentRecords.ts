@@ -15,6 +15,10 @@ export class NativeSubagentRecords {
   private readonly metadata = new Map<string, Partial<SubagentInfo>>();
   private readonly uncertain = new Set<string>();
   private readonly records = new Set<string>();
+  // Bounded, exact-parent start proofs survive task completion, not interruption/unknown kinds.
+  private readonly codexRelations = new Map<string, { item: SubagentInfo; completed: boolean }>();
+  private readonly codexReferences = new Map<string, SubagentInfo>();
+  private codexMalformed = false;
   private seen = false;
   private limited = false;
   constructor(readonly kind: NativeSubagentKind, readonly sessionId: string) {}
@@ -28,7 +32,15 @@ export class NativeSubagentRecords {
   }
 
   snapshot(): Subagents | undefined {
-    if (!this.seen || this.limited || this.uncertain.size) return undefined;
+    if (!this.seen || this.limited || this.codexMalformed) return undefined;
+    if (this.uncertain.size) {
+      if (this.kind !== "codex" || [...this.uncertain].some(id => !this.codexReferences.has(id))) return undefined;
+      const members = [
+        ...[...this.items.values()].map(item => ({ ...item, state: "working" as const })),
+        ...[...this.uncertain].map(id => ({ ...this.codexReferences.get(id)! })),
+      ].sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id));
+      return { count: members.length, countBasis: "alive", items: members.slice(0, 64) };
+    }
     const all = [...this.items.values()].sort((a, b) => a.startedAt - b.startedAt);
     return { count: all.length, items: all.slice(0, 64).map(item => ({ ...item })) };
   }
@@ -60,17 +72,33 @@ export class NativeSubagentRecords {
     const event = object(row.payload), item = object(event?.item);
     if (row.type !== "event_msg" || event?.type !== "item_completed" || event.thread_id !== this.sessionId || item?.type !== "SubAgentActivity") return;
     const at = Date.parse(row.timestamp);
-    if (!Number.isFinite(at)) return;
-    if (typeof item.id !== "string" || !ID.test(item.id) || !this.admit(`c:${item.id}:${label(item.kind, 64)}`)) return;
+    const id = item.agent_thread_id;
+    if (!Number.isFinite(at) || typeof item.id !== "string" || !ID.test(item.id) || typeof id !== "string" || !ID.test(id) || id === this.sessionId || typeof item.kind !== "string") { this.codexMalformed = true; return; }
+    if (!this.admit(`c:${item.id}:${label(item.kind, 64)}`)) return;
     const name = label(item.agent_path, 200)?.split("/").at(-1);
     const model = label(item.model, 64);
     const meta = { ...(name ? { description: name } : {}), ...(model ? { type: model } : {}) };
-    // "interacted" reports delivery, not proof that a child began a new task.
+    // A fresh successful reference to an owned, completed child proves membership, not work.
     if (item.kind === "interacted") {
-      if (!this.items.has(item.agent_thread_id)) this.apply(item.agent_thread_id, "unknown", at, meta);
+      if (!this.items.has(id)) {
+        const relation = this.codexRelations.get(id);
+        if (relation?.completed) this.codexReferences.set(id, { ...relation.item, ...meta, state: "unknown" });
+        this.apply(id, "unknown", at, meta);
+      }
       return;
     }
-    this.apply(item.agent_thread_id, item.kind === "started" ? "active" : ["completed", "interrupted"].includes(item.kind) ? "terminal" : "unknown", at, meta);
+    this.codexReferences.delete(id);
+    if (item.kind === "started") {
+      if (!this.codexRelations.has(id) && this.codexRelations.size >= MAX) { this.limited = true; return; }
+      this.codexRelations.set(id, { item: { ...this.codexRelations.get(id)?.item, id, startedAt: at, depth: 1, ...meta }, completed: false });
+    } else if (item.kind === "completed") {
+      const relation = this.codexRelations.get(id);
+      if (relation) relation.completed = true;
+    } else {
+      // No inferred revival after interruption or an unknown lifecycle state.
+      this.codexRelations.delete(id);
+    }
+    this.apply(id, item.kind === "started" ? "active" : ["completed", "interrupted"].includes(item.kind) ? "terminal" : "unknown", at, meta);
   }
 
   private muse(row: Record<string, any>): void {

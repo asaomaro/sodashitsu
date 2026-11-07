@@ -27,6 +27,15 @@ describe("owned native records reader", () => {
     expect((await reader.read(source))?.count).toBe(1);
     await appendFile(file, JSON.stringify(result) + "\n"); expect((await reader.read(source))?.count).toBe(0); reader.close();
   });
+  it("publishes owned unknown membership only after the complete exact-parent record, and clears it on scope changes", async () => {
+    const f = await setup(), rows = (await readFile(new URL("./fixtures/native-subagents/codex-referenced-members.jsonl", import.meta.url), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const reader = new NativeSubagentReader({ codexHome: f.home });
+    const text = rows.map(r => JSON.stringify({ ...r, payload: { ...r.payload, thread_id: f.source.sessionId } })).join("\n");
+    await writeFile(f.file, text); expect(await reader.read(f.source)).toBeUndefined(); await appendFile(f.file, "\n");
+    expect(await reader.read(f.source)).toMatchObject({ count: 3, countBasis: "alive", items: [{ state: "unknown" }, { state: "unknown" }, { state: "unknown" }] });
+    expect(await reader.read({ ...f.source, sessionId: "33333333-3333-4333-8333-333333333333" })).toBeUndefined();
+    reader.close();
+  });
   it("reads exact session, follows append/truncation, and does not count replayed history twice", async () => {
     const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home });
     expect(await reader.read(f.source)).toBeUndefined();

@@ -1,0 +1,19 @@
+{
+  "eof": true,
+  "readCalls": 112,
+  "bytes": 462470065,
+  "invalid": false,
+  "partial": false,
+  "countBasis": "alive",
+  "count": 2,
+  "stateCounts": {
+    "working": 0,
+    "idle": 0,
+    "unknown": 2
+  },
+  "ownershipProofs": 22,
+  "malformed": false,
+  "freshProofPublic": false,
+  "refKindMatch": true,
+  "physicalInput": false
+}

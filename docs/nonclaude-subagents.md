@@ -1,6 +1,6 @@
 # Claude以外のサブエージェント取得
 
-サイドバー・グラフ・Statusline・CLIの`subagents`は、子の件数と一覧を共有します。従来のClaude・Codex・Muse・Copilotは実行中件数、Antigravityは存続する子の所属数です。`countBasis`省略または`working`は従来の実行中、`alive`は所属を表します。各子の`state`省略は従来の実行中で、明示値は`working`・`idle`・`unknown`です。子は独立したpaneではありません。トークン利用状況の主/子内訳とは別の情報です。
+サイドバー・グラフ・Statusline・CLIの`subagents`は、子の件数と一覧を共有します。Claude・Muse・Copilot、および通常のCodexは実行中件数、Antigravityと後述のCodex再参照は存続する子の所属数です。`countBasis`省略または`working`は従来の実行中、`alive`は所属を表します。各子の`state`省略は従来の実行中で、明示値は`working`・`idle`・`unknown`です。子は独立したpaneではありません。トークン利用状況の主/子内訳とは別の情報です。
 
 | 親CLI | 取得する正式記録 | 確認範囲 |
 | --- | --- | --- |
@@ -13,7 +13,7 @@
 
 Codex・Muse・Copilot・Antigravityは約2秒ごとに、現在の親paneへ改めて結び付けられた会話の記録だけを読みます。保存済みの会話IDだけでは取得せず、現在のinstanceについてサーバが確認した証拠が必要です。読み終わるまでにinstanceや会話が変われば結果を捨てます。読み取りによるCLI・モデルの起動や、子への入力は行いません。
 
-Codex・Muse・Copilotは開始済みの子を一覧に載せ、終了・失敗・割込の記録で外します。履歴や同じイベントを読み直しても件数を足しません。Codexのinteractedは入力の配達なので、それだけで終了済みの子が再び実行中とは断定せず未取得に戻します。実行中の子への配達は実行中を維持します。未知の状態、読めない記録、未確認の親は`undefined`（CLIでは`null`）です。従来の実行中件数の0件は取得済みの終了状態を意味します。Antigravityの所属数0件は、確認した直属フォルダにALIVEの子が無い状態です。サーバ再起動時も所属を再確認して正式記録の最終状態を読み戻します。
+Codex・Muse・Copilotは開始済みの子を一覧に載せ、終了・失敗・割込の記録で外します。履歴や同じイベントを読み直しても件数を足しません。Codexのinteractedは入力の配達なので、再び実行中とは断定しません。正式startedで同じ親会話への所属を確認済みの子がcompleted後に改めてinteractedで参照された場合は、所属数`countBasis: alive`・作業状態`state: unknown`として表示します。既知の実行中が混ざる場合はその項目だけ`state: working`を明示します。completedだけで終わった過去の子を一覧へ戻すことはなく、再参照後のcompletedでunknown項目も外します。interruptedや未知kindは再参照の所属証拠を失効させ、新しい正式startedまで復帰させません。所属証拠のないinteractedや未知状態は引き続き未取得です。実行中の子への配達は実行中を維持します。所属証拠はcompleted後も含めて256件までで、超過時は未取得です。未知の状態、読めない記録、未確認の親は`undefined`（CLIでは`null`）です。従来の実行中件数の0件は取得済みの終了状態を意味します。Antigravityの所属数0件は、確認した直属フォルダにALIVEの子が無い状態です。サーバ再起動時も所属を再確認して正式記録の最終状態を読み戻します。
 
 Codexの種類欄は記録にあるモデル名、説明は子の論理的なtask path末尾です。Museは記録にあるroleとobjective、CopilotはagentNameとagentDescriptionです。分からない値は補いません。子の記録閲覧の`hasTranscript`は従来のClaude経路だけに付き、この件数取得で他CLIの記録閲覧が有効になるわけではありません。
 

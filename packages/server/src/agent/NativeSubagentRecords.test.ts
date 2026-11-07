@@ -29,13 +29,49 @@ describe("native subagent lifecycle records", () => {
     fold.consume(source); fold.consume(event("interacted", "delivery-live"));
     expect(fold.snapshot()?.count).toBe(1);
     fold.consume(rows[1]); fold.consume(event("interacted", "delivery-after-terminal"));
-    expect(fold.snapshot()).toBeUndefined();
+    expect(fold.snapshot()).toMatchObject({ count: 1, countBasis: "alive", items: [{ state: "unknown" }] });
     fold.consume(event("started", "followup-started"));
     expect(fold.snapshot()?.count).toBe(1);
     fold.consume(event("future-unknown-status", "future-update"));
     expect(fold.snapshot()).toBeUndefined();
     fold.consume(event("completed", "followup-completed"));
     expect(fold.snapshot()?.count).toBe(0);
+  });
+  it("exposes three formally owned completed children referenced again as membership with unknown tasks", async () => {
+    const rows = await fixture("codex-referenced-members"), fold = new NativeSubagentRecords("codex", rows[0].payload.thread_id);
+    rows.forEach(row => fold.consume(row));
+    expect(fold.snapshot()).toMatchObject({ count: 3, countBasis: "alive", items: [{ state: "unknown" }, { state: "unknown" }, { state: "unknown" }] });
+    expect(fold.snapshot()?.items.map(i => i.startedAt)).toEqual(rows.filter(r => r.payload.item.kind === "started").map(r => Date.parse(r.timestamp)));
+    rows.forEach(row => fold.consume(row)); expect(fold.snapshot()?.count).toBe(3);
+    const active = structuredClone(rows[0]); active.payload.item.id = "fourth-start"; active.payload.item.agent_thread_id = "fourth-child";
+    fold.consume(active); expect(fold.snapshot()).toMatchObject({ count: 4, countBasis: "alive" });
+    expect(fold.snapshot()?.items.filter(i => i.state === "working")).toHaveLength(1);
+    for (const row of rows.filter(r => r.payload.item.kind === "completed")) fold.consume({ ...row, payload: { ...row.payload, item: { ...row.payload.item, id: row.payload.item.id + "-new" } } });
+    expect(fold.snapshot()).toMatchObject({ count: 1 }); expect(fold.snapshot()).not.toHaveProperty("countBasis");
+  });
+  it("does not revive completed-only children, unowned references, interruption or unknown-state ownership", async () => {
+    const rows = await fixture("codex-referenced-members"), parent = rows[0].payload.thread_id;
+    const completed = new NativeSubagentRecords("codex", parent);
+    rows.filter(r => r.payload.item.kind !== "interacted").forEach(r => completed.consume(r));
+    expect(completed.snapshot()).toEqual({ count: 0, items: [] });
+    const event = (kind: string, id: string) => ({ ...rows[0], payload: { ...rows[0].payload, item: { ...rows[0].payload.item, kind, id } } });
+    const unknown = new NativeSubagentRecords("codex", parent); unknown.consume(event("interacted", "unowned")); expect(unknown.snapshot()).toBeUndefined();
+    for (const kind of ["interrupted", "future-state"]) {
+      const fold = new NativeSubagentRecords("codex", parent); fold.consume(rows[0]); fold.consume(event(kind, "terminal-or-unknown")); fold.consume(event("interacted", "later-reference"));
+      expect(fold.snapshot()).toBeUndefined(); fold.consume(event("started", "new-formal-start")); expect(fold.snapshot()?.count).toBe(1);
+      fold.consume(event("completed", "new-completion")); fold.consume(event("interacted", "new-reference")); expect(fold.snapshot()).toMatchObject({ count: 1, countBasis: "alive", items: [{ state: "unknown" }] });
+    }
+    const foreign = new NativeSubagentRecords("codex", "other-parent"); rows.forEach(r => foreign.consume(r)); expect(foreign.snapshot()).toBeUndefined();
+  });
+  it("keeps malformed important events unknown and bounds retained Codex ownership proofs", async () => {
+    const rows = await fixture("codex-referenced-members"), parent = rows[0].payload.thread_id;
+    for (const field of ["id", "agent_thread_id", "kind"]) {
+      const fold = new NativeSubagentRecords("codex", parent); rows.forEach(r => fold.consume(r));
+      const row = structuredClone(rows[0]); row.payload.item.id = "malformed-" + field; delete row.payload.item[field]; fold.consume(row); expect(fold.snapshot()).toBeUndefined();
+    }
+    const fold = new NativeSubagentRecords("codex", parent);
+    for (let n = 0; n < 257; n++) for (const kind of ["started", "completed"]) fold.consume({ ...rows[0], payload: { ...rows[0].payload, item: { ...rows[0].payload.item, kind, id: kind + n, agent_thread_id: "child-" + n } } });
+    expect(fold.snapshot()).toBeUndefined();
   });
   it("folds the real Muse parent stream, using explicit start and result_ready rather than a tool prompt", async () => {
     const rows = await fixture("muse"), id = rows[0].stream.id, fold = new NativeSubagentRecords("muse", id);
