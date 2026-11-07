@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-child-turn-catchup
+
+
+ Test Files  13 passed (13)
+      Tests  196 passed (196)
+   Start at  00:51:50
+   Duration  3.20s (transform 44%, tests 38%, import 18%)
+
+  Transform  transforming modules took 8.62s · 44% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

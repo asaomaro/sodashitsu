@@ -7,6 +7,14 @@ type Frame = { kind: "object" | "array"; phase: string; context: Context; key?: 
 const NON_CHILD_EVENTS = new Set(["user_message", "agent_message", "token_count"]);
 const NON_CHILD_ITEMS = new Set(["Extension", "AgentMessage", "UserMessage", "CommandExecution", "Reasoning", "ImageView", "FileChange", "McpToolCall", "ContextCompaction"]);
 export class CodexRecordEnvelope {
+  constructor(private readonly purpose: "subagents" | "turn" = "subagents") {}
+  private turnTimestamp?: string;
+  private turnModel?: string;
+  private turnEffort?: string;
+  get recordType(): string | undefined { return this.rootType; }
+  get turnMetadata(): { timestamp?: string; model?: string; effort?: string } {
+    return {...(this.turnTimestamp!==undefined?{timestamp:this.turnTimestamp}:{}),...(this.turnModel!==undefined?{model:this.turnModel}:{}),...(this.turnEffort!==undefined?{effort:this.turnEffort}:{})};
+  }
   private stack: Frame[] = [];
   private readonly utf8 = new TextDecoder("utf-8", { fatal: true });
   private mode: "idle" | "string" | "scalar" = "idle";
@@ -67,19 +75,23 @@ export class CodexRecordEnvelope {
         if (this.stack.length >= 64) { this.bad = true; continue; }
         const context: Context = !frame ? "root" : frame.kind === "object" && frame.context === "root" && frame.key === "payload" && c === "{" ? "payload" : frame.kind === "object" && frame.context === "payload" && frame.key === "item" && c === "{" ? "item" : "other";
         // A discriminator must be a scalar string; nested objects cannot redefine it.
-        if (frame?.context !== "other" && frame?.key === "type") { this.bad = true; continue; }
+        if (this.importantType(frame)) { this.bad = true; continue; }
         this.started = true; this.stack.push({ kind: c === "{" ? "object" : "array", phase: c === "{" ? "keyOrEnd" : "valueOrEnd", context, ...(context !== "other" ? { seen: new Set<string>() } : {}) }); continue;
       }
-      if (c === '"') { this.startString(false, frame?.context !== "other" && frame?.key === "type"); continue; }
-      if (frame?.context !== "other" && frame?.key === "type") { this.bad = true; continue; }
+      if (c === '"') { this.startString(false, frame?.context !== "other" && (this.importantType(frame) || this.purpose === "turn" && (frame?.context === "root" && frame.key === "timestamp" || this.rootType === "turn_context" && frame?.context === "payload" && ["model", "effort"].includes(frame.key ?? "")))); continue; }
+      if (this.importantType(frame)) { this.bad = true; continue; }
       this.mode = "scalar"; this.token = c;
     }
     return !this.bad;
   }
-  finish(): boolean {
+  finishSyntax(): boolean {
     try { this.utf8.decode(); } catch { this.bad = true; }
     if (this.mode === "scalar") this.endScalar();
-    return !this.bad && this.ended && this.stack.length === 0 && this.mode === "idle" && this.irrelevant;
+    return !this.bad && this.ended && this.stack.length === 0 && this.mode === "idle";
+  }
+  finish(): boolean { return this.finishSyntax() && this.irrelevant; }
+  private importantType(frame: Frame | undefined): boolean {
+    return frame?.key === "type" && (frame.context === "root" || this.purpose === "subagents" && frame.context !== "other");
   }
   private startString(key: boolean, capture: boolean): void {
     this.mode = "string"; this.keyToken = key; this.capture = capture; this.token = capture ? '"' : "";
@@ -94,11 +106,17 @@ export class CodexRecordEnvelope {
       frame.key = key; frame.phase = "colon";
     } else {
       if (this.capture) {
-        if (this.bytes > 4096) { this.bad = true; return; }
-        let value: string; try { value = JSON.parse(this.token); } catch { this.bad = true; return; }
-        if (frame.context === "root") this.rootType = value;
-        if (frame.context === "payload") this.payloadType = value;
-        if (frame.context === "item") this.itemType = value;
+        if (frame.key === "type" && this.bytes > 4096) { this.bad = true; return; }
+        let value: string; try { value = JSON.parse(this.purpose === "turn" ? Buffer.from(this.token,"latin1").toString("utf8") : this.token); } catch { this.bad = true; return; }
+        if (frame.key === "type") {
+          if (frame.context === "root") this.rootType = value;
+          if (frame.context === "payload") this.payloadType = value;
+          if (frame.context === "item") this.itemType = value;
+        } else if (this.purpose === "turn") {
+          if (frame.context === "root" && frame.key === "timestamp") this.turnTimestamp = value;
+          if (frame.context === "payload" && frame.key === "model") this.turnModel = value;
+          if (frame.context === "payload" && frame.key === "effort") this.turnEffort = value;
+        }
       }
       this.valueDone();
     }

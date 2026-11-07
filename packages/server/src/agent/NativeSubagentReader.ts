@@ -1,6 +1,6 @@
 import { readCodexControlStatus, type CodexControlTarget, type CodexObservedState } from "./CodexControlStatus.js";
 import { MuseChildObservations } from "./MuseChildObservations.js";
-import { readCodexChildObservations } from "./CodexChildObservations.js";
+import { CodexChildObservationCache } from "./CodexChildObservationCache.js";
 import { CodexSubagentStream } from "./CodexSubagentStream.js";
 import { readAntigravitySubagents } from "./AntigravitySubagentReader.js";
 import { realpath, lstat } from "node:fs/promises";
@@ -26,6 +26,7 @@ interface State {
   ino: number;
   invalid: boolean;
   generation: number;
+  observationEpoch: number;
   abort: AbortController;
   pending?: boolean;
   codex?: CodexSubagentStream;
@@ -39,12 +40,14 @@ const MAX_LINE = 256 * 1024;
 export class NativeSubagentReader {
   private readonly states = new Map<string, State>();
   private closed = false;
+  private readonly codexObservations=new CodexChildObservationCache();
+  private observationEpoch=0;
   private readonly museObservations: Pick<MuseChildObservations,"readMany"|"forget">;
   private readonly agyStates = new Map<string, { key: string; reading?: Promise<Subagents | undefined> }>();
   constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}, private readonly codexStatus: (target: CodexControlTarget) => Promise<Map<string, CodexObservedState>> = readCodexControlStatus, museObservations?: Pick<MuseChildObservations,"readMany"|"forget">) { this.museObservations = museObservations ?? new MuseChildObservations(roots); }
 
-  forget(paneId: string): void { this.museObservations.forget(); this.states.get(paneId)?.abort.abort(); this.states.delete(paneId); this.agyStates.delete(paneId); }
-  close(): void { this.closed = true; for (const state of this.states.values()) state.abort.abort(); this.states.clear(); this.agyStates.clear(); this.museObservations.forget(); }
+  forget(paneId: string): void { this.codexObservations.forget(paneId); this.museObservations.forget(); this.states.get(paneId)?.abort.abort(); this.states.delete(paneId); this.agyStates.delete(paneId); }
+  close(): void { this.closed = true; for (const state of this.states.values()) state.abort.abort(); this.states.clear(); this.agyStates.clear(); this.museObservations.forget(); this.codexObservations.close(); }
 
   /** Internal provider-owned relation, never a client path or a guessed child UUID. */
   museChildSession(source:NativeSubagentSource,child:string):string|undefined {
@@ -67,13 +70,14 @@ export class NativeSubagentReader {
 
   async read(source: NativeSubagentSource): Promise<Subagents | undefined> {
     if (this.closed) return undefined;
+    if(source.kind!=="codex")this.codexObservations.forget(source.paneId);
     if (source.kind === "agy") return this.readAgy(source);
     this.agyStates.delete(source.paneId);
     const key = JSON.stringify([source.instanceId, source.kind, source.sessionId]);
     let state = this.states.get(source.paneId);
     if (!state || state.key !== key) {
       state?.abort.abort(); this.museObservations.forget();
-      state = { abort: new AbortController(), key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false, generation: 0 };
+      state = { abort: new AbortController(), key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false, generation: 0, observationEpoch: ++this.observationEpoch };
       this.states.set(source.paneId, state);
     }
     const current = state;
@@ -141,7 +145,7 @@ export class NativeSubagentReader {
         const home = await realpath(this.roots.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex"));
         const statuses = await this.codexStatus({ home, parentId: source.sessionId, childIds: members.items.map(item => item.id), signal: state.abort.signal, current }).catch(() => new Map<string, CodexObservedState>());
         if (!current()) return undefined;
-        const observations = await readCodexChildObservations(home, source.sessionId, members.items, current);
+        const observations = await this.codexObservations.read(home, source.sessionId, members.items, current, {paneId:source.paneId,instanceId:source.instanceId,generation:state.generation,epoch:state.observationEpoch});
         if (!current()) return undefined;
         // A new completion/interaction, replacement or truncation invalidates the old membership proof.
         const after = await fd.stat({ bigint: true }), reopened = await this.open(source);

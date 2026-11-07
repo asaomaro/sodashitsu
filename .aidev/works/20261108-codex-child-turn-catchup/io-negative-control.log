@@ -1,0 +1,32 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-child-turn-catchup
+
+ ❯ packages/server/src/agent/NativeSubagentReader.test.ts (32 tests | 1 failed | 31 skipped) 33ms
+   × never erases proven membership when a child metadata body read fails 31ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/NativeSubagentReader.test.ts > never erases proven membership when a child metadata body read fails
+AssertionError: expected undefined to be 1 // Object.is equality
+
+- Expected:
+1
+
++ Received:
+undefined
+
+ ❯ packages/server/src/agent/NativeSubagentReader.test.ts:251:67
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 12 skipped (13)
+      Tests  1 failed | 195 skipped (196)
+   Start at  00:51:48
+   Duration  1.38s (transform 71%, import 28%, worker 1%)
+
+  Transform  transforming modules took 9.58s · 71% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

@@ -12,7 +12,7 @@
 | Grok | ネイティブ子起動のソース契約は確認したが、導入CLIの実子生成記録は未証明 | 公開grok-build 2bdd1d6のModelChangedはmodel_idと解決済みreasoning_effortを持つのでソース上は取得候補。ただし導入1.0.77とのcommit一致・実子更新記録の形式は未実証で、正式子binding/更新readerが未実装。親usageや起動profileを子へ転用しない |
 | Cursor | SDK/CLIのnative子metadataは候補だが、現在の取得経路へ未配線 | 導入2026.11.05の正式subagentInfoはparentAgentId/rootParentAgentId/toolCallId/typeNameを保存するが、このmetadata自体にmodel/effortはない。SQLite codecと子の実設定の結合readerは未実装。親afterAgentResponse hookを子の証拠にはしない |
 
-Codexの観測は1子あたり先頭metadata最大256KiBと末尾256KiB、最大64子・4並列・全体2秒です。長いターンでturn_contextが末尾256KiBより前ならモデル・effortは未取得です。最新のCLIのライブ設定を常に示す保証ではなく、保存された最後のターン設定です。新しい記録・scope変更・ファイルの置換が検証中に起きたら値を返しません。モデル変更と古いeffortを混ぜず、未取得を開始時の値で埋めません。取得の失敗は件数や現在の作業状態を変更しません。
+Codexのモデル・effortは、末尾256KiBのfast pathと継続scanで取得します。1子4MiB・親poll16MiB、4並列・64cacheの上限で長い記録にも順番に追いつき、appendを優先します。最後の完全な同一turnの設定だけを返し、欠測は以前の値で埋めません。ライブCLI設定の保証ではありません。ファイルidentity・親scope変更時は破棄し、補足取得の失敗で件数・作業状態を変更しません。詳細は[Codex子ターン設定の取得](codex-child-turn-observations.md)。
 
 CodexのhasTranscriptは子ファイルの安全なopenと親子照合に成功した場合だけ付けます。既存のagent.subagent_transcriptを使い、同じfdで抜粋し、パス/fdのidentityと親scopeを最後に再確認します。1MiB窓・200件・1件4000文字・2秒、同じ親instance/会話に限る64件・30分の閲覧grantです。本文・認証値・記録パスを診断ログへ出さず、reasoningや添付データ・道具のbodyを会話として表示しません。
 

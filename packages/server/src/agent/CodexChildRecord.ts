@@ -6,7 +6,7 @@ import type { SubagentTranscriptEntry } from "@sodashitsu/protocol";
 import { entriesOfLine } from "./SubagentTranscript.js";
 
 /** Child UUID and the exact provider session_meta relation are both required. No latest-file fallback. */
-export async function openCodexChildRecord(home: string, parent: string, child: string): Promise<(OpenedFile & { unchanged(): Promise<boolean> }) | undefined> {
+export async function openCodexChildRecord(home: string, parent: string, child: string): Promise<(OpenedFile & { file: string; metadataBytes: number; unchanged(): Promise<boolean> }) | undefined> {
   if (!isCodexSessionId(parent) || !isCodexSessionId(child) || parent === child) return undefined;
   const root = await realpath(join(home, "sessions")).catch(() => undefined);
   if (!root) return undefined;
@@ -31,7 +31,7 @@ export async function openCodexChildRecord(home: string, parent: string, child: 
         [path,fd].every(st => st !== undefined && (["dev","ino","size","mtimeNs","ctimeNs"] as const).every(k => st[k] === revision[k]));
     };
     if (before.dev !== opened.st.dev || before.ino !== opened.st.ino || !await unchanged()) throw Error("child changed");
-    return {...opened, unchanged};
+    return {...opened, file, metadataBytes: head.length, unchanged};
   } catch { await opened.fd.close(); return undefined; }
 }
 

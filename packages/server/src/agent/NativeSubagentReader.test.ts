@@ -227,3 +227,27 @@ it("publishes verified Codex child transcript and latest-turn metadata without c
   const item=(await reader.read(f.source))?.items?.[0];expect(item?.model).toBe("newer-model");expect(item).not.toHaveProperty("reasoningEffort");
  }finally{reader.close();}
 });
+
+
+it("catches up a Codex child turn outside the tail window through the public reader",async()=>{
+ const f=await setup(),start=f.rows[0],child=start.payload.item.agent_thread_id;await writeFile(f.file,JSON.stringify(start)+"\n");
+ const childFile=join(f.home,"sessions","2026","11","07",`rollout-long-child-${child}.jsonl`);
+ const meta=JSON.stringify({type:"session_meta",payload:{id:child,source:{subagent:{thread_spawn:{parent_thread_id:f.source.sessionId}}}}})+"\n";
+ const context=JSON.stringify({type:"turn_context",timestamp:new Date(Date.parse(start.timestamp)+1000).toISOString(),payload:{model:"observed-long-child",effort:"medium"}})+"\n";
+ const huge=JSON.stringify({type:"response_item",payload:{type:"message",content:[{type:"output_text",text:"x".repeat(12*1024*1024)}]}})+"\n";
+ await writeFile(childFile,meta+context+huge);
+ const reader=new NativeSubagentReader({codexHome:f.home},async()=>new Map());
+ try{let value;for(let n=0;n<6;n++){value=await reader.read(f.source);if(value?.items[0]?.model)break;}expect(value?.items[0]).toMatchObject({model:"observed-long-child",reasoningEffort:"medium",hasTranscript:true});}
+ finally{reader.close();}
+});
+
+
+it("never erases proven membership when a child metadata body read fails",async()=>{
+ const f=await setup(),start=f.rows[0],child=start.payload.item.agent_thread_id;await writeFile(f.file,JSON.stringify(start)+"\n");
+ const file=join(f.home,"sessions","2026","11","07",`rollout-iofail-child-${child}.jsonl`),meta=JSON.stringify({type:"session_meta",payload:{id:child,source:{subagent:{thread_spawn:{parent_thread_id:f.source.sessionId}}}}})+"\n";
+ await writeFile(file,meta+JSON.stringify({type:"response_item",payload:{type:"message",content:[{type:"output_text",text:"x".repeat(1024*1024)}]}})+"\n");
+ const safe=await import("./safeFile.js"),original=safe.readRange,spy=vi.spyOn(safe,"readRange").mockImplementation((fd,offset,length)=>offset>0?Promise.reject(Error("generated child metadata IO failure")):original(fd,offset,length));
+ const reader=new NativeSubagentReader({codexHome:f.home},async()=>new Map());
+ try{const value=await reader.read(f.source);expect(value?.count).toBe(1);expect(value?.items[0]?.model).toBeUndefined();}
+ finally{spy.mockRestore();reader.close();}
+});

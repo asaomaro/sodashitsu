@@ -1,0 +1,11 @@
+{
+  "CodexChildObservationCache.ts": "e4ed24d63d71d99661f4abd79d5587333acf02999bec72985a06692a183a00b5",
+  "CodexChildObservationCache.test.ts": "21ff72d67c786d47a4a56b9f3469a27f56e9f76bf6862907ef18813cbaa01658",
+  "CodexChildTurnStream.ts": "f5242a07a46c157c4d1f442cc1e9badf6288cf4d293ed88da8a0e6a5ead155be",
+  "CodexChildTurnStream.test.ts": "94a25bf6df163b5d0f6d7027ca1ce83b60400eee5cf302206d05974a5313e5b4",
+  "CodexRecordEnvelope.ts": "c50bd5f6054de794687072b68f78941cdfc60ccb3b8883dfd44e3727932c6b5e",
+  "CodexChildRecord.ts": "0dd4502c1b9b8f11193f7717c22d152f5fc4379a9345d5ae82ecb57d66aadf71",
+  "CodexChildObservations.ts": "cf4c3ad5a3cd8a45d1d3c0d7bb7c18cd92b3987e9bc9b4a80820735a9d659934",
+  "NativeSubagentReader.ts": "0cb85fd7440ff72b8645039eed76021ed0f96075b6f57cc7c88a05bfb5ec8f3c",
+  "NativeSubagentReader.test.ts": "b6bead6fd148b1e9d436925f599a9853e9a515d029b90ec27441a0e85f88512d"
+}

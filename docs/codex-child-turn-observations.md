@@ -1,0 +1,9 @@
+# Codex子のモデル・effort取得
+
+子の正式rolloutの最後の完全なturn_contextからmodelとeffortを一緒に読みます。最新rowで欠けた値は以前の値や開始時の設定で埋めません。これは保存されたターン設定で、CLIの現在の一時設定を保証しません。子開始より古いturnは使いません。
+
+末尾256KiBに完全なturnがあれば先に使います。無ければ先頭から進捗を保持して読み続けます。1子4MiB・親の1poll16MiB、4並列・64cache、2秒の取得予算で順番に進みます。新しく追記されたsuffixを優先し、巨大な本文行を保持・JSON.parseしません。70MiB級の自作記録と実際の約60–74MBの3子で数十秒の取得を確認しています。poll周期や負荷で所要時間は変わります。
+
+正式な親子UUIDの二重照合、nofollow・単一regular file・owner・canonical pathとFD/path照合を維持します。キャッシュは親会話・pane・instance・記録世代に結び、replace・truncate・同sizeのns更新やscope失効で破棄します。append-only provider記録を前提とし、同じmetadataを意図的に偽造した任意の書換検出までは保証しません。未知root・壊れたJSON/UTF8・保護key重複・固定深さ/値長上限超過は未取得です。
+
+本文は保存せず、JSON構造と少量の設定値だけを保持します。会話閲覧の権限・抽出は別の既存readerで確認し、補足取得失敗で所属数やworking/unknownを変更しません。Codex 0.166.0の正式RolloutItemWireにある非turn rootを区別し、world_stateなどのpayloadをturn設定と誤認しません。

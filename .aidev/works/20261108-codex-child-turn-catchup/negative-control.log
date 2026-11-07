@@ -1,0 +1,85 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-child-turn-catchup
+
+ ❯ packages/server/src/agent/CodexChildTurnStream.test.ts (17 tests | 1 failed) 148ms
+   × validates formal non-turn root world_state without applying turn field guards 18ms
+ ❯ packages/server/src/agent/CodexChildObservationCache.test.ts (5 tests | 2 failed) 1598ms
+   × continues two 70MiB records to EOF with 4MiB/child and 16MiB/parent budgets 1069ms
+   × invalidates replacement, truncation, same-size rewrite, creation floor and scope 16ms
+ ❯ packages/server/src/agent/NativeSubagentReader.test.ts (32 tests | 1 failed) 1776ms
+   × catches up a Codex child turn outside the tail window through the public reader 77ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/CodexChildObservationCache.test.ts > continues two 70MiB records to EOF with 4MiB/child and 16MiB/parent budgets
+AssertionError: expected +0 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 0
+
+ ❯ packages/server/src/agent/CodexChildObservationCache.test.ts:19:17
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  packages/server/src/agent/CodexChildObservationCache.test.ts > invalidates replacement, truncation, same-size rewrite, creation floor and scope
+AssertionError: expected 'old-model' to be 'new-model' // Object.is equality
+
+Expected: "new-model"
+Received: "old-model"
+
+ ❯ packages/server/src/agent/CodexChildObservationCache.test.ts:36:117
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  packages/server/src/agent/CodexChildTurnStream.test.ts > validates formal non-turn root world_state without applying turn field guards
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/server/src/agent/CodexChildTurnStream.test.ts:36:25
+     34|  const stream=new CodexChildTurnStream(0,0);stream.consume(Buffer.from…
+     35|  stream.consume(Buffer.from(JSON.stringify({type,payload:{type:{nested…
+     36|  expect(stream.invalid).toBe(false);expect(stream.value).toMatchObject…
+       |                         ^
+     37| });
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  packages/server/src/agent/NativeSubagentReader.test.ts > catches up a Codex child turn outside the tail window through the public reader
+AssertionError: expected { …(7) } to match object { model: 'observed-long-child', …(2) }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "hasTranscript": true,
+-   "model": "observed-long-child",
+-   "reasoningEffort": "medium",
+  }
+
+ ❯ packages/server/src/agent/NativeSubagentReader.test.ts:240:128
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed | 10 passed (13)
+      Tests  4 failed | 192 passed (196)
+   Start at  00:51:44
+   Duration  3.15s (transform 46%, tests 33%, import 20%)
+
+  Transform  transforming modules took 9.65s · 46% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
