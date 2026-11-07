@@ -1,0 +1,1 @@
+{"nativeTui": true, "networkNamespace": "loopback-only", "realAuth": false, "externalModelCalls": 0, "inputBytes": 0, "cliExit": 0, "ptyBytesDiscarded": 156, "reports": 1, "allKindsGrok": true, "allUuid": true, "allPidMatchesOwnTui": true, "inferenceRequests": 0}
