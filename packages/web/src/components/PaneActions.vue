@@ -8,6 +8,7 @@
  * - ボタンは Tab の順に入れない（`tabindex="-1"`）。キーボードでは、いまのキー（分割・拡大表示・閉じる）と、pane の枠の Tab・Enter で開くメニューで足りる。
  * - 押下は、端末からフォーカスを奪わない（`mousedown` を止める）。印はインラインの SVG（絵文字は環境で見た目が変わる）。
  */
+import PaneInfoIcon from "./PaneInfoIcon.vue";
 import { HEADER_ACTION_LABELS, type AgentHeaderAction } from "@sodashitsu/protocol";
 const props = defineProps<{
   variant: "row" | "corner";
@@ -89,17 +90,7 @@ function keepFocus(ev: MouseEvent): void {
       :aria-pressed="infoOpen === true"
       @click="$emit('info')"
     >
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
-        <circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3" />
-        <path
-          d="M8 7.2v4"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.4"
-          stroke-linecap="round"
-        />
-        <circle cx="8" cy="5" r="0.9" fill="currentColor" />
-      </svg>
+      <PaneInfoIcon />
     </button>
     <button data-assistant-feature
       v-if="showAddView"

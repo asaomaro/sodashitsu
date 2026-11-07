@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import type { AgentInfo } from "@sodashitsu/protocol";
-import { subagentStateLabel, subagentCountLabel, subagentEmptyLabel, formatSubagentElapsed, subagentsMoreLabel } from "@sodashitsu/client-core";
+import { subagentModelLabel,subagentEffortLabel,subagentStateLabel, subagentCountLabel, subagentEmptyLabel, formatSubagentElapsed, subagentsMoreLabel } from "@sodashitsu/client-core";
 
 /**
  * サブエージェントの一覧の中身（20261004-subagent-display）。サイドバーからの一覧のダイアログ（`SubagentListDialog`）と、連携のグラフの中のパネル
@@ -16,8 +16,8 @@ const now = ref(Date.now());
 const ticker = setInterval(() => (now.value = Date.now()), 10_000);
 onBeforeUnmount(() => clearInterval(ticker));
 
-const items = computed(() => props.subagents?.items ?? []);
-const more = computed(() => (props.subagents ? subagentsMoreLabel(props.subagents) : null));
+const items = computed(() => props.subagents?.items.slice(0,64) ?? []);
+const more = computed(() => (props.subagents ? subagentsMoreLabel({...props.subagents,items:items.value}) : null));
 
 defineExpose({ focus: () => listEl.value?.focus() });
 </script>
@@ -37,7 +37,7 @@ defineExpose({ focus: () => listEl.value?.focus() });
     <div v-for="item in items" :key="item.id" class="subagent-list-item" role="listitem">
       <div class="subagent-list-item-head">
         <span v-if="item.state" class="subagent-list-state" :data-state="item.state ?? 'working'">{{ subagentStateLabel(item) }}</span>
-        <span class="subagent-list-type">{{ item.type ?? "サブエージェント" }}</span>
+        <span class="subagent-list-type" :title="subagentEffortLabel(item)?.title">{{ subagentModelLabel(item) ?? "サブエージェント" }}</span>
         <span v-if="item.background" class="subagent-list-bg">バックグラウンド</span>
         <span class="subagent-list-elapsed">{{ formatSubagentElapsed(item.startedAt, now) }}</span>
       </div>

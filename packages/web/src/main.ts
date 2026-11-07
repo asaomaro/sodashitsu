@@ -475,6 +475,7 @@ connection.onOpened(() => viewSync.onConnectionOpened());
 // 利用状況の配信（20261010-agent-usage PR3・PR4）。ダッシュボードか pane の利用状況の窓が見えていて、タブが前面で、接続が開いている間だけ、サーバへ頼む（見ている、の数え方は 1 つ）。
 const usageWanted = () =>
   view.usageWatchWanted ||
+  (!view.mobileViewport&&!view.sidebarCollapsed&&!view.sectionsCollapsed.agents&&[...session.panes.values()].some(p=>p.agent&&!p.virtual)) ||
   (view.screen === "base" &&
     loadStatuslineSettings(settings.statuslineSettings).enabled &&
     [...session.panes.values()].some((p) => p.tabId === view.tabId && p.agent && !p.virtual));

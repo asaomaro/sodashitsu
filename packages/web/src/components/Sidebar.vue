@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaneInfoIcon from "./PaneInfoIcon.vue";
 import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { AgentInfo, ItemTarget, SubagentInfo, Workspace } from "@sodashitsu/protocol";
@@ -8,7 +9,7 @@ import { type SectionBox, clampRatio, ratioFromOffset, ratioPercent, stepRatio }
 import { useSessionStore } from "../store/session.js";
 import { useUsageStore } from "../store/usage.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
-import { subagentStateLabel, subagentCountLabel, subagentsMoreLabel, orderedAgentPaneIds, paneMoveBlock } from "@sodashitsu/client-core";
+import { observedAgentModel,subagentEffortLabel,subagentModelLabel,subagentStateLabel, subagentCountLabel, subagentsMoreLabel, orderedAgentPaneIds, paneMoveBlock } from "@sodashitsu/client-core";
 import { type DropAnchor, type ItemRow, dropBefore, nextAnchorOf, sameItemTarget, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfUngrouped, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../store/sidebarTree.js";
 import ThemeModeToggle from "./ThemeModeToggle.vue";
@@ -369,9 +370,9 @@ const agents = computed(() => {
       const agent = p.agent!;
       const state = displayStateFor(agent, seen.getSeenSeq(agent.instanceId, agent.serverSeenSeq));
       const observed = usage.panes[p.id];
-      const model = observed?.kind === agent.kind ? observed.model?.trim() || undefined : undefined;
+      const observedLabel=observedAgentModel(p,observed),model=observedLabel?.text,modelTitle=observedLabel?.title;
       const lines = resolveAgentLines(settings.agentsLayout, { pane: p, tab, workspace: ws, agent, state, model });
-      return { pane: p, tab, workspace: ws, agent, state, lines, model };
+      return { pane: p, tab, workspace: ws, agent, state, lines, model,modelTitle };
     });
   const rowsByPaneId = new Map(rows.map((r) => [r.pane.id, r]));
   // 並び順は `orderedAgentPaneIds`（`ActionDispatcher` の `previous_agent`/`next_agent`/`focus_agent` と
@@ -501,14 +502,12 @@ function toggleSubagents(agent:AgentInfo):void {
 }
 function subagentCount(agent:AgentInfo):number {return agent.subagents?.count??0;}
 function subagentStatus(agent:AgentInfo):string {return subagentCountLabel(agent.subagents);}
-function childSession(child:SubagentInfo):string {return child.description?.trim()||child.type?.trim()||"サブエージェント";}
-function childModel(child:SubagentInfo):string|undefined {return child.description?.trim()&&child.type?.trim()?child.type.trim():undefined;}
-function childTitle(child:SubagentInfo):string {return [child.type,child.description,subagentStateLabel(child),"親エージェント内（独立した端末はありません）"].filter(Boolean).join(" · ");}
+function childSession(child:SubagentInfo):string {return child.description?.trim()||(child.type?.trim()?subagentModelLabel(child):undefined)||"サブエージェント";}
+function childModel(child:SubagentInfo):string|undefined {return child.description?.trim()||!child.type?.trim()?subagentModelLabel(child):undefined;}
+function childTitle(child:SubagentInfo):string {return [child.type,child.description,subagentEffortLabel(child)?.title,subagentStateLabel(child),"親エージェント内（独立した端末はありません）"].filter(Boolean).join(" · ");}
 
 /** その pane のエージェントのサブエージェントの一覧を開く（ダイアログ。対象は選んでいるマシンの pane）。 */
-function openSubagents(paneId: string): void {
-  view.openDialogWithContext({ kind: "subagents", machineId: machines.selectedId, paneId, opener: "button" });
-}
+
 
 /** 全体のメニューを、押したボタンの位置に開く（`ContextMenu` が中身と操作を引き受ける）。 */
 function onOpenGlobalMenu(ev: MouseEvent): void {
@@ -1085,8 +1084,8 @@ watchDragInterrupt(view, () => {
       </div>
       <div id="sidebar-agents-body" class="sidebar-section-body">
       <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
-      <template v-for="{ pane, workspace, state, lines, agent, model } in agents" :key="pane.id">
-      <div class="sidebar-row" :title="`${agent.name || agent.label}${model ? ` ${model}` : ''} · ${subagentStatus(agent)}`" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
+      <template v-for="{ pane, workspace, state, lines, agent, model,modelTitle } in agents" :key="pane.id">
+      <div class="sidebar-row" :title="`${agent.name || agent.label}${model ? ` ${model}` : ''} · ${subagentStatus(agent)}${modelTitle&&modelTitle!==model?` · ${modelTitle}`:''}`" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
         <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
         <ShortcutNumber :number="agentNumbers.get(pane.id)" target="agent" />
         <div v-if="view.sidebarCollapsed" class="sidebar-row-line1">
@@ -1098,9 +1097,10 @@ watchDragInterrupt(view, () => {
               <StateIcon v-if="t.kind === 'state_icon'" class="sidebar-state-icon" :state="state" :style="tokenStyleAttr(t.style)" />
               <span v-else-if="t.kind === 'text'" v-bind="textTokenAttrs(t, i)">{{ t.text }}</span>
             </template>
-            <!-- 親の右端の開閉。件数は閉じたときだけ。親への移動やドラッグを発火しない。 -->
+            <button v-if="i===0" data-assistant-feature data-pane-action="info" type="button" class="sidebar-agent-info" :aria-label="`${agent.name||agent.label}の利用状況（情報）`" title="利用状況（情報）" :aria-pressed="view.paneInfoPaneId===pane.id" @pointerdown.stop @click.stop="focusPane(pane.id,pane.tabId,workspace?.id??'');view.togglePaneInfo(pane.id)" @keydown="onButtonKeydown"><PaneInfoIcon /></button>
+            <!-- 子の開閉は2行目。1行設定では同じ行へ収める。 -->
             <button data-assistant-feature
-              v-if="i === 0 && subagentCount(agent) > 0"
+              v-if="i === Math.min(1,lines.length-1) && subagentCount(agent) > 0"
               type="button"
               class="sidebar-subagent-btn"
               :data-subagent-pane="pane.id"
@@ -1123,7 +1123,6 @@ watchDragInterrupt(view, () => {
           <div v-if="childModel(child)" class="sidebar-row-line2 sidebar-label">{{ childModel(child) }}</div>
         </div>
         <div v-if="subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)})" class="sidebar-subagent-more">{{ subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)}) }}</div>
-        <button data-assistant-feature type="button" class="sidebar-btn sidebar-subagent-details" @click="openSubagents(pane.id)" @keydown="onButtonKeydown">詳細・記録…</button>
       </div>
       </template>
       </div>
@@ -1420,7 +1419,8 @@ watchDragInterrupt(view, () => {
   color: inherit;
   cursor: pointer;
 }
-.sidebar-subagent-btn:hover {
+.sidebar-agent-info { flex:none; display:inline-flex; align-items:center; justify-content:center; margin-left:auto; width:24px; height:24px; padding:0; border:none; border-radius:var(--soda-shape-radius-s); background:none; color:var(--soda-fg,#f8f8f2); cursor:pointer; }
+.sidebar-agent-info:hover, .sidebar-subagent-btn:hover {
   background: var(--soda-menu-hover-bg, #343746);
 }
 .sidebar-subagent-icon { display:inline-block; transition:transform .15s; }
@@ -1430,7 +1430,7 @@ watchDragInterrupt(view, () => {
 .sidebar-subagent-row { cursor:default; }
 .sidebar-subagent-row .sidebar-row-line1 { font-size:.85em; }
 .sidebar-subagent-row .sidebar-row-line2 { padding-left:1.5em; }
-.sidebar-subagent-more,.sidebar-subagent-details { margin:.3em .8em; font-size:.85em; }
+.sidebar-subagent-more { margin:.3em .8em; font-size:.85em; }
 @media(prefers-reduced-motion:reduce) { .sidebar-subagent-icon { transition:none; } }
 .sidebar-row-line2 {
   display: flex;

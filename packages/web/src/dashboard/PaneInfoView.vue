@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SubagentList from "../components/SubagentList.vue";
 /**
  * pane の利用状況（情報）の中身（20261010-agent-usage PR4。AC1）。デスクトップの小さな窓（`PaneInfoPopover`）と、1 列の画面の全面のダイアログ（`PaneInfoDialog`）が同じものを使う。
  * **見るだけ**。数字の整形・基準の印・古い値の扱い・アカウントの枠の形は、PR3 のダッシュボードの部品（`dashboardModel.ts`・`AccountCard.vue`）をそのまま使う（二重に作らない）。
@@ -126,11 +127,6 @@ const accounts = computed(() => (agent.value ? usageStore.accounts.filter((a) =>
 const stateText = computed(() => stateLabel(state.value) ?? NONE);
 
 // --- 入口 -----------------------------------------------------------------------------------------------------------
-function openSubagents(): void {
-  const id = props.paneId;
-  emit("close");
-  view.openDialogWithContext({ kind: "subagents", machineId: machines.selectedId, paneId: id });
-}
 function openDashboard(): void {
   emit("close");
   view.openDashboard();
@@ -222,9 +218,10 @@ function openDashboard(): void {
         <dt>サブエージェント</dt>
         <dd data-pane-info-subagents :title="subagentCountLabel(agent?.subagents)">
           {{ subagentCount === null ? NONE : `${agent?.subagents?.countBasis==='alive'?'所属 ':''}${subagentCount} 件` }}
-          <button data-assistant-feature v-if="subagentCount !== null && subagentCount > 0" type="button" class="pinfo-btn" data-pane-info-open-subagents @click="openSubagents">一覧を開く</button>
         </dd>
       </dl>
+
+      <section v-if="subagentCount !== null && subagentCount>0" aria-label="サブエージェントの情報" class="pinfo-inline-subagents"><SubagentList :subagents="agent?.subagents" /></section>
 
       <section v-if="accounts.length > 0" class="pinfo-accounts" data-pane-info-accounts aria-label="アカウントの利用枠">
         <h3 class="pinfo-sub">アカウントの利用枠</h3>

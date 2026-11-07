@@ -172,15 +172,13 @@ describe("PaneInfoView", () => {
     wrapper.unmount();
   });
 
-  it("入口: ダッシュボードを開く（窓を閉じ、ダッシュボードへ）。サブエージェントは 1 件以上のときだけ一覧への入口（今ある一覧を開く）", async () => {
+  it("入口: ダッシュボードは窓を閉じ、サブエージェントは同じ窓へ埋め込む", async () => {
     const { wrapper, view, emitted } = setup(pane("p1", agent({ name: "alpha", subagents: { count: 2, items: [] } })));
     expect(wrapper.get("[data-pane-info-subagents]").text()).toContain("2 件");
-    await wrapper.get("[data-pane-info-open-subagents]").trigger("click");
-    expect(emitted).toEqual(["close"]);
-    expect(view.dialogContext).toMatchObject({ kind: "subagents", paneId: "p1" });
-    view.closeDialog();
+    expect(wrapper.find("[data-pane-info-open-subagents]").exists()).toBe(false);
+    expect(wrapper.find(".subagent-list").exists()).toBe(true);expect(emitted).toEqual([]);expect(view.dialogContext).toBeNull();
     await wrapper.get("[data-pane-info-open-dashboard]").trigger("click");
-    expect(emitted).toEqual(["close", "close"]);
+    expect(emitted).toEqual(["close"]);
     expect(view.dashboardVisible).toBe(true);
     wrapper.unmount();
   });
@@ -209,8 +207,13 @@ it("renders effort, remaining context and explicitly estimated/partial costs",as
  await wrapper.vm.$nextTick();expect(wrapper.get("[data-pane-info-effort]").text()).toBe("high");expect(wrapper.get("[data-pane-info-remaining]").text()).toContain("800");expect(wrapper.get("[data-pane-info-cost]").text()).toContain("見積り");expect(wrapper.get("[data-pane-info-cost]").text()).toContain("一部のみ");wrapper.unmount();
 });
 
-it.each(["codex","muse","copilot","agy"])("labels %s native membership counts and preserves the generic list action",async kind=>{
+it.each(["codex","muse","copilot","agy"])("labels %s native membership counts with inline children",async kind=>{
  const {wrapper,view}=setup(pane("p1",agent({kind,subagents:{count:2,items:[],countBasis:"alive"}})));
  expect(wrapper.get('[data-pane-info-subagents]').text()).toContain("所属 2 件");
- await wrapper.get('[data-pane-info-open-subagents]').trigger('click');expect(view.dialogContext).toMatchObject({kind:'subagents',paneId:'p1'});wrapper.unmount();
+ expect(wrapper.find('.subagent-list').exists()).toBe(true);expect(view.dialogContext).toBeNull();wrapper.unmount();
+});
+
+it("bounds inline child rows at 64 without opening a separate list",()=>{
+ const {wrapper,view}=setup(pane("p1",agent({subagents:{count:70,items:Array.from({length:70},(_,i)=>({id:`c${i}`,startedAt:0,type:"child-model",description:`child-session-${i}`,reasoningEffort:"low",reasoningEffortBasis:"creation"}))}})));
+ expect(wrapper.findAll('.subagent-list-item')).toHaveLength(64);expect(wrapper.text()).toContain('ほか 6 件');expect(wrapper.text()).toContain('low（開始時）');expect(view.dialogContext).toBeNull();wrapper.unmount();
 });
