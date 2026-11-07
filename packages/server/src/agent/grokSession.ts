@@ -8,10 +8,20 @@ export interface GrokSessionLocation{kind:'grok';id:string;dir:string;cwd:string
 export function grokHome(opts:GrokSessionRoots={}):string{return opts.grokHome||process.env.GROK_HOME||join(opts.home??homedir(),'.grok')}
 const pending=new Map<string,Promise<GrokSessionLocation|null>>();
 async function directory(path:string):Promise<boolean>{const st=await lstat(path).catch(()=>null);return !!st&&st.isDirectory()&&!st.isSymbolicLink()&&await realpath(path).catch(()=>null)===path}
+function absoluteCwd(value:string):string|null{
+ const text=value.trim();return text.length>0&&text.length<=4096&&!/[\x00-\x1f\x7f]/.test(text)&&(text.startsWith('/')||/^[A-Za-z]:[\\/]/.test(text)||text.startsWith('\\\\'))?text:null;
+}
 async function groupCwd(group:string):Promise<string|null>{
- try{const decoded=decodeURIComponent(basename(group));if(decoded.startsWith('/')||/^[A-Za-z]:[\\/]/.test(decoded))return decoded.slice(0,4096)}catch{}
+ try{const decoded=absoluteCwd(decodeURIComponent(basename(group)));if(decoded)return decoded}catch{}
  const file=join(group,'.cwd');let opened:OpenedFile|null=null;
- try{opened=await openVerified(file);if(!opened||opened.st.size>4096)return null;const value=(await readRange(opened.fd,0,opened.st.size)).toString('utf8').trim();return value&&!value.includes('\0')?value:null}catch{return null}finally{await opened?.fd.close()}
+ const leaf=async()=>{const st=await lstat(file);if(!st.isFile()||st.isSymbolicLink()||st.nlink!==1||await realpath(file)!==file||await realpath(dirname(file))!==group)throw Error('Invalid cwd metadata');return st;};
+ try{
+  const before=await leaf();if(before.size>4096)return null;
+  opened=await openVerified(file);if(!opened||opened.st.size>4096||opened.st.dev!==before.dev||opened.st.ino!==before.ino)return null;
+  const bytes=await readRange(opened.fd,0,opened.st.size),after=await leaf(),fdAfter=await opened.fd.stat();
+  if(after.dev!==opened.st.dev||after.ino!==opened.st.ino||after.size!==opened.st.size||fdAfter.size!==opened.st.size||!bytes.equals(await readRange(opened.fd,0,bytes.length)))return null;
+  return absoluteCwd(bytes.toString('utf8'));
+ }catch{return null}finally{await opened?.fd.close()}
 }
 /** One bounded CWD-group walk, probing the exact UUID directory instead of scanning
  * every session. Concurrent users of the same root/id share only that pending read. */

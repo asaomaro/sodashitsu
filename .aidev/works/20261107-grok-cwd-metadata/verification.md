@@ -1,0 +1,7 @@
+# .cwd metadataのnofollow非提供時境界
+
+5e638c87独立review P2修正。Windows等でO_NOFOLLOWを提供しないopenであっても、.cwdのlstat非link/通常単一file、realpathが固定leaf/親へ一致、fd/path identityとbounded read前後を確認する。戻すcwdは絶対path・4096字以内・制御文字無しだけ。URLdecodeした短いgroup名にも同じ文字境界を掛ける。
+
+10tests pass。O_NOFOLLOWが効かずsymlinkを辿るopenを自作fixture内だけmockし、旧helperで外部の生成cwd文字列が返る負例exit1→byteexact復元（negative.log/restoration.json）。新helperとテストを対象にstrict/exactOptional/noUnchecked型検査0。server全体の7kindcontract後の4既存型箇所は(2)後続で対応し、この対象型検査をserver全体passとは報告しない。
+
+モデルターン・CLI起動・通常ユーザーファイル読取・実Windows操作は無し。usage担当へは5eとこのfixを両方渡す。

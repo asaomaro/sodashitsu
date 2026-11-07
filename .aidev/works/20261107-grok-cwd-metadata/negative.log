@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-cursor-conversations/packages/server
+
+ ❯ src/agent/grokSession.test.ts (10 tests | 1 failed | 9 skipped) 17ms
+   × rejects cwd leaf links even when the OS open primitive would follow them 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/grokSession.test.ts > rejects cwd leaf links even when the OS open primitive would follow them
+AssertionError: expected '/generated/external' to be null
+
+- Expected:
+null
+
++ Received:
+"/generated/external"
+
+ ❯ src/agent/grokSession.test.ts:24:54
+     22|  const f=await fixture();await rm(f.group,{recursive:true});const grou…
+     23|  const external=join(f.home,'external-cwd');await writeFile(external,'…
+     24|  expect((await locateGrokSession(f.id,f.opts))?.cwd).toBeNull();
+       |                                                      ^
+     25| });
+     26| it.each(['relative/path','/generated/line\nprivate','/generated/zero\0…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 skipped (10)
+   Start at  17:38:24
+   Duration  174ms (transform 53%, import 25%, tests 19%, worker 3%)
+
+undefined
+/workspaces/sodashitsu-grok-cursor-conversations/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/grokSession.test.ts -t rejects cwd leaf links
