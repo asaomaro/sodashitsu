@@ -168,3 +168,11 @@ it("keeps WSL VM and Windows host memory distinct with optional host data, indep
  expect(systemFooterSegments(base,settings.fields,settings.graphs)).toEqual(['メモリ 2.0GiB/4.0GiB 50%','ホストメモリ 12.0GiB/16.0GiB ████░ 75%']);expect(systemFooterDisplaySegments(base,settings).find(s=>s.field==='hostMemory')?.color).toBe('warning');
  for(const missing of [{},{hostMemoryTotalBytes:16*1024**3},{hostMemoryTotalBytes:10,hostMemoryAvailableBytes:11},{hostMemoryTotalBytes:10,hostMemoryAvailableBytes:-1}])expect(systemFooterSegments({...base,hostMemoryTotalBytes:undefined,hostMemoryAvailableBytes:undefined,...missing} as unknown as SystemResources,['hostMemory'])).toEqual([]);
 });
+it("labels WSL CPU/memory independently from interop and formats a real total host CPU including zero",()=>{
+ const data={hostname:"fixture",cpuPercent:25,cpuCount:2,memoryTotalBytes:4*1024**3,memoryAvailableBytes:2*1024**3,serverRssBytes:0,uptimeSeconds:0,loadAverage:null,isWsl:true} as SystemResources;
+ expect(systemFooterSegments(data,["cpu","memory","hostCpu"])).toEqual(['CPU(WSL) 25% (—/2 コア)','メモリ(WSL) 2.0GiB/4.0GiB 50%']);
+ expect(systemFooterSegments({...data,hostCpuPercent:0},['hostCpu'])).toEqual(['ホストCPU 0%']);
+ const settings=loadSystemFooterSettings({fields:['hostCpu'],colorMode:'color',graphs:{hostCpu:{visible:true,pattern:'halfBlocks'}}});expect(systemFooterDisplaySegments({...data,hostCpuPercent:90},settings)[0]).toMatchObject({field:'hostCpu',text:'ホストCPU ████▒ 90%',color:'danger'});
+ for(const bad of [NaN,-1,101])expect(systemFooterSegments({...data,hostCpuPercent:bad},['hostCpu'])).toEqual([]);
+ expect(systemFooterSegments({...data,isWsl:false},['cpu'])[0]).toContain('CPU 25%');
+});

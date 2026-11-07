@@ -1,0 +1,73 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-wsl-host-memory
+
+ ❯ |@sodashitsu/protocol| src/systemFooter.test.ts (10 tests | 1 failed) 17ms
+   × labels WSL CPU/memory independently from interop and formats a real total host CPU including zero 10ms
+ ❯ |@sodashitsu/web| src/components/SystemFooter.test.ts (5 tests | 1 failed) 54ms
+   × keeps a selectable WSL host metric separate from VM memory 10ms
+ ❯ |@sodashitsu/tui| src/app/TuiApp.systemFooter.test.ts (1 test | 1 failed) 1098ms
+   × reserves one bottom row across screens and releases it when disabled 1097ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/protocol| src/systemFooter.test.ts > labels WSL CPU/memory independently from interop and formats a real total host CPU including zero
+AssertionError: expected [ 'CPU 25% (—/2 コア)', …(1) ] to deeply equal [ 'CPU(WSL) 25% (—/2 コア)', …(1) ]
+
+- Expected
++ Received
+
+  [
+-   "CPU(WSL) 25% (—/2 コア)",
+-   "メモリ(WSL) 2.0GiB/4.0GiB 50%",
++   "CPU 25% (—/2 コア)",
++   "メモリ 2.0GiB/4.0GiB 50%",
+  ]
+
+ ❯ src/systemFooter.test.ts:173:64
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |@sodashitsu/web| src/components/SystemFooter.test.ts > keeps a selectable WSL host metric separate from VM memory
+AssertionError: expected '⋮ ホストメモリ 12.0GiB/16.0GiB 75%' to contain 'ホストCPU 20%'
+
+Expected: "ホストCPU 20%"
+Received: "⋮ ホストメモリ 12.0GiB/16.0GiB 75%"
+
+ ❯ src/components/SystemFooter.test.ts:72:46
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |@sodashitsu/tui| src/app/TuiApp.systemFooter.test.ts > reserves one bottom row across screens and releases it when disabled
+AssertionError: expected '⋮ CPU 25% (2/4 コア) · ホストメモリ 12.0GiB/1…' to contain 'CPU(WSL) 25% (2/4 コア)'
+
+Expected: "CPU(WSL) 25% (2/4 コア)"
+Received: "⋮ CPU 25% (2/4 コア) · ホストメモリ 12.0GiB/16.0GiB 75%"
+
+ ❯ src/app/TuiApp.systemFooter.test.ts:27:77
+     25|     h.app.prefs.apply({ systemFooterSettings: { enabled: true, fields:…
+     26|     h.app.renderNow();
+     27|     await vi.waitFor(async () => expect((await h.screen()).split("\n")…
+       |                                                                             ^
+     28|     expect((await h.screen()).split("\n")[29]).toContain("ホストCPU 20%");
+     29|     expect((await h.screen()).split("\n")[29]).toContain("ホストメモリ 12.0G…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  3 failed | 13 passed (16)
+   Start at  22:10:31
+   Duration  3.92s (transform 65%, tests 20%, import 12%, environment 3%)
+
+  Transform  |@sodashitsu/tui| transforming modules took 2.32s · 61% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

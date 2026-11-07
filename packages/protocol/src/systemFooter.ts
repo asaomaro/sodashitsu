@@ -23,6 +23,7 @@ export function countSystemAgents(panes: Iterable<Pane>): SystemAgentCounts {
 }
 export const SYSTEM_FOOTER_GRAPHS = [
   { id: "cpu", label: "CPU使用率" },
+  { id: "hostCpu", label: "ホストCPU使用率（WSL）" },
   { id: "memory", label: "メモリ使用率" },
   { id: "hostMemory", label: "ホストメモリ使用率（WSL）" },
   { id: "serverMemory", label: "Sodashitsuのメモリ使用率" },
@@ -44,7 +45,11 @@ export interface SystemResources {
   /** Windows OS-visible memory via WSL interop only; absent when unavailable/old server. */
   hostMemoryTotalBytes?: number;
   hostMemoryAvailableBytes?: number;
-  hostMemorySampledAt?: number;
+  hostMetricsSampledAt?: number;
+  /** WSL kernel scope, independent of Windows interop availability. */
+  isWsl?: boolean;
+  /** Windows total processor counter, not a sum/inference from WSL CPUs. */
+  hostCpuPercent?: number;
   serverRssBytes: number;
   uptimeSeconds: number;
   loadAverage: number[] | null;
@@ -54,6 +59,7 @@ export interface SystemResources {
 }
 export const SYSTEM_FOOTER_FIELDS = [
   { id: "cpu", label: "CPU使用率" },
+  { id: "hostCpu", label: "ホストCPU使用率（WSL）" },
   { id: "memory", label: "メモリ使用量" },
   { id: "hostMemory", label: "ホストメモリ使用量（WSL）" },
   { id: "serverMemory", label: "Sodashitsuのメモリ" },
@@ -122,15 +128,17 @@ export function systemFooterSegments(
   const total = data.memoryTotalBytes,
     used = Math.max(0, total - data.memoryAvailableBytes);
   const hostMemory=hostMemoryUsage(data);
+  const hostCpu=typeof data.hostCpuPercent==="number"&&Number.isFinite(data.hostCpuPercent)&&data.hostCpuPercent>=0&&data.hostCpuPercent<=100?data.hostCpuPercent:undefined;
   const mins = Math.floor(data.uptimeSeconds / 60);
   const values: Record<SystemFooterField, string | undefined> = {
     cpu:
       data.cpuPercent === null
         ? undefined
-        : `CPU ${statuslineGauge(data.cpuPercent, graphs.cpu)} (${systemCpuCoreLabel(data)})`,
+        : `${data.isWsl?"CPU(WSL)":"CPU"} ${statuslineGauge(data.cpuPercent, graphs.cpu)} (${systemCpuCoreLabel(data)})`,
+    hostCpu:hostCpu!==undefined?`ホストCPU ${statuslineGauge(hostCpu,graphs.hostCpu)}`:undefined,
     memory:
       total > 0
-        ? `メモリ ${bytes(used)}/${bytes(total)} ${statuslineGauge((used / total) * 100, graphs.memory)}`
+        ? `${data.isWsl?"メモリ(WSL)":"メモリ"} ${bytes(used)}/${bytes(total)} ${statuslineGauge((used / total) * 100, graphs.memory)}`
         : undefined,
     hostMemory:hostMemory?`ホストメモリ ${bytes(hostMemory.used)}/${bytes(hostMemory.total)} ${statuslineGauge(hostMemory.percent,graphs.hostMemory)}`:undefined,
     serverMemory: `Soda ${bytes(data.serverRssBytes)}${total > 0 ? " " + statuslineGauge((data.serverRssBytes / total) * 100, graphs.serverMemory) : ""}`,
@@ -175,6 +183,7 @@ export function systemFooterDisplaySegments(
         ? ((data.memoryTotalBytes - data.memoryAvailableBytes) / data.memoryTotalBytes) * 100
         : 0,
     ),
+    hostCpu:typeof data.hostCpuPercent==="number"?severity(data.hostCpuPercent):"muted",
     hostMemory:severity(hostMemoryUsage(data)?.percent??0),
     serverMemory: severity(
       data.memoryTotalBytes > 0 ? (data.serverRssBytes / data.memoryTotalBytes) * 100 : 0,

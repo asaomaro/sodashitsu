@@ -46,7 +46,7 @@ onBeforeUnmount(() => {
     class="system-footer"
     data-system-footer
     aria-label="サーバーの使用状況"
-    title="接続先OSの情報（WSLの通常メモリはLinux側、ホストメモリはWindows側）"
+    title="接続先OSの情報（WSLのCPU・メモリはLinux側、ホストCPU・メモリはWindows側）"
   >
     <button data-assistant-feature
       type="button"

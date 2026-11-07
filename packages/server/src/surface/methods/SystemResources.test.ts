@@ -6,7 +6,7 @@ import { registerServerMethods } from "./server.js";
 import type { MethodDeps } from "./deps.js";
 import type { ClientSink } from "../../terminal/OutputFanout.js";
 // Unit RPC tests must never start a Windows interop process.
-vi.mock("./WslHostMemory.js",()=>({WslHostMemoryCache:class {get(){return undefined;}}}));
+vi.mock("./WslHostResources.js",()=>({isWslHost:()=>false,WslHostResourcesCache:class {get(){return undefined;}}}));
 const cpu = (idle: number, user: number) =>
   ({ times: { idle, user, nice: 0, sys: 0, irq: 0 } }) as CpuInfo;
 it("measures interval CPU usage across all cores and rejects reset counters", () => {
@@ -46,5 +46,7 @@ it("exposes resources through the authenticated RPC surface", async () => {
   expect(next).toMatchObject({ ok: true, result: { agents: counts } });
 });
 it("adds optional Windows host memory without replacing the WSL VM sample",()=>{
- const value={hostMemoryTotalBytes:123456789,hostMemoryAvailableBytes:23456789,hostMemorySampledAt:1};const sampler=new SystemResourceSampler({get:()=>value} as import('./WslHostMemory.js').WslHostMemoryCache);const data=sampler.get();expect(data).toMatchObject(value);expect(data.memoryTotalBytes).toBeGreaterThan(0);expect(data.memoryTotalBytes).not.toBe(data.hostMemoryTotalBytes);
+ const value={hostMemoryTotalBytes:123456789,hostMemoryAvailableBytes:23456789,hostMetricsSampledAt:1};const sampler=new SystemResourceSampler({get:()=>value} as import('./WslHostResources.js').WslHostResourcesCache);const data=sampler.get();expect(data).toMatchObject(value);expect(data.memoryTotalBytes).toBeGreaterThan(0);expect(data.memoryTotalBytes).not.toBe(data.hostMemoryTotalBytes);
 });
+
+it("reports WSL scope even when interop metrics are unavailable",()=>{const sampler=new SystemResourceSampler({get:()=>undefined} as unknown as import("./WslHostResources.js").WslHostResourcesCache,true);expect(sampler.get()).toHaveProperty("isWsl",true);});

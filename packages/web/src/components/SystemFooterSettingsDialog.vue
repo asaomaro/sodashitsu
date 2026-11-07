@@ -51,7 +51,7 @@ function graph(id: keyof SystemFooterGraphs, event: Event, pattern = false) {
       ><button data-assistant-feature type="button" aria-label="閉じる" @click="view.closeDialog()">×</button>
     </header>
     <p>
-      接続先OSの情報です。WSLの通常メモリはLinux側、ホストメモリはWindows側です。変更はWeb版・端末版で共有します。
+      接続先OSの情報です。WSLのCPU・メモリはLinux側、ホストCPU・メモリはWindows側です。変更はWeb版・端末版で共有します。
     </p>
     <label
       >色の表示<select
