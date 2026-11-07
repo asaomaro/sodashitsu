@@ -2,6 +2,7 @@ import { scrollbarThumb, type ScrollMetrics, type Track } from "../scrollbar.js"
 import type { DisplayState, ItemTarget, MachineState, Pane, Workspace } from "@sodashitsu/protocol";
 import { remoteKey, type MachineSection } from "../../model/MachinesModel.js";
 import {
+  observedAgentModel,subagentModelLabel,
   subagentsMoreLabel,
   aggregate,
   themeModeOf,
@@ -82,7 +83,8 @@ export type SidebarTarget =
   /** 区画の中の何も無い行（ホイールでその区画を動かす）。 */
   | { kind: "area"; section: "spaces" | "agents" }
   /** エージェントの行の末尾の件数（`⤷n`。20261004-subagent-display）。`x`〜`x+w` だけが当たり（押すとサブエージェントの一覧）。 */
-  | { kind: "subagents"; paneId: string; x: number; w: number };
+  | { kind: "subagents"; paneId: string; x: number; w: number }
+  | {kind:"info";paneId:string;x:number;w:number};
 /**
  * ドラッグの掴み・落とし先になる行の情報（項目の行と、グループ・「グループなし」の見出し。web の `SpaceRow` の `item`・`container`・
  * `dragIds`・`dropAnchorId` に当たる）。子の行は親の worktree グループの項目を指す。
@@ -144,7 +146,8 @@ interface Line {
   hit?: SidebarTarget;
   drag?: SidebarDragInfo;
   /** 1 行目の末尾に右寄せで出す印（サブエージェントの件数）。 */
-  badge?: { text: string; paneId: string };
+  badge?: { text: string; paneId: string; row?:number };
+  info?:{paneId:string};
 }
 
 /** 画面の 1 行（項目の何行目か）。 */
@@ -581,15 +584,16 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       agentLines.push({
         indent: 0,
         rows: segsOf(
-          resolveAgentLines(agentsLayout, { pane: p, tab, workspace: ws, agent: p.agent!, state, model:ctx.paneUsage?.[p.id]?.kind===p.agent!.kind?ctx.paneUsage[p.id]?.model?.trim()||undefined:undefined }),
+          resolveAgentLines(agentsLayout, { pane: p, tab, workspace: ws, agent: p.agent!, state, model:observedAgentModel(p,ctx.paneUsage?.[p.id])?.text }),
           state,
           ctx,
         ),
         selected: id === model.focusedPaneId,
         hit: { kind: "agent", paneId: id },
+        info:{paneId:id},
         // サブエージェントの件数（1 件以上のとき。20261004-subagent-display）。`⤷` は unicode11 で 1 桁（環境で崩れるなら別の記号にする。decisions D11）。
         ...((p.agent?.subagents?.count ?? 0) > 0
-          ? { badge: { text: ctx.sidebarScroll?.expandedSubagents?.has(`${ctx.machines?.selectedId??LOCAL_MACHINE_ID}:${p.agent!.instanceId}`) ? "▾" : `▸${p.agent!.subagents!.count}`, paneId: id } }
+          ? { badge: { text: ctx.sidebarScroll?.expandedSubagents?.has(`${ctx.machines?.selectedId??LOCAL_MACHINE_ID}:${p.agent!.instanceId}`) ? "▾" : `▸${p.agent!.subagents!.count}`, paneId: id,row:1 } }
           : {}),
       });
       const subs=p.agent!.subagents;
@@ -599,7 +603,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
         const plain=(value:string)=>value.replace(/[\x00-\x1f\x7f-\x9f\u2028-\u202e\u2066-\u2069]/g," ");
         for(const child of items){
           const state=child.state??"working",glyph=glyphFor(state,prefs.statusSymbols,"subagent");
-          const session=child.description?.trim()||child.type?.trim()||"サブエージェント",model=child.description?.trim()&&child.type?.trim()?child.type.trim():undefined;
+          const session=child.description?.trim()||(child.type?.trim()?subagentModelLabel(child):undefined)||"サブエージェント",model=child.description?.trim()||!child.type?.trim()?subagentModelLabel(child):undefined;
           agentLines.push({indent:2,subIndent:stringWidth(glyph)+1,selected:false,rows:[[
             {text:glyph,fg:stateColor(ctx.theme,state)},
             {text:` ${plain(session)}${child.background?"（裏実行）":""}`},
@@ -915,15 +919,14 @@ function paintSection(
     const lineEnd = rect.x + inner - 1;
     // 1 行目の末尾の印（件数）。名前の行の幅（字下げを除く）が印＋2 桁を超えるときだけ出し、文字はその手前（印と 1 桁あけて）までに縮める。
     // 入らない狭い幅では出さない（文字の最小幅の保証はしない。一覧へは pane のメニュー・`show_subagents` からも行ける）。
-    const badge = sub === 0 ? line.badge : undefined;
-    const badgeW = badge ? stringWidth(badge.text) : 0;
-    const showBadge = badge !== undefined && lineEnd - rect.x - 1 - line.indent > badgeW + 2;
-    const end = showBadge ? lineEnd - badgeW - 1 : lineEnd;
-    if (showBadge) {
-      const bx = lineEnd - badgeW;
-      grid.text(bx, y, badge!.text, rowFg, rowBg, ATTR.underline, badgeW);
-      hits.push({ y, section, kind: "subagents", paneId: badge!.paneId, x: bx, w: badgeW });
-    }
+    const badge = sub === Math.min(line.badge?.row??0,line.rows.length-1) ? line.badge : undefined;
+    const controls:Array<{kind:"info"|"subagents";paneId:string;text:string}>=[];
+    if(sub===0&&line.info)controls.push({kind:"info",paneId:line.info.paneId,text:"[i]"});
+    if(badge)controls.push({kind:"subagents",paneId:badge.paneId,text:badge.text});
+    const controlW=controls.reduce((sum,c)=>sum+stringWidth(c.text),0)+Math.max(0,controls.length-1);
+    const showControls=controls.length>0&&lineEnd-x>controlW+2;
+    const end=showControls?lineEnd-controlW-1:lineEnd;
+    if(showControls){let bx=lineEnd-controlW;for(const control of controls){const w=stringWidth(control.text);grid.text(bx,y,control.text,rowFg,rowBg,ATTR.underline,w);hits.push({y,section,kind:control.kind,paneId:control.paneId,x:bx,w});bx+=w+1;}}
     if (sub === 0 && (held || drop)) grid.set(rect.x, y, held ? "↕" : "▶", 1, rowFg, rowBg);
     const rank =
       line.hit?.kind === "workspace" || line.hit?.kind === "autoGroup"

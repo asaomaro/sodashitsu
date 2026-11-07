@@ -1,7 +1,7 @@
 import {loadStatuslineSettings,statuslineSegments,type AgentUsage,type Pane,type SubagentInfo} from '@sodashitsu/protocol';
 const effortSettings=loadStatuslineSettings({enabled:true,fields:{effort:true}});
 /** Uses provider observations only; launch preferences are deliberately not an input. */
-export function observedAgentModel(pane:Pane,usage:AgentUsage|undefined):{text:string;title:string}|undefined {
+export function observedAgentModel(pane:Pane,usage:AgentUsage|null|undefined):{text:string;title:string}|undefined {
  if(!pane.agent||usage?.kind!==pane.agent.kind||usage.paneId!==pane.id)return undefined;
  const model=usage.model?.trim(),effort=statuslineSegments(pane,usage,[],effortSettings).find(s=>s.field==='effort');
  if(!model&&!effort)return undefined;

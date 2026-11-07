@@ -283,7 +283,7 @@ export class MouseController {
       row.find(
         (h) =>
           ((h.kind === "newWorkspace" || h.kind === "collapse") && h.x === x) ||
-          ((h.kind === "sort" || h.kind === "subagents" || h.kind === "control") &&
+          ((h.kind === "sort" || h.kind === "subagents" || h.kind === "info" || h.kind === "control") &&
             x >= h.x &&
             x < h.x + h.w),
       ) ??
@@ -293,7 +293,7 @@ export class MouseController {
           h.kind !== "collapse" &&
           h.kind !== "control" &&
           h.kind !== "sort" &&
-          h.kind !== "subagents",
+          h.kind !== "subagents" && h.kind !== "info",
       )
     );
   }
@@ -357,7 +357,7 @@ export class MouseController {
         else if (hit?.kind === "ungrouped") {
           // 「グループなし」の見出し：上へ／下へ移動だけ。`layout` の無い古いサーバでは出す項目が無いので開かない（web と同じ）。
           if (model.hasServerLayout) ui.openContextMenu({ kind: "ungrouped" }, { x, y });
-        } else if (hit?.kind === "agent" || hit?.kind === "subagents")
+        } else if (hit?.kind === "agent" || hit?.kind === "subagents" || hit?.kind === "info")
           ui.openContextMenu({ kind: "pane", paneId: hit.paneId }, { x, y });
         else ui.openContextMenu({ kind: "global" }, { x, y });
         return;
@@ -391,6 +391,7 @@ export class MouseController {
         };
       } else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
       else if (hit.kind === "subagents") this.host.toggleSidebarSubagents?.(hit.paneId);
+      else if(hit.kind === "info")actions.showUsageOf(hit.paneId);
       else if (hit.kind === "control") {
         if (hit.action === "new" || hit.action === "menu")
           ui.openContextMenu(

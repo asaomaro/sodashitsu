@@ -1,7 +1,7 @@
 import { sectionRule, sectionSides } from "../render/chrome/page.js";
 import { ScrollBar } from "./ScrollBar.js";
 import { glyphFor, stateColor } from "../render/chrome/context.js";
-import { paneNameOf, type KeyInput } from "@sodashitsu/client-core";
+import {subagentCountLabel,subagentStateLabel,subagentModelLabel,subagentsMoreLabel,paneNameOf, type KeyInput } from "@sodashitsu/client-core";
 import { formatUsageCredits, shortId, type AgentUsage, type AccountCostResult } from "@sodashitsu/protocol";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
@@ -188,6 +188,14 @@ export class UsageDialog implements Overlay {
                   `${w.label}: ${usageGauge(w.usedPct)} · リセット ${w.resetsAt ? new Date(w.resetsAt).toLocaleString("ja-JP") : "—"}${w.stale ? "（古い値）" : ""}`,
               ),
             ])),
+      ...(pane?.agent?.subagents ? [
+        `サブエージェント · ${subagentCountLabel(pane.agent.subagents)}`,
+        ...pane.agent.subagents.items.slice(0,64).flatMap(child=>{
+          const model=subagentModelLabel(child),session=child.description?.trim()||model||"サブエージェント";
+          return [`${subagentStateLabel(child)} · ${session}`,...(child.description?.trim()&&model?[`  ${model}`]:[])];
+        }),
+        ...(subagentsMoreLabel({...pane.agent.subagents,items:pane.agent.subagents.items.slice(0,64)})?[subagentsMoreLabel({...pane.agent.subagents,items:pane.agent.subagents.items.slice(0,64)})!]:[]),
+      ]:[]),
       "↑↓ スクロール · Tab:アカウント選択 / Enter:コスト · Esc 閉じる",
     ];
     this.scroll = Math.min(this.scroll, Math.max(0, lines.length - area.h));

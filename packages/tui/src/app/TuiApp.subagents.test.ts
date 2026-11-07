@@ -1,4 +1,4 @@
-import type { AgentInfo, SubagentInfo } from "@sodashitsu/protocol";
+import {loadStatuslineSettings,type AgentInfo,type SubagentInfo} from "@sodashitsu/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import { menuItems } from "../modes/ContextMenu.js";
@@ -361,4 +361,16 @@ describe("端末版のサブエージェントの表示", () => {
     expect(rows.some((r) => /1分\s*█\s*│/.test(r))).toBe(true);
     expect(rows.some((r) => /1分\s*░\s*│/.test(r))).toBe(true);
   });
+  it("puts info on the first row and opens inline child information without another dialog",async()=>{
+    const h=await start({subagents:{count:1,items:[sub("c",{type:"child-model",description:"child-session",reasoningEffort:"low",reasoningEffortBasis:"creation"})]}}),info=h.hits().find(x=>x.kind==="info")!,badge=h.badge()!;
+    expect(badge.y).toBe(info.y+1);h.io.type(down(info.x!,info.y)+up(info.x!,info.y));h.app.renderNow();expect(h.app.ui.dialogContext).toMatchObject({kind:"usage",paneId:"p3"});const screen=await h.screen();expect(screen).toContain("child-session");expect(screen).toContain("child-model low（開始時）");
+  });
+  it("keeps a single-row fallback and watches usage independently from disabled footer",async()=>{
+    const h=await start({subagents:subs(1)});h.app.prefs.apply({statuslineSettings:loadStatuslineSettings({enabled:false}),sidebarRows:{spaces:null,agents:[[{token:"agent"}]]}},10000);h.app.renderNow();const info=h.hits().find(x=>x.kind==="info")!,badge=h.badge()!;expect(badge.y).toBe(info.y);
+    h.app.prefs.setLocal({...h.app.prefs.localState,sidebarCollapsed:true});h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(false));
+    h.app.prefs.setLocal({...h.app.prefs.localState,sidebarCollapsed:false,sidebarCols:60});h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(true));
+    await vi.waitFor(()=>expect(h.app.usage.status).toBe("ready"));h.ws.event("agent.usage_changed",{panes:{p3:{paneId:"p3",kind:"claude",model:"observed-model",reasoningEffort:"high",tokens:{basis:"context"},source:"statusline",updatedAt:Date.now()}}});h.app.renderNow();expect(await h.screen()).toContain("observed-model high（報告）");
+    h.app.prefs.setLocal({...h.app.prefs.localState,sidebarSectionsCollapsed:{agents:true}});h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(false));
+  });
+
 });

@@ -1663,6 +1663,7 @@ export class TuiApp {
 
   private usageWanted(): boolean {
     return this.ui.screen === "dashboard" ||
+      (!this.prefs.sidebarCollapsed&&!this.prefs.sectionsCollapsed.agents&&[...this.model.panes.values()].some(p=>p.agent&&!p.virtual)) ||
       ["usage", "usageAccounts", "accountCost"].includes(this.ui.dialogContext?.kind ?? "") ||
       (this.ui.screen === "base" &&
         loadStatuslineSettings(this.prefs.shared.statuslineSettings).enabled &&
