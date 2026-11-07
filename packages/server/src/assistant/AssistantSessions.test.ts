@@ -43,7 +43,12 @@ class MemoryHost implements TerminalHost {
   onExit() {
     return { dispose() {} };
   }
-  dispose() {}
+  holdExit = false;
+  private finishExit!:()=>void;
+  private exitProof = new Promise<void>(resolve => this.finishExit=resolve);
+  waitForExit() {return this.exitProof;}
+  confirmExit() {this.finishExit();}
+  dispose() {if(!this.holdExit)this.confirmExit();}
 }
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -107,6 +112,7 @@ async function fixture(existing?: { model: SessionModel; stateDir: string }) {
     };
   });
   const manager = new AssistantSessions({
+    terminals,
     session,
     starter: { start, isShellAvailable: available },
     flush,
@@ -876,4 +882,76 @@ it("does not inject an automatic notification summary if the captain starts work
  const pending=surface.invoke({clientId:randomUUID(),sink:{} as never},"assistant.prompt",{deviceId:device,instanceId:agent.instanceId,text:"通知の作業要約",idleOnly:true});
  await vi.waitFor(()=>expect(release).toBeTypeOf("function"));f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"working"}});release();
  expect(await pending).toMatchObject({ok:false});expect(host.writes).toEqual([]);
+});
+
+it("explicit stop closes only the owned working captain, blocks restart until persisted, then permits fresh start",async()=>{
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"working"}});
+ const ordinary=await f.session.createWorkspace(f.stateDir,"ordinary");
+ let done!:()=>void;f.flush.mockImplementationOnce(()=>new Promise<void>(resolve=>done=resolve));
+ const stopped=f.manager.stop({deviceId:device,instanceId:agent.instanceId});
+ expect(f.manager.get(device)?.state).toBe("stopping");
+ expect(f.manager.stop({deviceId:device,instanceId:agent.instanceId})).toBe(stopped);
+ expect(()=>f.manager.stop({deviceId:device,instanceId:randomUUID()})).toThrow();
+ expect(()=>f.manager.ensure({deviceId:device,kind:"codex",activate:true})).toThrow();
+ await vi.waitFor(()=>expect(f.session.getPane(info.paneId)).toBeUndefined());
+ expect(f.session.getWorkspace(ordinary.workspace.id)).toBeDefined();
+ done();await expect(stopped).resolves.toEqual({stopped:true});
+ expect(()=>f.manager.ensure({deviceId:device,kind:"codex"})).toThrow();
+ const next=await f.manager.ensure({deviceId:device,kind:"codex",activate:true});
+ expect(next.paneId).not.toBe(info.paneId);
+});
+it("explicit stop rejects replaced actors and leaves their terminal intact",async()=>{
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,instanceId:randomUUID()}});
+ expect(()=>f.manager.stop({deviceId:device,instanceId:agent.instanceId})).toThrow();
+ expect(f.session.getPane(info.paneId)).toBeDefined();
+});
+it("dedicated captain remains attachable in raw snapshot but is excluded from ordinary agent counts",async()=>{
+ const f=await fixture();const {info}=await f.ready();
+ expect(f.session.snapshot().panes.some(p=>p.id===info.paneId)).toBe(true);
+ expect(f.session.agentCounts().total).toBe(0);
+ const ordinary=await f.session.createWorkspace(f.stateDir,"ordinary");
+ const pane=f.session.snapshot().panes.find(p=>p.tabId===ordinary.tab.id)!;
+ f.session.updatePaneRuntime(pane.id,{agent:{...f.session.getPane(info.paneId)!.agent!,instanceId:randomUUID()}});
+ expect(f.session.agentCounts().total).toBe(1);
+});
+it("registers explicit captain stop with strict instance scope",async()=>{
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ const surface=new ControlSurface(new MemoryLogger());registerAssistantMethods(surface,{session:f.session,assistantSessions:f.manager} as MethodDeps);
+ const ctx={clientId:randomUUID(),sink:{} as never};
+ expect((await surface.invoke(ctx,"assistant.stop",{deviceId:device,instanceId:randomUUID()})).ok).toBe(false);
+ expect(await surface.invoke(ctx,"assistant.stop",{deviceId:device,instanceId:agent.instanceId})).toMatchObject({ok:true,result:{stopped:true}});
+ expect(f.session.getPane(info.paneId)).toBeUndefined();
+});
+
+it("keeps restart blocked on unconfirmed close and never stops a replaced actor",async()=>{
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ vi.spyOn(f.session,"closePane").mockRejectedValueOnce(Error("generated close failure"));
+ await expect(f.manager.stop({deviceId:device,instanceId:agent.instanceId})).rejects.toThrow("generated close failure");
+ expect(f.session.getPane(info.paneId)).toBeDefined();expect(f.manager.get(device)?.state).toBe("stopping");
+ expect(()=>f.manager.ensure({deviceId:device,kind:"codex",activate:true})).toThrow();
+ const g=await fixture();const ready=await g.ready();
+ const stopping=g.manager.stop({deviceId:ready.device,instanceId:ready.agent.instanceId});
+ g.session.updatePaneRuntime(ready.info.paneId,{agent:{...ready.agent,instanceId:randomUUID()}});
+ await expect(stopping).rejects.toThrow();expect(g.session.getPane(ready.info.paneId)).toBeDefined();
+});
+it("does not report completion or permit restart on model removal before actual PTY exit",async()=>{
+ const f=await fixture();const {device,info,agent}=await f.ready();const host=f.hosts.get(info.paneId)!;host.holdExit=true;
+ const stopped=f.manager.stop({deviceId:device,instanceId:agent.instanceId});
+ await vi.waitFor(()=>expect(f.session.getPane(info.paneId)).toBeUndefined());
+ expect(f.manager.get(device)?.state).toBe("stopping");
+ expect(()=>f.manager.ensure({deviceId:device,kind:"codex",activate:true})).toThrow();
+ host.confirmExit();await stopped;expect(f.manager.get(device)).toBeNull();
+});
+it("keeps sibling panes in the captain workspace visible and live after the captain stops",async()=>{
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ const {pane}=await f.session.splitPane(info.paneId,"right",undefined);
+ f.session.updatePaneRuntime(pane.id,{agent:{...agent,instanceId:randomUUID(),name:"ordinary-sibling"}});
+ expect(f.session.agentCounts().total).toBe(1);
+ await f.manager.stop({deviceId:device,instanceId:agent.instanceId});
+ expect(f.session.getPane(pane.id)).toBeDefined();expect(f.session.agentCounts().total).toBe(1);
+ expect(f.session.getWorkspace(info.workspaceId)).toBeDefined();
+ expect(f.session.getWorkspace(info.workspaceId)?.assistant).toBeUndefined();
+ const next=await f.manager.ensure({deviceId:device,kind:"codex",activate:true});expect(next.workspaceId).not.toBe(info.workspaceId);
 });

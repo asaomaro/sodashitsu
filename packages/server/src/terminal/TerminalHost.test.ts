@@ -414,3 +414,13 @@ describe("DefaultTerminalHost の入力の上限（20260927-server-size-input-li
     host.dispose();
   });
 });
+
+it("observes real PTY exit after disposal rather than treating kill request as completion",async()=>{
+ const {pty,host}=setup();let settled=false;const exit=host.waitForExit(1000).then(()=>{settled=true;});
+ host.dispose();await Promise.resolve();expect(settled).toBe(false);
+ pty.exit(0);await exit;expect(settled).toBe(true);
+});
+it("fails closed when disposed PTY never confirms exit",async()=>{
+ const {host}=setup();const exit=host.waitForExit(1000);const rejected=expect(exit).rejects.toThrow("PTY exit unconfirmed");
+ host.dispose();await vi.advanceTimersByTimeAsync(1000);await rejected;
+});

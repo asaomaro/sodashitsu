@@ -3,6 +3,7 @@ import { assistantLaunchArgs } from "@sodashitsu/protocol";
 import { mkdir, lstat, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  AssistantSessionStopParams,
   AssistantSessionEnsureParams,
   AssistantSessionAdoptParams,
   AssistantSessionGetParams,
@@ -16,6 +17,7 @@ import type { SessionService } from "../session/SessionService.js";
 import type { AgentStarter } from "../agent/AgentStarter.js";
 
 export interface AssistantSessionDeps {
+  terminals: Pick<import("../terminal/TerminalManager.js").TerminalManager,"get">;
   session: Pick<
     SessionService,
     | "snapshot"
@@ -43,7 +45,8 @@ export class AssistantSessions {
     string,
     { kind: string; settings?: string; promise: Promise<AssistantSessionInfo>; adoptInstanceId?: string }
   >();
-  private readonly stopRequests = new Set<Promise<void>>();
+  private readonly explicitStops = new Map<string, { instanceId: string; promise: Promise<{stopped:true}>; info: AssistantSessionInfo }>();
+  private readonly stopRequests = new Set<Promise<unknown>>();
   private draining: Promise<void> | null = null;
   private drainAgain = false;
   private readonly disabledDevices: AssistantDisabledDevices;
@@ -67,6 +70,51 @@ export class AssistantSessions {
   async suspend(): Promise<void> {
     this.close();
     await Promise.allSettled([...this.pending.values()].map((item) => item.promise).map(promise => promise as Promise<unknown>).concat([...this.stopRequests], this.draining ? [this.draining] : []));
+  }
+
+  /** Explicit conversation-window stop. Never close a replacement or a foreign pane. */
+  stop(input: unknown): Promise<{stopped:true}> {
+    const request = AssistantSessionStopParams.parse(input);
+    const pending = this.explicitStops.get(request.deviceId);
+    if (pending) {
+      if (pending.instanceId !== request.instanceId) throw new RpcError("agent_not_found", "停止対象が変更されました");
+      return pending.promise;
+    }
+    if (this.closed) throw new RpcError("agent_pane_busy", "専用セッションの操作を停止しています");
+    const workspace = this.find(request.deviceId);
+    const binding = workspace?.assistant;
+    if (!workspace || !binding || this.info(workspace).state !== "ready" ||
+        this.ownAgent(workspace, binding)?.instanceId !== request.instanceId)
+      throw new RpcError("agent_not_found", "停止対象の専用エージェントが変更されました");
+    const paneId = binding.paneId;
+    const host = this.deps.terminals.get(paneId);
+    if (!host?.waitForExit) throw new RpcError("agent_pane_busy", "専用端末の終了を確認できません");
+    const stoppedInfo = {...this.info(workspace),state:"stopping" as const};
+    const generation = this.generation;
+    let completed = false;
+    // Invalidate queued prompts and prevent background ensure from relaunching.
+    this.disabledDevices.disable(request.deviceId);
+    const token = {}; this.stopTokens.set(request.deviceId, token);
+    const promise = Promise.resolve().then(async () => {
+      if (this.closed || generation !== this.generation || this.stopTokens.get(request.deviceId) !== token ||
+          !this.scoped(workspace, binding) || this.ownAgent(workspace, binding)?.instanceId !== request.instanceId || this.deps.terminals.get(paneId) !== host)
+        throw new RpcError("agent_not_found", "停止前に専用セッションが変更されました");
+      const exited = host.waitForExit!(10000);
+      void exited.catch(() => {});
+      await this.deps.session.closePane(paneId);
+      await exited;
+      if (this.deps.session.getWorkspace(workspace.id)?.assistant === binding)
+        this.deps.session.detachAssistantBinding(workspace.id, binding);
+      await this.deps.flush();
+      completed = true;
+      return {stopped:true as const};
+    }).finally(() => {
+      if (completed && this.explicitStops.get(request.deviceId)?.promise === promise) this.explicitStops.delete(request.deviceId);
+    });
+    this.explicitStops.set(request.deviceId, {instanceId: request.instanceId, promise, info: stoppedInfo});
+    this.stopRequests.add(promise);
+    void promise.then(() => this.stopRequests.delete(promise), () => this.stopRequests.delete(promise));
+    return promise;
   }
 
   /** Disable only this installation's dedicated agent; active work may finish before closure. */
@@ -95,7 +143,7 @@ export class AssistantSessions {
   }
   activate(deviceId: string): void {
     const id = AssistantSessionGetParams.parse({deviceId}).deviceId;
-    if (this.closed) return;
+    if (this.closed || this.explicitStops.has(id)) return;
     this.disabledDevices.activate(id);
     this.stopTokens.delete(id);
     const workspace = this.find(id);
@@ -134,6 +182,8 @@ export class AssistantSessions {
 
   get(deviceId: string): AssistantSessionInfo | null {
     const id = AssistantSessionGetParams.parse({ deviceId }).deviceId;
+    const stopping = this.explicitStops.get(id);
+    if (stopping) return structuredClone(stopping.info);
     const workspace = this.find(id);
     return workspace ? this.info(workspace) : null;
   }
@@ -143,6 +193,7 @@ export class AssistantSessions {
     assistantLaunchArgs(request.kind, request.launchSettings ?? {});
 
     if (this.closed) throw new RpcError("agent_pane_busy", "専用セッションの起動を停止しています");
+    if (this.explicitStops.has(request.deviceId)) throw new RpcError("agent_pane_busy", "専用セッションの停止完了を待ってください");
     if (request.activate) this.activate(request.deviceId);
     if (this.isStopped(request.deviceId) || this.find(request.deviceId)?.assistant?.stopWhenIdle)
       throw new RpcError("agent_pane_busy", "アシスタントは無効です。明示的に有効化してください");
@@ -389,7 +440,7 @@ export class AssistantSessions {
       paneId: binding.paneId,
       kind: binding.kind,
       ...(binding.launchSettings ? {launchSettings: binding.launchSettings} : {}),
-      state,
+      state: this.explicitStops.has(binding.deviceId) ? "stopping" : state,
       agent: agent ? structuredClone(agent) : null,
       observedAgent:
         this.scoped(workspace, binding) && pane?.agent ? structuredClone(pane.agent) : null,

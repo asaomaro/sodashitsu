@@ -483,7 +483,7 @@ export async function composeServer(
   const desktopEndpointRelay=new DesktopEndpointRelay(auth,originRejections,machines);
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
-  const assistantSessions = new AssistantSessions({session,starter:agentStarter,flush:()=>persist.flush(),stateDir:options.stateDir});
+  const assistantSessions = new AssistantSessions({session,terminals,starter:agentStarter,flush:()=>persist.flush(),stateDir:options.stateDir});
   const assistantAudio=new LazyAssistantAudio(options.stateDir);
   const voiceHost=new VoiceHost(options.stateDir,message=>logger.warn(message));
   const assistantIdleStops = watchAssistantIdleStops(bus, assistantSessions, () => logger.warn("無効なアシスタントの停止を確認できません"));

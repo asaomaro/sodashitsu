@@ -1,3 +1,4 @@
+import {AssistantSessionStopParams} from "@sodashitsu/protocol";
 import {VoiceCoreCancelParams,VoiceCoreCallParams} from "@sodashitsu/protocol";
 import {
   AssistantConversationParams,
@@ -235,6 +236,10 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
         throw new RpcError("not_found", "会話が変更されました。読み直してください");
       return {...page,messages};
     },
+  });
+  surface.register("assistant.stop", {
+    schema: AssistantSessionStopParams,
+    handler: (_ctx, params) => sessions.stop(params),
   });
   surface.register("assistant.get", {
     schema: AssistantSessionGetParams,

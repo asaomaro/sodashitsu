@@ -51,6 +51,8 @@ export interface TerminalHost {
    */
   lastSubmitAt?(): number;
   onExit(cb: (code: number) => void): Disposable;
+  /** Observe actual PTY exit even when dispose removes ordinary listeners. */
+  waitForExit?(timeoutMs: number): Promise<void>;
   dispose(): void;
   /**
    * 更新時の引き継ぎ（20260926-live-handoff）の前に読み取りを止め、ミラーへの書き込みを待ってから、渡すもの（master の fd・大きさ・画面）を返す。
@@ -116,6 +118,7 @@ export class DefaultTerminalHost implements TerminalHost {
   /** 引き継ぎのために読み取りを止めている（流量制御の `onDrained` で再開しない）。 */
   private heldForHandoff = false;
   private disposed = false;
+  private exited = false;
   private cols: number;
   private rows: number;
   /** モード付き入力を処理中（この間の入力は `queue` へ）。 */
@@ -175,6 +178,7 @@ export class DefaultTerminalHost implements TerminalHost {
     this.disposables.push(this.mirror.onResponse((data) => this.pty.write(data)));
     this.disposables.push(
       pty.onExit((e) => {
+        this.exited = true;
         this.closeInput();
         for (const fn of [...this.exitListeners]) fn(e.exitCode);
       }),
@@ -406,6 +410,18 @@ export class DefaultTerminalHost implements TerminalHost {
   onExit(cb: (code: number) => void): Disposable {
     this.exitListeners.add(cb);
     return { dispose: () => this.exitListeners.delete(cb) };
+  }
+
+  waitForExit(timeoutMs: number): Promise<void> {
+    if (this.exited) return Promise.resolve();
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return Promise.reject(Error("PTY exit deadline invalid"));
+    return new Promise((resolve, reject) => {
+      // Deliberately separate from disposables: dispose initiates kill, not exit proof.
+      const subscription = this.pty.onExit(() => {
+        this.exited = true; clearTimeout(timer); subscription.dispose(); resolve();
+      });
+      const timer = setTimeout(() => {subscription.dispose();reject(Error("PTY exit unconfirmed"));}, timeoutMs);
+    });
   }
 
   dispose(): void {

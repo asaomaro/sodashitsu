@@ -24,7 +24,7 @@ import type {
   WorkspaceGroup,
   WorkspaceId,
 } from "@sodashitsu/protocol";
-import { assistantAgentName, AssistantWorkspaceBinding, AssistantSessionEnsureParams, countSystemAgents, INVALID_AGENT_NAME_MESSAGE, isValidAgentName, RpcError } from "@sodashitsu/protocol";
+import { isAssistantPane, assistantAgentName, AssistantWorkspaceBinding, AssistantSessionEnsureParams, countSystemAgents, INVALID_AGENT_NAME_MESSAGE, isValidAgentName, RpcError } from "@sodashitsu/protocol";
 import type { SessionFileData, SessionFilePane, SessionFileTab, SessionFileWorkspace } from "../persist/SessionFile.js";
 import type { PaneHistoryEntry } from "../persist/PaneHistoryFile.js";
 import { historyReplayText, sanitizeHistoryAnsi } from "../terminal/historyAnsi.js";
@@ -389,7 +389,10 @@ export class SessionService {
   }
 
   agentCounts() {
-    return countSystemAgents(this.model.listPanes());
+    return countSystemAgents(this.model.listPanes().filter(pane => {
+      const tab = this.model.getTab(pane.tabId);
+      return !isAssistantPane(pane, tab ? this.model.getWorkspace(tab.workspaceId) : undefined, tab);
+    }));
   }
 
   snapshot(): SessionSnapshot {
@@ -535,7 +538,7 @@ export class SessionService {
   detachAssistantBinding(workspaceId: string, expected: AssistantWorkspaceBinding): void {
     const workspace = this.model.getWorkspace(workspaceId);
     const pane = this.model.getPane(expected.paneId);
-    if (!workspace || workspace.assistant !== expected || !pane || pane.agent || this.hasAgentLaunch(pane.id) || this.hasPendingResume(pane.id))
+    if (!workspace || workspace.assistant !== expected || (pane && (pane.agent || this.hasAgentLaunch(pane.id) || this.hasPendingResume(pane.id))))
       throw new RpcError("agent_pane_busy", "専用セッションは停止していません");
     delete workspace.assistant;
     this.bus.publish({ event: "workspace.updated", data: { workspace } });

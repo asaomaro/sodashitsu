@@ -1,0 +1,21 @@
+{
+  "negativeExitCode": 1,
+  "restoration": {
+    "packages/server/src/assistant/AssistantSessions.ts": {
+      "sha256": "d8853315145ea1c88a576903e82876421c30f06ac854e14ffcc0ac081852b305",
+      "exact": true
+    },
+    "packages/server/src/surface/methods/assistant.ts": {
+      "sha256": "04a2e7ceb587f48c0ef7300c677d847b0008f36de5a69524abdfb2e2037257f9",
+      "exact": true
+    },
+    "packages/server/src/session/SessionService.ts": {
+      "sha256": "20c150d8fbee72a250aa834f2d895fb8d5c9c8a14c6f0a99286f76d5b9896f6b",
+      "exact": true
+    },
+    "packages/server/src/terminal/TerminalHost.ts": {
+      "sha256": "4b4f6faed6d20901e10eb4cb63441e971d6ab750bb19464ef96748242d562699",
+      "exact": true
+    }
+  }
+}
