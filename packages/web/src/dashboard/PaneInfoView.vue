@@ -74,7 +74,7 @@ const sessionShort = computed(() => {
 });
 const subagentCount = computed(() => agent.value?.subagents?.count ?? null);
 const transcript = ref<{id:string;scope:string;title:string}|null>(null);
-const transcriptScope=computed(()=>JSON.stringify([props.active,props.paneId,agent.value?.instanceId,agent.value?.kind,pane.value?.agentSession?.sessionId,machines.selectedId,session.clientId,view.connectionState]));
+const transcriptScope=computed(()=>JSON.stringify([props.active,props.paneId,agent.value?.instanceId,agent.value?.kind,pane.value?.agentSession?.sessionId,pane.value?.agentSession?.kind,machines.selectedId,session.clientId,view.connectionState]));
 const readableChildren=computed(()=>agent.value?.subagents?.items.filter(item=>item.hasTranscript)??[]);
 function openTranscript(id:string):void {
  const child=readableChildren.value.find(item=>item.id===id);

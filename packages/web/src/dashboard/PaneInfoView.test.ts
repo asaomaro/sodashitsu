@@ -235,12 +235,13 @@ it.each(['claude','codex'])('reads proven %s child conversation inside pane info
  await vi.advanceTimersByTimeAsync(3000);expect(request).toHaveBeenCalledTimes(1);wrapper.unmount();
 });
 
-it.each(['instance','proof','inactive','disconnect'])('invalidates inline child read on %s change, discarding an in-flight response',async change=>{
+it.each(['instance','proof','inactive','disconnect','session-kind'])('invalidates inline child read on %s change, discarding an in-flight response',async change=>{
  let resolve!:(r:unknown)=>void;const request=vi.fn(()=>new Promise(r=>{resolve=r}));
  const a=agent({kind:'codex',subagents:{count:1,items:[{id:'child',startedAt:1,hasTranscript:true}]}});
- const {wrapper}=setup(pane('p1',a),{request});await wrapper.get('.subagent-list-transcript').trigger('click');
+ const {wrapper}=setup(pane('p1',a,{agentSession:{kind:'codex',sessionId:'same',reportedAt:1}}),{request});await wrapper.get('.subagent-list-transcript').trigger('click');
  if(change==='inactive')await wrapper.setProps({active:false});
  else if(change==='disconnect')useViewStore(pinia).onConnectionState('reconnecting');
+ else if(change==='session-kind')useSessionStore(pinia).paneUpserted(pane('p1',a,{agentSession:{kind:'claude',sessionId:'same',reportedAt:1}}));
  else useSessionStore(pinia).paneUpserted(pane('p1',{...a,...(change==='instance'?{instanceId:'new'}:{subagents:{count:1,items:[{id:'child',startedAt:1}]}})}));
  await wrapper.vm.$nextTick();expect(wrapper.find('[data-subagent-transcript]').exists()).toBe(false);
  resolve({status:'ok',entries:[{kind:'say',text:'STALE GENERATED REPLY'}],offset:1,reset:false,omittedBefore:false,running:false});

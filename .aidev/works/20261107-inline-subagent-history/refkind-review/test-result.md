@@ -1,0 +1,1 @@
+独立レビューshould: agentSession.kindを履歴scopeに追加。同sessionId/親instance/kindでも参照kindが切り替わればinlineを即unmountしlate結果を破棄する。既存失効テストへrefkindのみ切替case追加。23pass、旧1sourceの同case1fail、cmp/SHA完全復元23pass。Vue SFC直読のためnegative再build不要。raw logs同梱。source変化は文字列scopeの1要素のみで公開型変更なし、全体check/DOM繰返しなし。

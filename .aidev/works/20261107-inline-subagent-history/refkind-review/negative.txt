@@ -1,0 +1,39 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-inline-history
+
+ ❯ |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts (23 tests | 1 failed | 22 skipped) 39ms
+   × invalidates inline child read on session-kind change, discarding an in-flight response 38ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > invalidates inline child read on session-kind change, discarding an in-flight response
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/dashboard/PaneInfoView.test.ts:246:91
+    244|  else if(change==='session-kind')useSessionStore(pinia).paneUpserted(p…
+    245|  else useSessionStore(pinia).paneUpserted(pane('p1',{...a,...(change==…
+    246|  await wrapper.vm.$nextTick();expect(wrapper.find('[data-subagent-tran…
+       |                                                                                           ^
+    247|  resolve({status:'ok',entries:[{kind:'say',text:'STALE GENERATED REPLY…
+    248|  for(let i=0;i<6;i++)await wrapper.vm.$nextTick();await vi.advanceTime…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 skipped (23)
+   Start at  23:21:17
+   Duration  1.99s (transform 75%, import 15%, environment 8%, tests 2%)
+
