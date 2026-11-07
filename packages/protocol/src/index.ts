@@ -4,6 +4,7 @@ export * from "./desktopCodecs.js";
 export * from "./ids.js";
 export * from "./model.js";
 export * from "./subagentControl.js";
+export * from "./subagentHistory.js";
 export * from "./agentName.js";
 export * from "./agentStart.js";
 export * from "./agentFork.js";

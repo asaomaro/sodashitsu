@@ -1,6 +1,7 @@
 import { AgentSubagentControlParams, AgentSubagentSendParams, type AgentSubagentControlResult, type AgentSubagentSendResult } from "./subagentControl.js";
 import {AgentSubagentUsageParams,type AgentSubagentUsageResult} from "./subagentUsage.js";
 import {NotificationSummaryParams,type NotificationWorkSummary} from "./conversation.js";
+import {AgentSubagentHistoryParams,type AgentSubagentHistoryResult,type SubagentTerminalStatus} from "./subagentHistory.js";
 import {AssistantModelCatalogParams,type AssistantModelCatalog} from "./desktopAssistant.js";
 import {UsageInsightsParams,type UsageInsights} from "./usageInsights.js";
 import {VoiceCoreCancelParams,VoiceCoreCallParams,type VoiceCoreResult} from "./voiceCore.js";
@@ -1263,6 +1264,8 @@ export type SubagentTranscriptEntry =
   /** 道具の結果の先頭。 */
   | { kind: "result"; text: string; truncated?: boolean; error?: boolean; at?: string };
 export interface AgentSubagentTranscriptResult {
+  /** Explicit formal terminal evidence only; unknown/!running are not completion. */
+  terminalStatus?: SubagentTerminalStatus;
   /** Observed task state when available. Absence retains legacy running compatibility; unknown is never completion. */
   state?: "working" | "idle" | "unknown";
   /** `ok`: 読めた。`pending`: 記録のファイルがまだ無い（始まったばかり）。`unreadable`: 読めない（理由は `reason`）。 */
@@ -1639,6 +1642,7 @@ export const METHOD_SCHEMAS = {
   "agent.subagent_send": AgentSubagentSendParams,
   "agent.subagent_usage": AgentSubagentUsageParams,
   "agent.subagent_transcript": AgentSubagentTranscriptParams,
+  "agent.subagent_history": AgentSubagentHistoryParams,
   "notification.test": NotificationStateParams,
   "notification.state": NotificationStateParams,
   "notification.summary": NotificationSummaryParams,
@@ -1850,6 +1854,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "agent.subagent_send": AgentSubagentSendResult;
   "agent.subagent_usage": AgentSubagentUsageResult;
   "agent.subagent_transcript": AgentSubagentTranscriptResult;
+  "agent.subagent_history": AgentSubagentHistoryResult;
   "notification.test": { ok: true };
   "notification.state": NotificationState;
   "notification.summary": NotificationWorkSummary;
