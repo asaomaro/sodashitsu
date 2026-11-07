@@ -61,3 +61,5 @@ export * from "./term/findMessageLine.js";
 export * from "./view/ViewHistory.js";
 export * from "./system/SystemResourcePoller.js";
 export * from "./sidebar/observedAgentModel.js";
+
+export * from "./layout/normalSession.js";
