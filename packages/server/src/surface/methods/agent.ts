@@ -192,7 +192,16 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
   if (transcripts) {
     surface.register("agent.subagent_transcript", {
       schema: AgentSubagentTranscriptParams,
-      handler: (_ctx, params) => transcripts.read(params.paneId, params.agentId, params.offset),
+      handler: async (ctx, params) => {
+        const check = () => {
+          if (ctx.connectionAuthorized?.() === false) throw new RpcError("unauthorized", "接続の認証が失効しました");
+          ctx.signal?.throwIfAborted();
+        };
+        check();
+        const result = await transcripts.read(params.paneId, params.agentId, params.offset);
+        check();
+        return result;
+      },
     });
   }
 

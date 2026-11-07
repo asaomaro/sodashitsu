@@ -7,6 +7,7 @@ import {
   type SubagentTranscriptEntry,
 } from "@sodashitsu/protocol";
 import type { Logger } from "../log/Logger.js";
+import type { OpenedFile } from "./safeFile.js";
 import { isNotFound, lstatRegular, openVerified, readRange, realRootsOf } from "./safeFile.js";
 
 /**
@@ -183,7 +184,7 @@ interface ParsedLines {
  * 枠（`limit` 件）に収まらない行は、**その行の頭で止める**（すでに 1 件以上あるとき。`consumed` はその行の前＝次の読みはその行から始まる。後ろの件が欠けない）。
  * その 1 行だけで枠を超えるときに限り、枠まで切って読んだことにし（`clipped`）、位置は行の次へ進める。
  */
-function parseLines(buf: Buffer, limit: number): ParsedLines {
+function parseLines(buf: Buffer, limit: number, mapper = entriesOfLine): ParsedLines {
   const entries: SubagentTranscriptEntry[] = [];
   let pos = 0;
   let consumed = 0;
@@ -194,7 +195,7 @@ function parseLines(buf: Buffer, limit: number): ParsedLines {
     const len = nl - pos;
     if (len > 0 && len <= LINE_MAX_BYTES) {
       try {
-        const es = entriesOfLine(JSON.parse(buf.toString("utf8", pos, nl)));
+        const es = mapper(JSON.parse(buf.toString("utf8", pos, nl)));
         const room = limit - entries.length;
         if (es.length > room) {
           if (entries.length > 0) break; // 枠の境目にかかった行は、その行の頭で止める（次の読みがその行から始まる）
@@ -219,52 +220,55 @@ export async function readTranscriptWindow(file: string, offset: number | undefi
   // 安全な開き方は `safeFile.ts`（O_NOFOLLOW・O_NONBLOCK・開いた fd で通常のファイル・リンク 1 つを確かめ直す）。
   const opened = await openVerified(file);
   if (opened === null) return { status: "unreadable", reason: "記録のファイルを読めません", entries: [], offset: 0, reset: false, omittedBefore: false };
+  try { return await readTranscriptHandle(opened, offset); }
+  finally { await opened.fd.close().catch(() => undefined); }
+}
+
+/** Caller owns this already verified handle, allowing native parent/child proof and reading on the same fd. */
+export async function readTranscriptHandle(opened: OpenedFile, offset: number | undefined, mapper = entriesOfLine): Promise<Omit<AgentSubagentTranscriptResult, "running">> {
   const { fd, st } = opened;
-  try {
-    const size = st.size;
-    const reset = offset !== undefined && offset > size;
-    if (offset !== undefined && !reset) {
-      // 続き: `offset` から先を、最大 1 MiB。
-      if (offset === size) return { status: "ok", entries: [], offset, reset: false, omittedBefore: false };
-      const length = Math.min(size - offset, TRANSCRIPT_READ_MAX_BYTES);
-      const buf = await readRange(fd, offset, length);
-      const { entries, consumed, clipped } = parseLines(buf, TRANSCRIPT_ENTRIES_MAX);
-      // 改行が 1 つも無いまま 1 MiB に達した（途方もなく長い 1 行）ときは、読み飛ばして先へ進む（止まり続けない）。
-      const advance = consumed === 0 && buf.length >= TRANSCRIPT_READ_MAX_BYTES ? buf.length : consumed;
-      return { status: "ok", entries, offset: offset + advance, reset: false, omittedBefore: false, ...(clipped ? { clipped: true } : {}) };
-    }
-    // 最初（か、位置が合わなくなったとき）: 末尾から最大 1 MiB。
-    const start = Math.max(0, size - TRANSCRIPT_READ_MAX_BYTES);
-    let buf = await readRange(fd, start, size - start);
-    if (start > 0) {
-      const nl = buf.indexOf(0x0a);
-      buf = nl === -1 ? Buffer.alloc(0) : buf.subarray(nl + 1); // 途中から始まる最初の行は捨てる
-    }
-    const base = size - buf.length;
-    const parsed = parseLines(buf, Number.MAX_SAFE_INTEGER);
-    let entries = parsed.entries;
-    let omittedBefore = start > 0;
-    if (start > 0) {
-      // 大きいファイルでも、指示（最初の user の行）は先頭から拾って添える。
-      const head = await readRange(fd, 0, Math.min(HEAD_BYTES, size));
-      const first = parseLines(head, 1).entries[0];
-      if (first && first.kind === "prompt") entries = [first, ...entries];
-    }
-    if (entries.length > TRANSCRIPT_ENTRIES_MAX) {
-      const keepFirst = start > 0 && entries[0]?.kind === "prompt";
-      const tail = entries.slice(-(TRANSCRIPT_ENTRIES_MAX - (keepFirst ? 1 : 0)));
-      entries = keepFirst ? [entries[0] as SubagentTranscriptEntry, ...tail] : tail;
-      omittedBefore = true;
-    }
-    return { status: "ok", entries, offset: base + parsed.consumed, reset, omittedBefore };
-  } finally {
-    await fd.close().catch(() => undefined);
+  const size = st.size;
+  const reset = offset !== undefined && offset > size;
+  if (offset !== undefined && !reset) {
+    // 続き: `offset` から先を、最大 1 MiB。
+    if (offset === size) return { status: "ok", entries: [], offset, reset: false, omittedBefore: false };
+    const length = Math.min(size - offset, TRANSCRIPT_READ_MAX_BYTES);
+    const buf = await readRange(fd, offset, length);
+    const { entries, consumed, clipped } = parseLines(buf, TRANSCRIPT_ENTRIES_MAX, mapper);
+    // 改行が 1 つも無いまま 1 MiB に達した（途方もなく長い 1 行）ときは、読み飛ばして先へ進む（止まり続けない）。
+    const advance = consumed === 0 && buf.length >= TRANSCRIPT_READ_MAX_BYTES ? buf.length : consumed;
+    return { status: "ok", entries, offset: offset + advance, reset: false, omittedBefore: false, ...(clipped ? { clipped: true } : {}) };
   }
+  // 最初（か、位置が合わなくなったとき）: 末尾から最大 1 MiB。
+  const start = Math.max(0, size - TRANSCRIPT_READ_MAX_BYTES);
+  let buf = await readRange(fd, start, size - start);
+  if (start > 0) {
+    const nl = buf.indexOf(0x0a);
+    buf = nl === -1 ? Buffer.alloc(0) : buf.subarray(nl + 1); // 途中から始まる最初の行は捨てる
+  }
+  const base = size - buf.length;
+  const parsed = parseLines(buf, Number.MAX_SAFE_INTEGER, mapper);
+  let entries = parsed.entries;
+  let omittedBefore = start > 0;
+  if (start > 0) {
+    // 大きいファイルでも、指示（最初の user の行）は先頭から拾って添える。
+    const head = await readRange(fd, 0, Math.min(HEAD_BYTES, size));
+    const first = parseLines(head, 1, mapper).entries[0];
+    if (first && first.kind === "prompt") entries = [first, ...entries];
+  }
+  if (entries.length > TRANSCRIPT_ENTRIES_MAX) {
+    const keepFirst = start > 0 && entries[0]?.kind === "prompt";
+    const tail = entries.slice(-(TRANSCRIPT_ENTRIES_MAX - (keepFirst ? 1 : 0)));
+    entries = keepFirst ? [entries[0] as SubagentTranscriptEntry, ...tail] : tail;
+    omittedBefore = true;
+  }
+  return { status: "ok", entries, offset: base + parsed.consumed, reset, omittedBefore };
 }
 
 // --- 読む口 -----------------------------------------------------------------------------------------------------
 
 export interface SubagentTranscriptReaderDeps {
+  native?: { read(pane: string, child: string, offset: number | undefined): Promise<AgentSubagentTranscriptResult | undefined> };
   tracker: {
     transcriptSource(paneId: string, agentId: string): { sessionId: string; parentTranscriptPath: string } | undefined;
   };
@@ -301,6 +305,8 @@ export class SubagentTranscriptReader {
    * ファイルがまだ無いときは `pending`、読めないときは固定の理由つきの `unreadable`。投げるのは `RpcError` だけ。
    */
   async read(paneId: string, agentId: string, offset: number | undefined): Promise<AgentSubagentTranscriptResult> {
+    const native = await this.deps.native?.read(paneId, agentId, offset);
+    if (native) return native;
     const now = (this.deps.now ?? Date.now)();
     const key = `${paneId}\n${agentId}`;
     const live = SAFE_ID.test(agentId) ? this.deps.tracker.transcriptSource(paneId, agentId) : undefined;
