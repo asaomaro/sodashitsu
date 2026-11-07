@@ -43,6 +43,8 @@ const omittedBefore = ref(false);
 /** 1 行が長すぎて、一部を省いた（一度でもあれば出す）。 */
 const clipped = ref(false);
 const running = ref(true);
+const observedState=ref<AgentSubagentTranscriptResult["state"]>();
+const taskState=computed(()=>observedState.value==="unknown"?"状態不明":observedState.value==="idle"?"待機中":observedState.value==="working"?"実行中":running.value?"実行中":"終了");
 type Status = "loading" | "ok" | "pending" | "unreadable" | "gone" | "error";
 const status = ref<Status>("loading");
 const reason = ref("");
@@ -61,6 +63,7 @@ function apply(r: AgentSubagentTranscriptResult): void {
   if (r.omittedBefore) omittedBefore.value = true;
   if (r.clipped) clipped.value = true;
   running.value = r.running;
+  observedState.value = r.state;
   offset = r.offset;
   if (r.status === "ok") {
     status.value = "ok";
@@ -217,7 +220,7 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
       >
         <span class="sat-name" :title="heading">{{ heading }}</span>
         <span class="sat-state" data-subagent-transcript-state>{{
-          running ? "実行中" : "終了"
+          taskState
         }}</span>
       </div>
       <button data-assistant-feature

@@ -1261,6 +1261,8 @@ export type SubagentTranscriptEntry =
   /** 道具の結果の先頭。 */
   | { kind: "result"; text: string; truncated?: boolean; error?: boolean; at?: string };
 export interface AgentSubagentTranscriptResult {
+  /** Observed task state when available. Absence retains legacy running compatibility; unknown is never completion. */
+  state?: "working" | "idle" | "unknown";
   /** `ok`: 読めた。`pending`: 記録のファイルがまだ無い（始まったばかり）。`unreadable`: 読めない（理由は `reason`）。 */
   status: "ok" | "pending" | "unreadable";
   /** 読めないときの理由（サーバが決めた固定の文。ファイルの場所・中身は含めない）。 */

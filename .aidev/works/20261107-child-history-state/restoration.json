@@ -1,0 +1,26 @@
+{
+  "files": [
+    {
+      "file": "packages/server/src/agent/AntigravityChildRecord.ts",
+      "fixedSha256": "bc35f8c21930667ccad3226ace89ff012f7b004fe44aacbde8e9c8af40fcb66f",
+      "restoredSha256": "bc35f8c21930667ccad3226ace89ff012f7b004fe44aacbde8e9c8af40fcb66f",
+      "byteExact": true
+    },
+    {
+      "file": "packages/server/src/agent/NativeSubagentTranscript.ts",
+      "fixedSha256": "27d12d44ec37331a32bf03282b838ea678011ada246a616d26c8df1dae5733d0",
+      "restoredSha256": "27d12d44ec37331a32bf03282b838ea678011ada246a616d26c8df1dae5733d0",
+      "byteExact": true
+    },
+    {
+      "file": "packages/web/src/components/graph/SubagentTranscriptWindow.vue",
+      "fixedSha256": "2dd715c1f7459d987297e383bd125beab11a3397c9ab5ca6d9c45e1e26a64d9f",
+      "restoredSha256": "2dd715c1f7459d987297e383bd125beab11a3397c9ab5ca6d9c45e1e26a64d9f",
+      "byteExact": true
+    }
+  ],
+  "negativeExitCodes": {
+    "negative": 1,
+    "negative-browser": 1
+  }
+}

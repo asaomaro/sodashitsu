@@ -23,7 +23,7 @@ it("offers and reads AGY child history only after formal parent spawn and descri
  const f=await fixture(),native=new NativeSubagentReader({home:f.home});
  try{expect((await native.read({paneId:"p",instanceId:"instance",kind:"agy",sessionId:parent}))?.items[0]).toMatchObject({id:child,hasTranscript:true,state:"unknown"});}
  finally{native.close();}
- expect(await f.reader.read("p",child,undefined)).toMatchObject({status:"ok",running:false,entries:[{kind:"say",text:"【親への送信要求】\ngenerated response"}]});
+ expect(await f.reader.read("p",child,undefined)).toMatchObject({status:"ok",running:false,state:"unknown",entries:[{kind:"tool",name:"send_message",text:"【親への送信要求】\ngenerated response"}]});
 });
 it("keeps granted killed child history readable but rejects missing/unknown descriptors",async()=>{
  const f=await fixture();await f.reader.read("p",child,undefined);f.pane.agent!.subagents!.items=[];
@@ -48,5 +48,15 @@ it("never exposes generic planner text, thoughts or messages addressed to anothe
 
 it("uses real sanitized native parent-directed message argument encoding",async()=>{
  const rows=(await readFile(new URL("./fixtures/agy-subagents/child.jsonl",import.meta.url),"utf8")).trim().split("\n").map(line=>JSON.parse(line));
- const entries=rows.flatMap(row=>antigravityChildEntries(row,parent));expect(entries).toMatchObject([{kind:"say",text:"【親への送信要求】\nNATIVE_SUBAGENT_PROBE_OK"}]);
+ const entries=rows.flatMap(row=>antigravityChildEntries(row,parent));expect(entries).toMatchObject([{kind:"tool",name:"send_message",text:"【親への送信要求】\nNATIVE_SUBAGENT_PROBE_OK"}]);
+});
+
+it("keeps native task state unknown when omitted and does not derive completion from membership",async()=>{
+ const f=await fixture();
+ for(const state of ["working","idle","unknown",undefined] as const){
+  const item=f.pane.agent!.subagents!.items[0]!;if(state===undefined)delete item.state;else item.state=state;
+  expect(await f.reader.read("p",child,undefined)).toMatchObject({state:state??"unknown",running:state==="working"});
+  expect(f.pane.agent!.subagents!.count).toBe(1);expect(f.pane.agent!.subagents!.countBasis).toBe("alive");
+ }
+ f.pane.agent!.subagents!.items=[];expect(await f.reader.read("p",child,undefined)).toMatchObject({state:"unknown",running:false});
 });

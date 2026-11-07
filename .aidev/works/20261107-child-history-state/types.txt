@@ -1,0 +1,22 @@
+Scope: 3 of 9 workspace projects
+packages/protocol typecheck$ tsc --noEmit -p tsconfig.typecheck.json
+packages/server typecheck$ tsc --noEmit -p tsconfig.typecheck.json
+packages/web typecheck$ vue-tsc --noEmit -p tsconfig.typecheck.json
+packages/protocol typecheck: Done
+packages/web typecheck: Done
+packages/server typecheck: src/launch/localHttp.ts(5,60): error TS2307: Cannot find module '@sodashitsu/tui/pinnedTls' or its corresponding type declarations.
+packages/server typecheck: src/launch/tuiTarget.ts(5,32): error TS2307: Cannot find module '@sodashitsu/tui' or its corresponding type declarations.
+packages/server typecheck: src/main.ts(172,68): error TS2307: Cannot find module '@sodashitsu/tui' or its corresponding type declarations.
+packages/server typecheck: src/tui.integration.test.ts(5,68): error TS2307: Cannot find module '@sodashitsu/tui' or its corresponding type declarations.
+packages/server typecheck: src/tui.integration.test.ts(34,5): error TS2353: Object literal may only specify known properties, and 'isTTY' does not exist in type 'FakeIo'.
+packages/server typecheck: src/tui.integration.test.ts(37,18): error TS7006: Parameter 'on' implicitly has an 'any' type.
+packages/server typecheck: src/tui.integration.test.ts(40,13): error TS7006: Parameter 'data' implicitly has an 'any' type.
+packages/server typecheck: src/tui.integration.test.ts(43,15): error TS7006: Parameter 'cb' implicitly has an 'any' type.
+packages/server typecheck: src/tui.integration.test.ts(44,16): error TS7006: Parameter 'cb' implicitly has an 'any' type.
+packages/server typecheck: src/tui.integration.test.ts(45,16): error TS7006: Parameter 'cb' implicitly has an 'any' type.
+packages/server typecheck: src/tui.integration.test.ts(46,15): error TS7006: Parameter 'cb' implicitly has an 'any' type.
+packages/server typecheck: src/tui.integration.test.ts(47,14): error TS7006: Parameter 'cb' implicitly has an 'any' type.
+packages/server typecheck: Failed
+/workspaces/sodashitsu-subagent-history-observation/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 typecheck: `tsc --noEmit -p tsconfig.typecheck.json`
+Exit status 2

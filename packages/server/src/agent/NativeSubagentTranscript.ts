@@ -40,7 +40,7 @@ export class NativeSubagentTranscriptReader {
     const key=JSON.stringify([pane,child]), now=(this.deps.now??Date.now)(), live=this.source(pane,child), old=this.grants.get(key);
     const source=live??(old&&now-old.at<=30*60000&&this.current(pane,old.source)?old.source:undefined);
     if(!source){this.grants.delete(key);throw new RpcError("not_found","subagent not found");}
-    const failure=():AgentSubagentTranscriptResult=>({status:"unreadable",reason:"子の正式な会話記録を確認できません",entries:[],offset:offset??0,reset:false,omittedBefore:false,running:false});
+    const failure=():AgentSubagentTranscriptResult=>({status:"unreadable",reason:"子の正式な会話記録を確認できません",entries:[],offset:offset??0,reset:false,omittedBefore:false,running:false,state:"unknown"});
     let active=true,timer:ReturnType<typeof setTimeout>|undefined;
     const work=async():Promise<AgentSubagentTranscriptResult>=>{
       const opened=source.kind==="codex"?await openCodexChildRecord(this.deps.home??process.env.CODEX_HOME??join(homedir(),".codex"),source.parent,child):source.kind==="agy"?await openAntigravityChildRecord(source.parent,child,this.deps.roots??{}):await openMuseChildRecord(source.parent,source.childSession!,this.deps.roots??{});
@@ -53,9 +53,9 @@ export class NativeSubagentTranscriptReader {
         while(this.grants.size>64)this.grants.delete(this.grants.keys().next().value!);
         if(source.publicInput&&(offset===undefined||page.reset)){
           const entries=[{kind:"prompt" as const,text:source.publicInput.text,...(source.publicInput.truncated?{truncated:true}:{})},...page.entries.slice(-199)];
-          return {...page,entries,omittedBefore:page.omittedBefore||page.entries.length>199,running:live?.item.state==="working"};
+          return {...page,entries,omittedBefore:page.omittedBefore||page.entries.length>199,running:live?.item.state==="working",state:live?.item.state??"unknown"};
         }
-        return {...page,running:live?.item.state==="working"};
+        return {...page,running:live?.item.state==="working",state:live?.item.state??"unknown"};
       }finally{await opened.fd.close();}
     };
     try{return await Promise.race([work().catch(failure),new Promise<AgentSubagentTranscriptResult>(resolve=>{timer=setTimeout(()=>{active=false;resolve(failure());},TRANSCRIPT_TIMEOUT_MS);})]);}

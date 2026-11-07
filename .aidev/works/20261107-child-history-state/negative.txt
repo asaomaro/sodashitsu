@@ -1,0 +1,144 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-history-observation
+
+ ❯ |@sodashitsu/web| src/components/graph/SubagentTranscriptWindow.test.ts (14 tests | 3 failed) 105ms
+   × uses observed native unknown without declaring false completion 9ms
+   × uses observed native idle without declaring false completion 4ms
+   × uses observed native working without declaring false completion 5ms
+ ❯ |@sodashitsu/server| src/agent/AntigravityChildRecord.test.ts (7 tests | 3 failed) 180ms
+   × offers and reads AGY child history only after formal parent spawn and descriptor proof 56ms
+   × uses real sanitized native parent-directed message argument encoding 3ms
+   × keeps native task state unknown when omitted and does not derive completion from membership 34ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/components/graph/SubagentTranscriptWindow.test.ts > uses observed native unknown without declaring false completion
+AssertionError: expected '終了' to be '状態不明' // Object.is equality
+
+Expected: "状態不明"
+Received: "終了"
+
+ ❯ src/components/graph/SubagentTranscriptWindow.test.ts:212:65
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  |@sodashitsu/web| src/components/graph/SubagentTranscriptWindow.test.ts > uses observed native idle without declaring false completion
+AssertionError: expected '終了' to be '待機中' // Object.is equality
+
+Expected: "待機中"
+Received: "終了"
+
+ ❯ src/components/graph/SubagentTranscriptWindow.test.ts:212:65
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  |@sodashitsu/web| src/components/graph/SubagentTranscriptWindow.test.ts > uses observed native working without declaring false completion
+AssertionError: expected '終了' to be '実行中' // Object.is equality
+
+Expected: "実行中"
+Received: "終了"
+
+ ❯ src/components/graph/SubagentTranscriptWindow.test.ts:212:65
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AntigravityChildRecord.test.ts > offers and reads AGY child history only after formal parent spawn and descriptor proof
+AssertionError: expected { status: 'ok', …(5) } to match object { status: 'ok', running: false, …(2) }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "entries": [
+      {
+-       "kind": "tool",
+-       "name": "send_message",
++       "kind": "say",
+        "text": "【親への送信要求】
+  generated response",
+      },
+    ],
+    "running": false,
+-   "state": "unknown",
+    "status": "ok",
+  }
+
+ ❯ src/agent/AntigravityChildRecord.test.ts:26:51
+     24|  try{expect((await native.read({paneId:"p",instanceId:"instance",kind:…
+     25|  finally{native.close();}
+     26|  expect(await f.reader.read("p",child,undefined)).toMatchObject({statu…
+       |                                                   ^
+     27| });
+     28| it("keeps granted killed child history readable but rejects missing/un…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AntigravityChildRecord.test.ts > uses real sanitized native parent-directed message argument encoding
+AssertionError: expected [ { kind: 'say', …(3) } ] to match object [ { kind: 'tool', …(2) } ]
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  [
+    {
+-     "kind": "tool",
+-     "name": "send_message",
++     "kind": "say",
+      "text": "【親への送信要求】
+  NATIVE_SUBAGENT_PROBE_OK",
+    },
+  ]
+
+ ❯ src/agent/AntigravityChildRecord.test.ts:51:87
+     49| it("uses real sanitized native parent-directed message argument encodi…
+     50|  const rows=(await readFile(new URL("./fixtures/agy-subagents/child.js…
+     51|  const entries=rows.flatMap(row=>antigravityChildEntries(row,parent));…
+       |                                                                                       ^
+     52| });
+     53|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AntigravityChildRecord.test.ts > keeps native task state unknown when omitted and does not derive completion from membership
+AssertionError: expected { status: 'ok', …(5) } to match object { state: 'working', running: true }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "running": true,
+-   "state": "working",
+  }
+
+ ❯ src/agent/AntigravityChildRecord.test.ts:58:52
+     56|  for(const state of ["working","idle","unknown",undefined] as const){
+     57|   const item=f.pane.agent!.subagents!.items[0]!;if(state===undefined)d…
+     58|   expect(await f.reader.read("p",child,undefined)).toMatchObject({stat…
+       |                                                    ^
+     59|   expect(f.pane.agent!.subagents!.count).toBe(1);expect(f.pane.agent!.…
+     60|  }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed | 3 passed (5)
+      Tests  6 failed | 61 passed (67)
+   Start at  00:01:56
+   Duration  1.46s (transform 62%, import 17%, tests 16%, environment 4%)
+
+  Transform  |@sodashitsu/server| transforming modules took 3.19s · 66% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
