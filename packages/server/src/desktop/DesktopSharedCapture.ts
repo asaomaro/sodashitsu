@@ -346,13 +346,16 @@ export class DesktopSharedCapture {
     if (g.clipboard?.receive(value)) return;
     if (g.native?.receive(value)) return;
     if (value.type === "ready" && !g.ready) {
-      const {protectedAudioClock,inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, nativePointerProof, ...wire } = value;
+      const {protectedAudioClock,inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, nativePointerProof,virtualNativeDragProof, ...wire } = value;
       const ready = DesktopReady.parse(wire);
       const configuration = JSON.parse(g.configuration!);
       const lockedSource = !g.protectedSource && !g.virtualSource && configuration.allowSharedUnlock===true && ready.secureDesktop===true && !ready.protectedDesktop && !ready.sharedProtected &&
         (ready.backend==="windows-gdi"||ready.backend==="windows-dxgi");
       const virtualSource=g.virtualSource===true && ready.virtualDisplay===true && !ready.secureDesktop && !ready.lockScreenCover && !ready.protectedDesktop && !ready.sharedProtected &&
         (ready.backend==="windows-gdi"||ready.backend==="windows-dxgi"||ready.backend==="synthetic");
+      const virtualDrag=virtualSource&&configuration.options.virtualNativeDrag===true&&configuration.nativePointerProof===true&&virtualNativeDragProof===true&&nativePointerProof===true&&ready.resourceFences===true&&!ready.virtualMonitors;
+      if(configuration.options.virtualNativeDrag&&!virtualDrag)throw Error("Shared virtual drag proof missing");
+      if(virtualNativeDragProof===true&&!virtualDrag)throw Error("Unrequested shared virtual drag proof");
       if(g.virtualSource&&!virtualSource){for(const member of [...g.members])this.emit(member,{type:"virtual_display_failure",code:"helper_incompatible"});this.end(g);return;}
       const protectedSource =
         ready.secureDesktop === true &&
@@ -407,6 +410,7 @@ export class DesktopSharedCapture {
         dynamicQuality: false,
         ...(protectedAudio?{protectedAudioClock:"windows-qpc-v1"}:{}),
         inputAckPipe: false,
+        ...(virtualDrag?{virtualNativeDragProof:true}:{}),
         ...(nativePointerProof===true&&configuration.nativePointerProof===true&&!g.protectedSource&&ready.resourceFences===true?{nativePointerProof:true}:{}),
         ...(value.deferNativeSnapshots === true ? { deferNativeSnapshots: true } : {}),
       };

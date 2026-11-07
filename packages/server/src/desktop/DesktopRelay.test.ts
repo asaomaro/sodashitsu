@@ -1609,25 +1609,28 @@ it("preserves an unproven input cleanup fault across reconnect, reconfigure and 
  f.provider.configure(cfg);await expect(f.provider.start("after-configure",{} as any)).rejects.toThrow("入力解放");const endpoint=f.provider.endpointScope("http://127.0.0.1:12345",()=>true);await expect(endpoint.start("endpoint",{} as any)).rejects.toThrow("入力解放");endpoint.close();
 });
 
-it.each(["pipe","json","shared","folder"])("copies a trusted %s selection through the file lane only after physical cleanup",async mode=>{
+it.each(["pipe","json","shared","folder","virtual","virtual-shared"])("copies a trusted %s selection through the file lane only after physical cleanup",async mode=>{
+ const shared=mode==="shared"||mode==="virtual-shared",virtual=mode.startsWith("virtual");
  const f=await fixture(),cfg=(f.provider as any).config,root=dirname(f.record),path=join(root,"selected-generated.txt");await writeFile(path,"generated native source");
- f.provider.configure({...cfg,fileRoot:root,command:[...cfg.command,"--pointer-witness-generated",...(mode==="pipe"?["--input-ack-pipe"]:[])]});
+ f.provider.configure({...cfg,fileRoot:root,...(virtual?{allowVirtualDisplay:true}:{}),command:[...cfg.command,"--pointer-witness-generated",...(virtual?["--virtual-display","--virtual-native-drag-generated"]:[]),...(mode==="pipe"?["--input-ack-pipe"]:[])]});
  const folder=join(root,"selected-folder");if(mode==="folder"){await mkdir(folder);await mkdir(join(folder,"empty"));await writeFile(join(folder,"data.txt"),"generated native source");}
  const runtime=(f.provider as any).nativeSelection;vi.spyOn(runtime,"prepare").mockResolvedValue(undefined);const capture=vi.spyOn(runtime,"capture").mockResolvedValue([mode==="folder"?folder:path]);vi.spyOn(runtime,"paths").mockImplementation(async(paths:any)=>paths);
- const v=await f.viewer(mode==="shared"?"shared-files":"checkpoints");v.send({...start,options:{...start.options,files:true,...(mode==="shared"?{sharedDesktop:true,features:true}:{})}});
+ const protocols=virtual?[DESKTOP_INPUT_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,...(shared?[DESKTOP_SHARED_PROTOCOL]:[]),desktopFeaturesProtocol(['virtualNativeDrag',...(shared?['sharedVirtual' as const]:[])])]:shared?'shared-files' as const:'checkpoints' as const;
+ const options={...start.options,files:true as const,...(virtual?{virtualDisplay:true as const,virtualNativeDrag:true as const,features:true}:{}),...(shared?{sharedDesktop:true as const,features:true,...(virtual?{sharedVirtual:true as const}:{})}:{})};
+ const v=await f.viewer(protocols);v.send({...start,options});
  await expect.poll(()=>v.frames.length).toBeGreaterThan(0);await expect.poll(()=>v.messages.some(m=>m.type==="files_ticket")).toBe(true);
  const socket=new WebSocket(f.endpoint,DESKTOP_FILES_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),responses:any[]=[];socket.on("error",()=>{});socket.on("message",data=>responses.push(JSON.parse(data.toString())));cleanup.push(async()=>socket.terminate());
  await new Promise<void>((resolve,reject)=>{socket.once("open",resolve);socket.once("error",reject);});socket.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="files_ticket")!.ticket}));await expect.poll(()=>v.messages.some(m=>m.type==="files_ready")).toBe(true);
  const run=async(request:unknown)=>{const id=crypto.randomUUID();socket.send(JSON.stringify({type:"desktop_file",id,request}));await expect.poll(()=>responses.some(m=>m.id===id)).toBe(true);return responses.find(m=>m.id===id);};
  expect((await run({action:"grant",enabled:true})).ok).toBe(true);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
  v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
- const state=f.provider as any,share=mode==="shared"?[...state.shared][0]:state.active,epoch=state.resources.identity(share,"control").epoch,gesture=crypto.randomUUID();
+ const state=f.provider as any,share=shared?[...state.shared][0]:state.active,epoch=state.resources.identity(share,"control").epoch,gesture=crypto.randomUUID();
  const prepared=await run({action:"native_prepare",gesture,origin:f.origin,seq:1});expect(prepared.ok).toBe(true);expect(capture).toHaveBeenCalledWith(expect.objectContaining({epoch,x:-400,y:50,window:42,pid:7}),expect.any(Number),expect.any(AbortSignal));
  const offer=prepared.result.native;expect(offer.entries[0].name).toBe(mode==="folder"?"selected-folder":"selected-generated.txt");if(mode==="folder")expect(offer.entries).toEqual(expect.arrayContaining([expect.objectContaining({name:"selected-folder\\empty",directory:true,bytes:0})]));expect(offer.generation).toBe(epoch);expect(JSON.stringify(offer)).not.toContain(root);
  const activated=await run({action:"native_activate",gesture,lease:offer.lease});expect(activated.ok).toBe(true);expect(state.resources.identity(share,"control")).toBeUndefined();expect(share.control).toBe(false);expect(share.pointerWitness).toBeUndefined();
  const read=await run({action:"native_read",gesture,lease:offer.lease,request:crypto.randomUUID(),index:mode==="folder"?offer.entries.findIndex((entry:any)=>entry.name.endsWith("data.txt")):0,offset:0,length:23});expect(read.ok).toBe(true);expect(Buffer.from(read.result.data,"base64").toString()).toBe("generated native source");
- if(mode==="shared"){
-  const other=await f.viewer("shared-files");other.send({...start,options:{...start.options,files:true,sharedDesktop:true,features:true}});await expect.poll(()=>other.frames.length).toBeGreaterThan(0);other.send({type:"control",enabled:true});await expect.poll(()=>other.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ if(shared){
+  const other=await f.viewer(protocols);other.send({...start,options});await expect.poll(()=>other.frames.length).toBeGreaterThan(0);other.send({type:"control",enabled:true});await expect.poll(()=>other.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
  }
  expect((await run({action:"native_abort",gesture})).ok).toBe(true);expect((await run({action:"native_read",gesture,lease:offer.lease,request:crypto.randomUUID(),index:0,offset:0,length:1})).ok).toBe(false);
  v.send({type:"stop"});
@@ -2036,3 +2039,30 @@ it.each(['elevated-default','elevated-uac'] as const)('routes protected %s micro
 });
 it.each(['permission','viewer','provider'])('does not activate protected microphone without independent %s opt-in',async missing=>{const f=await protectedFixture({mode:'elevated-default',allowed:true}),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMicrophone:true,allowProtectedMicrophone:missing!=='permission',microphoneEndpoint:'fixed-virtual-render'});if(missing==='provider'){const original=f.provider.capabilities.bind(f.provider);vi.spyOn(f.provider,'capabilities').mockImplementation(()=>({...original(),protectedMicrophone:false}));}const v=await f.viewer([DESKTOP_PROTECTED_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,...(missing==='viewer'?[]:[desktopFeaturesProtocol(['protectedMicrophone'])])]);v.send(protectedStart);await expect.poll(()=>v.messages.some(m=>m.type==='ready')).toBe(true);expect(v.messages.find(m=>m.type==='ready')).not.toHaveProperty('microphone');expect(v.messages.some(m=>m.type==='microphone_ticket')).toBe(false);});
 it('rejects a protected helper that forges ordinary-user protected microphone authority',async()=>{const f=await protectedFixture({mode:'elevated-uac',allowed:true}),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMicrophone:true,allowProtectedMicrophone:true,microphoneEndpoint:'fixed-virtual-render',command:[...cfg.command,'--protected-microphone-forged']});const v=await f.viewer([DESKTOP_PROTECTED_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,desktopFeaturesProtocol(['protectedMicrophone'])]);v.send(protectedStart);await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(v.messages.some(m=>m.type==='ready')).toBe(false);});
+it.each(['single','shared','old-host','no-optin','old-viewer'])('requires negotiated fresh owned virtual drag proof across relay/provider: %s',async mode=>{
+ const f=await fixture(),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,allowVirtualDisplay:true,fileRoot:dirname(f.record),command:[...cfg.command,'--virtual-display','--pointer-witness-generated',...(mode!=='old-host'?['--virtual-native-drag-generated']:[])]});
+ const v=await f.viewer([DESKTOP_INPUT_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,...(mode==='shared'?[DESKTOP_SHARED_PROTOCOL]:[]),desktopFeaturesProtocol([...(mode==='shared'?['sharedVirtual' as const]:[]),...(mode!=='old-viewer'?['virtualNativeDrag' as const]:[])])]);
+ v.send({...start,options:{...start.options,features:true,files:true,virtualDisplay:true,...(mode!=='no-optin'?{virtualNativeDrag:true}:{}),...(mode==='shared'?{sharedDesktop:true,sharedVirtual:true}:{})}});
+ if(mode==='old-host'||mode==='old-viewer'){
+  await expect.poll(()=>v.ws.readyState===WebSocket.CLOSED||v.messages.some(m=>m.type==='error'||m.type==='stopped')).toBe(true);expect(v.messages.some(m=>m.type==='ready')).toBe(false);return;
+ }
+ await expect.poll(()=>v.messages).toEqual(expect.arrayContaining([expect.objectContaining({type:'ready'})]));
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ const readyMessage=v.messages.find(m=>m.type==='ready');expect(readyMessage!.virtualNativeDrag).toBe(mode==='no-optin'?undefined:true);expect(readyMessage).not.toHaveProperty('virtualNativeDragProof');expect(readyMessage).not.toHaveProperty('nativePointerProof');
+ v.send({type:'control',enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==='control'&&m.enabled)).toBe(true);
+ const state=f.provider as any,share=mode==='shared'?[...state.shared][0]:state.active;
+ v.send({type:'input',seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:'pointer',x:0.5,y:0.5,event:'down',button:0}});
+ await expect.poll(()=>v.messages.some(m=>m.type==='input_ack'&&m.seq===1)).toBe(true);
+ if(mode==='no-optin')expect(share.pointerWitness).toBeUndefined();else expect(share.pointerWitness).toMatchObject({seq:1,source:share.process.resourceChannel,point:{epoch:state.resources.identity(share,'control').epoch}});
+ v.send({type:'input',seq:2,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:'pointer',x:0.51,y:0.5,event:'move',button:0}});
+ await expect.poll(()=>v.messages.some(m=>m.type==='input_ack'&&m.seq===2)).toBe(true);expect(share.pointerWitness).toBeUndefined();
+});
+it('does not reuse owned virtual drag ready proof after reconnect to an old host',async()=>{
+ const f=await fixture(),cfg=(f.provider as any).config,configured={...cfg,allowVirtualDisplay:true,fileRoot:dirname(f.record),command:[...cfg.command,'--virtual-display','--pointer-witness-generated','--virtual-native-drag-generated']};f.provider.configure(configured);
+ const protocols=[DESKTOP_INPUT_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,desktopFeaturesProtocol(['virtualNativeDrag'])],request={...start,options:{...start.options,features:true,files:true,virtualDisplay:true,virtualNativeDrag:true}};
+ const first=await f.viewer(protocols);first.send(request);await expect.poll(()=>first.messages.find(m=>m.type==='ready')?.virtualNativeDrag).toBe(true);
+ first.send({type:'stop'});await expect.poll(()=>(f.provider as any).physicalHelpers.size).toBe(0);
+ f.provider.configure({...configured,command:configured.command.filter((part:string)=>part!=='--virtual-native-drag-generated')});
+ const second=await f.viewer(protocols);second.send(request);await expect.poll(()=>second.ws.readyState).toBe(WebSocket.CLOSED);expect(second.messages.some(m=>m.type==='ready')).toBe(false);
+});

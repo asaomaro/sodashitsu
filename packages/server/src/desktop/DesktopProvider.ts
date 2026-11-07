@@ -252,6 +252,7 @@ export class DesktopProvider {
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
     if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay&&cfg.nativePlatform!=="linux-portal"||p.options.display&&cfg.nativePlatform!=="macos-sck"||p.options.sharedResolution||p.options.sharedRate||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
     if(p.options.protectedFiles&&(!p.options.elevatedDesktop||!p.options.files||!p.fileTicket||!p.options.features||!cfg.allowElevated||!cfg.allowProtectedFiles||!cfg.fileRoot||cfg.nativePlatform))throw new RpcError("unauthorized","管理者画面中のファイル転送は接続先で許可されていません。");
+    if(p.options.virtualNativeDrag&&(!p.options.virtualDisplay||!p.options.files||!cfg.fileRoot||cfg.nativePlatform||p.options.elevatedDesktop||p.options.virtualMonitors))throw new RpcError("invalid_params","仮想ドラッグには単一の所有仮想画面とファイル許可が必要です");
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");
@@ -429,7 +430,7 @@ export class DesktopProvider {
             if(p.fileTicket){
               if(p.options.files!==true||!cfg.fileRoot)throw Error("File transfer not negotiated");
               const socket=s.fileSocket=new WebSocket(p.url,DESKTOP_FILES_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:100000});
-              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&(!s.secureDesktop||s.protectedFilesActive===true)&&performance.now()-s.lastSeen<5000,p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot,p.options.folders===true,p.options.folderCheckpoints?this.folderCheckpoints:undefined,!cfg.nativePlatform&&!p.options.elevatedDesktop&&!p.options.virtualDisplay?{
+              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&(!s.secureDesktop||s.protectedFilesActive===true)&&performance.now()-s.lastSeen<5000,p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot,p.options.folders===true,p.options.folderCheckpoints?this.folderCheckpoints:undefined,!cfg.nativePlatform&&!p.options.elevatedDesktop&&(!p.options.virtualDisplay||p.options.virtualNativeDrag===true)?{
                 origin:scope?.nativeOrigin??url.origin.replace(/^ws/,"http"),
                 runtime:this.nativeSelection,paths:(paths,signal)=>this.nativeSelection.paths(paths,signal),
                 pointer:seq=>{
@@ -689,7 +690,7 @@ export class DesktopProvider {
             this.nativeMonitorRestores.remember(s.nativeMonitorOrigin,receipt.token);continue;
           }
           if (raw.type === "ready" && !s.ready) {
-            const {protectedAudioClock,deferNativeSnapshots, inputAckPipe,nativePointerProof, ...wireReady}=raw;
+            const {protectedAudioClock,deferNativeSnapshots, inputAckPipe,nativePointerProof,virtualNativeDragProof, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
             if(options.virtualMonitors&&(ready.resourceFences!==true||ready.virtualMonitors!==true||!ready.virtualDisplay||!ready.monitorLayout||ready.monitorLayout.selected==="all"||ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Owned virtual monitor metadata missing");
             s.agentRegions=ready.agentRegions===true&&!ready.secureDesktop;
@@ -710,7 +711,9 @@ export class DesktopProvider {
             }
             s.secureDesktop = ready.secureDesktop === true;
             s.inputAcks.enabled = !s.secureDesktop && inputAckPipe === true;
-            s.inputAcks.pointerEnabled=!s.secureDesktop&&!ready.virtualDisplay&&!cfg.nativePlatform&&!!cfg.fileRoot&&nativePointerProof===true&&s.process?.resourceChannel?.supported===true;
+            const virtualDrag=options.virtualNativeDrag===true&&virtualNativeDragProof===true&&ready.virtualDisplay===true&&!ready.virtualMonitors&&!ready.secureDesktop&&!ready.lockScreenCover;
+            if(options.virtualNativeDrag&&!virtualDrag)throw Error("Owned virtual drag helper proof missing");
+            s.inputAcks.pointerEnabled=!s.secureDesktop&&(!ready.virtualDisplay||virtualDrag)&&!cfg.nativePlatform&&!!cfg.fileRoot&&nativePointerProof===true&&s.process?.resourceChannel?.supported===true;
             if(s.inputAcks.pointerEnabled&&options.files===true)void this.nativeSelection.prepare().catch(()=>{});
             s.deferNativeSnapshots=options.nativeVideo===true&&cfg.allowNativeVideo===true&&!s.secureDesktop&&deferNativeSnapshots===true;
             s.lockScreenCover = ready.lockScreenCover === true;
@@ -801,7 +804,7 @@ export class DesktopProvider {
               ...(cfg.nativePlatform&&inputCapabilities?{inputCapabilities}:{}),
               ...(options.virtualDisplay&&virtualDisplay&&!s.secureDesktop?{virtualDisplay:true}:{}),
               ...((!options.virtualDisplay&&options.monitors===true||options.virtualMonitors===true)&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout,...(options.virtualMonitors?{virtualMonitors:true}:{})}:{}),
-              ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true,...(this.transferStore?{durableFolderCheckpoints:true}:{})}:{})}:{}),
+              ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(virtualDrag&&s.inputAcks.pointerEnabled?{virtualNativeDrag:true,resourceFences:true}:{}),...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true,...(this.transferStore?{durableFolderCheckpoints:true}:{})}:{})}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
               ...(nativeEnabled?{nativeVideo:true,...(s.protectedVideoActive?{protectedVideo:true,...(options.sharedProtectedVideo?{sharedProtectedVideo:true}:{}),...(s.protectedAudioActive?{protectedAudio:true,nativeAudio:true}:{})}:{})}:{}),
               ...(nativeEnabled&&options.nativeCodecs&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),
@@ -926,7 +929,7 @@ export class DesktopProvider {
       options:options.sharedDesktop ? sharedHelperOptions(options) : {...helperOptions,...(options.virtualMonitors?{monitors:true}:{})},
       captureBackends: ["dxgi"],
       inputAckPipe: !options.sharedDesktop,
-      ...(!cfg.nativePlatform?{resourceFences:true,nativePointerProof:!!cfg.fileRoot&&!options.elevatedDesktop&&!options.virtualDisplay}:{}),
+      ...(!cfg.nativePlatform?{resourceFences:true,nativePointerProof:!!cfg.fileRoot&&!options.elevatedDesktop&&(!options.virtualDisplay||options.virtualNativeDrag===true)}:{}),
       allowMonitors:(options.monitors===true||options.virtualMonitors===true)&&cfg.allowMonitors===true,
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
@@ -1054,7 +1057,7 @@ export class DesktopProvider {
   }
 }
 function sharedHelperOptions(options: z.infer<typeof DesktopStartParams>["options"]) {
-  return {width:options.width,fps:options.fps,quality:options.quality,...(options.sharedProtectedVideo?{protectedVideo:true as const,...(options.protectedAudio?{protectedAudio:true as const,nativeAudio:true as const}:{})}:{}),...(options.sharedVirtual?{virtualDisplay:true as const,...(options.virtualMonitors?{monitors:true as const}:{}),...(options.display?{display:options.display}:{})}:{}),...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{}),...(options.sharedMonitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{})};
+  return {width:options.width,fps:options.fps,quality:options.quality,...(options.sharedProtectedVideo?{protectedVideo:true as const,...(options.protectedAudio?{protectedAudio:true as const,nativeAudio:true as const}:{})}:{}),...(options.sharedVirtual?{virtualDisplay:true as const,...(options.virtualNativeDrag?{virtualNativeDrag:true as const}:{}),...(options.virtualMonitors?{monitors:true as const}:{}),...(options.display?{display:options.display}:{})}:{}),...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{}),...(options.sharedMonitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{})};
 }
 function allowedRelay(url: URL, origins: string[]): boolean {
   if (

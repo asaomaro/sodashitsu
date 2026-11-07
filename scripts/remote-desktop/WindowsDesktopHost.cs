@@ -107,9 +107,15 @@ public static class SodaDesktopHost {
         if(DeferNativeSnapshots&&msg.ContainsKey("deferNativeSnapshot")&&msg["deferNativeSnapshot"] is bool&&(bool)msg["deferNativeSnapshot"])Interlocked.Exchange(ref LastNativeInput,Clock.ElapsedMilliseconds);
         if(applied!=null)applied();InputAck(id,witness);return true;
     }
+    static bool VirtualNativePointerSource() {
+        return VirtualNativePointerProof&&!Secure&&VirtualLease!=null&&VirtualAlive!=null&&VirtualAlive()&&AllowedDesktop()&&
+            ActiveMonitors!=null&&ActiveMonitors.Selected!="all"&&ActiveMonitors.Selected==CaptureDevice&&
+            ActiveMonitors.Bounds==Bounds&&SourceMatches(CaptureDevice);
+    }
     static Dictionary<string,object> PointerWitness(double x,double y) {
-        if(!NativePointerProof||Secure||VirtualLease!=null||ResourceFence==null||!ResourceActive("control")||!ResourceEpochs.ContainsKey("control")||Keys.Count!=0||Buttons.Count!=1||!Buttons.Contains(0))return null;
+        if(!NativePointerProof||Secure||(VirtualLease!=null&&!VirtualNativePointerSource())||ResourceFence==null||!ResourceActive("control")||!ResourceEpochs.ContainsKey("control")||Keys.Count!=0||Buttons.Count!=1||!Buttons.Contains(0))return null;
         Point pixel=new Point(Bounds.Left+(int)Math.Round(x*(Bounds.Width-1)),Bounds.Top+(int)Math.Round(y*(Bounds.Height-1)));
+        if(VirtualLease!=null&&!Bounds.Contains(pixel))return null;
         Tuple<long,int> target;
         if(MemoryPointerTarget!=null)target=MemoryPointerTarget(pixel);
         else {IntPtr window=GetAncestor(WindowFromPoint(pixel),2);uint pid;GetWindowThreadProcessId(window,out pid);target=window!=IntPtr.Zero&&pid>0&&pid<=Int32.MaxValue?Tuple.Create(window.ToInt64(),(int)pid):null;}
@@ -381,6 +387,32 @@ public static class SodaDesktopHost {
         }finally{Keys.Clear();Buttons.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();foreach(string resource in oldReleased)ResourceReleased.Add(resource);ResourceFence=null;MemoryInput=null;MemoryOutput=null;MemoryDesktop=null;MemoryPointerTarget=null;LastAppliedPointer=null;NativePointerProof=false;InputAckPipe=false;Control=false;Stopping=false;Secure=oldSecure;MonitorDriver=oldDriver;Bounds=oldBounds;}
         Console.WriteLine("desktop_native_pointer_generated_applied_down_epoch_coordinates_policy_and_failure_passed");
     }
+    sealed class MemoryVirtualLease:IDisposable {public void Dispose(){}}
+    public static void VerifyVirtualNativePointerWitness(){
+        if(VirtualLease!=null||ResourceFence!=null||MemoryDesktop!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
+        var oldDriver=MonitorDriver;var oldBounds=Bounds;var oldReleased=new HashSet<string>(ResourceReleased);bool oldStopping=Stopping;
+        try {
+            foreach(string mode in new[]{"ok","not-opted","lease-lost","secure","desktop-lost","layout-changed","same-name-recreated","selected-physical","bounds-changed","out-of-range","fence-lost"}){
+                int looked=0;bool alive=mode!="lease-lost";Secure=mode=="secure";Stopping=false;
+                VirtualLease=new MemoryVirtualLease();VirtualAlive=()=>alive;VirtualNativePointerProof=mode!="not-opted";NativePointerProof=true;
+                MemoryDesktop=()=>mode!="desktop-lost";Bounds=new Rectangle(1600,-200,800,600);CaptureDevice="owned";
+                var fake=new MemoryMonitors{Items=new[]{new SodaDesktopMonitorLayout.Item("owned",Bounds,false,100),new SodaDesktopMonitorLayout.Item("physical",new Rectangle(0,0,1600,900),true,100)}};
+                MonitorDriver=fake;ActiveMonitors=new SodaDesktopMonitorLayout(fake,"owned");
+                ResourceFence=new object();ResourceEpochs["control"]=Guid.NewGuid().ToString("D");ResourceReleased.Remove("control");Buttons.Add(0);
+                MemoryPointerTarget=point=>{looked++;return Tuple.Create(42L,7);};
+                if(mode=="layout-changed")fake.Items=new[]{new SodaDesktopMonitorLayout.Item("owned",new Rectangle(1601,-200,800,600),false,100)};
+                if(mode=="same-name-recreated")alive=false; // original client validates PnP instance/container, not display-name equality
+                if(mode=="selected-physical")CaptureDevice="physical";
+                if(mode=="bounds-changed")Bounds=new Rectangle(1600,-200,801,600);
+                if(mode=="fence-lost")ResourceReleased.Add("control");
+                var proof=PointerWitness(mode=="out-of-range"?1.1:0.5,0.5);
+                if((proof!=null)!=(mode=="ok")||looked!=(mode=="ok"?1:0))throw new InvalidOperationException("Virtual native pointer guard: "+mode);
+                if(proof!=null&&(Num(proof,"x")!=2000||Num(proof,"y")!=100||(string)proof["epoch"]!=ResourceEpochs["control"]))throw new InvalidOperationException("Virtual native pointer coordinate/epoch mismatch");
+                Buttons.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();
+            }
+        }finally{Buttons.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();foreach(string resource in oldReleased)ResourceReleased.Add(resource);VirtualLease=null;VirtualAlive=null;VirtualNativePointerProof=false;NativePointerProof=false;ResourceFence=null;MemoryDesktop=null;MemoryPointerTarget=null;ActiveMonitors=null;CaptureDevice=null;Secure=false;Stopping=oldStopping;MonitorDriver=oldDriver;Bounds=oldBounds;}
+        Console.WriteLine("desktop_owned_virtual_native_pointer_11_memory_checks_passed");
+    }
     // A fresh validation process only. Every desktop, topology, emit and output
     // endpoint is memory-backed before any production input code is called.
     public static void VerifyQueuedMonitorInput(){
@@ -558,6 +590,7 @@ public static class SodaDesktopHost {
         Console.WriteLine("virtual_desktop_preflight_guard_passed: fake normal/secure guards; no native device or desktop APIs");
     }
     static SodaDesktopDisplay.Lease DisplayLease;
+    static bool VirtualNativePointerProof;
     static IDisposable VirtualLease;static Func<bool> VirtualAlive;static Func<string> VirtualFailure;static bool VirtualRequested;
     public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null,Func<int> lockState=null,bool locallyAllowMonitors=false,bool locallyAllowVirtualDisplay=false) {
         VirtualRequested=false;bool failureReported=false;
@@ -657,7 +690,10 @@ public static class SodaDesktopHost {
             }
         }
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
-        NativePointerProof=!Secure&&VirtualLease==null&&ResourceFence!=null&&config.ContainsKey("nativePointerProof")&&config["nativePointerProof"] is bool&&(bool)config["nativePointerProof"];
+        VirtualNativePointerProof=!Secure&&VirtualLease!=null&&VirtualAlive!=null&&VirtualAlive()&&ResourceFence!=null&&
+            options.ContainsKey("virtualNativeDrag")&&options["virtualNativeDrag"] is bool&&(bool)options["virtualNativeDrag"]&&
+            !options.ContainsKey("monitors")&&!options.ContainsKey("monitorDevice")&&ActiveMonitors!=null&&ActiveMonitors.Selected==CaptureDevice&&ActiveMonitors.Bounds==Bounds;
+        NativePointerProof=!Secure&&(VirtualLease==null||VirtualNativePointerSource())&&ResourceFence!=null&&config.ContainsKey("nativePointerProof")&&config["nativePointerProof"] is bool&&(bool)config["nativePointerProof"];
         bool protectedVideo=ProtectedVideoProof(config);
         bool protectedAudioClock=protectedVideo&&config.ContainsKey("protectedAudioClock")&&config["protectedAudioClock"] is string&&(string)config["protectedAudioClock"]=="windows-qpc-v1"&&options.ContainsKey("protectedAudio")&&options["protectedAudio"] is bool&&(bool)options["protectedAudio"]&&options.ContainsKey("nativeAudio")&&options["nativeAudio"] is bool&&(bool)options["nativeAudio"];
         bool nativeCeiling=(!Secure||protectedVideo) && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
@@ -689,6 +725,7 @@ public static class SodaDesktopHost {
             if(VirtualLease!=null&&monitorCeiling)ready["virtualMonitors"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
             if(NativePointerProof)ready["nativePointerProof"]=true;
+            if(NativePointerProof&&VirtualNativePointerProof)ready["virtualNativeDragProof"]=true;
             if(ResourceFence!=null)ready["resourceFences"]=true;
             if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;

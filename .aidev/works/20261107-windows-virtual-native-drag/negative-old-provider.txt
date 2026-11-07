@@ -1,0 +1,85 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-virtual-native-drag
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (329 tests | 4 failed | 325 skipped) 4064ms
+   × copies a trusted virtual selection through the file lane only after physical cleanup 1035ms
+   × copies a trusted virtual-shared selection through the file lane only after physical cleanup 1011ms
+   × requires negotiated fresh owned virtual drag proof across relay/provider: single 1009ms
+   × requires negotiated fresh owned virtual drag proof across relay/provider: shared 1007ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > copies a trusted virtual selection through the file lane only after physical cleanup
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > copies a trusted virtual-shared selection through the file lane only after physical cleanup
+AssertionError: expected 0 to be greater than 0
+ ❯ src/desktop/DesktopRelay.test.ts:1621:41
+
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:1621:2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > requires negotiated fresh owned virtual drag proof across relay/provider: single
+AssertionError: expected [ { type: 'files_ticket', …(1) } ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   ObjectContaining {
+-     "type": "ready",
++ [
++   {
++     "ticket": "d69JROTwdGLRy2AsS6F8A72xOqKxerlWDoB_Pi9RL88",
++     "type": "files_ticket",
+    },
+  ]
+
+ ❯ src/desktop/DesktopRelay.test.ts:2050:36
+
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:2050:2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > requires negotiated fresh owned virtual drag proof across relay/provider: shared
+AssertionError: expected [ { …(2) }, …(1) ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   ObjectContaining {
+-     "type": "ready",
++ [
++   {
++     "enabled": true,
++     "type": "shared_virtual_available",
++   },
++   {
++     "ticket": "6VV_pQlmeMg6PcWgkw1pqK2ffV8Fa7AKe9Y_lWOV36s",
++     "type": "files_ticket",
+    },
+  ]
+
+ ❯ src/desktop/DesktopRelay.test.ts:2050:36
+
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:2050:2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 325 skipped (329)
+   Start at  15:13:36
+   Duration  5.74s (tests 72%, transform 23%, import 5%)

@@ -514,3 +514,15 @@ it("accepts only the owned virtual monitor layout and propagates lease loss to e
  const f=fixture(),a=f.join("virtual",virtualConfiguration),b=f.join("virtual",virtualConfiguration),layout={selected:"virtual-owned",bounds:{x:2000,y:0,width:320,height:200},allSupported:false,monitors:[{id:"virtual-owned",x:2000,y:0,width:320,height:200,primary:false}]};
  try{f.child.send({...ready,virtualDisplay:true,monitorLayout:layout});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({virtualDisplay:true}));f.child.send({type:"virtual_display_failure",code:"lease_lost"});f.child.send(frame(1));await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));for(const member of[a,b])expect(member.messages.map(m=>m.type)).toEqual(["ready","virtual_display_failure"]);}finally{f.pool.dispose();}
 });
+it.each(['proved','old-host','not-requested','no-fence','multi-source'])('only forwards fresh owned virtual drag proof: %s',async kind=>{
+ const f=fixture(),configuration={...virtualConfiguration,nativePointerProof:true,options:{...virtualConfiguration.options,...(kind!=='not-requested'?{virtualNativeDrag:true}:{})}},a=f.join('virtual',configuration),b=f.join('virtual',configuration);
+ try{
+  f.child.send({...ready,virtualDisplay:true,...(kind!=='no-fence'?{resourceFences:true}:{}),nativePointerProof:true,...(kind!=='old-host'?{virtualNativeDragProof:true}:{}),...(kind==='multi-source'?{virtualMonitors:true,monitorLayout:{selected:'owned',bounds:{x:0,y:0,width:320,height:200},allSupported:false,monitors:[{id:'owned',x:0,y:0,width:320,height:200,primary:false}]}}:{})});
+  if(kind==='proved'){
+   await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({virtualNativeDragProof:true,nativePointerProof:true}));
+   expect(a.session.requestControl!(true)).toBe(true);expect(b.session.requestControl!(true)).toBe(false);
+   f.child.send({type:'virtual_display_failure',code:'lease_lost'});await vi.waitFor(()=>expect(b.session.exitCode).toBe(0));
+   expect(b.messages.map(m=>m.type)).toEqual(['ready','virtual_display_failure']);
+  }else{await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));expect(a.messages.some(m=>m.type==='ready')).toBe(false);}
+ }finally{f.pool.dispose();}
+});

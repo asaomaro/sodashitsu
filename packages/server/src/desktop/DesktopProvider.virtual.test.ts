@@ -11,3 +11,12 @@ it.each([true,false])('requires the generated helper virtual source proof before
   else{await vi.waitFor(()=>expect(closed).toBe(true));expect(messages.some(m=>m.type==='ready')).toBe(false);await vi.waitFor(()=>expect((provider as any).physicalHelpers.size).toBe(0));}
  }finally{provider.dispose();for(const ws of relay.clients)ws.terminate();await new Promise<void>(r=>relay.close(()=>r()));}
 },10000);
+it.each([
+ {virtualDisplay:false,files:true,virtualNativeDrag:true},
+ {virtualDisplay:true,virtualNativeDrag:true},
+ {virtualDisplay:true,files:true,virtualNativeDrag:true,virtualMonitors:true},
+ {virtualDisplay:true,files:true,virtualNativeDrag:true,elevatedDesktop:true},
+])('refuses invalid virtual native drag scope before launching: %j',async extra=>{
+ const provider=new DesktopProvider({command:['never-launched'],allowInput:true,allowVirtualDisplay:true,fileRoot:'/generated/root',origins:()=>['http://127.0.0.1:1']});
+ try{const {virtualDisplay,...rest}=extra;const options={width:320,fps:10,quality:65,features:true,...rest,...(virtualDisplay?{virtualDisplay:true as const}:{})};await expect(provider.start('generated',{url:'ws://127.0.0.1:1/desktop-share',ticket:'a'.repeat(43),options} as any)).rejects.toMatchObject({code:'invalid_params'});}finally{provider.dispose();}
+});

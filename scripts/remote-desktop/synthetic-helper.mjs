@@ -271,6 +271,7 @@ function run() {
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
           ...(nativePointerProof?{nativePointerProof:true}:{}),
+          ...(virtualSource&&nativePointerProof&&options.virtualNativeDrag===true&&process.argv.includes("--virtual-native-drag-generated")?{virtualNativeDragProof:true}:{}),
           ...(nativeFixture&&m.nativeDatagrams===true&&process.argv.includes("--native-datagrams")&&!secure?{nativeDatagrams:true}:{}),
           ...(nativeFixture&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:["h264",...(process.argv.includes("--native-444")?["h264-444"]:[]),"hevc","av1"]}:{}),
           ...(nativeFixture&&nativeAdaptive?{nativeAdaptive:true}:{}),
