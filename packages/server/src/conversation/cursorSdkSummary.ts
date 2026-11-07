@@ -16,6 +16,8 @@ export interface CursorSummaryJob {
 export class CursorSdkSummarySupervisor {
   private readonly children = new Set<ChildProcess>();
   private closed = false;
+  private cleanupUnconfirmed = false;
+  private readonly retireWatchers = new WeakMap<ChildProcess, () => void>();
   private readonly stopping = new WeakSet<ChildProcess>();
   constructor(private readonly options: {
     worker?: URL;
@@ -24,6 +26,9 @@ export class CursorSdkSummarySupervisor {
     // Test seam: production always uses the SDK's public default path resolver.
     authPath?: () => Promise<string>;
     tempRoot?: string;
+    retirementMs?: number;
+    /** Generated process tests only; production always retires the owned OS tree. */
+    retireTree?: (child: ChildProcess) => void;
   } = {}) {}
   close() {
     this.closed = true;
@@ -32,10 +37,13 @@ export class CursorSdkSummarySupervisor {
   private stop(child: ChildProcess) {
     if (!child.pid || this.stopping.has(child)) return;
     this.stopping.add(child);
+    this.retireWatchers.get(child)?.();
     try { if (child.connected) child.send("cancel", () => undefined); } catch {}
     const force = setTimeout(() => {
-      if (child.exitCode !== null || child.signalCode !== null) return;
+      if (this.options.retireTree) { this.options.retireTree(child); return; }
       if (process.platform === "win32") {
+        // A vanished parent PID is not a safe/reliable Windows tree owner.
+        if (child.exitCode !== null || child.signalCode !== null) return;
         const killer = spawn(join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"),
           ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
         killer.on("error", () => child.kill());
@@ -46,19 +54,25 @@ export class CursorSdkSummarySupervisor {
     force.unref();
     child.once("close", () => clearTimeout(force));
   }
+  private assertAvailable() {
+    if (this.cleanupUnconfirmed) throw new RpcError("agent_prompt_failed", "前のCursor SDKの終了を確認できないため、新しい要約を開始できません");
+    if (this.closed) throw new RpcError("agent_prompt_failed", "サーバを停止しています");
+  }
   async run(job: CursorSummaryJob): Promise<{ text: string; sessionId: null }> {
     job.check();
-    if (this.closed) throw new RpcError("agent_prompt_failed", "サーバを停止しています");
+    this.assertAvailable();
     if (job.sessionId || job.effort) throw new RpcError("invalid_params", "Cursor SDKの要約は毎回独立して生成します。個別のeffort指定にはまだ対応していません。");
-    if (!job.model || job.model.length > 512 || !job.prompt || Buffer.byteLength(job.prompt) > 384 * 1024)
+    if (!job.model) throw new RpcError("invalid_params", "Cursor SDKの要約に使うモデルを明示的に選択してください");
+    if (job.model.length > 512 || !job.prompt || Buffer.byteLength(job.prompt) > 384 * 1024)
       throw new RpcError("invalid_params", "Cursorの要約入力の上限を超えました");
     let authPath: string;
     try {
       authPath = this.options.authPath ? await this.options.authPath() : (await import("@cursor/sdk")).getDefaultSdkAuthPath();
     } catch { throw unavailable(); }
     job.check();
-    if (this.closed) throw new RpcError("agent_prompt_failed", "サーバを停止しています");
+    this.assertAvailable();
     const dir = await mkdtemp(join(this.options.tempRoot ?? tmpdir(), "soda-cursor-summary-"));
+    let cleanupConfirmed = true;
     try {
       const home = join(dir, "home"), cwd = join(dir, "work"), store = join(dir, "store");
       await Promise.all([home, cwd, store].map(path => mkdir(path, { mode: 0o700 })));
@@ -73,13 +87,30 @@ export class CursorSdkSummarySupervisor {
         ...(apiKey ? { apiKey } : {}) });
       if (Buffer.byteLength(input) > 512 * 1024) throw new RpcError("invalid_params", "Cursorの要約入力の上限を超えました");
       job.check();
-      if (this.closed) throw new RpcError("agent_prompt_failed", "サーバを停止しています");
+      this.assertAvailable();
       const result = await new Promise<{ text: string; sessionId: null }>((resolve, reject) => {
         const child = spawn(process.execPath, [fileURLToPath(this.options.worker ?? new URL("./cursorSdkSummaryWorker.js", import.meta.url))],
           { cwd, env, stdio: ["pipe", "pipe", "ignore", "ipc"], detached: process.platform !== "win32", windowsHide: true });
         this.children.add(child);
+        cleanupConfirmed = false;
         const chunks: Buffer[] = [];
-        let bytes = 0, failure: unknown;
+        let bytes = 0, failure: unknown, settled = false, unconfirmed = false;
+        let retirement: ReturnType<typeof setTimeout> | undefined;
+        const finishUnconfirmed = () => {
+          if (settled) return;
+          settled = true; unconfirmed = true; this.cleanupUnconfirmed = true;
+          clearTimeout(timer); clearInterval(access); clearTimeout(retirement);
+          // Detaching owned handles bounds this operation; it does not prove
+          // descendants died. Keep private state and refuse new SDK jobs.
+          child.stdin?.destroy(); child.stdout?.destroy();
+          try { if (child.connected) child.disconnect(); } catch {}
+          process.stderr.write("soda: Cursor SDK close unconfirmed; private temporary state retained; new SDK summaries disabled\n");
+          reject(new RpcError("agent_prompt_failed", "Cursor SDKの終了を確認できません。結果を破棄し、一時保存先を保持しました"));
+        };
+        const armRetirement = () => {
+          retirement ??= setTimeout(finishUnconfirmed, this.options.retirementMs ?? 2000);
+        };
+        this.retireWatchers.set(child, armRetirement);
         const fail = (error: unknown) => { if (failure) return; failure = error; this.stop(child); };
         const timer = setTimeout(() => fail(new RpcError("agent_prompt_failed", "要約が時間内に完了しませんでした")), this.options.deadlineMs ?? 120000);
         const access = setInterval(() => {
@@ -94,9 +125,31 @@ export class CursorSdkSummarySupervisor {
           chunks.push(Buffer.from(chunk));
         });
         // Wait for physical close even after spawn error/invalid result, before cleanup or settlement.
-        child.on("error", () => { failure ??= unavailable(); });
+        child.on("error", () => { failure ??= unavailable(); armRetirement(); });
+        child.on("exit", () => {
+          armRetirement();
+          if (process.platform !== "win32" && child.pid) {
+            // The worker has exited; a remaining owned group means descendants
+            // still exist. Fail closed and retire that group, even after exitCode.
+            let groupExists = false;
+            try { process.kill(-child.pid, 0); groupExists = true; }
+            catch(error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") finishUnconfirmed(); }
+            if (groupExists) {
+              failure ??= new RpcError("agent_prompt_failed", "Cursor SDKの子プロセスが残ったため結果を破棄しました");
+              // Retire immediately: close may follow exit before the ordinary
+              // 500ms cancellation grace and clear its timer.
+              try {
+                if (this.options.retireTree) this.options.retireTree(child);
+                else process.kill(-child.pid, "SIGKILL");
+              } catch { finishUnconfirmed(); }
+            }
+          }
+        });
         child.on("close", code => {
-          clearTimeout(timer); clearInterval(access); this.children.delete(child);
+          clearTimeout(timer); clearInterval(access); clearTimeout(retirement);
+          this.retireWatchers.delete(child); this.children.delete(child);
+          if (unconfirmed || settled) return;
+          settled = true; cleanupConfirmed = true;
           if (failure) { reject(failure); return; }
           try {
             job.check();
@@ -115,7 +168,7 @@ export class CursorSdkSummarySupervisor {
       job.check();
       return result;
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      if (cleanupConfirmed) await rm(dir, { recursive: true, force: true });
     }
   }
 }

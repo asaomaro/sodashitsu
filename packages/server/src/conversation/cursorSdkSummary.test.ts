@@ -7,7 +7,7 @@ import { CursorSdkSummarySupervisor } from "./cursorSdkSummary.js";
 
 const dirs: string[] = [], supervisors: CursorSdkSummarySupervisor[] = [];
 afterEach(async () => { for (const s of supervisors.splice(0)) s.close(); for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); vi.unstubAllEnvs(); });
-async function setup(body: string, options: { deadlineMs?: number; accessIntervalMs?: number } = {}) {
+async function setup(body: string, options: { deadlineMs?: number; accessIntervalMs?: number; retirementMs?: number; retireTree?: () => void } = {}) {
   const root = await mkdtemp(join(tmpdir(), "soda-sdk-supervisor-test-")); dirs.push(root);
   const worker = join(root, "fixture.mjs"), temps = join(root, "temps");
   await import("node:fs/promises").then(fs => fs.mkdir(temps));
@@ -63,5 +63,28 @@ describe("Cursor SDK owned worker", () => {
     const f=await setup(`process.exit(9)`);
     await expect(f.supervisor.run({...f.job,sessionId:'old-session'})).rejects.toMatchObject({code:'invalid_params'});
     await expect(f.supervisor.run({...f.job,effort:'high'})).rejects.toMatchObject({code:'invalid_params'});expect(await readdir(f.temps)).toEqual([]);
+  });
+});
+
+describe("Cursor SDK physical retirement",()=>{
+  const held = `import('node:child_process').then(({spawn})=>{const p=spawn(process.execPath,['-e','setTimeout(()=>{},10000)'],{stdio:['ignore',1,'ignore']});writeFileSync(input.cwd+'/owned-child',String(p.pid));process.stdout.write(JSON.stringify({ok:true,text:'late fixture'}));process.disconnect();process.exit(0);});`;
+  it.skipIf(process.platform==='win32')("retires a remaining owned group after worker exit rather than trusting exitCode",async()=>{
+    const f=await setup(held,{deadlineMs:3000,retirementMs:1800});
+    const pending=f.supervisor.run(f.job);const result=await pending.then(()=>"success",()=>"failed");
+    expect(result).toBe("failed");expect(await readdir(f.temps)).toEqual([]);
+  });
+  it.skipIf(process.platform==='win32')("bounds unconfirmed inherited-pipe close, retains state and prevents a new SDK job",async()=>{
+    const f=await setup(held,{deadlineMs:5000,retirementMs:150,retireTree:()=>{}});
+    let pid:number|undefined;const pending=f.supervisor.run(f.job).then(()=>"success",error=>error);
+    try{
+      await vi.waitFor(async()=>{const [dir]=await readdir(f.temps);pid=Number(await import('node:fs/promises').then(fs=>fs.readFile(join(f.temps,dir!,"work","owned-child"),'utf8')));expect(pid).toBeGreaterThan(0);});
+      const result=await Promise.race([pending,new Promise(resolve=>setTimeout(()=>resolve('still-pending'),600))]);
+      expect(result).toMatchObject({code:'agent_prompt_failed'});
+      expect((result as Error).message).toContain('一時保存先を保持');
+      expect(await readdir(f.temps)).toHaveLength(1);
+      expect(()=>process.kill(pid!,0)).not.toThrow();
+      await expect(f.supervisor.run(f.job)).rejects.toThrow(/前のCursor SDK/);
+      expect(await readdir(f.temps)).toHaveLength(1);
+    }finally{if(pid){try{process.kill(pid,'SIGKILL')}catch{}}await pending;}
   });
 });
