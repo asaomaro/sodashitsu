@@ -34,7 +34,7 @@ process.stdout.write("\\u001b]0;\\u2733 fake\\u0007fake agent ready\\r\\n");
 const hook = () => {
   const sock = process.env.SODA_AGENT_REPORT_SOCKET;
   if (!sock || !sessionId) return;
-  const c = connect(sock, () => c.end(JSON.stringify({ paneId: pane, kind: "claude", sessionId, agentPid: process.pid }) + "\\n"));
+  const c = connect(sock, () => c.end(JSON.stringify({ paneId: pane, kind: "claude", sessionId, agentPid: process.pid, ...(process.env.FAKE_PERMISSION_MODE ? { executionSettings: { permissionMode: { value: process.env.FAKE_PERMISSION_MODE, source: "hook", basis: "hook" } } } : {}) }) + "\\n"));
   c.on("error", () => {});
 };
 setTimeout(hook, Number(process.env.FAKE_DELAY_HOOK || 0));
@@ -184,6 +184,17 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     for (const secret of ["SECRET-NAME", "/secret/cwd", "/secret/t.jsonl", dir]) expect(json, secret).not.toContain(secret);
   });
 
+  it("routes verified parent hook settings into the API and keeps them across numeric statusline reports", async () => {
+    const { server, client, paneId } = await boot();
+    await runAgent(server, paneId, { FAKE_SESSION_ID: SID, FAKE_PERMISSION_MODE: "plan" });
+    await vi.waitFor(async () => expect((await usageOf(client, paneId)).panes[paneId]?.executionSettings?.permissionMode).toEqual({ value: "plan", source: "hook", basis: "hook" }), { timeout: 15_000, interval: 200 });
+    const first = await usageOf(client, paneId);
+    expect(first.panes[paneId]?.source).toBe("hook"); expect(first.panes[paneId]?.costUsd).toBeUndefined(); expect(first.accounts).toEqual([]);
+    sendStatus(server, paneId, status());
+    await vi.waitFor(async () => expect((await usageOf(client, paneId)).panes[paneId]?.costUsd).toBe(1.25), { timeout: 15_000, interval: 200 });
+    expect((await usageOf(client, paneId)).panes[paneId]?.executionSettings?.permissionMode.value).toBe("plan");
+  });
+
   it("別の会話の session_id の報告は捨てる（前の値は変わらない）。否定の対照: 一致する報告なら届く", async () => {
     const { server, client, paneId } = await boot();
     await runAgent(server, paneId, { FAKE_SESSION_ID: SID });
@@ -201,13 +212,14 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     await runAgent(server, paneId, { FAKE_SESSION_ID: SID });
     await new Promise<void>((resolve, reject) => {
       const c = connect(agentReportSocketPathFor(stateDir), () =>
-        c.end(JSON.stringify({ type: "usage", paneId, kind: "claude", sessionId: SID, agentPid: process.pid, costUsd: 777 }) + "\n"),
+        c.end(JSON.stringify({ type: "usage", paneId, kind: "claude", sessionId: SID, agentPid: process.pid, costUsd: 777, executionSettings: { permissionMode: { value: "bypassPermissions", source: "hook", basis: "hook" } } }) + "\n"),
       );
       c.on("close", () => resolve());
       c.on("error", reject);
     });
     await new Promise((r) => setTimeout(r, 1500));
     expect((await usageOf(client, paneId)).panes[paneId]?.costUsd).toBeUndefined();
+    expect((await usageOf(client, paneId)).panes[paneId]?.executionSettings).toBeUndefined();
     expect((await usageOf(client, paneId)).accounts).toEqual([]);
   });
 

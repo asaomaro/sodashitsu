@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AccountUsage, UsageWindow } from "@sodashitsu/protocol";
+import type { AgentExecutionSettings, AccountUsage, UsageWindow } from "@sodashitsu/protocol";
 
 /**
  * Claude Code のステータスラインの包みが送ってくる利用状況（20261010-agent-usage の PR2。AC4）を、受けて持つ。
@@ -14,6 +14,7 @@ export interface UsageReportWindow {
 }
 
 export interface UsageReport {
+  executionSettings?: AgentExecutionSettings;
   paneId: string;
   sessionId: string;
   agentPid?: number;
@@ -30,6 +31,10 @@ export interface UsageReport {
   configKey?: string;
   /** 別の設定のフォルダを使うときの、フォルダの名前（末尾だけ）。 */
   configDirName?: string;
+}
+
+export function executionSettingsOnly(report: UsageReport): boolean {
+  return report.executionSettings !== undefined && Object.keys(report).every(key => ["paneId", "sessionId", "agentPid", "executionSettings"].includes(key));
 }
 
 interface PaneEntry {
@@ -74,10 +79,17 @@ export class ReportedUsage {
   note(report: UsageReport): void {
     const at = this.now();
     this.last = at;
+    const previous = this.panes.get(report.paneId);
+    const same = previous?.report.sessionId === report.sessionId ? previous : undefined;
+    const settingsOnly = executionSettingsOnly(report);
+    const executionSettings = report.executionSettings || same?.report.executionSettings
+      ? { ...same?.report.executionSettings, ...report.executionSettings } : undefined;
+    const merged = settingsOnly && same ? { ...same.report, ...(executionSettings ? { executionSettings } : {}) } : { ...report, ...(executionSettings ? { executionSettings } : {}) };
     this.panes.delete(report.paneId);
-    this.panes.set(report.paneId, { report, at });
+    // A new hook observation does not make the old cost/context report newer.
+    this.panes.set(report.paneId, { report: merged, at: settingsOnly && same ? same.at : at });
     while (this.panes.size > PANES_MAX) this.panes.delete(this.panes.keys().next().value as string);
-    this.noteAccount(report, at);
+    if (!settingsOnly) this.noteAccount(report, at);
   }
 
   /** その pane の、いまの会話（`sessionId`）の最新の報告。会話が違えば（`/clear` の後など）無い。 */

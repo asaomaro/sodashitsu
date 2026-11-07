@@ -1,3 +1,4 @@
+import { executionSettingsOnly } from "./reportedUsage.js";
 import { RpcError } from "@sodashitsu/protocol";
 import { AccountCostReader } from "./accountCost.js";
 import type { AccountUsage, AgentUsage, AgentUsageResult, Pane } from "@sodashitsu/protocol";
@@ -122,17 +123,20 @@ export class UsageService {
     if (!adapter) return null;
     const ref = pane.agentSession;
     if (!ref || ref.kind !== agent.kind) return null;
+    const owner = { instanceId: agent.instanceId, kind: agent.kind, sessionId: ref.sessionId, refKind: ref.kind };
     const note = this.transcripts.get(pane.id);
     const transcriptPath =
       note !== undefined && note.sessionId === ref.sessionId ? note.path : undefined;
     let base: Omit<AgentUsage, "paneId" | "kind"> | null = null;
     try {
-      base = await adapter.usageFor({ paneId: pane.id, sessionId: ref.sessionId, transcriptPath });
+      base = await adapter.usageFor({ paneId: pane.id, sessionId: owner.sessionId, transcriptPath });
     } catch {
       // 例外の中身（場所を含みうる）は書かない。
       this.deps.logger.debug("usage: read failed", { kind: agent.kind });
     }
-    const rep = this.deps.reported?.paneReport(pane.id, ref.sessionId);
+    const current = this.deps.session.getPane(pane.id);
+    if (this.closed || !current?.agent || current.agent.instanceId !== owner.instanceId || current.agent.kind !== owner.kind || current.agentSession?.kind !== owner.refKind || current.agentSession.sessionId !== owner.sessionId) return null;
+    const rep = this.deps.reported?.paneReport(pane.id, owner.sessionId);
     const merged = rep === undefined ? base : mergeReported(base, rep.report, rep.at);
     return merged === null ? null : { paneId: pane.id, kind: agent.kind, ...merged };
   }
@@ -157,9 +161,10 @@ function mergeReported(
             basis: "context",
             ...(r.contextTokens !== undefined ? { input: r.contextTokens } : {}),
           },
-          source: "statusline",
+          source: executionSettingsOnly(r) ? "hook" : "statusline",
           updatedAt: at,
         };
+  if (r.executionSettings) out.executionSettings = { ...out.executionSettings, ...r.executionSettings };
   if (out.model === null && r.model !== undefined) out.model = r.model;
   if (r.costUsd !== undefined && (out.costAsOf === undefined || at >= out.costAsOf)) {
     out.costUsd = r.costUsd;
@@ -169,7 +174,7 @@ function mergeReported(
   if (r.contextTokens !== undefined) out.contextTokens = r.contextTokens;
   if (r.contextWindowSize !== undefined) out.contextWindowTokens = r.contextWindowSize;
   if (r.contextUsedPct !== undefined) out.contextUsedPct = r.contextUsedPct;
-  if (at >= out.updatedAt) {
+  if (!executionSettingsOnly(r) && at >= out.updatedAt) {
     out.source = "statusline";
     out.updatedAt = at;
   }

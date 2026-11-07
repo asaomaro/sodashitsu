@@ -1176,6 +1176,7 @@ export async function composeServer(
                   paneId: report.paneId,
                   sessionId: report.sessionId,
                   ...(report.agentPid !== undefined ? { agentPid: report.agentPid } : {}),
+                  ...(report.executionSettings ? { executionSettings: report.executionSettings } : {}),
                   ...(report.model !== undefined ? { model: report.model } : {}),
                   ...(report.modelName !== undefined ? { modelName: report.modelName } : {}),
                   ...(report.costUsd !== undefined ? { costUsd: report.costUsd } : {}),
@@ -1195,6 +1196,11 @@ export async function composeServer(
               // サブエージェントの報告は claude だけ。入れ子の子の `claude` の報告は、親の pane の件数に混ぜない（同じ確かめ。pid の無い報告は今までどおり）。
               if (session.acceptsReporter(report.paneId, report.kind, report.agentPid)) subagents.report(report);
             }
+            if (report.kind === "claude" && report.type !== "usage" && report.executionSettings) usageIntake.offer({
+              paneId: report.paneId, sessionId: report.sessionId,
+              ...(report.agentPid !== undefined ? { agentPid: report.agentPid } : {}),
+              executionSettings: report.executionSettings,
+            });
           },
           logger,
         );

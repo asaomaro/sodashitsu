@@ -90,3 +90,16 @@ describe("UsageService", () => {
     expect((await bad.get()).accounts).toEqual([]);
   });
 });
+
+it.each(["session", "instance", "kind", "close"])("discards old execution observations after an awaited %s change", async change => {
+  const p = pane("late"); let resolve!: (value: any) => void;
+  const adapter: UsageAdapter = { kind: "claude", usageFor: () => new Promise(done => { resolve = done }) };
+  const svc = new UsageService({ session: { getPane: () => p, snapshot: () => ({ panes: [p] }) }, adapters: [adapter], logger: { debug() {}, warn() {} } });
+  const pending = svc.get("late");
+  if (change === "session") p.agentSession = { ...p.agentSession!, sessionId: "new-session" };
+  if (change === "instance") p.agent = { ...p.agent!, instanceId: "new-instance" };
+  if (change === "kind") p.agent = { ...p.agent!, kind: "codex" };
+  if (change === "close") svc.close();
+  resolve({ model: "old", tokens: { basis: "context" }, source: "hook", updatedAt: 1, executionSettings: { permissionMode: { value: "plan", source: "hook", basis: "hook" } } });
+  expect((await pending).panes.late).toBeNull(); svc.close();
+});

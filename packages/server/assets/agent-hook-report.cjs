@@ -190,6 +190,7 @@ async function main() {
   const raw = await readStdin();
   let sessionId;
   let extra;
+  let executionSettings;
   let origin = {}; // 作業フォルダ・会話が始まった理由（サーバが、報告の持ち主を確かめる材料）・会話の記録の場所（利用状況の材料）
   try {
     const payload = JSON.parse(raw);
@@ -206,6 +207,9 @@ async function main() {
       });
     }
     if (payload && typeof payload === "object" && kind === "claude") {
+      // Only the parent hook scope. Child-agent permission overrides must not be reported as the parent's.
+      if (!payload.agent_id && !payload.agent_type && ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"].includes(payload.hook_event_name) && ["default", "plan", "acceptEdits", "auto", "dontAsk", "bypassPermissions"].includes(payload.permission_mode))
+        executionSettings = { permissionMode: { value: payload.permission_mode, source: "hook", basis: "hook" } };
       extra = typedFields(payload);
       if (extra === null) return;
     }
@@ -217,7 +221,7 @@ async function main() {
   await new Promise((resolve) => {
     const conn = net.connect(sock, () => {
       const agentPid = agentPidOf(kind);
-      conn.end(`${JSON.stringify({ paneId, kind, sessionId, ...(agentPid !== undefined ? { agentPid } : {}), ...origin, ...extra })}\n`);
+      conn.end(`${JSON.stringify({ paneId, kind, sessionId, ...(agentPid !== undefined ? { agentPid } : {}), ...origin, ...extra, ...(executionSettings ? { executionSettings } : {}) })}\n`);
     });
     conn.on("error", () => resolve()); // サーバが落ちている等 → 黙って諦める（report は best-effort）
     conn.on("close", () => resolve());

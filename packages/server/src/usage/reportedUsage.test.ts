@@ -17,6 +17,14 @@ describe("ReportedUsage", () => {
     expect(r.paneReport("p1", ID)).toBeUndefined();
   });
 
+  it("merges hook-only observations without re-dating numeric usage and drops them on session replacement", () => {
+    let now = 100; const r = new ReportedUsage(() => now);
+    r.note(rep({ model: "fixture", costUsd: 1, contextTokens: 20 }));
+    now = 200; r.note(rep({ executionSettings: { permissionMode: { value: "plan", source: "hook", basis: "hook" } } }));
+    expect(r.paneReport("p1", ID)).toMatchObject({ at: 100, report: { costUsd: 1, contextTokens: 20, executionSettings: { permissionMode: { value: "plan" } } } });
+    now = 300; r.note(rep({ contextTokens: 25 })); expect(r.paneReport("p1", ID)?.report.executionSettings?.permissionMode?.value).toBe("plan");
+    r.note(rep({ sessionId: OTHER, contextTokens: 1 })); expect(r.paneReport("p1", OTHER)?.report.executionSettings).toBeUndefined();
+  });
   it("アカウント: 5 時間・週・組織の枠。resets_at（秒）は ms にする。過ぎた枠は stale。設定のフォルダの場所は持たない", () => {
     let now = 1_000_000;
     const r = new ReportedUsage(() => now);
