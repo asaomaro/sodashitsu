@@ -2022,7 +2022,7 @@ it("shows a simple notice when its shared headline stalls without announcing a l
 });
 
 
-it.each(["claude","codex","muse","agy","copilot"])("previews local transcription and stages an edited draft for %s without sending",async kind=>{
+it.each(["claude","codex","muse","agy","copilot","grok"])("previews local transcription and stages an edited draft for %s without sending",async kind=>{
  const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/settings.html")).at(-1)!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
  try{
   await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false,transcriptionEnabled:true,transcriptionProvider:"local"});
@@ -2073,4 +2073,13 @@ it.each(["claude","codex","muse","agy","copilot"])("previews local transcription
   await expect(fixture.handlers.get("assistant:transcription-draft")!(local,request)).rejects.toThrow("変わり");
   expect((await fixture.handlers.get("assistant:tools")!(local) as any).transcription.text).toBe("");
  }finally{fixture.audioRead=null;await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
+});
+
+it("saves Grok captain choices only through the authorized chat window",async()=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ try{await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!,local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame},input={kind:"grok",profile:{model:"grok-generated",effort:"high"},notificationSummary:true};
+ await expect(fixture.handlers.get("assistant:captain-choice")!(event,input)).rejects.toThrow("許可");
+ expect(await fixture.handlers.get("assistant:captain-choice")!(local,input)).toMatchObject({captainKind:"grok",agentProfiles:{grok:input.profile}});
+ }finally{await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
 });

@@ -1,0 +1,4 @@
+
+> @sodashitsu/desktop-assistant@0.1.0 typecheck /workspaces/sodashitsu-grok-assistant-profile/packages/desktop-assistant
+> tsc --noEmit -p tsconfig.typecheck.json
+

@@ -49,3 +49,10 @@ it("applies changes immediately without a save button and supports an explicit u
  expect(w.findAll("button").some(button=>button.text().includes("保存"))).toBe(false);
  await w.get('[aria-label="要約エージェントの種類"]').setValue("");expect(settings.summaryConfigured).toBe(false);expect(useSettingsStore(createPinia()).summaryConfigured).toBe(false);
 });
+
+it("selects Grok with fetched model-specific effort choices",async()=>{
+ const {w,settings}=fixture(vi.fn(async()=>({models:[{id:"grok-generated",label:"Generated Grok",efforts:["low","high"]}],message:"Grok CLIから取得した候補"})));await flushPromises();
+ await w.get('[aria-label="要約エージェントの種類"]').setValue("grok");await flushPromises();
+ await w.get('[aria-label="要約エージェントのモデル"]').setValue("grok-generated");await w.get('[aria-label="要約エージェントのeffort"]').setValue("low");
+ expect(settings.summarySettings).toMatchObject({kind:"grok",model:"grok-generated",effort:"low"});expect(w.text()).toContain("Grok CLIから取得");
+});

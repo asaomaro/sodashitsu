@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-assistant-profile/packages/web
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  16:55:33
+   Duration  2.10s (transform 67%, import 16%, environment 10%, tests 7%)
+

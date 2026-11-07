@@ -1,0 +1,85 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-assistant-profile/packages/server
+
+ ❯ src/agent/assistantModels.test.ts (7 tests | 2 failed) 40ms
+   × reads Grok ACP model menus without a new session or prompt 6ms
+   × does not substitute fixed models when Grok rejects model discovery 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/assistantModels.test.ts > reads Grok ACP model menus without a new session or prompt
+AssertionError: expected [ { id: 'auto', …(2) }, …(1) ] to deeply equal [ Array(2) ]
+
+- Expected
++ Received
+
+  [
+    {
++     "efforts": [],
++     "id": "auto",
++     "label": "Auto",
++   },
++   {
+      "efforts": [
+-       "high",
+        "low",
++       "medium",
++       "high",
++       "xhigh",
+      ],
+-     "id": "grok-generated",
+-     "label": "Generated Grok",
+-   },
+-   {
+-     "efforts": [],
+-     "id": "grok-no-effort",
+-     "label": "No effort",
++     "id": "gpt-5.4",
++     "label": "GPT-5.4",
+    },
+  ]
+
+ ❯ src/agent/assistantModels.test.ts:49:24
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/agent/assistantModels.test.ts > does not substitute fixed models when Grok rejects model discovery
+AssertionError: expected [ { id: 'auto', …(2) }, …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "efforts": [],
++     "id": "auto",
++     "label": "Auto",
++   },
++   {
++     "efforts": [
++       "low",
++       "medium",
++       "high",
++       "xhigh",
++     ],
++     "id": "gpt-5.4",
++     "label": "GPT-5.4",
++   },
++ ]
+
+ ❯ src/agent/assistantModels.test.ts:57:53
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 5 passed (7)
+   Start at  16:55:11
+   Duration  1.09s (transform 76%, import 20%, tests 4%)
+
+undefined
+/workspaces/sodashitsu-grok-assistant-profile/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/assistantModels.test.ts

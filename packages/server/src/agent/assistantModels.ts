@@ -10,7 +10,7 @@ type Effort=AssistantModelCatalog["models"][number]["efforts"][number];
 const validId=/^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,199}$/;
 const efforts=(kind:Kind,values:unknown)=>Array.isArray(values)?[...new Set(values.filter((v):v is Effort=>typeof v==='string'&&(ASSISTANT_EFFORTS[kind] as readonly string[]).includes(v)))]:[];
 /** Fixed read-only CLI operations; no renderer-supplied executable, path, prompt or arguments. */
-async function query(command:string,args:string[],msp=false):Promise<unknown>{
+async function query(command:string,args:string[],msp:boolean|"grok"=false):Promise<unknown>{
  const env={...process.env,MUSE_NO_AUTO_UPDATE:'1',MUSE_LOGIN:'0'};
  const target=process.platform==='win32'?await windowsAgentExecutable(command,env):{file:command,prefix:[]};
  return new Promise((resolve,reject)=>{
@@ -31,11 +31,11 @@ async function query(command:string,args:string[],msp=false):Promise<unknown>{
    bytes+=chunk.length;if(bytes>2*1024*1024){finish(undefined,Error('モデル候補が大きすぎます'));return;}
    if(!msp){text+=decoder.write(chunk);return;}buffer+=decoder.write(chunk);
    let end:number;while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end);buffer=buffer.slice(end+1);let row:any;try{row=JSON.parse(line);}catch{continue;}
-    if(row.id===1){if(row.error){finish(undefined,Error('モデル候補を取得できません'));return;}send({jsonrpc:'2.0',method:'initialized',params:{}});send({jsonrpc:'2.0',id:2,method:'model/list',params:{}});}
+    if(row.id===1){if(row.error){finish(undefined,Error('モデル候補を取得できません'));return;}if(msp!=="grok")send({jsonrpc:'2.0',method:'initialized',params:{}});send({jsonrpc:'2.0',id:2,method:msp==="grok"?'_x.ai/models/list':'model/list',params:{}});}
     if(row.id===2){finish(row.result,row.error?Error('モデル候補を取得できません'):undefined);return;}
    }
   });
-  if(msp)send({jsonrpc:'2.0',id:1,method:'initialize',params:{clientInfo:{name:'sodashitsu',version:'1'}}});else child.stdin.end();
+  if(msp)send({jsonrpc:'2.0',id:1,method:'initialize',params:msp==="grok"?{protocolVersion:1,clientCapabilities:{fs:{readTextFile:false,writeTextFile:false},terminal:false},clientInfo:{name:'sodashitsu',version:'1'}}:{clientInfo:{name:'sodashitsu',version:'1'}}});else child.stdin.end();
  });
 }
 export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatalog>{
@@ -48,6 +48,10 @@ export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatal
    const data=JSON.parse(raw);for(const m of (Array.isArray(data.models)?data.models:[])){if(m.visibility==='hide')continue;add(m.slug,m.display_name,m.supported_reasoning_levels?.map((e:any)=>e.effort));}
   }else if(kind==='muse'){
    const data=await query('muse',['serve','--disable-shell','--disable-write'],true) as any;for(const m of Array.isArray(data?.models)?data.models:[])add(m.modelId,m.displayLabel,m.variants);
+  }else if(kind==='grok'){
+   const data=await query('grok',['agent','--no-leader','stdio'],'grok') as any;
+   if(data?.error)throw Error('model catalog error');
+   for(const m of Array.isArray(data?.result?.availableModels)?data.result.availableModels:[])add(m.modelId,m.name,m._meta?.supportsReasoningEffort===true&&Array.isArray(m._meta.reasoningEfforts)?m._meta.reasoningEfforts.map((e:any)=>typeof e==='string'?e:e?.value):[]);
   }else if(kind==='agy'){
    const raw=await query('agy',['models']) as string;for(const line of raw.split('\n')){const [id,label]=line.split('\t');if(!label)continue;const effort=id?.match(/-(low|medium|high)$/)?.[1];add(id,label,effort?[effort]:[]);}
   }else if(kind==='claude'){
@@ -55,7 +59,7 @@ export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatal
   }else{
    add('auto','Auto',[]);add('gpt-5.4','GPT-5.4',['low','medium','high','xhigh']);
   }
-  return {models:rows,message:rows.length?(['claude','copilot'].includes(kind)?'代表的なモデル候補です。利用可否は契約とCLIの版に従います。':''):'候補を取得できません。既定値または保存済みモデルを使用できます。'};
+  return {models:rows,message:rows.length?(kind==='grok'?'Grok CLIから取得したモデル・effort候補です。最大5分キャッシュし、この画面内では再接続まで保持します。':['claude','copilot'].includes(kind)?'代表的なモデル候補です。利用可否は契約とCLIの版に従います。':''):'候補を取得できません。既定値または保存済みモデルを使用できます。'};
  }catch{return {models:[],message:'モデル候補を取得できません。既定値または保存済みモデルを使用できます。'};}
 }
 export function createAssistantModelLister(){

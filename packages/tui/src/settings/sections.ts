@@ -959,6 +959,7 @@ function agentToolsSection(env: SettingsEnv): SettingsSection {
             { value: "muse" as const, label: "Muse Code" },
             { value: "agy" as const, label: "Antigravity CLI" },
             { value: "copilot" as const, label: "GitHub Copilot CLI" },
+            { value: "grok" as const, label: "Grok Build" },
           ],
           summary.kind,
           (kind) => setSummary({ kind, sessionId: "" }),

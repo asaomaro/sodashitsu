@@ -1,0 +1,42 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-assistant-profile/packages/web
+
+ ❯ src/components/AgentToolsSettings.test.ts (7 tests | 1 failed) 134ms
+   × selects Grok with fetched model-specific effort choices 24ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/AgentToolsSettings.test.ts > selects Grok with fetched model-specific effort choices
+AssertionError: expected { kind: 'claude', model: '', …(1) } to match object { kind: 'grok', …(2) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "effort": "low",
+-   "kind": "grok",
+-   "model": "grok-generated",
++   "kind": "claude",
++   "model": "",
+  }
+
+ ❯ src/components/AgentToolsSettings.test.ts:57:35
+     55|  await w.get('[aria-label="要約エージェントの種類"]').setValue("grok");await flus…
+     56|  await w.get('[aria-label="要約エージェントのモデル"]').setValue("grok-generated")…
+     57|  expect(settings.summarySettings).toMatchObject({kind:"grok",model:"gr…
+       |                                   ^
+     58| });
+     59|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  16:55:18
+   Duration  2.04s (transform 68%, import 16%, environment 9%, tests 7%)
+
+undefined
+/workspaces/sodashitsu-grok-assistant-profile/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/AgentToolsSettings.test.ts

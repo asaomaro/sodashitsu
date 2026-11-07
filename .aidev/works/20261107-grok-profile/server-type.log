@@ -1,0 +1,14 @@
+
+> @sodashitsu/server@0.1.0 typecheck /workspaces/sodashitsu-grok-assistant-profile/packages/server
+> tsc --noEmit -p tsconfig.typecheck.json
+
+src/agent/conversationResume.ts(3,90): error TS2366: Function lacks ending return statement and return type does not include 'undefined'.
+src/conversation/ConversationService.ts(31,61): error TS2345: Argument of type '"copilot" | "grok" | "agy" | "muse"' is not assignable to parameter of type 'ExtraKind'.
+  Type '"grok"' is not assignable to type 'ExtraKind'.
+src/conversation/ConversationService.ts(86,92): error TS2345: Argument of type '"copilot" | "grok" | "agy" | "muse"' is not assignable to parameter of type 'ExtraKind'.
+  Type '"grok"' is not assignable to type 'ExtraKind'.
+src/conversation/ConversationService.ts(108,54): error TS2345: Argument of type '"copilot" | "grok" | "agy" | "muse"' is not assignable to parameter of type 'ExtraKind'.
+  Type '"grok"' is not assignable to type 'ExtraKind'.
+/workspaces/sodashitsu-grok-assistant-profile/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 typecheck: `tsc --noEmit -p tsconfig.typecheck.json`
+Exit status 2

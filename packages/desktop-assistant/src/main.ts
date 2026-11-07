@@ -1800,12 +1800,12 @@ function registerIpc(): void {
         openPanel(source.serverOrigin,{paneId:source.paneId,workspaceId:source.workspaceId,instanceId:source.agentInstanceId,machineId:source.machineId},"reply");return;
       }
       if(action==="agent-models"){
-        const request=z.object({kind:z.enum(["claude","codex","muse","agy","copilot"])}).strict().parse(input);
+        const request=z.object({kind:z.enum(["claude","codex","muse","agy","copilot","grok"])}).strict().parse(input);
         if(!control)throw Error("操舵室に接続してください。");
         return AssistantModelCatalog.parse(await control.request("agent.model_options",request));
       }
       if(action==="captain-choice"){
-        const request=z.object({kind:z.enum(["claude","codex","muse","agy","copilot"]),profile:AssistantLaunchSettings,notificationSummary:z.boolean()}).strict().parse(input);
+        const request=z.object({kind:z.enum(["claude","codex","muse","agy","copilot","grok"]),profile:AssistantLaunchSettings,notificationSummary:z.boolean()}).strict().parse(input);
         const saved=await controller.chooseCaptain(request.kind,request.profile,request.notificationSummary);
         assistantChat?.configure(saved.agentProfiles,activeCharacterId());
         return saved;

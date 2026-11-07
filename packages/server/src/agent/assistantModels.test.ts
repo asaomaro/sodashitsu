@@ -41,3 +41,18 @@ it('cleans up the owned process group after a successful text catalog command',a
   expect((await result).models).toEqual([{id:'gemini-generated-high',label:'Generated model',efforts:['high']}]);expect(kill).toHaveBeenCalledWith(-987654321,'SIGKILL');
  }finally{kill.mockRestore();}
 });
+
+it('reads Grok ACP model menus without a new session or prompt',async()=>{
+ const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),stdout:new PassThrough(),stderr:new PassThrough(),kill:vi.fn(()=>{queueMicrotask(()=>child.emit('close',null));return true;})});
+ const sent:any[]=[];child.stdin.on('data',chunk=>{const r=JSON.parse(chunk.toString());sent.push(r);if(r.id===1)queueMicrotask(()=>child.stdout.write(JSON.stringify({id:1,result:{}})+'\n'));if(r.id===2)queueMicrotask(()=>child.stdout.write(JSON.stringify({id:2,result:{result:{availableModels:[{modelId:'grok-generated',name:'Generated Grok',_meta:{supportsReasoningEffort:true,reasoningEfforts:[{id:'deep',value:'high'},'low','unsupported']}},{modelId:'grok-no-effort',name:'No effort',_meta:{supportsReasoningEffort:false,reasoningEfforts:['high']}}]}}})+'\n'));});
+ vi.mocked(spawn).mockReturnValue(child as never);const result=await readAssistantModels('grok');
+ expect(result.models).toEqual([{id:'grok-generated',label:'Generated Grok',efforts:['high','low']},{id:'grok-no-effort',label:'No effort',efforts:[]}]);
+ expect(result.message).toContain('Grok CLIから取得');expect(result.message).toContain('5分');
+ expect(sent.map(r=>r.method)).toEqual(['initialize','_x.ai/models/list']);expect(sent[0].params.protocolVersion).toBe(1);
+ expect(vi.mocked(spawn).mock.calls[0]!.slice(0,2)).toEqual(['grok',['agent','--no-leader','stdio']]);expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+});
+it('does not substitute fixed models when Grok rejects model discovery',async()=>{
+ const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),stdout:new PassThrough(),stderr:new PassThrough(),kill:vi.fn(()=>{queueMicrotask(()=>child.emit('close',null));return true;})});
+ child.stdin.on('data',chunk=>{const r=JSON.parse(chunk.toString());queueMicrotask(()=>child.stdout.write(JSON.stringify(r.id===1?{id:1,result:{}}:{id:2,error:{code:-32601}})+'\n'));});vi.mocked(spawn).mockReturnValue(child as never);
+ expect((await readAssistantModels('grok')).models).toEqual([]);
+});
