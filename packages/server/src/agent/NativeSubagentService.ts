@@ -12,7 +12,7 @@ interface Deps {
 }
 const sourceOf = (pane: Pane | undefined): NativeSubagentSource | undefined => {
   const agent = pane?.agent, ref = pane?.agentSession;
-  if (!pane || !agent || !ref || ref.kind !== agent.kind || !["codex", "muse", "copilot"].includes(agent.kind)) return undefined;
+  if (!pane || !agent || !ref || ref.kind !== agent.kind || !["codex", "muse", "copilot", "agy"].includes(agent.kind)) return undefined;
   return { paneId: pane.id, instanceId: agent.instanceId, kind: agent.kind as NativeSubagentSource["kind"], sessionId: ref.sessionId };
 };
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);

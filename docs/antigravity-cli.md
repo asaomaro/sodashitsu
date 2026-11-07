@@ -24,7 +24,7 @@ CLIを起動し直すと反映されます。自動では利用者の設定を�
 
 SessionStartの `conversationId`、statuslineの `conversation_id`（互換 `session_id`）をpaneに結びます。UUIDを指定した手動の `agy --conversation <id>` も前面プロセスの引数から追います。サーバの保存・復元は同じコマンドを使います。`--continue` の最新会話を推測で紐付けません。
 
-ヘッダーから `/usage` と `/permissions` を開けます。通常のpaneへの送信・キー入力・状態変化の通知は共通経路です。Sodashitsuの別pane/worktreeへのfork、一般paneの会話本文閲覧・過去会話一覧・要約・ToDo・サブエージェント一覧は未対応で、能力判定から表示しません。CLI自身の `/fork` の存在は、Sodashitsuのfork対応を意味しません。
+ヘッダーから `/usage` と `/permissions` を開けます。通常のpaneへの送信・キー入力・状態変化の通知は共通経路です。Sodashitsuの別pane/worktreeへのfork、一般paneの会話本文閲覧・過去会話一覧・要約・ToDoは未対応で、能力判定から表示しません。CLI自身の `/fork` の存在は、Sodashitsuのfork対応を意味しません。
 
 専用の[デスクトップアシスタント](desktop-assistant.md#吹き出しでの会話と制限)では、現在の会話IDを確認後に固定位置のJSONLからユーザー入力・最終応答を吹き出し表示します。一般paneの会話閲覧とは別の経路です。生成記録での検証であり、実CLIの会話往復は未検証です。
 
@@ -33,3 +33,12 @@ SessionStartの `conversationId`、statuslineの `conversation_id`（互換 `ses
 Linux実CLIの無入力起動・プロセス名・信頼画面・終了を確認しました。モデル呼び出し、実会話の再開、実アカウントのquota受信、working/ツール承認画面は未検証です。ブラウザE2Eは隔離した偽CLIと作ったデータで検出→IPC→DOMを確認します。Windows/macOSの実機検証は行っていません。
 
 根拠: [公式statusline仕様](https://antigravity.google/docs/cli/statusline/)、[公式hooks仕様](https://antigravity.google/docs/hooks)。調査・検証・Bob/Copilot監査は `.aidev/works/20261017-antigravity-cli/` にあります。
+
+
+## ネイティブのサブエージェント一覧
+
+インストール済み `agy 1.4.12` を隔離した自作プロジェクトで実起動し、`invoke_subagent`、子の `send_message`、`manage_subagents list/kill` と正式な親子記録を確認しています。読み取り時にCLIやモデルを起動しません。
+
+確認済みの親会話UUID配下 `.system_generated/subagents/<子UUID>.json` と、親の正式な起動結果の `spawnStepIndex`・子UUIDを照合して所属を取得します。状態 `SUBAGENT_STATE_ALIVE` は作業完了後の待機中の子も含むため、一覧の件数は「所属数」（`countBasis: alive`）、各子の作業状態は「不明」（`state: unknown`）です。従来のClaude/Codex/Muse/Copilotの実行中件数とは区別します。`SUBAGENT_STATE_KILLED` は除外します。ALIVEを実行中と推定したり、子の完了メッセージの文章で状態を判定したりしません。`countBasis`・`state` 省略時は従来どおり実行中です。
+
+親記録がない・子の起動が照合できない・未知の状態・途中書き込み・リンク・上限超過は取得不明となります。親記録は4MiB/2万行（1行256KiB）、直属の子フォルダは256項目・1秒、各descriptorは32KiBまで。配信する一覧は64件まで、件数は読み取れた所属全件です。起動時刻は正式な起動結果の `created_at` を使います。再開後の実際の作業状態や入れ子の子、本文閲覧への対応は含みません。検証fixtureと手順は `.aidev/works/20261107-antigravity-subagents/probe.md` にあります。

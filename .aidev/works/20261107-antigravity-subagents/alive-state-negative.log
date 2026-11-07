@@ -1,0 +1,51 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-antigravity-subagents
+
+ ❯ |@sodashitsu/server| src/agent/AntigravitySubagentReader.test.ts (14 tests | 1 failed | 13 skipped) 44ms
+   ❯ Antigravity official direct-child snapshots (14)
+     × counts ALIVE membership as unknown task state, including provider-listed idle; killed children disappear 42ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AntigravitySubagentReader.test.ts > Antigravity official direct-child snapshots > counts ALIVE membership as unknown task state, including provider-listed idle; killed children disappear
+AssertionError: expected { count: 1, countBasis: 'alive', …(1) } to match object { count: 1, countBasis: 'alive', …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+@@ -4,10 +4,10 @@
+    "items": [
+      {
+        "depth": 1,
+        "description": "Integration Probe",
+        "id": "22222222-2222-4222-8222-222222222222",
+-       "state": "unknown",
++       "state": "working",
+        "type": "self",
+      },
+    ],
+  }
+
+ ❯ src/agent/AntigravitySubagentReader.test.ts:24:19
+     22|     const f = await fixture();
+     23|     const first = await f.reader.read(f.source);
+     24|     expect(first).toMatchObject({ count: 1, countBasis: "alive", items…
+       |                   ^
+     25|     expect(first?.items[0]?.hasTranscript).toBeUndefined();
+     26|     expect(await f.reader.read(f.source)).toEqual(first);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  13:21:32
+   Duration  440ms (transform 67%, tests 18%, import 14%, worker 2%)
+

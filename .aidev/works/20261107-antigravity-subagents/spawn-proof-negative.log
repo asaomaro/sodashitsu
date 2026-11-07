@@ -1,0 +1,53 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-antigravity-subagents
+
+ ❯ |@sodashitsu/server| src/agent/AntigravitySubagentReader.test.ts (14 tests | 1 failed | 13 skipped) 42ms
+   ❯ Antigravity official direct-child snapshots (14)
+     × rejects invalid unproven-spawn instead of inventing zero 39ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AntigravitySubagentReader.test.ts > Antigravity official direct-child snapshots > rejects invalid unproven-spawn instead of inventing zero
+AssertionError: expected { count: 1, countBasis: 'alive', …(1) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "count": 1,
+  "countBasis": "alive",
+  "items": [
+    {
+      "depth": 1,
+      "description": "Integration Probe",
+      "id": "22222222-2222-4222-8222-222222222222",
+      "startedAt": 0,
+      "state": "unknown",
+      "type": "self",
+    },
+  ],
+}
+
+ ❯ src/agent/AntigravitySubagentReader.test.ts:40:43
+     38|     if (change === "unproven-spawn") row.spawnStepIndex = 999;
+     39|     await writeFile(f.file, change === "truncated" ? "{" : change === …
+     40|     expect(await f.reader.read(f.source)).toBeUndefined(); f.reader.cl…
+       |                                           ^
+     41|   });
+     42|   it.each(["file-symlink", "hardlink", "directory-symlink", "parent-sy…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  13:21:30
+   Duration  428ms (transform 65%, tests 16%, import 16%, worker 3%)
+

@@ -13,9 +13,18 @@ function setup() {
   return { service, reader, publish, verified, set: (value: Pane) => { current = value; }, get: () => current, dispose };
 }
 describe("native activity publication", () => {
-  it.each(["agy", "bob"])("keeps unsupported %s unknown rather than inventing a zero", async kind => {
+  it.each(["bob"])("keeps unsupported %s unknown rather than inventing a zero", async kind => {
     const f = setup(); f.set(pane(kind)); await f.service.refresh();
     expect(f.reader.read).not.toHaveBeenCalled(); expect(f.publish).not.toHaveBeenCalled(); f.service.close();
+  });
+  it("publishes AGY membership without disguising it as working and requires fresh verification", async () => {
+    const f = setup(); f.set(pane("agy"));
+    const value: Subagents = { count: 1, countBasis: "alive", items: [{ id: "child", state: "unknown", startedAt: 0 }] };
+    f.reader.read.mockResolvedValue(value); await f.service.refresh();
+    expect(f.publish).toHaveBeenLastCalledWith("pane", value);
+    f.verified.mockReturnValue(false); await f.service.refresh();
+    expect(f.publish).toHaveBeenLastCalledWith("pane", undefined);
+    f.reader.read.mockClear(); await f.service.refresh(); expect(f.reader.read).not.toHaveBeenCalled(); f.service.close();
   });
   it("keeps unavailable undefined, publishes a known zero, and leaves Claude to its hook tracker", async () => {
     const f = setup(); await f.service.refresh(); expect(f.publish).not.toHaveBeenCalled();

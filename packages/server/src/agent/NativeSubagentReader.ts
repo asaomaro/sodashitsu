@@ -1,3 +1,4 @@
+import { readAntigravitySubagents } from "./AntigravitySubagentReader.js";
 import { realpath, lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, sep } from "node:path";
@@ -10,7 +11,7 @@ import type { Subagents } from "./SubagentTracker.js";
 export interface NativeSubagentSource {
   paneId: string;
   instanceId: string;
-  kind: NativeSubagentKind;
+  kind: NativeSubagentKind | "agy";
   sessionId: string;
 }
 interface State {
@@ -30,13 +31,16 @@ const MAX_LINE = 256 * 1024;
 export class NativeSubagentReader {
   private readonly states = new Map<string, State>();
   private closed = false;
+  private readonly agyStates = new Map<string, { key: string; reading?: Promise<Subagents | undefined> }>();
   constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}) {}
 
-  forget(paneId: string): void { this.states.delete(paneId); }
-  close(): void { this.closed = true; this.states.clear(); }
+  forget(paneId: string): void { this.states.delete(paneId); this.agyStates.delete(paneId); }
+  close(): void { this.closed = true; this.states.clear(); this.agyStates.clear(); }
 
   async read(source: NativeSubagentSource): Promise<Subagents | undefined> {
     if (this.closed) return undefined;
+    if (source.kind === "agy") return this.readAgy(source);
+    this.agyStates.delete(source.paneId);
     const key = JSON.stringify([source.instanceId, source.kind, source.sessionId]);
     let state = this.states.get(source.paneId);
     if (!state || state.key !== key) {
@@ -47,6 +51,18 @@ export class NativeSubagentReader {
     current.reading ??= this.refresh(source, current).catch(() => undefined).finally(() => { delete current.reading; });
     const value = await current.reading;
     return !this.closed && this.states.get(source.paneId) === current ? value : undefined;
+  }
+
+  private async readAgy(source: NativeSubagentSource): Promise<Subagents | undefined> {
+    const key = JSON.stringify([source.instanceId, source.kind, source.sessionId]);
+    // A kind change invalidates both reader families, including in-flight results.
+    this.states.delete(source.paneId);
+    let state = this.agyStates.get(source.paneId);
+    if (!state || state.key !== key) { state = { key }; this.agyStates.set(source.paneId, state); }
+    const current = state;
+    current.reading ??= readAntigravitySubagents(source.sessionId, this.roots).catch(() => undefined).finally(() => { delete current.reading; });
+    const value = await current.reading;
+    return !this.closed && this.agyStates.get(source.paneId) === current ? value : undefined;
   }
 
   private async open(source: NativeSubagentSource): Promise<OpenedFile | null> {
@@ -70,7 +86,7 @@ export class NativeSubagentReader {
     try {
       const { fd, st } = opened;
       if (state.dev !== st.dev || state.ino !== st.ino || st.size < state.offset) {
-        state.offset = 0; state.fold = new NativeSubagentRecords(source.kind, source.sessionId); state.invalid = false;
+        state.offset = 0; state.fold = new NativeSubagentRecords(source.kind as NativeSubagentKind, source.sessionId); state.invalid = false;
       }
       state.dev = st.dev; state.ino = st.ino;
       if (state.invalid || st.size > MAX_BYTES) return undefined;
