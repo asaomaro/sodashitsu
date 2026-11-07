@@ -578,6 +578,12 @@ function audioInputContext():string {
  const p=controller.preferences,chat=assistantChat?.snapshot(),session=chat?.session;
  return createHash("sha256").update(JSON.stringify([p.enabled,p.transcriptionEnabled,p.transcriptionProvider,p.transcriptionOrigin,p.serverOrigin,chat?.connected,session?.kind,session?.paneId,session?.agent?.instanceId,chat?.conversationSessionId])).digest("hex");
 }
+function cancelRecordingForContext():void {
+ if(!recording?.has())return;
+ const id=recording.owner(),token=recording.cancel();recordingOrigin=null;
+ const owner=id===undefined?undefined:localWindows.get(id)?.window;
+ if(owner&&!owner.isDestroyed())owner.webContents.send("assistant:recording-cancelled",{token,reason:"音声の処理先が変わったため録音を破棄しました。"});
+}
 async function toolsState(revision = toolsRevision) {
   const state = transcription.snapshot();
   const preferences = controller.preferences,transcriptionContext=audioInputContext();
@@ -710,11 +716,7 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
         const changed=!!publishedAudioContext;publishedAudioContext=audioContext;
         if(changed){
           transcription?.cancel();
-          if(recording?.has()){
-            const id=recording.owner(),token=recording.cancel();recordingOrigin=null;
-            const owner=id===undefined?undefined:localWindows.get(id)?.window;
-            if(owner&&!owner.isDestroyed())owner.webContents.send("assistant:recording-cancelled",{token,reason:"音声の処理先が変わったため録音を破棄しました。"});
-          }
+          cancelRecordingForContext();
         }
       }
       // Actor readiness/busy changes also refresh the native-input controls.
@@ -781,8 +783,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
       !preferences.transcriptionEnabled ||
       recordingOrigin !== audioInputContext())
   ) {
-    const recordingOwner=recording.owner();recording.cancel();
-    if(recordingOwner!==undefined)localWindows.get(recordingOwner)?.window.destroy();
+    cancelRecordingForContext();
   }
   assistantChat?.configure(preferences.agentProfiles,activeCharacterId(preferences));
   transcription.configure(

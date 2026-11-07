@@ -2033,6 +2033,16 @@ it.each(["claude","codex","muse","agy","copilot"])("previews local transcription
   await fixture.handlers.get("assistant:transcription-draft")!(local,request);
   expect(await fixture.handlers.get("assistant:draft-state")!(chat)).toMatchObject({text:request.text});
   expect(rpc.request.mock.calls.some(([method])=>method==="assistant.prompt"||method==="assistant.audio_begin")).toBe(false);
+  const oldProviderGrant=await fixture.handlers.get("assistant:record-start")!(local) as {token:string};
+  const providerFetches=fixture.audioFetch.mock.calls.length;
+  await fixture.handlers.get("assistant:save")!(event,{...await fixture.handlers.get("assistant:read")!(event) as object,transcriptionProvider:"agent"});
+  expect(tools.isDestroyed()).toBe(false);expect(tools.isVisible()).toBe(true);
+  expect(tools.webContents.send).toHaveBeenCalledWith("assistant:recording-cancelled",{token:oldProviderGrant.token,reason:expect.stringContaining("処理先")});
+  await expect(fixture.handlers.get("assistant:record-stop")!(local,{token:oldProviderGrant.token})).rejects.toThrow("対象");
+  await expect(fixture.handlers.get("assistant:record-transcribe")!(local,{token:oldProviderGrant.token,mime:"audio/webm",bytes:new Uint8Array([1]).buffer})).rejects.toThrow();
+  await expect(fixture.handlers.get("assistant:transcription-draft")!(local,request)).rejects.toThrow("変わり");
+  expect(fixture.audioFetch.mock.calls.length).toBe(providerFetches);
+  await fixture.handlers.get("assistant:save")!(event,{...await fixture.handlers.get("assistant:read")!(event) as object,transcriptionProvider:"local"});
   const grant=await fixture.handlers.get("assistant:record-start")!(local) as {token:string};
   const fetches=fixture.audioFetch.mock.calls.length;
   rpc.options.status(false);

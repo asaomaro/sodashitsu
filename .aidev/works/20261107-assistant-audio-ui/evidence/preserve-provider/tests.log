@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-audio-ui/packages/desktop-assistant
+
+
+ Test Files  2 passed (2)
+      Tests  71 passed (71)
+   Start at  12:08:15
+   Duration  4.20s (tests 90%, transform 9%, import 1%)
+

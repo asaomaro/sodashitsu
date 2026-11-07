@@ -1,0 +1,6 @@
+PASS: settings changes save automatically, serialized drafts survive delayed writes, invalid input waits and failed saves recover
+PASS: original Sodashitsu icon loads, rotates around its centre, and obeys rotation/reduced-motion preferences
+PASS: one outer content scroll, fully expanded sections/editors, and keyboard folding at 400x640, 400x540 and 320x480
+PASS: generated settings keyboard flow, four-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing, explicit microphone stop/review/upload and late-permission cancellation, OCR preview/recognition/import and note-save fencing
+PASS: assistant normal/dark/system preferences, live OS changes, stale revisions, and every local window
+generated Copilot and Antigravity bubble text and pinned reply PASS

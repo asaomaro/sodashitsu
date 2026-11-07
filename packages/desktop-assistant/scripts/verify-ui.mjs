@@ -790,6 +790,14 @@ try {
   await expect(page.locator("#record-start")).toBeEnabled();
   await page.locator("#record-start").press("Enter");
   await expect(page.locator("#record-status")).toContainText("録音中");
+  const stoppedBeforeProviderChange=await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length);
+  await page.evaluate(()=>{window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcriptionProvider:"agent",transcriptionContext:"c".repeat(64)};window.toolsCallback(window.currentTools);});
+  await expect(page.locator("#record-status")).toContainText("処理先が変わった");
+  await expect(page.locator("#tool-text")).toHaveValue("未保存のメモを保持");
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length),stoppedBeforeProviderChange+1);
+  await page.evaluate(()=>{window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcriptionProvider:"local",transcriptionContext:"d".repeat(64)};window.toolsCallback(window.currentTools);});
+  await page.locator("#record-start").press("Enter");
+  await expect(page.locator("#record-status")).toContainText("録音中");
   const stopsBeforeCollapse=await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length);
   await page.locator("#standard-tools > summary").press("Enter");
   await expect(page.locator("#record-status")).toContainText("標準ツールを閉じたため");
