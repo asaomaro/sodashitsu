@@ -81,3 +81,9 @@ it("keeps the full previous report available beyond the compact card excerpt", (
   expect(reportHtml(old, "scope")).toContain("終端の重要な説明");
   w.unmount();
 });
+it("shows a shared score/grade and unknown coverage in the report and standalone HTML",()=>{
+ const graded={...report,document:{...report.document!,assessment:{criteria:['direction','scope','verification'].map(id=>({id:id as 'direction',score:3,reason:'作業記録からの自動評価',evidenceRef:'work.items.0.messages.0',evidenceQuote:'生成した根拠の引用',improvement:'受入条件と検証を共有',priority:'high' as const}))}}};
+ expect(reportHtml(graded,'生成PC')).toContain('B · 75 / 100点');
+ const w=mount(AgentUsageReport,{props:{report:graded,scope:'生成PC'}});const card=w.get('[data-usage-assessment]');expect(card.text()).toContain('75 / 100点');expect(card.text()).toContain('3/5項目');expect(card.find('[data-grade="B"]').exists()).toBe(true);expect(card.findAll('[role="meter"]')).toHaveLength(3);expect(card.text()).toContain('未評価');expect(reportHtml(graded,'生成PC')).toContain('B · 75 / 100点');w.unmount();
+ const old=mount(AgentUsageReport,{props:{report,scope:'生成PC'}});expect(old.get('[data-usage-assessment]').text()).toContain('未評価');expect(old.find('[data-grade="E"]').exists()).toBe(false);old.unmount();
+});

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import {usageAssessmentSummary} from "@sodashitsu/protocol";
 import type { UsageReport } from "@sodashitsu/protocol";
 import { totalLabel } from "./insightsModel.js";
 import { resolvedReport, reportHtml, priorityLabel } from "./reportHtml.js";
 const props = defineProps<{ report: UsageReport; scope: string }>();
 const document = computed(() => resolvedReport(props.report));
+const assessment = computed(()=>usageAssessmentSummary(document.value.assessment));
 const metricRows = computed(() => {
   const m = props.report.metrics ?? {};
   return [
@@ -57,6 +59,22 @@ function saveHtml() {
         {{ document.summary || "現在の取り組み、利用傾向、改善案をまとめた生成時点の分析です。" }}
       </p>
     </header>
+    <section class="assessment-card" data-usage-assessment aria-label="エージェントの使い方の評価">
+      <div class="assessment-heading"><div><span class="eyebrow">OBSERVED PRACTICE</span><h2>エージェントの使い方</h2><p class="muted">観測範囲の自動評価 · {{ assessment.assessed }}/{{ assessment.total }}項目を評価</p></div>
+        <strong class="assessment-score" :data-grade="assessment.grade ?? 'unknown'">{{ assessment.score===null?'未評価':assessment.grade }}<small v-if="assessment.score!==null">{{ assessment.score }} / 100点</small></strong>
+      </div>
+      <p v-if="assessment.score===null" class="muted">総合点には根拠のある3項目以上の評価が必要です。再生成時に根拠があれば評価できます。</p>
+      <p class="muted">提供した現在の作業記録の範囲を評価し、期間別数値そのものは採点しません。記録がない項目は0点にしません。作業成果を独立検証した品質評価ではありません。A ≥80 · B ≥60 · C ≥40 · D ≥20 · E &lt;20。</p>
+      <details class="assessment-details"><summary>評価基準・根拠と改善の優先度</summary>
+        <article v-for="c in assessment.criteria" :key="c.id" class="assessment-criterion" :data-criterion="c.id">
+          <div class="assessment-heading"><h4>{{ c.label }}</h4><span>{{ c.score===null?'未評価':`${c.score} / 4` }}</span></div>
+          <div v-if="c.score!==null" class="assessment-meter" role="meter" :aria-label="c.label" :aria-valuenow="c.score" aria-valuemin="0" aria-valuemax="4"><span :style="{width:`${c.score/4*100}%`}"/></div>
+          <p class="muted">{{ c.rule }}</p><p class="copy">{{ c.reason }}</p>
+          <blockquote v-if="c.evidenceQuote" class="evidence copy">{{ c.evidenceQuote }}<small>参照: {{ c.evidenceRef }}</small></blockquote>
+          <p v-if="c.improvement" class="copy"><span class="report-badge" :data-priority="c.priority">{{ priorityLabel(c.priority??'medium') }}</span> {{ c.improvement }}</p>
+        </article>
+      </details>
+    </section>
     <div v-if="metricRows.length" class="report-metrics">
       <div v-for="m in metricRows" :key="m.label">
         <span>{{ m.label }}</span
@@ -318,4 +336,6 @@ li + li {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+.assessment-card{margin:22px 0;padding:24px;border:1px solid var(--soda-menu-border);border-radius:17px;background:var(--soda-panel-bg,var(--soda-menu-bg))}
+.assessment-heading{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}.assessment-heading h2,.assessment-heading h4{margin:8px 0}.assessment-score{font-size:44px;color:var(--report-accent);line-height:1.1}.assessment-score small{display:block;font-size:15px;margin-top:8px;color:var(--soda-fg)}.assessment-score[data-grade="unknown"]{font-size:28px}.assessment-criterion{padding:16px 0;border-top:1px solid var(--soda-menu-border)}.assessment-meter{height:7px;border-radius:8px;overflow:hidden;background:color-mix(in srgb,var(--report-accent) 13%,transparent)}.assessment-meter span{display:block;height:100%;background:var(--report-accent)}.assessment-details summary{cursor:pointer}.assessment-criterion small{display:block}.assessment-card .muted{font-size:12px}
 </style>
