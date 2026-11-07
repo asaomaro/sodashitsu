@@ -26,11 +26,11 @@ SessionStartの `conversationId`、statuslineの `conversation_id`（互換 `ses
 
 ヘッダーから `/usage` と `/permissions` を開けます。通常のpaneへの送信・キー入力・状態変化の通知は共通経路です。Sodashitsuの別pane/worktreeへのfork、一般paneの会話本文閲覧・過去会話一覧・要約・ToDoは未対応で、能力判定から表示しません。CLI自身の `/fork` の存在は、Sodashitsuのfork対応を意味しません。
 
-専用の[デスクトップアシスタント](desktop-assistant.md#吹き出しでの会話と制限)では、現在の会話IDを確認後に固定位置のJSONLからユーザー入力・最終応答を吹き出し表示します。一般paneの会話閲覧とは別の経路です。生成記録での検証であり、実CLIの会話往復は未検証です。
+専用の[デスクトップアシスタント](desktop-assistant.md#吹き出しでの会話と制限)では、現在の会話IDを確認後に固定位置のJSONLからユーザー入力・最終応答を吹き出し表示します。一般paneの会話閲覧とは別の経路です。この表示経路は生成記録での検証であり、実CLIをこの経路に接続した会話往復は未検証です。
 
 ## 検証と限界
 
-Linux実CLIの無入力起動・プロセス名・信頼画面・終了を確認しました。モデル呼び出し、実会話の再開、実アカウントのquota受信、working/ツール承認画面は未検証です。ブラウザE2Eは隔離した偽CLIと作ったデータで検出→IPC→DOMを確認します。Windows/macOSの実機検証は行っていません。
+Linux実CLIの無入力起動・プロセス名・信頼画面・終了を確認しました。加えて1.4.12では、空の一時PJと隔離HOMEを使う3回のCLI実行で、モデル呼び出し、ネイティブの子の起動・応答、同じ自作会話の再開2回、native list・killを確認しました（[実起動記録](../.aidev/works/20261107-antigravity-subagents/probe.md)）。実利用者の既存の長い会話の再開・往復、native音声入力、実アカウントのquota受信、working/ツール承認画面の製品連携は未検証です。ブラウザE2Eは隔離した偽CLIと作ったデータで検出→IPC→DOMを確認します。Windows/macOSの実機検証は行っていません。
 
 根拠: [公式statusline仕様](https://antigravity.google/docs/cli/statusline/)、[公式hooks仕様](https://antigravity.google/docs/hooks)。調査・検証・Bob/Copilot監査は `.aidev/works/20261017-antigravity-cli/` にあります。
 
