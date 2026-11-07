@@ -368,7 +368,7 @@ export interface AssistantAppsInfo {
 }
 
 export type AssistantAgentKind = z.infer<typeof AssistantAgentKind>;
-export const AssistantModelCatalogParams=z.object({kind:z.enum(ASSISTANT_AGENT_KINDS)}).strict();
+export const AssistantModelCatalogParams=z.object({kind:z.enum(ASSISTANT_AGENT_KINDS),refresh:z.boolean().optional()}).strict();
 export const ASSISTANT_MODEL_MAX_OPTIONS=512;
-export const AssistantModelCatalog=z.object({models:z.array(z.object({id:AssistantLaunchSettings.shape.model,label:z.string().max(200),efforts:z.array(AssistantLaunchSettings.shape.effort).max(10)})).max(ASSISTANT_MODEL_MAX_OPTIONS),message:z.string().max(500)});
+export const AssistantModelCatalog=z.object({models:z.array(z.object({id:AssistantLaunchSettings.shape.model,label:z.string().max(200),efforts:z.array(AssistantLaunchSettings.shape.effort).max(10)})).max(ASSISTANT_MODEL_MAX_OPTIONS),message:z.string().max(500),source:z.enum(["cli","local-cache","reference","unavailable"]).optional(),fetchedAt:z.number().int().nonnegative().optional(),cached:z.boolean().optional()});
 export type AssistantModelCatalog=z.infer<typeof AssistantModelCatalog>;

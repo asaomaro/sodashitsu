@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { AssistantModelCatalog,assistantLaunchArgs, DesktopAssistantPreferences, AssistantSessionEnsureParams } from "./desktopAssistant.js";
+import { AssistantModelCatalogParams,AssistantModelCatalog,assistantLaunchArgs, DesktopAssistantPreferences, AssistantSessionEnsureParams } from "./desktopAssistant.js";
 it("uses per-agent session arguments and delegates empty settings to CLI defaults", () => {
  expect(assistantLaunchArgs("claude", {})).toEqual([]);
  expect(assistantLaunchArgs("claude", {model:"sonnet",effort:"high"})).toEqual(["--model","sonnet","--effort","high"]);
@@ -47,4 +47,12 @@ it("bounds large advertised model catalogs at 512 entries",()=>{
  const rows=Array.from({length:512},(_,i)=>({id:`generated-${i}`,label:`Model ${i}`,efforts:[]}));
  expect(AssistantModelCatalog.safeParse({models:rows,message:""}).success).toBe(true);
  expect(AssistantModelCatalog.safeParse({models:[...rows,rows[0]],message:""}).success).toBe(false);
+});
+
+it("keeps old catalogs compatible and accepts bounded discovery provenance",()=>{
+ expect(AssistantModelCatalogParams.parse({kind:"grok",refresh:true})).toEqual({kind:"grok",refresh:true});
+ expect(AssistantModelCatalog.safeParse({models:[],message:"old host"}).success).toBe(true);
+ expect(AssistantModelCatalog.safeParse({models:[],message:"",source:"cli",fetchedAt:1,cached:false}).success).toBe(true);
+ expect(AssistantModelCatalog.safeParse({models:[],message:"",source:"remote-updated",fetchedAt:-1}).success).toBe(false);
+ expect(AssistantModelCatalogParams.safeParse({kind:"grok",command:"arbitrary"}).success).toBe(false);
 });
