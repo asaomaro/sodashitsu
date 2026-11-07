@@ -234,3 +234,8 @@ it("graph uses live sidebar state symbols and dot preferences", async () => {
     view.dispose();
   }
 });
+it('hides captain from the rendered graph without removing stored graph nodes or raw model',async()=>{
+ const model=new SessionModel(),ui=new UiState(model),focus=vi.fn();model.workspaces.set('w',workspace('w',['t'],{assistant:{paneId:'captain'} as NonNullable<import('@sodashitsu/protocol').Workspace['assistant']>}));model.tabs.set('t',tab('t','w',leaf('captain')));model.panes.set('captain',pane('captain','t',{label:'hidden-captain'}));
+ const graph={rev:0,paused:false,nodes:[{key:'local:captain',x:0,y:0}],links:[]};const view=new GraphView(model,ui,{request:async()=>graph} as unknown as RequestPort,()=>{},focus);view.sync(true);
+ try{await vi.waitFor(()=>{const grid=new Grid(100,30);view.render(grid,{x:0,y:0,w:100,h:30},new ThemeColors('dracula'));expect(grid.rowText(0)).toContain('0ノード');expect(Array.from({length:30},(_,i)=>grid.rowText(i)).join('\n')).not.toContain('hidden-captain');});expect(graph.nodes).toHaveLength(1);expect(model.panes.has('captain')).toBe(true);}finally{view.dispose();}
+});

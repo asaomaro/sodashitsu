@@ -19,6 +19,7 @@ import type {
   WorkspaceGroup,
 } from "@sodashitsu/protocol";
 import {
+  normalSession,
   aggregate,
   displayStateFor,
   layoutFromLegacy,
@@ -55,12 +56,13 @@ export interface SessionModelHooks {
 }
 
 export class SessionModel {
+  normalView() {return normalSession(this);}
   private readonly history = new ViewHistory();
   preferredPane(tabId: string) {
-    return this.history.pane(tabId, this);
+    return this.history.pane(tabId, this.normalView());
   }
   selectWorkspace(workspaceId: string) {
-    const tabId = this.history.tab(workspaceId, this);
+    const tabId = this.history.tab(workspaceId, this.normalView());
     if (tabId) this.setView(workspaceId, tabId, this.preferredPane(tabId));
   }
   private rememberCurrent() {
@@ -303,7 +305,9 @@ export class SessionModel {
 
   /** 表示中のものが閉じられていたら、残っているものへ移す（web の `StoreAdapter.applyViewRepair` と同じ `repairView`）。 */
   private repair(successorHint?: string): void {
-    const next = repairView(this.viewTarget(), this, successorHint);
+    const normal=this.normalView();
+    if(normal.hiddenPaneIds.size&&!normal.tabs.size){this.workspaceId=null;this.tabId=null;this.setFocusedPane(null);return;}
+    const next = repairView(this.viewTarget(), normal, successorHint);
     if (!next) return;
     this.workspaceId = next.workspaceId;
     this.tabId = next.tabId;
@@ -312,6 +316,7 @@ export class SessionModel {
 
   /** 表示する workspace/tab を替える。 */
   setView(workspaceId: string, tabId: string, focusedPaneId?: string | null): void {
+    if(this.tabs.has(tabId)&&!this.normalView().tabs.has(tabId))return;
     this.rememberCurrent();
     this.workspaceId = workspaceId;
     this.tabId = tabId;
@@ -322,7 +327,7 @@ export class SessionModel {
 
   focusPane(paneId: string): void {
     this.rememberCurrent();
-    const pane = this.panes.get(paneId);
+    const pane = this.normalView().panes.get(paneId);
     if (!pane) return;
     const tab = this.tabs.get(pane.tabId);
     if (!tab) return;
@@ -341,7 +346,7 @@ export class SessionModel {
   }
 
   currentTab(): Tab | undefined {
-    return this.tabId ? this.tabs.get(this.tabId) : undefined;
+    return this.tabId ? this.normalView().tabs.get(this.tabId) : undefined;
   }
 
   /** このクライアントがその tab のサイズ権限を持っているか。 */
@@ -351,22 +356,23 @@ export class SessionModel {
 
   /** workspace の tab を `tabIds` の順で（まだ載っていない新しい tab は後ろに。`repairView` と同じ）。 */
   tabsOf(workspaceId: string): Tab[] {
-    const w = this.workspaces.get(workspaceId);
+    const normal=this.normalView();
+    const w = normal.workspaces.get(workspaceId);
     if (!w) return [];
     const ids = [
       ...w.tabIds,
-      ...[...this.tabs.values()]
+      ...[...normal.tabs.values()]
         .filter((t) => t.workspaceId === w.id && !w.tabIds.includes(t.id))
         .map((t) => t.id),
     ];
     return ids
-      .map((id) => this.tabs.get(id))
+      .map((id) => normal.tabs.get(id))
       .filter((t): t is Tab => t !== undefined && t.workspaceId === workspaceId);
   }
 
   panesInWorkspace(workspaceId: string): Pane[] {
     const result: Pane[] = [];
-    for (const pane of this.panes.values())
+    for (const pane of this.normalView().panes.values())
       if (this.tabs.get(pane.tabId)?.workspaceId === workspaceId) result.push(pane);
     return result;
   }

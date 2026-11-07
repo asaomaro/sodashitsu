@@ -174,3 +174,10 @@ describe("SessionModel: サイドバーのレイアウト（T16）", () => {
     expect(m.layout).toBeNull();
   });
 });
+
+it("normal TUI focus/layout excludes exact captain while raw pane and same-tab sibling remain",()=>{
+ const s=snapshot();s.workspaces[0]!.assistant={paneId:"p1"} as NonNullable<typeof s.workspaces[0]['assistant']>;
+ const m=new SessionModel();m.applySnapshot(s,"client");expect(m.panes.has("p1")).toBe(true);expect(m.currentTab()?.layout).toEqual(leaf("p2"));expect(m.normalView().panes.has("p1")).toBe(false);expect(m.focusedPaneId).toBe("p2");
+ m.focusPane("p1");expect(m.focusedPaneId).toBe("p2");
+ const only=snapshot({workspaces:[s.workspaces[0]!],tabs:[tab("t1","w1",leaf("p1"))],panes:[pane("p1","t1")]});m.applySnapshot(only,"client");expect(m.currentTab()).toBeUndefined();expect(m.workspaceId).toBeNull();expect(m.panes.has("p1")).toBe(true);
+});

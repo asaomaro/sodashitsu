@@ -61,7 +61,7 @@ export class GraphDialog implements Overlay {
           input: new TextInput(value),
           ...(choices ? { choices } : {}),
         });
-      const nodes = graph.nodes.map((n) => ({
+      const nodes = graph.nodes.filter(n=>!n.key.startsWith("local:")||!this.model.normalView().hiddenPaneIds.has(n.key.slice(6))).map((n) => ({
         value: n.key,
         label: safeText(
           n.key.startsWith("local:")
@@ -106,7 +106,7 @@ export class GraphDialog implements Overlay {
       } else {
         const kinds = await this.conn.request("agent.kinds", {});
         if (this.dead) return;
-        const tabs = [...this.model.tabs.values()].map((t) => ({
+        const tabs = [...this.model.normalView().tabs.values()].map((t) => ({
           value: t.id,
           label: safeText(`${this.model.workspaces.get(t.workspaceId)?.label ?? ""} / ${t.label}`),
         }));
@@ -267,7 +267,7 @@ export class GraphDialog implements Overlay {
           ]);
         }
       } else {
-        const tab = this.model.tabs.get(this.value("tab"));
+        const tab = this.model.normalView().tabs.get(this.value("tab"));
         if (!tab) throw new Error("追加するタブがありません");
         const source =
           this.model.panes.get(tab.focusedPaneId) ??

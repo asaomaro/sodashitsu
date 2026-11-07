@@ -209,7 +209,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     ...ctx,
     numberWorkspaceIds: currentVisibleWorkspaceIds(model, prefs),
     numberAgentIds: orderedAgentPaneIds(
-      [...model.panes.values()]
+      [...model.normalView().panes.values()]
         .filter((p) => p.agent)
         .map((p) => ({ paneId: p.id, state: model.displayStateOf(p), since: p.agent!.since })),
       prefs.agentSort,
@@ -261,7 +261,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       model.workspaces.get(id)!,
     );
     const agents = orderedAgentPaneIds(
-      [...model.panes.values()]
+      [...model.normalView().panes.values()]
         .filter((p) => p.agent)
         .map((p) => ({ paneId: p.id, state: model.displayStateOf(p), since: p.agent?.since ?? 0 })),
       prefs.agentSort,
@@ -341,7 +341,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     rect = { ...rect, y: rect.y + switchRows, h: Math.max(0, rect.h - switchRows - 1) };
   }
   const lines: Line[] = [];
-  const workspaces = [...model.workspaces.values()];
+  const workspaces = [...model.normalView().workspaces.values()];
   const tree = currentSidebarTree(model, prefs);
   const layouts = loadSidebarRows(prefs.shared.sidebarRows);
   const spacesLayout = effectiveLayout(layouts, "spaces");
@@ -567,7 +567,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   const agentLines: Line[] = [];
   if (agentPanes.length > 0) {
     const order = orderedAgentPaneIds(
-      [...model.panes.values()]
+      [...model.normalView().panes.values()]
         .filter((p) => p.agent)
         .map((p) => ({
           paneId: p.id,
@@ -809,7 +809,7 @@ function machineSection(
     out.push(...own);
     return out;
   }
-  const summary = m.summaries[section.id];
+  const summary = m.normalSummary(section.id);
   if (!summary?.everConnected) {
     out.push({ indent: 2, rows: [[{ text: "未接続", attrs: ATTR.dim }]], selected: false });
     return out;

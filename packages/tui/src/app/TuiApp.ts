@@ -1,3 +1,4 @@
+import {summaryAssistantPane,parseNodeKey} from "@sodashitsu/client-core";
 import { ConnectionsView } from "../modes/ConnectionsView.js";
 import { drawStartup } from "../render/startup.js";
 import { stringWidth } from "../render/width.js";
@@ -439,6 +440,7 @@ export class TuiApp {
       () => this.scheduleRender(),
       (id) => this.ui.openDialogWithContext({ kind: "graphTerminal", paneId: id }),
       () => this.prefs.statusSymbols,
+      key=>{const parsed=parseNodeKey(key),summary=parsed?this.machines.summaries[parsed.machine]:undefined;return !!summary&&!!parsed&&summaryAssistantPane(summary,parsed.paneId);},
     );
     this.disposers.push(() => this.graphView.dispose());
     this.asks = new TuiAskController(

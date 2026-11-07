@@ -5,7 +5,7 @@ import type {
   SessionSnapshot,
   Workspace,
 } from "@sodashitsu/protocol";
-import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
+import {normalMachineSummary, LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 
 /** 選んでいないマシンの要約（web の `store/machines.ts` の `MachineSummary` と同じ）。 */
 export interface MachineSummary {
@@ -34,6 +34,7 @@ export class MachinesModel {
   selectedId: string = LOCAL_MACHINE_ID;
   summaries: Record<string, MachineSummary> = {};
   collapsed: Record<string, boolean> = {};
+  normalSummary(id:string):MachineSummary|undefined {const raw=this.summaries[id];return raw?normalMachineSummary(raw):undefined;}
   private readonly listeners = new Set<() => void>();
 
   onChange(cb: () => void): () => void {
@@ -162,7 +163,7 @@ export class MachinesModel {
   }
 
   agentsInWorkspace(id: string, workspaceId: string): AgentInfo[] {
-    const s = this.summaries[id];
+    const s = this.normalSummary(id);
     if (!s) return [];
     const out: AgentInfo[] = [];
     for (const p of Object.values(s.panes))

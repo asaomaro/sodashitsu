@@ -81,7 +81,7 @@ export function gotoRows(
     return p ? model.displayStateOf(p) : null;
   };
   const out: GotoRow[] = [];
-  for (const ws of model.workspaces.values()) {
+  for (const ws of model.normalView().workspaces.values()) {
     const tabRows: GotoRow[] = [];
     for (const tabId of ws.tabIds) {
       const tab = model.tabs.get(tabId);

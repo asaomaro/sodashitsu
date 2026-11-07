@@ -428,7 +428,7 @@ export class TuiDispatcher {
     const ctx = this.ui.dialogContext;
     if (ctx?.kind !== "worktreeOpen") return;
     this.ui.closeDialog();
-    const existing = [...this.model.workspaces.values()].find((w) => w.cwd === path);
+    const existing = [...this.model.normalView().workspaces.values()].find((w) => w.cwd === path);
     if (existing) {
       this.model.selectWorkspace(existing.id);
       void this.conn
@@ -614,7 +614,7 @@ export class TuiDispatcher {
   private itemWorkspaceIds(workspaceId: string): string[] {
     const repoKey = this.model.workspaces.get(workspaceId)?.git?.repoKey;
     if (!repoKey) return [workspaceId];
-    const members = repoMembers([...this.model.workspaces.values()], repoKey);
+    const members = repoMembers([...this.model.normalView().workspaces.values()], repoKey);
     return members.length > 0 ? members.map((m) => m.id) : [workspaceId];
   }
 
@@ -1101,7 +1101,7 @@ export class TuiDispatcher {
     for (const s of m.sections) {
       if (s.id === m.selectedId) out.push(...this.navigableKeys());
       else if (!m.collapsed[s.id])
-        for (const ws of m.summaries[s.id]?.workspaces ?? []) out.push(remoteKey(s.id, ws.id));
+        for (const ws of m.normalSummary(s.id)?.workspaces ?? []) out.push(remoteKey(s.id, ws.id));
     }
     return out;
   }
@@ -1116,7 +1116,7 @@ export class TuiDispatcher {
 
   /** 別のマシンの workspace へ（そのマシンへ切り替えて、その workspace へ移る）。 */
   openRemoteWorkspace(machineId: string, workspaceId: string): void {
-    const ws = this.host.machines?.summaries[machineId]?.workspaces.find(
+    const ws = this.host.machines?.normalSummary(machineId)?.workspaces.find(
       (w) => w.id === workspaceId,
     );
     if (!ws) return;
@@ -1208,7 +1208,7 @@ export class TuiDispatcher {
   // --- エージェント・直前の pane ---
 
   private agentOrderEntries(): AgentOrderEntry[] {
-    return [...this.model.panes.values()]
+    return [...this.model.normalView().panes.values()]
       .filter((p) => p.agent !== null)
       .map((p) => ({ paneId: p.id, state: this.model.displayStateOf(p), since: p.agent!.since }));
   }
@@ -1311,7 +1311,7 @@ export class TuiDispatcher {
       return;
     }
     if (parseRemoteKey(key)) return;
-    const all = [...this.model.workspaces.values()];
+    const all = [...this.model.normalView().workspaces.values()];
     const ws = this.model.workspaces.get(key);
     // 代表でない通常の行（同じフォルダの 2 つ目）は worktree の印が付かないので何もしない（追補 A）。
     if (!ws || !isRepresentative(ws, all)) return;

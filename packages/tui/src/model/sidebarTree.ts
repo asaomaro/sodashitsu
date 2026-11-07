@@ -19,7 +19,7 @@ export function currentSidebarTree(
   prefs: Pick<PrefsModel, "workspaceSort" | "ungroupedCollapsed">,
 ): TopRow[] {
   return sidebarTree(
-    [...model.workspaces.values()],
+    [...model.normalView().workspaces.values()],
     [...model.groups.values()],
     model.effectiveLayout(),
     prefs.workspaceSort,
@@ -58,7 +58,7 @@ export function currentNavigableRows(
 export function itemGroupIdOf(model: SessionModel, workspaceId: string): string | null {
   const ws = model.workspaces.get(workspaceId);
   if (!ws) return null;
-  const ref = itemRefOf(ws, [...model.workspaces.values()]);
+  const ref = itemRefOf(ws, [...model.normalView().workspaces.values()]);
   for (const [groupId, refs] of Object.entries(model.effectiveLayout().groups))
     if (refs.includes(ref)) return groupId;
   return null;

@@ -15,6 +15,10 @@ const W = 24,
 /** 端末専用のセル座標。サーバーのWeb用ノード座標には書き込まない。 */
 export class GraphView {
   private graph: Graph = { rev: 0, paused: false, nodes: [], links: [] };
+  private get visibleGraph():Graph {
+    const hidden=this.model.normalView().hiddenPaneIds;const visible=(key:NodeKey)=>key.startsWith("local:")?!hidden.has(key.slice(6)):!this.remoteCaptain(key);
+    return {...this.graph,nodes:this.graph.nodes.filter(n=>visible(n.key)),links:this.graph.links.filter(l=>visible(l.from)&&visible(l.to))};
+  }
   private positions = new Map<NodeKey, Point>();
   private selected: NodeKey | null = null;
   private pan: Point = { x: 0, y: 0 };
@@ -37,6 +41,7 @@ export class GraphView {
     private redraw: () => void,
     private focusPane: (id: string) => void,
     private symbols: () => boolean = () => true,
+    private remoteCaptain: (key:NodeKey)=>boolean = () => false,
   ) {}
   sync(active: boolean) {
     if (this.active === active) return;
@@ -127,7 +132,7 @@ export class GraphView {
       }
       this.ui.setScreen("base");
     } else if (k.key === "Tab") {
-      const keys = this.graph.nodes.map((n) => n.key);
+      const keys = this.visibleGraph.nodes.map((n) => n.key);
       this.selected =
         keys[(keys.indexOf(this.selected!) + (k.shift ? -1 : 1) + keys.length) % keys.length] ??
         null;
@@ -238,7 +243,7 @@ export class GraphView {
     grid.text(
       area.x + 1,
       area.y,
-      `グラフ · ${this.graph.paused ? "一時停止" : "稼働"} · ${this.graph.nodes.length}ノード / ${this.graph.links.length}線`,
+      `グラフ · ${this.graph.paused ? "一時停止" : "稼働"} · ${this.visibleGraph.nodes.length}ノード / ${this.visibleGraph.links.length}線`,
       c.fg,
       c.bg,
       0,
@@ -247,7 +252,7 @@ export class GraphView {
     grid.text(
       area.x + 1,
       area.y + 1,
-      this.graph.links
+      this.visibleGraph.links
         .map(
           (l) =>
             `${{ trigger: "指示", supervise: "監督", approval: "承認" }[l.kind]} ${l.count}/${l.limit}${l.paused ? " 停止" : ""}`,
@@ -272,12 +277,12 @@ export class GraphView {
       return hiddenCursor();
     }
     const cols = Math.max(1, Math.floor(area.w / (W + 6)));
-    const live = new Set(this.graph.nodes.map((n) => n.key));
+    const live = new Set(this.visibleGraph.nodes.map((n) => n.key));
     for (const key of this.positions.keys()) if (!live.has(key)) this.positions.delete(key);
     if (this.selected && !live.has(this.selected)) this.selected = null;
     const groups = new Map<string, NodeKey[]>();
     const groupName = new Map<string, string>();
-    for (const node of this.graph.nodes) {
+    for (const node of this.visibleGraph.nodes) {
       const pane = node.key.startsWith("local:")
         ? this.model.panes.get(node.key.slice(6))
         : undefined;
@@ -424,14 +429,14 @@ export class GraphView {
         );
       }
     };
-    for (const link of this.graph.links)
+    for (const link of this.visibleGraph.links)
       connect(
         link.from,
         link.to,
         `${link.count}/${link.limit} ${{ trigger: "指示", supervise: "監督", approval: "承認" }[link.kind]}${link.paused ? " 停止" : ""}`,
         link.id,
       );
-    for (const node of this.graph.nodes)
+    for (const node of this.visibleGraph.nodes)
       if (node.forkedFrom) connect(node.forkedFrom, node.key, "fork");
     const glyphs: Record<number, string> = {
       1: "│",
@@ -514,7 +519,7 @@ export class GraphView {
         W - 2,
       );
     }
-    if (this.error || !this.graph.nodes.length)
+    if (this.error || !this.visibleGraph.nodes.length)
       grid.text(
         area.x + 1,
         area.y + 1,
