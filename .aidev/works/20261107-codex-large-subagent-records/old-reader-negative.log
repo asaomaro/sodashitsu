@@ -1,0 +1,44 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-large-records
+
+ ❯ |@sodashitsu/server| src/agent/NativeSubagentReader.test.ts (17 tests | 3 failed | 14 skipped) 166ms
+   ❯ owned native records reader (17)
+     × skips a validated irrelevant 300000-byte Codex row and reaches current lifecycle 20ms
+     × skips a validated irrelevant 4194337-byte Codex row and reaches current lifecycle 43ms
+     × skips a validated irrelevant 9437184-byte Codex row and reaches current lifecycle 101ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/NativeSubagentReader.test.ts > owned native records reader > skips a validated irrelevant 300000-byte Codex row and reaches current lifecycle
+ FAIL  |@sodashitsu/server| src/agent/NativeSubagentReader.test.ts > owned native records reader > skips a validated irrelevant 4194337-byte Codex row and reaches current lifecycle
+ FAIL  |@sodashitsu/server| src/agent/NativeSubagentReader.test.ts > owned native records reader > skips a validated irrelevant 9437184-byte Codex row and reaches current lifecycle
+AssertionError: expected undefined to be +0 // Object.is equality
+
+- Expected:
+0
+
++ Received:
+undefined
+
+ ❯ src/agent/NativeSubagentReader.test.ts:65:26
+     63|     const calls = Math.ceil(Buffer.byteLength(unrelated) / (4 * 1024 *…
+     64|     let value; for (let n = 0; n < calls; n++) value = await reader.re…
+     65|     expect(value?.count).toBe(0);
+       |                          ^
+     66|     const next = structuredClone(f.rows[0]); next.payload.item.id = "s…
+     67|     await appendFile(f.file, JSON.stringify(next) + "\n"); expect((awa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 14 skipped (17)
+   Start at  14:19:52
+   Duration  502ms (tests 46%, transform 43%, import 9%, worker 2%)
+

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, writeFile, appendFile, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, appendFile, rm, symlink, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -56,10 +56,74 @@ describe("owned native records reader", () => {
     expect((await reader.read(f.source))?.count).toBe(0);
     reader.close();
   });
+  it.each([300000, 4 * 1024 * 1024 + 33, 9 * 1024 * 1024])("skips a validated irrelevant %s-byte Codex row and reaches current lifecycle", async size => {
+    const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home });
+    const unrelated = JSON.stringify({ timestamp: "2026-11-07", type: "response_item", payload: { type: "message", content: [{ type: "input_image", image_url: "data:image/png;base64," + "A".repeat(size) }] } });
+    await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n" + unrelated + "\n" + JSON.stringify(f.rows[1]) + "\n");
+    const calls = Math.ceil(Buffer.byteLength(unrelated) / (4 * 1024 * 1024)) + 1;
+    let value; for (let n = 0; n < calls; n++) value = await reader.read(f.source);
+    expect(value?.count).toBe(0);
+    const next = structuredClone(f.rows[0]); next.payload.item.id = "second-start"; next.payload.item.agent_thread_id = "new-child";
+    await appendFile(f.file, JSON.stringify(next) + "\n"); expect((await reader.read(f.source))?.count).toBe(1); reader.close();
+  });
+  it.each(["user_message", "agent_message", "token_count"])("skips a known non-lifecycle event_msg/%s oversized envelope", async type => {
+    const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home });
+    const unrelated = JSON.stringify({ type: "event_msg", payload: { type, message: "猫".repeat(100000) } });
+    await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n" + unrelated + "\n" + JSON.stringify(f.rows[1]) + "\n");
+    expect((await reader.read(f.source))?.count).toBe(0); reader.close();
+  });
+  it("never publishes a historical start across an unfinished huge line and follows completion after newline", async () => {
+    const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home });
+    const text = JSON.stringify({ type: "compacted", payload: { message: "x".repeat(5 * 1024 * 1024) } });
+    await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n" + text);
+    expect(await reader.read(f.source)).toBeUndefined(); expect(await reader.read(f.source)).toBeUndefined(); expect(await reader.read(f.source)).toBeUndefined();
+    await appendFile(f.file, "\n" + JSON.stringify(f.rows[1]) + "\n"); expect((await reader.read(f.source))?.count).toBe(0);
+    await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n"); expect((await reader.read(f.source))?.count).toBe(1); reader.close();
+  });
+  it("handles a record header and UTF8 codepoint split at the 4MiB boundary", async () => {
+    const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home }), chunk = 4 * 1024 * 1024;
+    const start = JSON.stringify(f.rows[0]) + "\n";
+    const huge = JSON.stringify({ type: "response_item", payload: { text: "猫🙂" + "a".repeat(400000) } });
+    await writeFile(f.file, start + "\n".repeat(chunk - 7 - Buffer.byteLength(start)) + huge + "\n" + JSON.stringify(f.rows[1]) + "\n");
+    expect(await reader.read(f.source)).toBeUndefined(); expect((await reader.read(f.source))?.count).toBe(0);
+    const prefix = '{"type":"response_item","payload":{"text":"';
+    const text = prefix + "a".repeat(chunk - Buffer.byteLength(start) - Buffer.byteLength(prefix) - 1) + '🙂tail"}}';
+    await writeFile(f.file, start + text + "\n" + JSON.stringify(f.rows[1]) + "\n");
+    // Explicit new instance also discards any old line decoder state on same-size replacements.
+    const source = { ...f.source, instanceId: "utf8-instance" };
+    expect(await reader.read(source)).toBeUndefined(); expect((await reader.read(source))?.count).toBe(0); reader.close();
+  });
+  it("discards partial oversized scanner state on file replacement and scope invalidation", async () => {
+    const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home });
+    const huge = JSON.stringify({ type: "response_item", payload: { text: "x".repeat(5 * 1024 * 1024) } });
+    await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n" + huge);
+    expect(await reader.read(f.source)).toBeUndefined();
+    const replacement = f.file + ".new"; await writeFile(replacement, JSON.stringify(f.rows[0]) + "\n" + JSON.stringify(f.rows[1]) + "\n"); await rename(replacement, f.file);
+    expect((await reader.read(f.source))?.count).toBe(0);
+    for (const change of ["forget", "close", "instance", "session", "kind"]) {
+      const next = new NativeSubagentReader({ codexHome: f.home, home: f.home });
+      const pending = next.read(f.source);
+      if (change === "forget") next.forget(f.source.paneId);
+      if (change === "close") next.close();
+      if (change === "instance") await next.read({ ...f.source, instanceId: "new-instance" });
+      if (change === "session") await next.read({ ...f.source, sessionId: "33333333-3333-4333-8333-333333333333" });
+      if (change === "kind") await next.read({ ...f.source, kind: "agy" });
+      expect(await pending).toBeUndefined(); next.close();
+    }
+    reader.close();
+  });
+  it.each(["unknown", "important", "duplicate", "broken"])("keeps oversized %s rows unknown", async kind => {
+    const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home });
+    let text = JSON.stringify({ type: kind === "unknown" ? "future" : "event_msg", payload: { type: "item_completed", item: { type: "SubAgentActivity", pad: "x".repeat(300000) } } });
+    if (kind === "duplicate") text = '{"type":"response_item","payload":{"text":"' + "x".repeat(300000) + '"},"type":"event_msg"}';
+    if (kind === "broken") text = '{"type":"response_item","payload":{"text":"' + "x".repeat(300000) + '"},BAD}';
+    await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n" + text + "\n" + JSON.stringify(f.rows[1]) + "\n");
+    expect(await reader.read(f.source)).toBeUndefined(); reader.close();
+  });
   it("uses only newline-committed rows and rejects malformed/oversized records and symlinks", async () => {
     const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home });
     await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n" + JSON.stringify(f.rows[1]));
-    expect((await reader.read(f.source))?.count).toBe(1);
+    expect(await reader.read(f.source)).toBeUndefined();
     await appendFile(f.file, "\n"); expect((await reader.read(f.source))?.count).toBe(0);
     await appendFile(f.file, "not-json\n"); expect(await reader.read(f.source)).toBeUndefined();
     await writeFile(f.file, "x".repeat(300000)); expect(await reader.read(f.source)).toBeUndefined();

@@ -1,3 +1,4 @@
+import { CodexSubagentStream } from "./CodexSubagentStream.js";
 import { readAntigravitySubagents } from "./AntigravitySubagentReader.js";
 import { realpath, lstat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -21,6 +22,7 @@ interface State {
   dev: number;
   ino: number;
   invalid: boolean;
+  codex?: CodexSubagentStream;
   reading?: Promise<Subagents | undefined>;
 }
 const CHUNK = 4 * 1024 * 1024;
@@ -87,10 +89,19 @@ export class NativeSubagentReader {
       const { fd, st } = opened;
       if (state.dev !== st.dev || state.ino !== st.ino || st.size < state.offset) {
         state.offset = 0; state.fold = new NativeSubagentRecords(source.kind as NativeSubagentKind, source.sessionId); state.invalid = false;
+        delete state.codex;
       }
       state.dev = st.dev; state.ino = st.ino;
       if (state.invalid || st.size > MAX_BYTES) return undefined;
       const bytes = await readRange(fd, state.offset, Math.min(CHUNK, st.size - state.offset));
+      if (source.kind === "codex") {
+        state.codex ??= new CodexSubagentStream();
+        state.codex.consume(bytes, state.fold);
+        state.offset += bytes.length;
+        if (state.codex.invalid) state.invalid = true;
+        // A current snapshot requires all available bytes and a complete final line.
+        return state.invalid || state.offset < st.size || state.codex.partial ? undefined : state.fold.snapshot();
+      }
       const scanning = state.offset + bytes.length < st.size;
       const end = bytes.lastIndexOf(10);
       if (end < 0) {
