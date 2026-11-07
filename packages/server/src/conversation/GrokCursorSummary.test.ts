@@ -5,9 +5,10 @@ import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import {prepareGrokCursorSummary,parseGrokCursorSummary} from './GrokCursorSummary.js';
 import {SummaryService} from './SummaryService.js';
+import {CursorSdkSummarySupervisor} from './cursorSdkSummary.js';
 import {windowsAgentExecutable} from '../agent/windowsAgentLaunch.js';
 const dirs:string[]=[];const services:SummaryService[]=[];
-afterEach(async()=>{services.splice(0).forEach(s=>s.close());vi.unstubAllEnvs();await Promise.all(dirs.splice(0).map(d=>rm(d,{recursive:true,force:true})));});
+afterEach(async()=>{services.splice(0).forEach(s=>s.close());vi.unstubAllEnvs();vi.restoreAllMocks();await Promise.all(dirs.splice(0).map(d=>rm(d,{recursive:true,force:true})));});
 async function fixture(){const dir=await mkdtemp(join(tmpdir(),'soda-gc-summary-'));dirs.push(dir);const original=join(dir,'original'),work=join(dir,'work');await mkdir(original);await mkdir(work);return {dir,original,work};}
 for(const kind of ['grok'] as const)it(`${kind}: isolates roots and executes its own CLI without Codex fallback`,async()=>{
  if(process.platform==='win32')return;
@@ -34,13 +35,15 @@ it('copies auth-only data into private roots and drops config/hook/leader overri
  if(process.platform!=='win32')expect((await stat(join(env.GROK_HOME!,'auth.json'))).mode&0o777).toBe(0o600);
  expect(await readFile(join(original,'auth.json'),'utf8')).toContain('generated-not-real');
 });
-it('Cursor summary fails closed before copying auth or preparing a CLI launch',async()=>{
+it('Cursor CLI fails closed while SummaryService binds only the isolated SDK path',async()=>{
  const {work}=await fixture(),env:NodeJS.ProcessEnv={HOME:'original',CURSOR_CONFIG_DIR:'original'};
  await expect(prepareGrokCursorSummary('cursor',work,'fixture',{kind:'cursor',model:'',sessionId:''},env)).rejects.toThrow(/正式な経路/);
  expect(env).toEqual({HOME:'original',CURSOR_CONFIG_DIR:'original'});
  const bin=join(work,'bin');await mkdir(bin);for(const exe of ['cursor','cursor-agent']){await writeFile(join(bin,exe),`#!${process.execPath}\nprocess.exit(97);`);await chmod(join(bin,exe),0o755);}vi.stubEnv('PATH',bin+delimiter+process.env.PATH);
  const service=new SummaryService({isActive:()=>false} as any,join(work,'state'));services.push(service);
- await expect((service as any).runPrompt({kind:'cursor',model:'',sessionId:''},'fixture')).rejects.toThrow(/正式な経路/);
+ const run=vi.spyOn(CursorSdkSummarySupervisor.prototype,'run').mockResolvedValue({text:'SDK fixture summary',sessionId:null});
+ expect(await (service as any).runPrompt({kind:'cursor',model:'fixture-model',sessionId:''},'fixture')).toEqual({text:'SDK fixture summary',sessionId:null});
+ expect(run).toHaveBeenCalledOnce();expect(run.mock.calls[0]?.[0]).toMatchObject({model:'fixture-model',prompt:'fixture',sessionId:''});
 });
 it('the Windows npm shim path keeps the empty tool whitelist as an actual argv element',async()=>{
  const {work}=await fixture(),script=join(work,'entry.cjs');await writeFile(script,'process.stdout.write(JSON.stringify(process.argv.slice(2)))');await writeFile(join(work,'cursor-agent.cmd'),'@echo off\n"%_prog%" "%dp0%\\entry.cjs" %*');

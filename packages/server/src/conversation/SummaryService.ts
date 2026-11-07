@@ -1,3 +1,4 @@
+import { CursorSdkSummarySupervisor } from "./cursorSdkSummary.js";
 import {prepareGrokCursorSummary,parseGrokCursorSummary} from "./GrokCursorSummary.js";
 import {isolatedAntigravity} from "./AgentIsolation.js";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -34,6 +35,7 @@ interface SavedSummary {
 /** Dedicated session IDs and isolated Codex configuration prevent modifying a working conversation. */
 export class SummaryService {
   private readonly running = new Set<ChildProcess>();
+  private readonly cursorSdk = new CursorSdkSummarySupervisor();
   private closed = false;
   private readonly busy = new Set<string>();
   private readonly sessionBusy = new Set<string>();
@@ -136,6 +138,7 @@ export class SummaryService {
   }
   close() {
     this.closed = true;
+    this.cursorSdk.close();
     for (const job of this.autoJobs.values()) clearTimeout(job.timer);
     this.autoJobs.clear();
     for (const child of this.running) this.stop(child);
@@ -465,6 +468,7 @@ export class SummaryService {
     prompt: string,
     check: () => void = () => undefined,
   ): Promise<{ text: string; sessionId: string | null }> {
+    if (settings.kind === "cursor") return this.cursorSdk.run({ model: settings.model, effort: settings.effort ?? "", sessionId: settings.sessionId, prompt, check });
     if (settings.kind === "codex" && /^gpt-\d[\w.-]*$/i.test(settings.model))
       settings = { ...settings, model: settings.model.toLowerCase() };
     let dir: string | undefined;
