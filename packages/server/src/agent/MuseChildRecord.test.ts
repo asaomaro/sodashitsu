@@ -32,6 +32,6 @@ it("rejects changed binding during async read, child-stream mismatch and symlink
  const other=f.file+".saved";await writeFile(other,JSON.stringify(f.rows[0])+"\n");await rm(f.file);await symlink(other,f.file);expect(await openMuseChildRecord(parent,child,{dataHome:f.dataHome})).toBeUndefined();
 });
 it("excludes internal reasoning, tool outputs, wrong child result and system instructions",()=>{
- for(const e of [{kind:"started",prompt:"private assembled instructions"},{kind:"reasoning_committed",text:"private"},{kind:"tool_result_batch_committed",results:[{text:"private"}]},{kind:"workflow_child_result_submitted",child_session_stream:{kind:"session",id:parent},payload:{text:"other"}}])expect(museChildEntries(event(e),child)).toEqual([]);
+ for(const e of [{kind:"assistant_message_committed",text:"unproven child surface"},{kind:"started",prompt:"private assembled instructions"},{kind:"reasoning_committed",text:"private"},{kind:"tool_result_batch_committed",results:[{text:"private"}]},{kind:"workflow_child_result_submitted",child_session_stream:{kind:"session",id:parent},payload:{text:"other"}}])expect(museChildEntries(event(e),child)).toEqual([]);
  expect(museChildEntries(event({kind:"started",prompt:"other"}),parent)).toEqual([]);
 });

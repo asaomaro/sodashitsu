@@ -28,7 +28,6 @@ export function museChildEntries(row:unknown,childSession:string):SubagentTransc
  const r=row as Record<string,any>;if(r.schema_version!==1||r.stream?.kind!=="session"||r.stream.id!==childSession||r.payload_schema_version!==1)return [];
  const event=r.payload?.kind==="run"?r.payload.event:undefined;
  const at=typeof r.recorded_at==="number"&&Number.isFinite(r.recorded_at)&&Math.abs(r.recorded_at/1000)<=8.64e15?new Date(r.recorded_at/1000).toISOString():undefined;
- if(event?.kind==="assistant_message_committed"&&typeof event.text==="string")return entriesOfLine({type:"assistant",timestamp:at,message:{content:event.text}});
  if(event?.kind==="workflow_child_result_submitted"&&event.child_session_stream?.kind==="session"&&event.child_session_stream.id===childSession&&typeof event.payload?.text==="string")return entriesOfLine({type:"assistant",timestamp:at,message:{content:event.payload.text}});
  return [];
 }
