@@ -4,6 +4,7 @@ import {
   systemFooterDisplaySegments,
   loadSystemFooterSettings,
   systemFooterSegments,
+  systemCpuCoreLabel,
   systemFooterPlaceholder,
   type SystemResources,
 } from "./systemFooter.js";
@@ -22,6 +23,7 @@ it("renders selected values and omits unsupported information", () => {
     sampledAt: 1,
     cpuPercent: 25,
     cpuCount: 4,
+    physicalCpuCount: 2,
     memoryTotalBytes: 8 * 1024 ** 3,
     memoryAvailableBytes: 2 * 1024 ** 3,
     serverRssBytes: 512 * 1024 ** 2,
@@ -33,7 +35,7 @@ it("renders selected values and omits unsupported information", () => {
     systemFooterSegments(data, ["memory", "cpu", "load", "serverMemory", "uptime", "host"]),
   ).toEqual([
     "メモリ 6.0GiB/8.0GiB 75%",
-    "CPU 25% (4核)",
+    "CPU 25% (2/4 コア)",
     "Soda 512MiB 6%",
     "稼働 1日 1h 0m",
     "host",
@@ -69,7 +71,7 @@ it("uses statusline patterns independently for percentage metrics and preserves 
     serverRssBytes: 256 * 1024 ** 2,
   } as SystemResources;
   expect(systemFooterSegments(data, ["cpu", "memory", "serverMemory"], settings.graphs)).toEqual([
-    "CPU #####----- 50% (2核)",
+    "CPU #####----- 50% (—/2 コア)",
     "メモリ 512MiB/1.0GiB ●●●●●○○○○○ 50%",
     "Soda 256MiB 25%",
   ]);
@@ -110,12 +112,13 @@ it("shares the five-character half-step gauge for all footer percentages", () =>
     uptimeSeconds: 0,
     cpuPercent: 50,
     cpuCount: 4,
+    physicalCpuCount: 2,
     memoryTotalBytes: 1024 ** 3,
     memoryAvailableBytes: 512 * 1024 ** 2,
     serverRssBytes: 256 * 1024 ** 2,
   } as SystemResources;
   expect(systemFooterSegments(data, ["cpu", "memory", "serverMemory"], settings.graphs)).toEqual([
-    "CPU ██▒░░ 50% (4核)",
+    "CPU ██▒░░ 50% (2/4 コア)",
     "メモリ 512MiB/1.0GiB ██▒░░ 50%",
     "Soda 256MiB █▒░░░ 25%",
   ]);
@@ -128,6 +131,7 @@ it("defaults the footer to mono and colors rates and agent states independently"
     uptimeSeconds: 0,
     cpuPercent: 70,
     cpuCount: 4,
+    physicalCpuCount: 2,
     memoryTotalBytes: 1024 ** 3,
     memoryAvailableBytes: 0,
     serverRssBytes: 256 * 1024 ** 2,
@@ -147,4 +151,12 @@ it("defaults the footer to mono and colors rates and agent states independently"
   expect(color.map((s) => s.color)).toEqual(["warning", "danger", "good", "danger", "model"]);
   expect(color.map((s) => s.text)).toEqual(mono.map((s) => s.text));
   expect(loadSystemFooterSettings({ colorMode: "invalid" }).colorMode).toBe("mono");
+});
+
+it("shows unknown topology on old servers without copying logical cores or assuming SMT2", () => {
+  expect(systemCpuCoreLabel({cpuCount:24,physicalCpuCount:16})).toBe("16/24 コア");
+  expect(systemCpuCoreLabel({cpuCount:24})).toBe("—/24 コア");
+  expect(systemCpuCoreLabel({cpuCount:24,physicalCpuCount:null})).toBe("—/24 コア");
+  expect(systemCpuCoreLabel({cpuCount:4,physicalCpuCount:8})).toBe("—/4 コア");
+  expect(systemCpuCoreLabel({cpuCount:0,physicalCpuCount:0})).toBe("—/— コア");
 });

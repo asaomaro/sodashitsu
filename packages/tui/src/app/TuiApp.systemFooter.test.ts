@@ -8,6 +8,7 @@ it("reserves one bottom row across screens and releases it when disabled", async
         sampledAt: 1,
         cpuPercent: 25,
         cpuCount: 4,
+        physicalCpuCount: 2,
         memoryTotalBytes: 8 * 1024 ** 3,
         memoryAvailableBytes: 2 * 1024 ** 3,
         serverRssBytes: 512 * 1024 ** 2,
@@ -22,7 +23,7 @@ it("reserves one bottom row across screens and releases it when disabled", async
   try {
     h.app.prefs.apply({ systemFooterSettings: { enabled: true, fields: ["cpu", "memory"] } }, 2);
     h.app.renderNow();
-    await vi.waitFor(async () => expect((await h.screen()).split("\n")[29]).toContain("CPU 25%"));
+    await vi.waitFor(async () => expect((await h.screen()).split("\n")[29]).toContain("CPU 25% (2/4 コア)"));
     for (const screen of ["graph", "dashboard", "schedule"] as const) {
       h.app.ui.setScreen(screen);
       h.app.renderNow();

@@ -34,7 +34,10 @@ export type SystemFooterGraphs = Record<
 export interface SystemResources {
   sampledAt: number;
   cpuPercent: number | null;
+  /** Logical processors visible to the server OS. */
   cpuCount: number;
+  /** Physical cores from explicit OS topology; absent on older servers, null when unknown. */
+  physicalCpuCount?: number | null;
   memoryTotalBytes: number;
   memoryAvailableBytes: number;
   serverRssBytes: number;
@@ -93,6 +96,12 @@ export function loadSystemFooterSettings(
 function bytes(n: number) {
   return n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)}GiB` : `${Math.round(n / 1024 ** 2)}MiB`;
 }
+/** Shared Web/TUI wording; no SMT ratio is inferred when topology is unavailable. */
+export function systemCpuCoreLabel(data: Pick<SystemResources, "cpuCount" | "physicalCpuCount">): string {
+  const logical = Number.isSafeInteger(data.cpuCount) && data.cpuCount > 0 ? data.cpuCount : null;
+  const physical = Number.isSafeInteger(data.physicalCpuCount) && data.physicalCpuCount! > 0 && logical !== null && data.physicalCpuCount! <= logical ? data.physicalCpuCount : null;
+  return `${physical ?? "—"}/${logical ?? "—"} コア`;
+}
 export function systemFooterSegments(
   data: SystemResources | undefined,
   fields: SystemFooterField[],
@@ -106,7 +115,7 @@ export function systemFooterSegments(
     cpu:
       data.cpuPercent === null
         ? undefined
-        : `CPU ${statuslineGauge(data.cpuPercent, graphs.cpu)} (${data.cpuCount}核)`,
+        : `CPU ${statuslineGauge(data.cpuPercent, graphs.cpu)} (${systemCpuCoreLabel(data)})`,
     memory:
       total > 0
         ? `メモリ ${bytes(used)}/${bytes(total)} ${statuslineGauge((used / total) * 100, graphs.memory)}`

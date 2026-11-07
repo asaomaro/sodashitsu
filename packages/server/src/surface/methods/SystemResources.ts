@@ -1,3 +1,4 @@
+import { CpuTopologyCache } from "./CpuTopology.js";
 import { cpus, freemem, hostname, loadavg, totalmem, uptime } from "node:os";
 import { readFileSync } from "node:fs";
 import type { SystemResources } from "@sodashitsu/protocol";
@@ -31,6 +32,7 @@ function availableMemory(total: number) {
 }
 /** One sampler per server; callers share a one-second cache. No timer when unused. */
 export class SystemResourceSampler {
+  private readonly topology = new CpuTopologyCache();
   private previous: ReturnType<typeof cpus> = [];
   private cached: SystemResources | undefined;
   get(): SystemResources {
@@ -42,6 +44,7 @@ export class SystemResourceSampler {
       sampledAt: now,
       cpuPercent: cpuDelta(this.previous, current),
       cpuCount: current.length,
+      physicalCpuCount: this.topology.get(current.length),
       memoryTotalBytes: total,
       memoryAvailableBytes: availableMemory(total),
       serverRssBytes: process.memoryUsage().rss,

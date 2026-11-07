@@ -58,3 +58,10 @@ it("keeps the left settings button when every field is hidden", async () => {
     localStorage.clear();
   }
 });
+
+it.each([[12, "12/24 コア"], [null, "—/24 コア"]])("renders physical/logical cores in the Web footer", async (physicalCpuCount, text) => {
+  const pinia=createPinia();setActivePinia(pinia);useViewStore().connectionState="open";
+  useSettingsStore().setSystemFooterSettings({enabled:true,fields:["cpu"]});
+  const wrapper=mount(SystemFooter,{global:{plugins:[pinia],provide:{[ConnectionKey as symbol]:{request:async()=>({sampledAt:1,cpuPercent:25,cpuCount:24,physicalCpuCount,memoryTotalBytes:1,memoryAvailableBytes:1,serverRssBytes:1,uptimeSeconds:1,loadAverage:null,hostname:"fixture"})}}}});
+  try { await nextTick();expect(wrapper.text()).toContain(text); } finally {wrapper.unmount();localStorage.clear();}
+});

@@ -18,6 +18,7 @@ it("shares the cached sample without creating background timers", () => {
     data = sampler.get();
   expect(sampler.get()).toBe(data);
   expect(data.cpuPercent).toBeNull();
+  expect(data).toHaveProperty("physicalCpuCount", null);
   expect(data.memoryTotalBytes).toBeGreaterThan(0);
   expect(data.memoryAvailableBytes).toBeLessThanOrEqual(data.memoryTotalBytes);
   expect(data.serverRssBytes).toBeGreaterThan(0);
@@ -33,7 +34,7 @@ it("exposes resources through the authenticated RPC surface", async () => {
     "server.resources",
     {},
   );
-  expect(response).toMatchObject({ ok: true, result: { cpuPercent: null, agents: counts } });
+  expect(response).toMatchObject({ ok: true, result: { cpuPercent: null, physicalCpuCount: null, agents: counts } });
   counts = { total: 1, states: { working: 0, idle: 0, blocked: 1, unknown: 0 } };
   const next = await surface.invoke(
     { clientId: "c", sink: {} as ClientSink },
