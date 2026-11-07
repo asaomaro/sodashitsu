@@ -16,7 +16,7 @@ async function fixture() {
   const alive = await readFile(new URL("./fixtures/agy-subagents/alive.json", import.meta.url), "utf8");
   const file = join(dir, child + ".json"); await writeFile(file, alive);
   const source: NativeSubagentSource = { paneId: "pane", instanceId: "instance", kind: "agy", sessionId: parent };
-  const reader = new NativeSubagentReader({ home });
+  const reader = new NativeSubagentReader({ home, codexHome: join(home, ".codex") });
   return { home, system, dir, file, alive, source, reader };
 }
 describe("Antigravity official direct-child snapshots", () => {
