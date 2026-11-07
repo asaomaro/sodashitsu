@@ -1,0 +1,1 @@
+会話ボタンへ既存data-assistant-feature属性を追加。実生成DOMのnone/actions/featuresでcomputed背景/文字/境界色を確認: none/actionsはmenu色、featuresはaccent色。旧1sourceはfeatures色がnoneと同じでfail、cmp/SHA完全復元後同DOM再pass。1属性で公開型/処理変更なし、全体test不要。既存fixtureの4テーマ/readonly/inline scopeも同時に通る。

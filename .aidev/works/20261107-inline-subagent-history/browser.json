@@ -40,6 +40,23 @@
   "settingsOffPreserved": true,
   "inlineInfo": true,
   "inlineChildHistory": true,
+  "buttonThemeLevels": [
+    {
+      "background": "rgb(23, 36, 56)",
+      "color": "rgb(237, 243, 250)",
+      "border": "rgb(38, 60, 86)"
+    },
+    {
+      "background": "rgb(23, 36, 56)",
+      "color": "rgb(237, 243, 250)",
+      "border": "rgb(38, 60, 86)"
+    },
+    {
+      "background": "rgb(201, 166, 79)",
+      "color": "rgb(23, 36, 56)",
+      "border": "rgb(201, 166, 79)"
+    }
+  ],
   "mutationRPCs": 0,
   "sidebarInfoRemoved": true,
   "headerInfoPreserved": true,

@@ -40,7 +40,7 @@ defineExpose({ focus: () => listEl.value?.focus() });
         <span class="subagent-list-type" :title="subagentEffortLabel(item)?.title">{{ subagentModelLabel(item) ?? item.type ?? "サブエージェント" }}</span>
         <span v-if="item.background" class="subagent-list-bg">バックグラウンド</span>
         <span class="subagent-list-elapsed">{{ formatSubagentElapsed(item.startedAt, now) }}</span>
-        <button v-if="readable && item.hasTranscript" type="button" class="subagent-list-transcript" :aria-label="`${item.description || item.type || 'サブエージェント'}の会話を読む`" @click="emit('transcript',item.id)">会話</button>
+        <button data-assistant-feature v-if="readable && item.hasTranscript" type="button" class="subagent-list-transcript" :aria-label="`${item.description || item.type || 'サブエージェント'}の会話を読む`" @click="emit('transcript',item.id)">会話</button>
       </div>
       <div v-if="item.description" class="subagent-list-desc">{{ item.description }}</div>
     </div>

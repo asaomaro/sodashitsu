@@ -1,0 +1,30 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected "actual" not to be strictly deep-equal to:
+
+{
+  background: 'rgb(23, 36, 56)',
+  border: 'rgb(38, 60, 86)',
+  color: 'rgb(237, 243, 250)'
+}
+
+    at file:///workspaces/sodashitsu-subagent-inline-history/.aidev/works/20261107-inline-subagent-history/browser.mjs:27:1386 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: {
+    background: 'rgb(23, 36, 56)',
+    color: 'rgb(237, 243, 250)',
+    border: 'rgb(38, 60, 86)'
+  },
+  expected: {
+    background: 'rgb(23, 36, 56)',
+    color: 'rgb(237, 243, 250)',
+    border: 'rgb(38, 60, 86)'
+  },
+  operator: 'notDeepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.15.0
