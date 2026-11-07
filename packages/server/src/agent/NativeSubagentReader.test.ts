@@ -112,6 +112,12 @@ describe("owned native records reader", () => {
     }
     reader.close();
   });
+  it("keeps oversized child-related CollabAgentToolCall records unknown", async () => {
+    const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home });
+    const related = JSON.stringify({ type: "event_msg", payload: { type: "item_completed", item: { type: "CollabAgentToolCall", sender_thread_id: f.source.sessionId, receiver_thread_ids: ["child"], agents_states: { child: { status: "running", message: "x".repeat(300000) } } } } });
+    await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n" + related + "\n" + JSON.stringify(f.rows[1]) + "\n");
+    expect(await reader.read(f.source)).toBeUndefined(); reader.close();
+  });
   it.each(["unknown", "important", "duplicate", "broken"])("keeps oversized %s rows unknown", async kind => {
     const f = await setup(), reader = new NativeSubagentReader({ codexHome: f.home });
     let text = JSON.stringify({ type: kind === "unknown" ? "future" : "event_msg", payload: { type: "item_completed", item: { type: "SubAgentActivity", pad: "x".repeat(300000) } } });

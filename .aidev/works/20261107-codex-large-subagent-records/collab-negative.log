@@ -1,0 +1,38 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-large-records
+
+ ❯ |@sodashitsu/server| src/agent/NativeSubagentReader.test.ts (18 tests | 1 failed | 17 skipped) 34ms
+   ❯ owned native records reader (18)
+     × keeps oversized child-related CollabAgentToolCall records unknown 33ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/NativeSubagentReader.test.ts > owned native records reader > keeps oversized child-related CollabAgentToolCall records unknown
+AssertionError: expected { count: +0, items: [] } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "count": 0,
+  "items": [],
+}
+
+ ❯ src/agent/NativeSubagentReader.test.ts:119:41
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 skipped (18)
+   Start at  14:25:07
+   Duration  246ms (transform 66%, tests 21%, import 12%, worker 2%)
+

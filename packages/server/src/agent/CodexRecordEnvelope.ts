@@ -5,7 +5,7 @@ type Context = "root" | "payload" | "item" | "other";
 type Frame = { kind: "object" | "array"; phase: string; context: Context; key?: string; seen?: Set<string> };
 // Codex rust-v0.166.0 protocol EventMsg: text/usage events, separate from ItemCompleted.
 const NON_CHILD_EVENTS = new Set(["user_message", "agent_message", "token_count"]);
-const NON_CHILD_ITEMS = new Set(["Extension", "AgentMessage", "UserMessage", "CommandExecution", "Reasoning", "ImageView", "FileChange", "McpToolCall", "CollabAgentToolCall", "ContextCompaction"]);
+const NON_CHILD_ITEMS = new Set(["Extension", "AgentMessage", "UserMessage", "CommandExecution", "Reasoning", "ImageView", "FileChange", "McpToolCall", "ContextCompaction"]);
 export class CodexRecordEnvelope {
   private stack: Frame[] = [];
   private readonly utf8 = new TextDecoder("utf-8", { fatal: true });
