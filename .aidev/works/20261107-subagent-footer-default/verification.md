@@ -1,0 +1,11 @@
+# Subagent footer default and display audit
+
+The reported disappearance has a server record-coverage cause handled separately. Read-only production prefs via FsSessionStore/withSession + prefs.get yielded only enabled=true, fields.subagents=true (explicit), so no production settings were changed. No full prefs, token/cookie, account or real conversation was output. Web/Electron/TUI current user-viewer identity is not available in the public snapshot, so it is unknown. No sr-pc operation.
+
+Separate UI gap: loadStatuslineSettings used first ten field indices as defaults; subagents is index19 and therefore absent even with known server data when its setting was unspecified. The one-expression fix enables the subagents field by default while leaving explicit false, enabled, order/rows/all other fields unchanged. Unknown server data still omits the segment; alive counts retain 所属 wording.
+
+Related protocol17, Web204 (PaneStatusline3 + Sidebar201), TUI6 tests passed. Web typecheck exit0. New tests cover actual default/explicitfalse/explicittrue with native Codex alive/unknown data through the real footer component and TUI rendered grid. Existing sidebar cases cover all five kinds without kind gates, collapsed badge and expanded unknown/idle/defaultworking labels.
+
+The real Vite/Chromium fixture mounts production Sidebar and PaneStatusline with generated Codex alive3/unknown children, no server or agent session. Browser DOM shows default footer count, respects explicit false/true, sidebar collapsed badge3→expanded3 unknown rows, and confirms footer-off does not suppress sidebar. No page errors; screenshot viewed. This is generated display verification, not an actual user recording.
+
+Negative control restores only the prior default expression. Protocol test fails (1/17). Protocol package is rebuilt with the old expression before the browser fixture: browser fails to observe default count. Source is then restored byte-for-byte, recorded SHA256 matches, package rebuilt and final protocol/browser pass. Raw negative/build/restored and positive logs are retained; no stale dist was used. Whole-repository tests/build not repeated; only own workspace dependency protocol/client-core builds and related tests/typecheck.

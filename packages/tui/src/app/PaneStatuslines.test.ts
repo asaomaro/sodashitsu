@@ -138,3 +138,12 @@ it("renders mono statusline cells with the theme foreground", () => {
   const mono = render();
   expect(mono.grid.cell(mono.box.x + 2, mono.box.y + mono.box.h).fg).toBe(theme.ui("--soda-fg"));
 });
+
+
+it.each([undefined,false,true])("renders native membership in the terminal footer with subagents=%s",enabled=>{
+ const h=harness(),p=h.model.panes.get("p1")!;p.label="Codex";p.agent={...p.agent!,kind:"codex",subagents:{count:3,countBasis:"alive",items:[{id:"generated",state:"unknown",startedAt:0}]}};
+ h.prefs.apply({statuslineSettings:loadStatuslineSettings(enabled===undefined?undefined:{fields:{subagents:enabled}})},2);
+ const layout=h.layout();h.controller.adjust(layout);const grid=new Grid(120,30);h.controller.render(grid,new ThemeColors("dracula"));
+ const box=layout.panes[0]!.content,row=grid.rowText(box.y+box.h);
+ expect(row.includes("Subagents 所属 3")).toBe(enabled!==false);
+});

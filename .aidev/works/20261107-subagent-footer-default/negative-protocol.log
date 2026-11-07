@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-footer-default/packages/protocol
+
+ ❯ src/statusline.test.ts (17 tests | 1 failed) 18ms
+   × shows supplied subagent membership by default while respecting explicit hidden and unknown 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/statusline.test.ts > shows supplied subagent membership by default while respecting explicit hidden and unknown
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/statusline.test.ts:227:80
+    225|  const pane={agent:{kind:"codex",label:"Codex",state:"idle",subagents:…
+    226|  for(const raw of [undefined,{}, {fields:{subagents:true}}]){
+    227|   const settings=loadStatuslineSettings(raw);expect(settings.fields.su…
+       |                                                                                ^
+    228|   expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.fiel…
+    229|  }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+   Start at  15:18:42
+   Duration  201ms (transform 63%, tests 17%, import 17%, worker 3%)
+
+undefined
+/workspaces/sodashitsu-subagent-footer-default/packages/protocol:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/statusline.test.ts

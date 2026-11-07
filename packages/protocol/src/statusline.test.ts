@@ -219,3 +219,14 @@ it.each(["claude","codex","muse","copilot","agy"])("shows native subagents in %s
  pane.agent!.subagents!.countBasis="alive";
  expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")).toMatchObject({text:"Subagents 所属 2",title:expect.stringContaining("作業中の件数ではありません")});
 });
+
+
+it("shows supplied subagent membership by default while respecting explicit hidden and unknown",()=>{
+ const pane={agent:{kind:"codex",label:"Codex",state:"idle",subagents:{count:3,countBasis:"alive",items:[]}}} as unknown as import("./model.js").Pane;
+ for(const raw of [undefined,{}, {fields:{subagents:true}}]){
+  const settings=loadStatuslineSettings(raw);expect(settings.fields.subagents).toBe(true);
+  expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")?.text).toBe("Subagents 所属 3");
+ }
+ expect(statuslineSegments(pane,undefined,[],loadStatuslineSettings({fields:{subagents:false}})).some(s=>s.field==="subagents")).toBe(false);
+ expect(statuslineSegments({...pane,agent:{...pane.agent!,subagents:undefined}},undefined,[],loadStatuslineSettings({})).some(s=>s.field==="subagents")).toBe(false);
+});

@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-footer-default/packages/protocol
+
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  15:18:56
+   Duration  178ms (transform 65%, import 18%, tests 14%, worker 4%)
+

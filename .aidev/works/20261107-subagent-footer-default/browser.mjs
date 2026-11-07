@@ -1,0 +1,26 @@
+// Real Vue component/DOM with generated WebSocket receipts; no actual desktop or helper start.
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import {join,dirname} from 'node:path';
+import {writeFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const here=dirname(fileURLToPath(import.meta.url)),repo=fileURLToPath(new URL('../../../',import.meta.url));
+const require=createRequire(join(repo,'packages/web/package.json'));
+const {createServer}=await import(require.resolve('vite'));
+const vue=(await import(require.resolve('@vitejs/plugin-vue'))).default;
+const {chromium,expect}=createRequire(join(repo,'packages/desktop-assistant/package.json'))('@playwright/test');
+const html="<html><body><div id=\"app\"></div><script type=\"module\">\nimport{createApp,h}from'vue';import{createPinia}from'pinia';import Sidebar from'/src/components/Sidebar.vue';import Footer from'/src/components/PaneStatusline.vue';import{useSessionStore}from'/src/store/session.ts';import{useSettingsStore}from'/src/store/settings.ts';import{loadStatuslineSettings}from'@sodashitsu/protocol';import{ConnectionKey,ActionDispatcherKey}from'/src/injection.ts';\nconst pinia=createPinia(),session=useSessionStore(pinia),settings=useSettingsStore(pinia);settings.statuslineSettings=loadStatuslineSettings(undefined);\nconst agent={instanceId:'generated-agent',kind:'codex',label:'Generated Codex',state:'idle',completionSeq:0,serverSeenSeq:0,verified:true,since:0,subagents:{count:3,countBasis:'alive',items:[{id:'child1',startedAt:0,type:'Worker One',state:'unknown'},{id:'child2',startedAt:0,type:'Worker Two',state:'unknown'},{id:'child3',startedAt:0,type:'Worker Three',state:'unknown'}]}};\nsession.workspaceUpserted({id:'w',label:'Generated',cwd:'/',tabIds:['t'],activeTabId:'t',groupId:null,git:null,autoLabel:false});session.tabUpserted({id:'t',workspaceId:'w',label:'Generated',layout:{type:'pane',paneId:'p'},focusedPaneId:'p',zoomedPaneId:null,sizeOwnerClientId:null});session.paneUpserted({id:'p',tabId:'t',label:'Generated Codex',cwd:'/',shell:'/bin/sh',cols:80,rows:24,status:'running',failure:null,busy:false,title:'',rightClick:'herdr',agent,agentSession:null});\nconst app=createApp({render:()=>h('div',{style:'display:flex;height:760px'},[h(Sidebar,{style:'width:320px'}),h('section',{style:'width:720px;height:500px'},[h('div',{class:'pane-frame-main',style:'height:460px'}),h(Footer,{paneId:'p'})])])});app.use(pinia);app.provide(ConnectionKey,{request:async()=>({}),sendInput(){},connect(){},login(){},logout(){}});app.provide(ActionDispatcherKey,{run(){},openContextMenu(){},toggleGroupCollapsed(){},moveItemByDrag(){},openSessionSwitcher(){}});app.mount('#app');window.generatedFooter={field(value){settings.statuslineSettings=loadStatuslineSettings({fields:{subagents:value}})}};\n</script></body></html>";
+const server=await createServer({root:join(repo,'packages/web'),configFile:false,plugins:[{name:'fixture-html',configureServer(s){s.middlewares.use('/generated-footer',async(_req,res)=>{res.setHeader('Content-Type','text/html');res.end(await s.transformIndexHtml('/generated-footer',html))})}},vue()],server:{host:'127.0.0.1',port:0},logLevel:'error'});
+let browser;
+try{
+ await server.listen();const port=server.httpServer.address().port;
+ browser=await chromium.launch({headless:true,args:['--disable-gpu']});const page=await browser.newPage({viewport:{width:1100,height:800}});const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error(e.message)});
+ page.on('console',m=>{if(m.type()==='error')console.error('console',m.text())});page.on('requestfailed',r=>console.error('requestfailed',r.url()));await page.goto(`http://127.0.0.1:${port}/generated-footer`);
+ await expect(page.locator('[data-pane-statusline]')).toBeVisible();await expect(page.locator('[data-pane-statusline]')).toContainText('Subagents 所属 3');
+ const button=page.locator('.sidebar-agents .sidebar-subagent-btn');await expect(button).toHaveAttribute('aria-expanded','false');await expect(button.locator('.sidebar-subagent-count')).toHaveText('3');
+ await button.click();await expect(button).toHaveAttribute('aria-expanded','true');await expect(page.locator('.sidebar-subagent-row')).toHaveCount(3);await expect(page.locator('.sidebar-subagent-row').first()).toContainText('状態不明');
+ await page.evaluate(()=>window.generatedFooter.field(false));await expect(page.locator('[data-pane-statusline]')).not.toContainText('Subagents');await expect(page.locator('.sidebar-subagent-row')).toHaveCount(3);
+ await page.evaluate(()=>window.generatedFooter.field(true));await expect(page.locator('[data-pane-statusline]')).toContainText('Subagents 所属 3');
+ await page.screenshot({path:join(here,'browser.png')});assert.deepEqual(errors,[]);
+ const receipt={defaultFooterVisible:true,explicitFalseHonored:true,explicitTrueVisible:true,nativeCodexAliveSidebarBadge:3,expandedUnknownChildRows:3,footerDisabledDoesNotHideSidebar:true,pageErrors:errors};await writeFile(join(here,'browser.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
+}finally{await browser?.close();await server.close();}

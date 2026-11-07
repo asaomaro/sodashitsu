@@ -74,7 +74,7 @@ export function loadStatuslineSettings(raw: unknown): StatuslineSettings {
     fields: Object.fromEntries(
       STATUSLINE_FIELDS.map(({ id }) => [
         id,
-        typeof fields[id] === "boolean" ? fields[id] : ids.indexOf(id) < 10,
+        typeof fields[id] === "boolean" ? fields[id] : id === "subagents" || ids.indexOf(id) < 10,
       ]),
     ) as StatuslineSettings["fields"],
     graphs: Object.fromEntries(

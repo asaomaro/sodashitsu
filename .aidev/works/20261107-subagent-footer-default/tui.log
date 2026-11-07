@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-footer-default/packages/tui
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  15:17:15
+   Duration  1.51s (transform 80%, import 18%, tests 1%)
+
