@@ -361,6 +361,22 @@ it("enables robot captain without focus stealing, fences IPC and opens a native-
     },
   });
   expect((remoteOf(panel).options.webPreferences as Record<string, unknown>).preload).toBeUndefined();
+  const contents = remoteOf(panel).webContents;
+  const requestDetails = {isMainFrame:true, requestingUrl:contents.mainFrame.url};
+  const check = fixture.permissionChecks.get("persist:assistant-server")!;
+  const request = fixture.permissionRequests.get("persist:assistant-server")!;
+  expect(check(contents,"clipboard-sanitized-write","http://127.0.0.1:7780",requestDetails)).toBe(true);
+  const copied = vi.fn();
+  request(contents,"clipboard-sanitized-write",copied,requestDetails);
+  expect(copied).toHaveBeenLastCalledWith(true);
+  for (const permission of ["clipboard-read","deprecated-sync-clipboard-read","media"]) {
+    expect(check(contents,permission,"http://127.0.0.1:7780",requestDetails)).toBe(false);
+    request(contents,permission,copied,requestDetails);
+    expect(copied).toHaveBeenLastCalledWith(false);
+  }
+  expect(check(contents,"clipboard-sanitized-write","http://127.0.0.1:7780",{...requestDetails,isMainFrame:false})).toBe(false);
+  expect(check(settings.webContents,"clipboard-sanitized-write","http://127.0.0.1:7780",requestDetails)).toBe(false);
+
   await expect(
     fixture.handlers.get("assistant:save")!(
       { sender: remoteOf(panel).webContents, senderFrame: remoteOf(panel).webContents.mainFrame },
@@ -379,6 +395,7 @@ it("enables robot captain without focus stealing, fences IPC and opens a native-
   await expect(fixture.handlers.get("assistant:read")!(characterEvent)).rejects.toThrow("許可");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
   expect(panel.isDestroyed()).toBe(true);
+  expect(check(contents,"clipboard-sanitized-write","http://127.0.0.1:7780",requestDetails)).toBe(false);
 });
 
 it("uses a focusable local bubble for user chat and closes it when disabled", async () => {

@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-electron-clipboard/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (67 tests | 1 failed | 66 skipped) 2206ms
+   × enables robot captain without focus stealing, fences IPC and opens a native-free panel 76ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > enables robot captain without focus stealing, fences IPC and opens a native-free panel
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/main.test.ts:368:94
+    366|   const check = fixture.permissionChecks.get("persist:assistant-server…
+    367|   const request = fixture.permissionRequests.get("persist:assistant-se…
+    368|   expect(check(contents,"clipboard-sanitized-write","http://127.0.0.1:…
+       |                                                                                              ^
+    369|   const copied = vi.fn();
+    370|   request(contents,"clipboard-sanitized-write",copied,requestDetails);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 66 skipped (67)
+   Start at  16:01:00
+   Duration  2.61s (tests 89%, transform 9%, import 2%)
+
+undefined
+/workspaces/sodashitsu-electron-clipboard/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/main.test.ts -t enables robot captain

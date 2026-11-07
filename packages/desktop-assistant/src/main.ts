@@ -1,3 +1,4 @@
+import { PanelClipboard } from "./panelClipboard.js";
 import {NoticeSummaries} from "./noticeSummaries.js";
 import {assistantAudioCapabilities,SummarySettingsSchema,loadSummarySettings} from "@sodashitsu/protocol";
 import {assistantAppearance} from "./appearance.js";
@@ -261,6 +262,7 @@ function showCompact(payload: { id?: string; title: string; message: string }): 
 }
 const fullscreen = new FullscreenPolicy();
 let settingsRequested = false;
+const panelClipboard = new PanelClipboard();
 const panelViews = new WeakMap<BrowserWindow,{view:WebContentsView;shell:Promise<void>}>();
 const windowRestores=new WeakMap<BrowserWindow,Rect>();
 const windowMaxBounds=new WeakMap<BrowserWindow,Rect>();
@@ -918,6 +920,7 @@ function openPanel(
   });
   const view=new WebContentsView({webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false,partition:"persist:assistant-server",webSecurity:true,webviewTag:false}});
   const remoteContents=view.webContents;
+  panelClipboard.register(remoteContents, url.href);
   view.setBackgroundColor("#172438");win.contentView.addChildView(view);
   const layout=()=>{const {width,height}=win.getBounds();view.setBounds({x:12,y:42,width:Math.max(1,width-24),height:Math.max(1,height-54)});};
   win.on("resize",layout);layout();win.setMenu(null);watchChromeState(win);
@@ -940,7 +943,7 @@ function openPanel(
     if (!sameServerNavigation(url, origin)) event.preventDefault();
   });
   win.on("closed", () => {
-    localWindows.delete(shellId);panelViews.delete(win);
+    localWindows.delete(shellId);panelViews.delete(win);panelClipboard.forget(remoteContents);
     if(!remoteContents.isDestroyed())remoteContents.close();
     if (panel === win) panel = null;
     if (responsePanel === win) responsePanel = null;
@@ -1917,16 +1920,18 @@ else {
         const isolated = session.fromPartition(partition);
         isolated.setPermissionRequestHandler((contents, permission, callback, details) => {
           callback(
-            partition === "assistant-local" &&
+            (partition === "persist:assistant-server" && panelClipboard.permits(contents, permission, details)) ||
+            (partition === "assistant-local" &&
               (microphonePermission(contents, permission, details) ||
-                screenshotPermission(contents, permission, details)),
+                screenshotPermission(contents, permission, details))),
           );
         });
         isolated.setPermissionCheckHandler((contents, permission, _origin, details) => {
           return (
-            partition === "assistant-local" &&
-            (microphonePermission(contents, permission, details) ||
-              screenshotPermission(contents, permission, details))
+            (partition === "persist:assistant-server" && panelClipboard.permits(contents, permission, details)) ||
+            (partition === "assistant-local" &&
+              (microphonePermission(contents, permission, details) ||
+                screenshotPermission(contents, permission, details)))
           );
         });
         isolated.setDisplayMediaRequestHandler((request, callback) => {

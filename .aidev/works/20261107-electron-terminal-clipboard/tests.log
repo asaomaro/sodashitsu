@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-electron-clipboard/packages/desktop-assistant
+
+
+ Test Files  2 passed (2)
+      Tests  68 passed (68)
+   Start at  16:00:30
+   Duration  4.20s (tests 91%, transform 8%, import 1%)
+
