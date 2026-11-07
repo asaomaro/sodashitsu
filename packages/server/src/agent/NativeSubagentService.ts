@@ -77,13 +77,14 @@ export class NativeSubagentService {
         this.pending.delete(source.paneId);
         if(!same(source,sourceOf(before))||!this.verified(source))return;
         const position=this.reader.progress?.(source);
-        const value = await this.reader.read(source).catch(() => undefined);
+        let readRejected=false;
+        const value = await this.reader.read(source).catch(() => {readRejected=true;return undefined;});
         const pane = this.deps.session.getPane(source.paneId);
         if (this.closed || !same(source, sourceOf(pane))) return;
         const verified=this.verified(source);
         const accepted = verified ? value : undefined;
         const progress=this.reader.progress?.(source);
-        if(verified&&progress?.pending&&progress.offset>(position?.offset??0)&&(!position||progress.generation===position.generation))this.pending.set(source.paneId,source);
+        if(verified&&!readRejected&&progress?.pending&&progress.offset>(position?.offset??0)&&(!position||progress.generation===position.generation))this.pending.set(source.paneId,source);
         if (!same(accepted, pane?.agent?.subagents)) this.deps.session.setAgentSubagents(source.paneId, accepted);
       }));
       const ended=this.now();

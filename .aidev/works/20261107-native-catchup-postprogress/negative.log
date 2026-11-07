@@ -1,0 +1,56 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-catchup-read-failure/packages/server
+
+ ❯ src/agent/NativeSubagentCatchup.test.ts (12 tests | 1 failed) 692ms
+   × rejects continuation after a read advanced its offset and then failed 7ms
+ ❯ src/agent/NativeSubagentReader.test.ts (22 tests | 1 failed) 1726ms
+   × clears a pending hint when refresh rejects after actual progress 93ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/NativeSubagentCatchup.test.ts > rejects continuation after a read advanced its offset and then failed
+AssertionError: expected 250 to be 2000 // Object.is equality
+
+- Expected
++ Received
+
+- 2000
++ 250
+
+ ❯ src/agent/NativeSubagentCatchup.test.ts:72:137
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/agent/NativeSubagentReader.test.ts > clears a pending hint when refresh rejects after actual progress
+AssertionError: expected { Object (offset, pending, ...) } to match object { offset: 4194304, pending: false }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "offset": 4194304,
+-   "pending": false,
++   "pending": true,
+  }
+
+ ❯ src/agent/NativeSubagentReader.test.ts:175:88
+    173|  const internal=reader as unknown as {refresh:(source:NativeSubagentSo…
+    174|  internal.refresh=async(source,state)=>{await original(source,state);t…
+    175|  expect(await reader.read(f.source)).toBeUndefined();expect(reader.pro…
+       |                                                                                        ^
+    176| });
+    177|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 32 passed (34)
+   Start at  16:40:40
+   Duration  2.06s (tests 86%, transform 12%, import 2%)
+
+undefined
+/workspaces/sodashitsu-native-catchup-read-failure/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/NativeSubagentCatchup.test.ts src/agent/NativeSubagentReader.test.ts

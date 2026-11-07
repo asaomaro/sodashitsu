@@ -65,3 +65,9 @@ it("does not overlap a pending source read and discards close before its continu
  const h=harness({large:100});let done!:(value:Subagents|undefined)=>void;h.reader.read.mockImplementation(()=>new Promise(resolve=>{done=resolve;}));h.service.start();await h.tick();
  expect(h.reader.read).toHaveBeenCalledTimes(1);await h.service.refresh();expect(h.reader.read).toHaveBeenCalledTimes(1);h.service.close();done({count:0,items:[]});await new Promise<void>(r=>setImmediate(r));expect(h.publish).not.toHaveBeenCalled();expect(h.timers).toHaveLength(0);
 });
+
+it("rejects continuation after a read advanced its offset and then failed",async()=>{
+ const h=harness({large:100}),original=h.reader.read.getMockImplementation()!;
+ h.reader.read.mockImplementation(async source=>{await original(source);throw Error("generated failure after progress");});
+ h.service.start();await h.tick();expect(h.reader.progress(h.reader.read.mock.calls[0]![0]).offset).toBe(CHUNK);expect(h.timers[0]!.ms).toBe(2000);expect(h.publish).not.toHaveBeenCalled();h.service.close();
+});

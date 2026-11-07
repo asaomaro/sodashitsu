@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-catchup-read-failure/packages/server
+
+
+ Test Files  2 passed (2)
+      Tests  34 passed (34)
+   Start at  16:38:56
+   Duration  1.55s (tests 84%, transform 13%, import 2%)
+

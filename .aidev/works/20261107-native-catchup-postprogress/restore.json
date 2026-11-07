@@ -1,0 +1,8 @@
+{
+  "negativeExit": 1,
+  "exactRestore": true,
+  "sha256": {
+    "packages/server/src/agent/NativeSubagentReader.ts": "3b56e9d28d6a449496679e061b29ffae8f04bcec14dd1d5ef8de08a5a120a910",
+    "packages/server/src/agent/NativeSubagentService.ts": "0130cd3d7ce4a9189d52bdf59eb87b2274abbd009de0c0c6b3395849ae2be9b6"
+  }
+}

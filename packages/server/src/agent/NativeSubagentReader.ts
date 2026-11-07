@@ -59,7 +59,7 @@ export class NativeSubagentReader {
       this.states.set(source.paneId, state);
     }
     const current = state;
-    current.reading ??= this.refresh(source, current).catch(() => undefined).finally(() => { delete current.reading; });
+    current.reading ??= this.refresh(source, current).catch(() => { current.pending=false; return undefined; }).finally(() => { delete current.reading; });
     const value = await current.reading;
     return !this.closed && this.states.get(source.paneId) === current ? value : undefined;
   }

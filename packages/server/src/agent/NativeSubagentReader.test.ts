@@ -167,3 +167,10 @@ it("clears continuation on unavailable paths and changes private generation on r
  await rename(f.file,f.file+".old");expect(await reader.read(f.source)).toBeUndefined();expect(reader.progress(f.source)?.pending).toBe(false);
  await writeFile(f.file,large);expect(await reader.read(f.source)).toBeUndefined();const replaced=reader.progress(f.source)!;expect(replaced.generation).not.toBe(first.generation);expect(replaced.offset).toBe(first.offset);reader.close();
 });
+
+it("clears a pending hint when refresh rejects after actual progress",async()=>{
+ const f=await setup(),reader=new NativeSubagentReader({codexHome:f.home});await writeFile(f.file,JSON.stringify(f.rows[0])+"\n"+JSON.stringify({type:"response_item",payload:{text:"x".repeat(5*1024*1024)}})+"\n");
+ const internal=reader as unknown as {refresh:(source:NativeSubagentSource,state:unknown)=>Promise<unknown>},original=internal.refresh.bind(reader);
+ internal.refresh=async(source,state)=>{await original(source,state);throw Error("generated failure after read/parse/close");};
+ expect(await reader.read(f.source)).toBeUndefined();expect(reader.progress(f.source)).toMatchObject({offset:4*1024*1024,pending:false});reader.close();
+});
