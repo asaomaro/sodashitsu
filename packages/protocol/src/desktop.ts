@@ -88,6 +88,7 @@ export const DesktopOptions = z
     protectedFiles:z.literal(true).optional(),
     protectedVideo:z.literal(true).optional(),
     protectedAudio:z.literal(true).optional(),
+    protectedMicrophone:z.literal(true).optional(),
     sharedProtectedVideo:z.literal(true).optional(),
     virtualMonitors:z.literal(true).optional(),
     fileCheckpoints:z.literal(true).optional(),
@@ -189,6 +190,7 @@ export const DesktopReady = z
     virtualDisplay:z.literal(true).optional(),
     protectedVideo:z.literal(true).optional(),
     protectedAudio:z.literal(true).optional(),
+    protectedMicrophone:z.literal(true).optional(),
     sharedProtectedVideo:z.literal(true).optional(),
     virtualMonitors:z.literal(true).optional(),
     monitorLayout:DesktopMonitorLayout.optional(),
@@ -223,9 +225,10 @@ export const DesktopReady = z
   })
   .strict()
   .refine((v) => !v.lockScreenCover || v.secureDesktop === true)
-  .refine(v=>!v.protectedDesktop||(v.secureDesktop===true&&!v.lockScreenCover&&!v.virtualDisplay&&!v.allowMedia&&!v.allowClipboard&&!v.display&&!v.monitorLayout&&!v.files&&!v.richClipboard&&(!v.nativeVideo||v.protectedVideo===true)&&(!v.nativeAudio||v.protectedAudio===true)&&!v.microphone&&!v.nativeDatagrams&&!v.nativeCodecs&&!v.nativeAdaptive&&!v.nativeCadence))
+  .refine(v=>!v.protectedDesktop||(v.secureDesktop===true&&!v.lockScreenCover&&!v.virtualDisplay&&!v.allowMedia&&!v.allowClipboard&&!v.display&&!v.monitorLayout&&!v.files&&!v.richClipboard&&(!v.nativeVideo||v.protectedVideo===true)&&(!v.nativeAudio||v.protectedAudio===true)&&(!v.microphone||v.protectedMicrophone===true)&&!v.nativeDatagrams&&!v.nativeCodecs&&!v.nativeAdaptive&&!v.nativeCadence))
   .refine(v=>!v.protectedVideo||(!!v.protectedDesktop&&v.nativeVideo===true))
   .refine(v=>!v.protectedAudio||(v.protectedVideo===true&&v.nativeAudio===true))
+  .refine(v=>!v.protectedMicrophone||(!!v.protectedDesktop&&v.secureDesktop===true&&v.microphone===true&&!v.sharedProtected&&!v.microphoneOpus))
   .refine(v=>!v.sharedProtectedVideo||(v.sharedProtected===true&&v.protectedVideo===true))
   .refine(v=>!v.virtualMonitors||(v.virtualDisplay===true&&!v.secureDesktop&&!!v.monitorLayout&&v.monitorLayout.selected!=="all"));
 export const DesktopFrameInfo = z
@@ -301,6 +304,7 @@ export const DesktopPermissions = z.object({
   allowVirtualDisplay:z.boolean().optional(),
   allowElevated:z.boolean().optional(),
   allowProtectedFiles:z.boolean().optional(),
+  allowProtectedMicrophone:z.boolean().optional(),
   fileRoot: z.string().max(4096).refine(v=>!v.includes("\0")).optional(),
 }).strict();
 export type DesktopPermissions = z.infer<typeof DesktopPermissions>;
@@ -365,6 +369,7 @@ export interface DesktopResults {
     protectedFiles?:boolean;
     protectedVideo?:boolean;
     protectedAudio?:boolean;
+    protectedMicrophone?:boolean;
     sharedProtectedVideo?:boolean;
     virtualMonitors?:boolean;
     sharedDeltas?:boolean;
