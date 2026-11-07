@@ -1,0 +1,53 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-current-state/packages/server
+
+ ❯ src/agent/NativeSubagentReader.test.ts (29 tests | 1 failed | 28 skipped) 32ms
+   ❯ owned native records reader (26)
+     × refines only EOF-proven Codex members with working/idle/unknown runtime states 31ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/NativeSubagentReader.test.ts > owned native records reader > refines only EOF-proven Codex members with working/idle/unknown runtime states
+AssertionError: expected { count: 3, countBasis: 'alive', …(1) } to match object { count: 3, countBasis: 'alive', …(1) }
+(10 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -1,14 +1,14 @@
+  {
+    "count": 3,
+    "countBasis": "alive",
+    "items": [
+      {
+-       "state": "working",
++       "state": "unknown",
+      },
+      {
+-       "state": "idle",
++       "state": "unknown",
+      },
+      {
+        "state": "unknown",
+      },
+    ],
+
+ ❯ src/agent/NativeSubagentReader.test.ts:26:41
+     24|     await writeFile(f.file, text); expect(await reader.read(f.source))…
+     25|     await appendFile(f.file, "\n");
+     26|     expect(await reader.read(f.source)).toMatchObject({ count: 3, coun…
+       |                                         ^
+     27|     expect(status).toHaveBeenCalledOnce(); reader.close();
+     28|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 skipped (29)
+   Start at  16:47:02
+   Duration  313ms (transform 69%, tests 16%, import 14%, worker 2%)
+
+undefined
+/workspaces/sodashitsu-codex-current-state/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/NativeSubagentReader.test.ts -t refines only EOF-proven

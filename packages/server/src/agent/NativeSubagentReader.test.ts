@@ -1,7 +1,7 @@
-import { mkdtemp, mkdir, readFile, writeFile, appendFile, rm, symlink, rename } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, appendFile, rm, symlink, rename, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NativeSubagentReader, type NativeSubagentSource } from "./NativeSubagentReader.js";
 
 const dirs: string[] = [];
@@ -15,6 +15,43 @@ async function setup() {
   return { home, text, rows, file: join(dir, `rollout-fixture-${id}.jsonl`), source: { paneId: "pane", instanceId: "instance-1", kind: "codex", sessionId: id } as NativeSubagentSource };
 }
 describe("owned native records reader", () => {
+  it("refines only EOF-proven Codex members with working/idle/unknown runtime states", async () => {
+    const f = await setup();
+    const rows = (await readFile(new URL("./fixtures/native-subagents/codex-referenced-members.jsonl", import.meta.url), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const text = rows.map(r => JSON.stringify({ ...r, payload: { ...r.payload, thread_id: f.source.sessionId } })).join("\n");
+    const status = vi.fn(async (target: import("./CodexControlStatus.js").CodexControlTarget) => new Map(target.childIds.map((id, index) => [id, (["working", "idle", "unknown"] as const)[index]!] as const)));
+    const reader = new NativeSubagentReader({ codexHome: f.home }, status);
+    await writeFile(f.file, text); expect(await reader.read(f.source)).toBeUndefined(); expect(status).not.toHaveBeenCalled();
+    await appendFile(f.file, "\n");
+    expect(await reader.read(f.source)).toMatchObject({ count: 3, countBasis: "alive", items: [{ state: "working" }, { state: "idle" }, { state: "unknown" }] });
+    expect(status).toHaveBeenCalledOnce(); reader.close();
+  });
+  it.each(["append", "replace", "same-size", "forget", "close"])("rejects stale live status after %s during the request", async mode => {
+    const f = await setup(); await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n");
+    let reader: NativeSubagentReader;
+    const status = vi.fn(async (target: import("./CodexControlStatus.js").CodexControlTarget) => {
+      if (mode === "append") await appendFile(f.file, JSON.stringify(f.rows[1]) + "\n");
+      if (mode === "replace") { await rename(f.file, f.file + ".old"); await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n"); }
+      if (mode === "same-size") { await writeFile(f.file, (JSON.stringify(f.rows[0]) + "\n").replace("started", "invalid")); await utimes(f.file, new Date(0), new Date(0)); }
+      if (mode === "forget") reader.forget(f.source.paneId);
+      if (mode === "close") reader.close();
+      return new Map(target.childIds.map(id => [id, "working" as const]));
+    });
+    reader = new NativeSubagentReader({ codexHome: f.home }, status);
+    expect(await reader.read(f.source)).toBeUndefined();
+    if (mode === "append") { expect((await reader.read(f.source))?.count).toBe(0); expect(status).toHaveBeenCalledOnce(); }
+    reader.close();
+  });
+  it("keeps membership unknown on failed status and aborts status work when forgotten", async () => {
+    const f = await setup(); await writeFile(f.file, JSON.stringify(f.rows[0]) + "\n");
+    const reader = new NativeSubagentReader({ codexHome: f.home }, async () => { throw Error("unavailable"); });
+    expect(await reader.read(f.source)).toMatchObject({ count: 1, countBasis: "alive", items: [{ state: "unknown" }] }); reader.close();
+    let signal: AbortSignal | undefined, release: (() => void) | undefined;
+    const delayed = new NativeSubagentReader({ codexHome: f.home }, async target => { signal = target.signal; await new Promise<void>(resolve => { release = resolve; }); return new Map(); });
+    const pending = delayed.read(f.source); await vi.waitFor(() => expect(release).toBeDefined()); delayed.forget(f.source.paneId);
+    expect(signal?.aborted).toBe(true); release!(); expect(await pending).toBeUndefined(); delayed.close();
+  });
+
   it("reads the real Muse parent-stream fixture through its UUIDv7 exact path", async () => {
     const f = await setup(), rows = (await readFile(new URL("./fixtures/native-subagents/muse.jsonl", import.meta.url), "utf8")).trim().split("\n").map(line => JSON.parse(line));
     const id = rows[0].stream.id, dataHome = join(f.home, "data");

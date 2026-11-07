@@ -1,3 +1,4 @@
+import { readCodexControlStatus, type CodexControlTarget, type CodexObservedState } from "./CodexControlStatus.js";
 import { CodexSubagentStream } from "./CodexSubagentStream.js";
 import { readAntigravitySubagents } from "./AntigravitySubagentReader.js";
 import { realpath, lstat } from "node:fs/promises";
@@ -23,6 +24,7 @@ interface State {
   ino: number;
   invalid: boolean;
   generation: number;
+  abort: AbortController;
   pending?: boolean;
   codex?: CodexSubagentStream;
   reading?: Promise<Subagents | undefined>;
@@ -36,10 +38,10 @@ export class NativeSubagentReader {
   private readonly states = new Map<string, State>();
   private closed = false;
   private readonly agyStates = new Map<string, { key: string; reading?: Promise<Subagents | undefined> }>();
-  constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}) {}
+  constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}, private readonly codexStatus: (target: CodexControlTarget) => Promise<Map<string, CodexObservedState>> = readCodexControlStatus) {}
 
-  forget(paneId: string): void { this.states.delete(paneId); this.agyStates.delete(paneId); }
-  close(): void { this.closed = true; this.states.clear(); this.agyStates.clear(); }
+  forget(paneId: string): void { this.states.get(paneId)?.abort.abort(); this.states.delete(paneId); this.agyStates.delete(paneId); }
+  close(): void { this.closed = true; for (const state of this.states.values()) state.abort.abort(); this.states.clear(); this.agyStates.clear(); }
 
   /** Internal scheduling hint only; never a partial activity snapshot or public protocol value. */
   progress(source: NativeSubagentSource): { offset: number; pending: boolean; generation: number } | undefined {
@@ -55,7 +57,8 @@ export class NativeSubagentReader {
     const key = JSON.stringify([source.instanceId, source.kind, source.sessionId]);
     let state = this.states.get(source.paneId);
     if (!state || state.key !== key) {
-      state = { key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false, generation: 0 };
+      state?.abort.abort();
+      state = { abort: new AbortController(), key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false, generation: 0 };
       this.states.set(source.paneId, state);
     }
     const current = state;
@@ -67,6 +70,7 @@ export class NativeSubagentReader {
   private async readAgy(source: NativeSubagentSource): Promise<Subagents | undefined> {
     const key = JSON.stringify([source.instanceId, source.kind, source.sessionId]);
     // A kind change invalidates both reader families, including in-flight results.
+    this.states.get(source.paneId)?.abort.abort();
     this.states.delete(source.paneId);
     let state = this.agyStates.get(source.paneId);
     if (!state || state.key !== key) { state = { key }; this.agyStates.set(source.paneId, state); }
@@ -112,7 +116,28 @@ export class NativeSubagentReader {
         if (state.codex.invalid) state.invalid = true;
         state.pending=!state.invalid&&bytes.length>0&&state.offset<st.size;
         // A current snapshot requires all available bytes and a complete final line.
-        return state.invalid || state.offset < st.size || state.codex.partial ? undefined : state.fold.snapshot();
+        if (state.invalid || state.offset < st.size || state.codex.partial) return undefined;
+        const members = state.fold.snapshot();
+        if (!members || !members.items?.length) return members;
+        const revision = await fd.stat({ bigint: true });
+        if (revision.size !== BigInt(st.size)) { state.pending = true; return undefined; }
+        const current = () => !this.closed && this.states.get(source.paneId) === state && !state.abort.signal.aborted;
+        if (!current()) return undefined;
+        const home = await realpath(this.roots.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex"));
+        const statuses = await this.codexStatus({ home, parentId: source.sessionId, childIds: members.items.map(item => item.id), signal: state.abort.signal, current }).catch(() => new Map<string, CodexObservedState>());
+        if (!current()) return undefined;
+        // A new completion/interaction, replacement or truncation invalidates the old membership proof.
+        const after = await fd.stat({ bigint: true }), reopened = await this.open(source);
+        try {
+          const afterPath = await reopened?.fd.stat({ bigint: true });
+          const sameRevision = (value: typeof revision | undefined) => value !== undefined && (["dev", "ino", "size", "mtimeNs", "ctimeNs"] as const).every(key => value[key] === revision[key]);
+          if (!sameRevision(after) || !sameRevision(afterPath)) {
+            state.pending = current() && !state.invalid;
+            return undefined;
+          }
+        } finally { await reopened?.fd.close(); }
+        if (!current()) return undefined;
+        return { ...members, countBasis: "alive", items: members.items.map(item => ({ ...item, state: statuses.get(item.id) ?? "unknown" })) };
       }
       const scanning = state.offset + bytes.length < st.size;
       const end = bytes.lastIndexOf(10);
