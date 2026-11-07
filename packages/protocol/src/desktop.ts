@@ -91,6 +91,7 @@ export const DesktopOptions = z
     protectedMicrophone:z.literal(true).optional(),
     sharedProtectedVideo:z.literal(true).optional(),
     virtualMonitors:z.literal(true).optional(),
+    virtualNativeDrag:z.literal(true).optional(),
     fileCheckpoints:z.literal(true).optional(),
     folders:z.literal(true).optional(),
     folderCheckpoints:z.literal(true).optional(),
@@ -193,6 +194,7 @@ export const DesktopReady = z
     protectedMicrophone:z.literal(true).optional(),
     sharedProtectedVideo:z.literal(true).optional(),
     virtualMonitors:z.literal(true).optional(),
+    virtualNativeDrag:z.literal(true).optional(),
     monitorLayout:DesktopMonitorLayout.optional(),
     files:z.literal(true).optional(),
     fileCheckpoints:z.literal(true).optional(),
@@ -230,6 +232,7 @@ export const DesktopReady = z
   .refine(v=>!v.protectedAudio||(v.protectedVideo===true&&v.nativeAudio===true))
   .refine(v=>!v.protectedMicrophone||(!!v.protectedDesktop&&v.secureDesktop===true&&v.microphone===true&&!v.sharedProtected&&!v.microphoneOpus))
   .refine(v=>!v.sharedProtectedVideo||(v.sharedProtected===true&&v.protectedVideo===true))
+  .refine(v=>!v.virtualNativeDrag||(v.virtualDisplay===true&&v.resourceFences===true&&!v.secureDesktop&&!v.lockScreenCover&&!v.virtualMonitors&&v.files===true))
   .refine(v=>!v.virtualMonitors||(v.virtualDisplay===true&&!v.secureDesktop&&!!v.monitorLayout&&v.monitorLayout.selected!=="all"));
 export const DesktopFrameInfo = z
   .object({
@@ -372,6 +375,7 @@ export interface DesktopResults {
     protectedMicrophone?:boolean;
     sharedProtectedVideo?:boolean;
     virtualMonitors?:boolean;
+    virtualNativeDrag?:boolean;
     sharedDeltas?:boolean;
     sharedMonitors?:boolean;
     independentMonitors?:boolean;
