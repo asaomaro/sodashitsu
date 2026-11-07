@@ -6,7 +6,7 @@
  * ドラッグ・接続の判断は親（`GraphView`）が持つ。ここは押されたことを伝えるだけ。
  */
 import { computed } from "vue";
-import { GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH, stateLabel } from "@sodashitsu/client-core";
+import { subagentCountLabel, GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH, stateLabel } from "@sodashitsu/client-core";
 import type { GraphNodeInfo } from "../../store/graph.js";
 import StateIcon from "../StateIcon.vue";
 import { nodeText } from "./nodeText.js";
@@ -72,7 +72,7 @@ const ariaLabel = computed(() => {
   parts.push(agentLine.value);
   const s = stateLabel(props.info.state);
   if (s) parts.push(s);
-  if (subagentCount.value > 0) parts.push(`サブエージェント ${subagentCount.value} 件`);
+  if (subagentCount.value > 0) parts.push(subagentCountLabel(props.info.agent?.subagents));
   parts.push(`出る線 ${props.outCount} 本・入る線 ${props.inCount} 本`);
   return parts.join("・");
 });
@@ -124,7 +124,8 @@ const ariaLabel = computed(() => {
         <span
           v-if="readOnly"
           class="graph-node-subagents graph-node-subagents-static"
-          :aria-label="`サブエージェント ${subagentCount} 件`"
+          :aria-label="subagentCountLabel(info.agent?.subagents)"
+          :title="info.agent?.subagents?.countBasis==='alive'?subagentCountLabel(info.agent.subagents):undefined"
         >
           <svg class="graph-node-subagents-icon" viewBox="0 0 12 12" aria-hidden="true">
             <path d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" />
@@ -136,7 +137,8 @@ const ariaLabel = computed(() => {
           type="button"
           class="graph-node-subagents"
           tabindex="-1"
-          :aria-label="`${info.name} のサブエージェント ${subagentCount} 件を表示`"
+          :aria-label="`${info.name} の${subagentCountLabel(info.agent?.subagents)}を表示`"
+          :title="info.agent?.subagents?.countBasis==='alive'?subagentCountLabel(info.agent.subagents):undefined"
           data-subagents-button
           @pointerdown.stop
           @click.stop="emit('subagents')"

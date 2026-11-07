@@ -506,7 +506,7 @@ export class GraphView {
         box.x + 1,
         box.y + 3,
         safeText(
-          `[${tab?.label ?? "—"}]${pane?.agent?.subagents?.count ? ` · 子${pane.agent.subagents.count}` : ""}`,
+          `[${tab?.label ?? "—"}]${pane?.agent?.subagents?.count ? ` · 子${pane.agent.subagents.countBasis==="alive"?"所属":""}${pane.agent.subagents.count}` : ""}`,
         ),
         c.dim,
         c.bg,

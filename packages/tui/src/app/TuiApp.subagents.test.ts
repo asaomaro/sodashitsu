@@ -85,6 +85,12 @@ describe("端末版のサブエージェントの表示", () => {
     expect(h.ws.requests("pane.focus")).toHaveLength(0);
   });
 
+  it.each(["codex","muse","copilot","agy"])("renders %s membership and unknown children without claiming work",async kind=>{
+    const h=await start({kind,subagents:{count:1,countBasis:"alive",items:[sub("unknown",{state:"unknown",type:"所属する子"})]}});
+    const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();
+    let screen=await h.screen();expect(screen).toContain("所属");expect(screen).toContain("状態不明");expect(screen).not.toContain("実行中");
+    dispatcherOf(h.app).showSubagentsOf("p3");h.app.renderNow();screen=await h.screen();expect(screen).toContain("（所属）");expect(screen).toContain("状態不明");
+  });
   it("展開行の上限と残り件数をsidebarスクロールで確認できる",async()=>{
     const h=await start({subagents:{count:70,items:Array.from({length:64},(_,i)=>sub(`s${i}`,{type:`担当${i}`,description:`作業${i}`}))}});
     const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();

@@ -1,0 +1,14 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-state-ui/packages/web
+
+[graph-perf] {"case":"web-subagent-churn","env":"happy-dom","subagents":60,"generations":20,"totalMs":20,"limitMs":10000}
+
+ Test Files  7 passed (7)
+      Tests  305 passed (305)
+   Start at  13:34:14
+   Duration  10.94s (transform 63%, tests 17%, import 11%, environment 9%)
+
+  Transform  transforming modules took 23.77s · 63% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

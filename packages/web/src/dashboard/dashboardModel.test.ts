@@ -168,3 +168,8 @@ describe("数字の見せ方", () => {
     ]);
   });
 });
+
+it("retains membership basis instead of silently treating alive counts as working",()=>{
+ const rows=buildRows({panes:[pane("a",{agent:{kind:"agy",subagents:{count:3,items:[],countBasis:"alive"}}})],tabs:new Map(),workspaces:new Map(),usage:{},stateOf:()=>"idle",nameOf:()=>"fixture"});
+ expect(rows[0]).toMatchObject({subagents:3,subagentCountBasis:"alive"});
+});

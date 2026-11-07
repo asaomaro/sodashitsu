@@ -5,7 +5,7 @@
  * 値が無いものは「—」（0 と書かない）。数字・モデル名・時刻・ラベルだけを文字として出す（会話の中身・記録の場所は来ない）。
  */
 import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
-import { paneNameOf, stateLabel } from "@sodashitsu/client-core";
+import { subagentCountLabel, paneNameOf, stateLabel } from "@sodashitsu/client-core";
 import StateIcon from "../components/StateIcon.vue";
 import { ConnectionKey } from "../injection.js";
 import { displayStateFor, useSeenStore } from "../store/seen.js";
@@ -220,8 +220,8 @@ function openDashboard(): void {
         <dt>ブランチ</dt>
         <dd data-pane-info-branch>{{ branch ?? NONE }}</dd>
         <dt>サブエージェント</dt>
-        <dd data-pane-info-subagents>
-          {{ subagentCount === null ? NONE : `${subagentCount} 件` }}
+        <dd data-pane-info-subagents :title="subagentCountLabel(agent?.subagents)">
+          {{ subagentCount === null ? NONE : `${agent?.subagents?.countBasis==='alive'?'所属 ':''}${subagentCount} 件` }}
           <button data-assistant-feature v-if="subagentCount !== null && subagentCount > 0" type="button" class="pinfo-btn" data-pane-info-open-subagents @click="openSubagents">一覧を開く</button>
         </dd>
       </dl>

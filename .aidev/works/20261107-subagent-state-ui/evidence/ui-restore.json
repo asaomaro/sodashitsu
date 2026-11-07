@@ -1,0 +1,47 @@
+{
+  "ui-web-negative": 1,
+  "ui-tui-negative": 1,
+  "ui-browser-negative": 1,
+  "restore": {
+    "packages/web/src/components/Sidebar.vue": {
+      "exact": true,
+      "sha256": "8e6c2e23c1fe0fe051ea2106dfec756010800ae97e2219d7cc6f2ac7331182a7"
+    },
+    "packages/web/src/components/SubagentList.vue": {
+      "exact": true,
+      "sha256": "b155b5a99ed86f208270dd9fa80df0bb07fb3eea215711aa49670fca7f9062e3"
+    },
+    "packages/web/src/components/graph/GraphNode.vue": {
+      "exact": true,
+      "sha256": "42483ebcd369c3d1bee9e8a33a2e5ed8a5b9d1c22bb408c0f85cb89fe189f4f5"
+    },
+    "packages/web/src/components/graph/GraphSubagentLayer.vue": {
+      "exact": true,
+      "sha256": "51bc04d97d113fbcfa81f43d05bfb7cef8391f14178ea177691b895ebaad72e8"
+    },
+    "packages/web/src/dashboard/PaneInfoView.vue": {
+      "exact": true,
+      "sha256": "672d06bcd7ed74207e1e276f929589a7a2df2d65226a2e3be3e19b3784c56f9a"
+    },
+    "packages/web/src/dashboard/DashboardView.vue": {
+      "exact": true,
+      "sha256": "0fed982e5e979d71cedf3d3567fdf0518eca84fa6d7ac2a331454338d65ad42e"
+    },
+    "packages/web/src/dashboard/dashboardModel.ts": {
+      "exact": true,
+      "sha256": "3571d9f5a2f06c883d601435cfe9681157300fdcb304b4bd38d4d6d6165a31c5"
+    },
+    "packages/tui/src/render/chrome/sidebar.ts": {
+      "exact": true,
+      "sha256": "8679b343da9feed18ff8632926a64a219e6576c26775b83034c53b8cd8ee43e7"
+    },
+    "packages/tui/src/modes/SubagentList.ts": {
+      "exact": true,
+      "sha256": "d75d20c4187c282f69932f14022dfa686dbfea3f1bc2a6ed9465623920c1dda1"
+    },
+    "packages/tui/src/modes/GraphView.ts": {
+      "exact": true,
+      "sha256": "a75ca55344ec1a19fdec0b5f56e75bb6a46d2340672fc8ced2a18a1a6b8569d3"
+    }
+  }
+}

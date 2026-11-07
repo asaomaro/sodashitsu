@@ -208,3 +208,9 @@ it("renders effort, remaining context and explicitly estimated/partial costs",as
  store.setSnapshot({panes:{p1:usage("p1",{reasoningEffort:"high",contextRemainingTokens:800,costUsd:0.1,costEstimated:true,costPartial:true})},accounts:[]});
  await wrapper.vm.$nextTick();expect(wrapper.get("[data-pane-info-effort]").text()).toBe("high");expect(wrapper.get("[data-pane-info-remaining]").text()).toContain("800");expect(wrapper.get("[data-pane-info-cost]").text()).toContain("見積り");expect(wrapper.get("[data-pane-info-cost]").text()).toContain("一部のみ");wrapper.unmount();
 });
+
+it.each(["codex","muse","copilot","agy"])("labels %s native membership counts and preserves the generic list action",async kind=>{
+ const {wrapper,view}=setup(pane("p1",agent({kind,subagents:{count:2,items:[],countBasis:"alive"}})));
+ expect(wrapper.get('[data-pane-info-subagents]').text()).toContain("所属 2 件");
+ await wrapper.get('[data-pane-info-open-subagents]').trigger('click');expect(view.dialogContext).toMatchObject({kind:'subagents',paneId:'p1'});wrapper.unmount();
+});

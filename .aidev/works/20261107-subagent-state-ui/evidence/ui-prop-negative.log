@@ -1,0 +1,69 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-state-ui/packages/web
+
+ ❯ src/components/SubagentListDialog.test.ts (30 tests | 4 failed | 26 skipped) 90ms
+   ❯ SubagentListDialog — 表示 (13)
+     × opens codex native data without a Claude gate and preserves unknown state 49ms
+     × opens muse native data without a Claude gate and preserves unknown state 11ms
+     × opens copilot native data without a Claude gate and preserves unknown state 13ms
+     × opens agy native data without a Claude gate and preserves unknown state 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/SubagentListDialog.test.ts > SubagentListDialog — 表示 > opens codex native data without a Claude gate and preserves unknown state
+AssertionError: expected 'サブエージェント — codexサブエージェント0秒閉じる' to contain '所属 1 件'
+
+Expected: "所属 1 件"
+Received: "サブエージェント — codexサブエージェント0秒閉じる"
+
+ ❯ src/components/SubagentListDialog.test.ts:103:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/components/SubagentListDialog.test.ts > SubagentListDialog — 表示 > opens muse native data without a Claude gate and preserves unknown state
+AssertionError: expected 'サブエージェント — museサブエージェント0秒閉じる' to contain '所属 1 件'
+
+Expected: "所属 1 件"
+Received: "サブエージェント — museサブエージェント0秒閉じる"
+
+ ❯ src/components/SubagentListDialog.test.ts:103:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/components/SubagentListDialog.test.ts > SubagentListDialog — 表示 > opens copilot native data without a Claude gate and preserves unknown state
+AssertionError: expected 'サブエージェント — copilotサブエージェント0秒閉じる' to contain '所属 1 件'
+
+Expected: "所属 1 件"
+Received: "サブエージェント — copilotサブエージェント0秒閉じる"
+
+ ❯ src/components/SubagentListDialog.test.ts:103:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/components/SubagentListDialog.test.ts > SubagentListDialog — 表示 > opens agy native data without a Claude gate and preserves unknown state
+AssertionError: expected 'サブエージェント — agyサブエージェント0秒閉じる' to contain '所属 1 件'
+
+Expected: "所属 1 件"
+Received: "サブエージェント — agyサブエージェント0秒閉じる"
+
+ ❯ src/components/SubagentListDialog.test.ts:103:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 26 skipped (30)
+   Start at  13:37:21
+   Duration  3.36s (transform 71%, import 15%, environment 11%, tests 3%)
+
+  Transform  transforming modules took 2.28s · 71% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-subagent-state-ui/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/SubagentListDialog.test.ts -t native data

@@ -1,0 +1,196 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-state-ui/packages/web
+
+ ❯ src/dashboard/dashboardModel.test.ts (13 tests | 1 failed | 12 skipped) 19ms
+   × retains membership basis instead of silently treating alive counts as working 17ms
+ ❯ src/components/SubagentListDialog.test.ts (30 tests | 4 failed | 26 skipped) 120ms
+   ❯ SubagentListDialog — 表示 (13)
+     × opens codex native data without a Claude gate and preserves unknown state 75ms
+     × opens muse native data without a Claude gate and preserves unknown state 19ms
+     × opens copilot native data without a Claude gate and preserves unknown state 14ms
+     × opens agy native data without a Claude gate and preserves unknown state 9ms
+ ❯ src/dashboard/PaneInfoView.test.ts (15 tests | 4 failed | 11 skipped) 116ms
+   × labels codex native membership counts and preserves the generic list action 69ms
+   × labels muse native membership counts and preserves the generic list action 12ms
+   × labels copilot native membership counts and preserves the generic list action 17ms
+   × labels agy native membership counts and preserves the generic list action 14ms
+ ❯ src/dashboard/DashboardView.test.ts (10 tests | 1 failed | 9 skipped) 128ms
+   × shows membership as membership rather than a working count 126ms
+ ❯ src/components/graph/GraphView.subagentNodes.test.ts (15 tests | 1 failed | 14 skipped) 74ms
+   ❯ 小さなサブエージェントのノード（層の単体） (9)
+     × displays unknown and idle explicitly while omitted state keeps the working default 72ms
+ ❯ src/components/graph/GraphView.subagents.test.ts (21 tests | 4 failed | 17 skipped) 245ms
+   ❯ グラフのノードの件数のボタン (7)
+     × labels codex membership in graph count and opens the shared list 148ms
+     × labels muse membership in graph count and opens the shared list 33ms
+     × labels copilot membership in graph count and opens the shared list 36ms
+     × labels agy membership in graph count and opens the shared list 25ms
+ ❯ src/components/Sidebar.test.ts (201 tests | 5 failed | 196 skipped) 232ms
+   ❯ Sidebar — サブエージェントの件数のボタン (16)
+     × shows claude children using their state and membership basis 77ms
+     × shows codex children using their state and membership basis 30ms
+     × shows muse children using their state and membership basis 48ms
+     × shows copilot children using their state and membership basis 35ms
+     × shows agy children using their state and membership basis 37ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 20 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > shows claude children using their state and membership basis
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > shows codex children using their state and membership basis
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > shows muse children using their state and membership basis
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > shows copilot children using their state and membership basis
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > shows agy children using their state and membership basis
+AssertionError: expected 'サブエージェント 3 件を展開' to contain '所属 3 件'
+
+Expected: "所属 3 件"
+Received: "サブエージェント 3 件を展開"
+
+ ❯ src/components/Sidebar.test.ts:738:45
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/20]⎯
+
+ FAIL  src/components/SubagentListDialog.test.ts > SubagentListDialog — 表示 > opens codex native data without a Claude gate and preserves unknown state
+AssertionError: expected 'サブエージェント — codexサブエージェント0秒閉じる' to contain '所属 1 件'
+
+Expected: "所属 1 件"
+Received: "サブエージェント — codexサブエージェント0秒閉じる"
+
+ ❯ src/components/SubagentListDialog.test.ts:103:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/20]⎯
+
+ FAIL  src/components/SubagentListDialog.test.ts > SubagentListDialog — 表示 > opens muse native data without a Claude gate and preserves unknown state
+AssertionError: expected 'サブエージェント — museサブエージェント0秒閉じる' to contain '所属 1 件'
+
+Expected: "所属 1 件"
+Received: "サブエージェント — museサブエージェント0秒閉じる"
+
+ ❯ src/components/SubagentListDialog.test.ts:103:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/20]⎯
+
+ FAIL  src/components/SubagentListDialog.test.ts > SubagentListDialog — 表示 > opens copilot native data without a Claude gate and preserves unknown state
+AssertionError: expected 'サブエージェント — copilotサブエージェント0秒閉じる' to contain '所属 1 件'
+
+Expected: "所属 1 件"
+Received: "サブエージェント — copilotサブエージェント0秒閉じる"
+
+ ❯ src/components/SubagentListDialog.test.ts:103:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/20]⎯
+
+ FAIL  src/components/SubagentListDialog.test.ts > SubagentListDialog — 表示 > opens agy native data without a Claude gate and preserves unknown state
+AssertionError: expected 'サブエージェント — agyサブエージェント0秒閉じる' to contain '所属 1 件'
+
+Expected: "所属 1 件"
+Received: "サブエージェント — agyサブエージェント0秒閉じる"
+
+ ❯ src/components/SubagentListDialog.test.ts:103:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/20]⎯
+
+ FAIL  src/dashboard/DashboardView.test.ts > shows membership as membership rather than a working count
+AssertionError: expected 'サブ3' to contain '所属 3'
+
+Expected: "所属 3"
+Received: "サブ3"
+
+ ❯ src/dashboard/DashboardView.test.ts:291:65
+    289| it("shows membership as membership rather than a working count",()=>{
+    290|  const {wrapper}=setup([pane("p1",agent({kind:"agy",subagents:{count:3…
+    291|  expect(wrapper.get('[data-dash-row="p1"] .dash-c-sub').text()).toCont…
+       |                                                                 ^
+    292| });
+    293|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/20]⎯
+
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels codex native membership counts and preserves the generic list action
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels muse native membership counts and preserves the generic list action
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels copilot native membership counts and preserves the generic list action
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels agy native membership counts and preserves the generic list action
+AssertionError: expected '2 件 一覧を開く' to contain '所属 2 件'
+
+Expected: "所属 2 件"
+Received: "2 件 一覧を開く"
+
+ ❯ src/dashboard/PaneInfoView.test.ts:214:59
+    212| it.each(["codex","muse","copilot","agy"])("labels %s native membership…
+    213|  const {wrapper,view}=setup(pane("p1",agent({kind,subagents:{count:2,i…
+    214|  expect(wrapper.get('[data-pane-info-subagents]').text()).toContain("所…
+       |                                                           ^
+    215|  await wrapper.get('[data-pane-info-open-subagents]').trigger('click')…
+    216| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/20]⎯
+
+ FAIL  src/dashboard/dashboardModel.test.ts > retains membership basis instead of silently treating alive counts as working
+AssertionError: expected { paneId: 'a', workspaceId: '', …(11) } to match object { subagents: 3, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "subagentCountBasis": "alive",
+    "subagents": 3,
+  }
+
+ ❯ src/dashboard/dashboardModel.test.ts:174:18
+    172| it("retains membership basis instead of silently treating alive counts…
+    173|  const rows=buildRows({panes:[pane("a",{agent:{kind:"agy",subagents:{c…
+    174|  expect(rows[0]).toMatchObject({subagents:3,subagentCountBasis:"alive"…
+       |                  ^
+    175| });
+    176|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/20]⎯
+
+ FAIL  src/components/graph/GraphView.subagentNodes.test.ts > 小さなサブエージェントのノード（層の単体） > displays unknown and idle explicitly while omitted state keeps the working default
+AssertionError: expected 'Explore説明 u2秒' to contain '状態不明'
+
+Expected: "状態不明"
+Received: "Explore説明 u2秒"
+
+ ❯ src/components/graph/GraphView.subagentNodes.test.ts:125:52
+    123|     vi.useFakeTimers({toFake:["Date","setInterval","clearInterval"]});…
+    124|     const w=mountLayer(info([sub("u",now,{state:"unknown"}),sub("i",no…
+    125|     expect(w.get('[data-subagent-id="u"]').text()).toContain("状態不明");e…
+       |                                                    ^
+    126|     expect(w.get('[data-subagent-id="i"]').text()).toContain("待機中");ex…
+    127|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/20]⎯
+
+ FAIL  src/components/graph/GraphView.subagents.test.ts > グラフのノードの件数のボタン > labels codex membership in graph count and opens the shared list
+ FAIL  src/components/graph/GraphView.subagents.test.ts > グラフのノードの件数のボタン > labels muse membership in graph count and opens the shared list
+ FAIL  src/components/graph/GraphView.subagents.test.ts > グラフのノードの件数のボタン > labels copilot membership in graph count and opens the shared list
+ FAIL  src/components/graph/GraphView.subagents.test.ts > グラフのノードの件数のボタン > labels agy membership in graph count and opens the shared list
+AssertionError: expected 'impl のサブエージェント 1 件を表示' to contain '所属 1 件'
+
+Expected: "所属 1 件"
+Received: "impl のサブエージェント 1 件を表示"
+
+ ❯ src/components/graph/GraphView.subagents.test.ts:107:62
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/20]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  20 failed | 285 skipped (305)
+   Start at  13:33:49
+   Duration  7.84s (transform 75%, import 13%, environment 9%, tests 3%)
+
+  Transform  transforming modules took 25.39s · 75% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-subagent-state-ui/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/Sidebar.test.ts src/components/SubagentListDialog.test.ts src/components/graph/GraphView.subagents.test.ts src/components/graph/GraphView.subagentNodes.test.ts src/dashboard/PaneInfoView.test.ts src/dashboard/dashboardModel.test.ts src/dashboard/DashboardView.test.ts -t native data|membership|their state|unknown and idle

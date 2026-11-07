@@ -37,6 +37,7 @@ export interface DashboardRow {
   branch: string | null;
   /** サブエージェントの数。報告を受けていなければ null（分からない）。 */
   subagents: number | null;
+  subagentCountBasis?: "working"|"alive";
   usage: AgentUsage | null;
 }
 
@@ -72,6 +73,7 @@ export function buildRows(input: BuildInput): DashboardRow[] {
       cwd: pane.cwd,
       branch: ws?.git?.branch ?? null,
       subagents: agent.subagents ? agent.subagents.count : null,
+      ...(agent.subagents?.countBasis?{subagentCountBasis:agent.subagents.countBasis}:{}),
       usage: input.usage[pane.id] ?? null,
     });
   }

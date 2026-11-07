@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-state-ui/packages/tui
+
+
+ Test Files  2 passed (2)
+      Tests  44 passed (44)
+   Start at  13:34:26
+   Duration  5.85s (transform 60%, tests 26%, import 14%)
+
+  Transform  transforming modules took 4.82s · 60% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

@@ -2,7 +2,7 @@ import { scrollbarThumb, type ScrollMetrics, type Track } from "../scrollbar.js"
 import type { DisplayState, ItemTarget, MachineState, Pane, Workspace } from "@sodashitsu/protocol";
 import { remoteKey, type MachineSection } from "../../model/MachinesModel.js";
 import {
-  subagentsMoreLabel,
+  subagentStateLabel, subagentsMoreLabel,
   aggregate,
   themeModeOf,
   sameItemTarget,
@@ -593,12 +593,13 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
           : {}),
       });
       const subs=p.agent!.subagents;
+      if(subs?.countBasis==="alive")agentLines.at(-1)?.rows.at(-1)?.push({text:" · 所属"});
       if(subs&&subs.count>0&&ctx.sidebarScroll?.expandedSubagents?.has(`${ctx.machines?.selectedId??LOCAL_MACHINE_ID}:${p.agent!.instanceId}`)){
         const items=subs.items.slice(0,64);
         const plain=(value:string)=>value.replace(/[\x00-\x1f\x7f-\x9f\u2028-\u202e\u2066-\u2069]/g," ");
         for(const child of items)agentLines.push({indent:2,selected:false,rows:[[
           {text:`↳ ${plain(child.type??"サブエージェント")}${child.background?"（裏実行）":""}`},
-        ],[{text:`実行中${child.description?` · ${plain(child.description)}`:""}`,fg:stateColor(ctx.theme,"working")}]]});
+        ],[{text:`${subagentStateLabel(child)}${child.description?` · ${plain(child.description)}`:""}`,fg:stateColor(ctx.theme,child.state===undefined||child.state==="working"?"working":child.state==="idle"?"idle":"unknown")}]]});
         const more=subagentsMoreLabel({...subs,items});
         if(more)agentLines.push({indent:2,selected:false,rows:[[{text:more}]]});
       }

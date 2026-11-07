@@ -1,0 +1,123 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-state-ui/packages/tui
+
+ ❯ src/app/TuiApp.subagents.test.ts (19 tests | 4 failed | 15 skipped) 402ms
+   ❯ 端末版のサブエージェントの表示 (19)
+     × renders codex membership and unknown children without claiming work 166ms
+     × renders muse membership and unknown children without claiming work 93ms
+     × renders copilot membership and unknown children without claiming work 77ms
+     × renders agy membership and unknown children without claiming work 64ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > renders codex membership and unknown children without claiming work
+AssertionError: expected ' 端末 グラフ 状況 他 ▾   │ t1   ＋            …' to contain '状態不明'
+
+- Expected
++ Received
+
+- 状態不明
++  端末 グラフ 状況 他 ▾   │ t1   ＋                                   [ ＋作業ビュー ] session: work
++  ▾ Spaces     開いた順   │┌─ pane p1 ───────[⋮][+][│][─][□][×]┐┌─ pane p2 ───────[⋮][+][│][─][□][×]┐
++      w1                  ││                                   ││                                   │
++    ◐ w2                  ││                                   ││                                   │
++                          ││                                   ││                                   │
++ ─ ▾ Agents ───グループ順─││                                   ││                                   │
++  ◐ w2 t2               ▾ ││                                   ││                                   │
++    Claude                ││                                   ││                                   │
++    ↳ 所属する子          ││                                   ││                                   │
++      実行中              ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++  ＋新規 ⋯        暗 🔔0  ││                                   ││                                   │
++                        « │└───────────────────────────────────⋯└───────────────────────────────────⋯
+
+ ❯ src/app/TuiApp.subagents.test.ts:91:79
+     89|     const h=await start({kind,subagents:{count:1,countBasis:"alive",it…
+     90|     const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.re…
+     91|     let screen=await h.screen();expect(screen).toContain("所属");expect(…
+       |                                                                               ^
+     92|     dispatcherOf(h.app).showSubagentsOf("p3");h.app.renderNow();screen…
+     93|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > renders muse membership and unknown children without claiming work
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > renders copilot membership and unknown children without claiming work
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > renders agy membership and unknown children without claiming work
+AssertionError: expected ' 端末 グラフ 状況 他 ▾   │ t1   ＋            …' to contain '状態不明'
+
+- Expected
++ Received
+
+- 状態不明
++  端末 グラフ 状況 他 ▾   │ t1   ＋                                   [ ＋作業ビュー ] session: work
++  ▾ Spaces     開いた順   │┌─ pane p1 ───────[⋮][+][│][─][□][×]┐┌─ pane p2 ───────[⋮][+][│][─][□][×]┐
++      w1                  ││                                   ││                                   │
++    ◐ w2                  ││                                   ││                                   │
++                          ││                                   ││                                   │
++ ─ ▾ Agents ───グループ順─││                                   ││                                   │
++  ◐ w2 t2               ▾ ││                                   ││                                   │
++    Claude                ││                                   ││                                   │
++    ↳ 所属する子          ││                                   ││                                   │
++      実行中              ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++  ＋新規 ⋯        暗 🔔0  ││                                   ││                                   │
++                        « │└───────────────────────────────────⋯└───────────────────────────────────⋯
+
+ ❯ src/app/TuiApp.subagents.test.ts:91:79
+     89|     const h=await start({kind,subagents:{count:1,countBasis:"alive",it…
+     90|     const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.re…
+     91|     let screen=await h.screen();expect(screen).toContain("所属");expect(…
+       |                                                                               ^
+     92|     dispatcherOf(h.app).showSubagentsOf("p3");h.app.renderNow();screen…
+     93|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 15 skipped (19)
+   Start at  13:33:58
+   Duration  4.12s (transform 73%, import 16%, tests 10%)
+
+  Transform  transforming modules took 2.89s · 73% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-subagent-state-ui/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/app/TuiApp.subagents.test.ts -t membership and unknown

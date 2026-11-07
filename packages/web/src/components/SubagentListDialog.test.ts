@@ -97,6 +97,11 @@ const dialogOf = (w: { get(s: string): { element: Element } }) =>
   w.get("dialog").element as HTMLDialogElement;
 
 describe("SubagentListDialog — 表示", () => {
+  it.each(["codex","muse","copilot","agy"])("opens %s native data without a Claude gate and preserves unknown state",async kind=>{
+    const {wrapper,session}=await setup({count:1,countBasis:"alive",items:[sub("unknown",{state:"unknown"})]});
+    session.paneUpserted(paneOf(agentOf({count:1,countBasis:"alive",items:[sub("unknown",{state:"unknown"})]},{kind,label:kind})));await wrapper.vm.$nextTick();
+    expect(dialogOf(wrapper).open).toBe(true);expect(wrapper.text()).toContain("所属 1 件");expect(wrapper.get('.subagent-list-state').text()).toBe("状態不明");expect(wrapper.text()).not.toContain("実行中");wrapper.unmount();
+  });
   it("開くと題（pane の呼び名）と、各行の種類・説明・経過時間・バックグラウンドの印を出す。先頭の一覧の領域にフォーカスが移る", async () => {
     const { wrapper } = await setup({
       count: 2,
@@ -462,7 +467,7 @@ describe("SubagentListDialog — 2 つのマシン（pane の ID が衝突）", 
     wrapper.unmount();
   });
 
-  it("新しい画面 × 古いサーバ（subagents の項目が無いエージェント）: 一覧は開いて、0 件の文言を出す（エラーにしない）。件数のボタン・show_subagents は項目が無ければ開かない", async () => {
+  it("新しい画面 × 古いサーバ（subagents の項目が無いエージェント）: 一覧は開いて、未取得の文言を出す（エラーにしない）。件数のボタン・show_subagents は項目が無ければ開かない", async () => {
     const machines = useMachinesStore(pinia);
     machines.applySummarySnapshot("local", {
       protocol: 1,
@@ -484,7 +489,7 @@ describe("SubagentListDialog — 2 つのマシン（pane の ID が衝突）", 
     // 項目が無い（分からない）エージェントでも、エージェント自身は居るので開く（0 件の文言）。
     expect(dialogOf(wrapper).open).toBe(true);
     expect(wrapper.findAll(".subagent-list-item")).toHaveLength(0);
-    expect(wrapper.get(".subagent-list-empty").text()).toBe("実行中のサブエージェントはありません");
+    expect(wrapper.get(".subagent-list-empty").text()).toBe("サブエージェントの状況は未取得です");
     wrapper.unmount();
   });
 });

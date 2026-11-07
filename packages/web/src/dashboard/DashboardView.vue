@@ -239,7 +239,7 @@ function stale(r: DashboardRow): boolean {
   return r.usage !== null && (r.usage.updatesStopped === true || isStale(r.usage.updatedAt, now.value));
 }
 function subagentsText(r: DashboardRow): string {
-  return r.subagents === null ? NONE : String(r.subagents);
+  return r.subagents === null ? NONE : `${r.subagentCountBasis==='alive'?'所属 ':''}${r.subagents}`;
 }
 function rowLabel(r: DashboardRow): string {
   const u = r.usage;

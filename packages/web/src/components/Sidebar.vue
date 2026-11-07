@@ -7,7 +7,7 @@ import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { type SectionBox, clampRatio, ratioFromOffset, ratioPercent, stepRatio } from "../sidebar/sectionSizing.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
-import { subagentsMoreLabel, orderedAgentPaneIds, paneMoveBlock } from "@sodashitsu/client-core";
+import { subagentStateLabel, subagentCountLabel, subagentsMoreLabel, orderedAgentPaneIds, paneMoveBlock } from "@sodashitsu/client-core";
 import { type DropAnchor, type ItemRow, dropBefore, nextAnchorOf, sameItemTarget, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfUngrouped, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../store/sidebarTree.js";
 import ThemeModeToggle from "./ThemeModeToggle.vue";
@@ -496,7 +496,7 @@ function toggleSubagents(agent:AgentInfo):void {
  if(next.size>256)next.delete(next.values().next().value!);expandedSubagents.value=next;
 }
 function subagentCount(agent:AgentInfo):number {return agent.subagents?.count??0;}
-function subagentStatus(agent:AgentInfo):string {return agent.subagents?`サブエージェント ${agent.subagents.count} 件`:'サブエージェントの状況は未取得';}
+function subagentStatus(agent:AgentInfo):string {return subagentCountLabel(agent.subagents);}
 
 /** その pane のエージェントのサブエージェントの一覧を開く（ダイアログ。対象は選んでいるマシンの pane）。 */
 function openSubagents(paneId: string): void {
@@ -1097,7 +1097,7 @@ watchDragInterrupt(view, () => {
               type="button"
               class="sidebar-subagent-btn"
               :data-subagent-pane="pane.id"
-              :aria-label="`サブエージェント ${subagentCount(agent)} 件を${subagentsExpanded(agent) ? '折りたたむ' : '展開'}`"
+              :aria-label="`${subagentCountLabel(agent.subagents)}を${subagentsExpanded(agent) ? '折りたたむ' : '展開'}`"
               :aria-expanded="subagentsExpanded(agent)"
               :aria-controls="`sidebar-subagents-${pane.id}`"
               @pointerdown.stop
@@ -1111,8 +1111,9 @@ watchDragInterrupt(view, () => {
         </template>
       </div>
       <div v-if="!view.sidebarCollapsed && subagentCount(agent)>0 && subagentsExpanded(agent)" :id="`sidebar-subagents-${pane.id}`" class="sidebar-subagents" role="group" :aria-label="`${agent.label} のサブエージェント`">
-        <div v-for="child in agent.subagents!.items.slice(0,64)" :key="child.id" class="sidebar-row sidebar-subagent-row" :data-subagent-id="child.id" title="親エージェント内で実行中（独立した端末はありません）">
-          <div class="sidebar-row-line1"><span class="sidebar-subagent-status">実行中</span><span class="sidebar-label">{{ child.type || 'サブエージェント' }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
+        <div v-if="agent.subagents?.countBasis==='alive'" class="sidebar-subagent-more">所属する子（作業中の件数ではありません）</div>
+        <div v-for="child in agent.subagents!.items.slice(0,64)" :key="child.id" class="sidebar-row sidebar-subagent-row" :data-subagent-id="child.id" :title="`親エージェント内・${subagentStateLabel(child)}（独立した端末はありません）`">
+          <div class="sidebar-row-line1"><span class="sidebar-subagent-status" :data-state="child.state ?? 'working'">{{ subagentStateLabel(child) }}</span><span class="sidebar-label">{{ child.type || 'サブエージェント' }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
           <div v-if="child.description" class="sidebar-row-line2 sidebar-label">{{ child.description }}</div>
         </div>
         <div v-if="subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)})" class="sidebar-subagent-more">{{ subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)}) }}</div>
@@ -1422,6 +1423,7 @@ watchDragInterrupt(view, () => {
 .sidebar-subagents { margin-left:1.1em; border-left:1px solid var(--soda-menu-border); }
 .sidebar-subagent-row { cursor:default; }
 .sidebar-subagent-status { color:var(--soda-accent); font-size:.8em; flex:none; }
+.sidebar-subagent-status[data-state="unknown"],.sidebar-subagent-status[data-state="idle"] { color:inherit; opacity:.8; }
 .sidebar-subagent-more,.sidebar-subagent-details { margin:.3em .8em; font-size:.85em; }
 @media(prefers-reduced-motion:reduce) { .sidebar-subagent-icon { transition:none; } }
 .sidebar-row-line2 {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import type { AgentInfo } from "@sodashitsu/protocol";
-import { formatSubagentElapsed, subagentsMoreLabel } from "@sodashitsu/client-core";
+import { subagentStateLabel, subagentCountLabel, subagentEmptyLabel, formatSubagentElapsed, subagentsMoreLabel } from "@sodashitsu/client-core";
 
 /**
  * サブエージェントの一覧の中身（20261004-subagent-display）。サイドバーからの一覧のダイアログ（`SubagentListDialog`）と、連携のグラフの中のパネル
@@ -9,7 +9,7 @@ import { formatSubagentElapsed, subagentsMoreLabel } from "@sodashitsu/client-co
  * 上下キーでスクロールできる。経過時間は 10 秒ごとに進める（ここが持つ）。短い説明などはエージェントが書いた文なので、文字として出す（HTML として解釈しない）。
  * 親は `focus()` でこの領域へフォーカスを移せる。開いている間だけ描く（`v-if`）ので、タイマーも開いている間だけ動く。
  */
-const props = defineProps<{ subagents: AgentInfo["subagents"] }>();
+const props = defineProps<{ subagents?: AgentInfo["subagents"] }>();
 
 const listEl = ref<HTMLElement | null>(null);
 const now = ref(Date.now());
@@ -30,11 +30,13 @@ defineExpose({ focus: () => listEl.value?.focus() });
     role="list"
     aria-label="サブエージェントの一覧"
   >
+    <p v-if="subagents?.countBasis==='alive'" class="subagent-list-more">{{ subagentCountLabel(subagents) }}（作業中の件数ではありません）</p>
     <p v-if="items.length === 0" class="subagent-list-empty">
-      実行中のサブエージェントはありません
+      {{ subagentEmptyLabel(subagents) }}
     </p>
     <div v-for="item in items" :key="item.id" class="subagent-list-item" role="listitem">
       <div class="subagent-list-item-head">
+        <span v-if="item.state" class="subagent-list-state" :data-state="item.state ?? 'working'">{{ subagentStateLabel(item) }}</span>
         <span class="subagent-list-type">{{ item.type ?? "サブエージェント" }}</span>
         <span v-if="item.background" class="subagent-list-bg">バックグラウンド</span>
         <span class="subagent-list-elapsed">{{ formatSubagentElapsed(item.startedAt, now) }}</span>

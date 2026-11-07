@@ -733,6 +733,12 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     const texts = mountSidebar(makeConnection()).findAll(".sidebar-agents .sidebar-subagent-btn").map((b) => b.find(".sidebar-subagent-count").text()).sort();
     expect(texts).toEqual(["2", "7"]);
   });
+  it.each(["claude","codex","muse","copilot","agy"])("shows %s children using their state and membership basis",async kind=>{
+    setup(makeAgent({kind,subagents:{count:3,countBasis:"alive",items:[{id:"u",startedAt:0,state:"unknown"},{id:"i",startedAt:0,state:"idle"},{id:"w",startedAt:0}]}}));const w=mountSidebar(makeConnection());
+    expect(btn(w).attributes("aria-label")).toContain("所属 3 件");await btn(w).trigger("click");
+    expect(w.get('[data-subagent-id="u"]').text()).toContain("状態不明");expect(w.get('[data-subagent-id="u"]').text()).not.toContain("実行中");
+    expect(w.get('[data-subagent-id="i"]').text()).toContain("待機中");expect(w.get('[data-subagent-id="w"]').text()).toContain("実行中");
+  });
   it("展開状態は更新/並び替えで保持、別instanceでは閉じ、上限と残り件数を表示する",async()=>{
     const session=setup(makeAgent({subagents:subs(70)}));const w=mountSidebar(makeConnection());
     await btn(w).trigger("click");expect(w.findAll(".sidebar-subagent-row")).toHaveLength(64);

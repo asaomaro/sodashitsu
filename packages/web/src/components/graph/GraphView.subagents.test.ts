@@ -101,6 +101,12 @@ const btn = (w: ReturnType<typeof mount>, k: string) =>
   w.find(`[data-node-key="${k}"] [data-subagents-button]`);
 
 describe("グラフのノードの件数のボタン", () => {
+  it.each(["codex","muse","copilot","agy"])("labels %s membership in graph count and opens the shared list",async kind=>{
+    const {wrapper,session}=await open({p1:{count:1,countBasis:"alive",items:[{id:"unknown",startedAt:Date.now(),state:"unknown"}]}});
+    const pane=session.panes.get("p1")!;session.panes.set("p1",{...pane,agent:{...pane.agent!,kind}});await flush();
+    expect(btn(wrapper,"local:p1").attributes("aria-label")).toContain("所属 1 件");
+    await btn(wrapper,"local:p1").trigger("click");await flush();expect(wrapper.get('.subagent-list').text()).toContain("所属 1 件");expect(wrapper.get('.subagent-list-state').text()).toBe("状態不明");wrapper.unmount();
+  });
   it("1 件以上のときだけ出る（数・読み上げの名前つき）。ノードの大きさは変えない。tabindex は -1", async () => {
     const { wrapper } = await open({ p1: subs(3), p2: subs(0) });
     const b = btn(wrapper, "local:p1");

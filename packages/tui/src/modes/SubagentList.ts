@@ -1,6 +1,7 @@
 import { ScrollBar } from "./ScrollBar.js";
 import { shortId } from "@sodashitsu/protocol";
 import {
+  subagentStateLabel, subagentEmptyLabel,
   formatSubagentElapsed,
   paneNameOf,
   subagentsMoreLabel,
@@ -112,12 +113,12 @@ export class SubagentList implements Overlay {
     this.total = Math.max(1, lines);
     const r = centeredRect(grid, Math.min(80, grid.w - 2), Math.max(1, lines) + 4);
     this.rect = r;
-    const title = `サブエージェント — ${pane ? paneNameOf(pane) : `pane ${shortId(this.paneId)}`}`;
+    const title = `サブエージェント${subagents?.countBasis==="alive"?"（所属）":""} — ${pane ? paneNameOf(pane) : `pane ${shortId(this.paneId)}`}`;
     const inner = drawBox(grid, r, c, title);
     this.visible = Math.max(0, inner.h - 1);
     this.scroll = Math.max(0, Math.min(this.scroll, Math.max(0, this.total - this.visible)));
     if (items.length === 0)
-      grid.text(inner.x, inner.y, "実行中のサブエージェントはありません", c.dim, c.bg);
+      grid.text(inner.x, inner.y, subagentEmptyLabel(subagents), c.dim, c.bg);
     const now = this.now();
     // 右端の 1 桁は ↑↓ の印のために空けておく（経過時間・「ほか n 件」の最後の文字を上書きしない）。
     const cw = Math.max(0, inner.w - 1);
@@ -135,7 +136,7 @@ export class SubagentList implements Overlay {
       const room = Math.max(0, cw - ew - 2);
       const head = truncate(
         plainText(
-          `${item.type ?? "サブエージェント"}${item.background ? "（バックグラウンド）" : ""}`,
+          `${item.state?subagentStateLabel(item)+" ":""}${item.type ?? "サブエージェント"}${item.background ? "（バックグラウンド）" : ""}`,
         ),
         room,
       );

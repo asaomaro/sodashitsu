@@ -11,7 +11,7 @@
  * 読み取りだけのモバイルの画面には置かない（件数だけ。呼び出し側が出さない）。
  */
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
-import { formatSubagentElapsed, GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH } from "@sodashitsu/client-core";
+import { subagentStateLabel, formatSubagentElapsed, GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH } from "@sodashitsu/client-core";
 import type { SubagentInfo } from "@sodashitsu/protocol";
 import type { GraphNodeInfo } from "../../store/graph.js";
 import {
@@ -151,7 +151,7 @@ const columns = computed<Column[]>(() => {
             };
       const s = r.item;
       const label = s.type ?? "サブエージェント";
-      const elapsed = formatSubagentElapsed(s.startedAt, t);
+      const elapsed = `${s.state ? subagentStateLabel(s)+" · " : ""}${formatSubagentElapsed(s.startedAt, t)}`;
       return {
         id: s.id,
         parentKey: n.key,
@@ -166,6 +166,7 @@ const columns = computed<Column[]>(() => {
         z: 50 - r.indent, // 親に近い側を前に出す
         aria: [
           `サブエージェント ${label}`,
+          s.state ? subagentStateLabel(s) : null,
           s.description,
           `経過 ${elapsed}`,
           s.background ? "バックグラウンド" : null,

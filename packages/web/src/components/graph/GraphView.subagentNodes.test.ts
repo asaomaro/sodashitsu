@@ -119,6 +119,12 @@ describe("小さなサブエージェントのノード（層の単体）", () =
       props: { nodes: [{ key: "local:p1", x, y }], infos: new Map([["local:p1", infoValue as never]]) },
     });
 
+  it("displays unknown and idle explicitly while omitted state keeps the working default",async()=>{
+    vi.useFakeTimers({toFake:["Date","setInterval","clearInterval"]});const now=Date.now();
+    const w=mountLayer(info([sub("u",now,{state:"unknown"}),sub("i",now,{state:"idle"}),sub("w",now)]));await tick(2500);
+    expect(w.get('[data-subagent-id="u"]').text()).toContain("状態不明");expect(w.get('[data-subagent-id="u"]').attributes("aria-label")).not.toContain("実行中");
+    expect(w.get('[data-subagent-id="i"]').text()).toContain("待機中");expect(w.get('[data-subagent-id="w"]').attributes("aria-label")).not.toContain("状態不明");w.unmount();
+  });
   it("現れて 2 秒たつまでは出さない。2 秒たてば、親の右下に出る（種類・説明・経過・読み上げの名前）", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     const w = mountLayer(info([sub("a", Date.now(), { background: true })]));
