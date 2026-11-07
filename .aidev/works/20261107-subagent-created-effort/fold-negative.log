@@ -1,0 +1,45 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-created-effort/packages/server
+
+ ❯ src/agent/NativeSubagentRecords.test.ts (11 tests | 1 failed | 10 skipped) 11ms
+   ❯ native subagent lifecycle records (11)
+     × keeps resolved creation effort from stored snake_case start without inventing current effort 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/NativeSubagentRecords.test.ts > native subagent lifecycle records > keeps resolved creation effort from stored snake_case start without inventing current effort
+AssertionError: expected { …(5) } to match object { reasoningEffort: 'low', …(1) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "reasoningEffort": "low",
+-   "reasoningEffortBasis": "creation",
++   "depth": 1,
++   "description": "probe_child",
++   "id": "01a1b40b-4c9a-7bb1-ac8b-3400a49e52d8",
++   "startedAt": 1794022001830,
++   "type": "gpt-6-luna",
+  }
+
+ ❯ src/agent/NativeSubagentRecords.test.ts:9:60
+      7|   it("keeps resolved creation effort from stored snake_case start with…
+      8|     const rows = await fixture("codex"), first = rows[0], fold = new N…
+      9|     fold.consume(first); expect(fold.snapshot()?.items[0]).toMatchObje…
+       |                                                            ^
+     10|     fold.consume(rows[1]);
+     11|     const interacted = { ...first, payload: { ...first.payload, item: …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 skipped (11)
+   Start at  17:28:45
+   Duration  168ms (transform 62%, import 19%, tests 15%, worker 4%)
+
+undefined
+/workspaces/sodashitsu-subagent-created-effort/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/NativeSubagentRecords.test.ts -t keeps resolved creation effort

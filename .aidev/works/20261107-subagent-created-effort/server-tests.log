@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-created-effort/packages/server
+
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  17:26:50
+   Duration  931ms (transform 77%, import 20%, tests 3%)
+

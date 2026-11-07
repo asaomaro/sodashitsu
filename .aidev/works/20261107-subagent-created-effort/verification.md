@@ -1,0 +1,9 @@
+# Codex子effortの最小追加
+
+contract941e4c6b: SubagentInfo.reasoningEffort?/reasoningEffortBasis?(creation|turn)。今回はcreationのみ出す。新規起動の希望値でなく、導入0.166.0の正式schemaがresolved-at-creationと定義する親stored SubAgentActivity.started.reasoning_effortを読む。SDKcamelCaseをstoredfieldと取り違えない。既存隔離実CLI fixture codex.jsonlのlowが正例。
+
+NativeRecordsは後続interactedの値で開始時の確定値を上書きせず、再startedで値が欠けたら旧値を外す。model名suffixや未知値から補わない。CLIget/listのexplicit mapperがoptionalな値と由来を保持し、旧JSONshapeは変えない。追加childrecordscan/CLI/modelturn/設定変更/Windows操作無し。
+
+固定sourceの関連テスト: server11pass、CLI39pass。各旧fold/CLI mapperを個別に戻し、対応する新回帰がfailすることを確認（fold-negative.log/cli-negative.log）、byteexact復元（restoration.json）。server/CLI projectbuildとテストfixture込みの型検査を実施。全体CIはroot統合時に1回。最初のCLItestに重複importがありcollection失敗したため修正して39件を再実行した（最終logは成功分）。
+
+creationは現在値ではないのでUIは開始時として区別する。turnは契約上の将来値で、今回は発行しない。

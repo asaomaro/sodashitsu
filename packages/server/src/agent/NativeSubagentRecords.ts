@@ -1,3 +1,4 @@
+import { ASSISTANT_EFFORTS } from "@sodashitsu/protocol";
 import type { SubagentInfo } from "@sodashitsu/protocol";
 import type { Subagents } from "./SubagentTracker.js";
 
@@ -78,7 +79,10 @@ export class NativeSubagentRecords {
     if (!this.admit(`c:${item.id}:${label(item.kind, 64)}`)) return;
     const name = label(item.agent_path, 200)?.split("/").at(-1);
     const model = label(item.model, 64);
-    const meta = { ...(name ? { description: name } : {}), ...(model ? { type: model } : {}) };
+    // SDK uses reasoningEffort; the persisted SubAgentActivity uses reasoning_effort.
+    // Its schema calls this resolved-at-creation, not the requested launch effort.
+    const effort = item.kind === "started" && typeof item.reasoning_effort === "string" && (ASSISTANT_EFFORTS.codex as readonly string[]).includes(item.reasoning_effort) ? item.reasoning_effort : undefined;
+    const meta: Partial<SubagentInfo> = { ...(effort ? { reasoningEffort: effort, reasoningEffortBasis: "creation" } : {}), ...(name ? { description: name } : {}), ...(model ? { type: model } : {}) };
     // A fresh successful reference to an owned, completed child proves membership, not work.
     if (item.kind === "interacted") {
       if (!this.items.has(id)) {
@@ -91,7 +95,11 @@ export class NativeSubagentRecords {
     this.codexReferences.delete(id);
     if (item.kind === "started") {
       if (!this.codexRelations.has(id) && this.codexRelations.size >= MAX) { this.limited = true; return; }
-      this.codexRelations.set(id, { item: { ...this.codexRelations.get(id)?.item, id, startedAt: at, depth: 1, ...meta }, completed: false });
+      const previous = this.metadata.get(id);
+      if (previous) { delete previous.reasoningEffort; delete previous.reasoningEffortBasis; }
+      const created: SubagentInfo = { ...this.codexRelations.get(id)?.item, id, startedAt: at, depth: 1, ...meta };
+      if (!effort) { delete created.reasoningEffort; delete created.reasoningEffortBasis; }
+      this.codexRelations.set(id, { item: created, completed: false });
     } else if (item.kind === "completed") {
       const relation = this.codexRelations.get(id);
       if (relation) relation.completed = true;

@@ -1,0 +1,46 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-created-effort/packages/cli
+
+ ❯ src/agentStatus.test.ts (39 tests | 1 failed | 38 skipped) 9ms
+   × keeps optional observed child effort and creation provenance in CLI JSON 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agentStatus.test.ts > keeps optional observed child effort and creation provenance in CLI JSON
+AssertionError: expected { id: 'generated-child', …(6) } to match object { reasoningEffort: 'low', …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "reasoningEffort": "low",
+-   "reasoningEffortBasis": "creation",
++   "background": null,
++   "depth": null,
++   "description": null,
++   "id": "generated-child",
++   "parentId": null,
++   "startedAt": 1,
++   "type": null,
+  }
+
+ ❯ src/agentStatus.test.ts:277:27
+    275| it("keeps optional observed child effort and creation provenance in CL…
+    276|  const result=subagentsViewOf({count:1,items:[{id:"generated-child",st…
+    277|  expect(result?.items[0]).toMatchObject({reasoningEffort:"low",reasoni…
+       |                           ^
+    278| });
+    279|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  17:28:46
+   Duration  191ms (transform 63%, import 22%, tests 10%, worker 5%)
+
+undefined
+/workspaces/sodashitsu-subagent-created-effort/packages/cli:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agentStatus.test.ts -t keeps optional observed child effort

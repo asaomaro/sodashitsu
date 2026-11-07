@@ -42,3 +42,7 @@ Copilotの隔離実probeは、最初は隔離HOMEに認証が無いため停止�
 実CLIのfixtureは新しい空の一時PJと隔離HOMEだけで採取し、利用者paneや通常会話を操作していません。認証ファイル・account情報・利用者のプロンプト本文をリポジトリへ保存していません。production配線は一時サーバ・偽の親CLI・実記録形式から既存WebSocket event/snapshotまで確認します。[検証記録](../.aidev/works/20261107-nonclaude-subagents/)を参照してください。
 
 Copilotの両イベント名は同じ`toolCallId`を子の鍵にし、イベントIDで重複を除きます。`subagent.selected/deselected`はメインのcustom agent選択なので子の開始・終了として数えません。未知・不正な子lifecycleは未取得とし、親の`session.idle`や記録の時刻から子の現在の待機を補いません。
+
+## Codexの子のeffort
+
+正式な親rolloutの`SubAgentActivity`の`started`にある`reasoning_effort`は、生成時に解決済みの値です。SDK schemaでは`reasoningEffort`というcamelCase名で定義されますが、保存済みrolloutはsnake_caseです。取得できた既知の値だけ`SubagentInfo.reasoningEffort`と`reasoningEffortBasis: creation`へ保持します。これは開始時の確定値であり、現在ターンのeffortを保証しません。後のinteractedやモデル名のsuffix、起動希望flagでは上書きしません。再startedに値が無ければ古いeffortは残しません。現在値を取るための子rollout追加scanは行いません。CLIの`agent get/list`もこのoptionalな値と由来を保持し、未取得時は従来どおり項目を省略します。

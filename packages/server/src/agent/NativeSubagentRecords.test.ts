@@ -4,6 +4,23 @@ import { NativeSubagentRecords } from "./NativeSubagentRecords.js";
 
 const fixture = async (kind: string) => (await readFile(new URL(`./fixtures/native-subagents/${kind}.jsonl`, import.meta.url), "utf8")).trim().split("\n").map(line => JSON.parse(line));
 describe("native subagent lifecycle records", () => {
+  it("keeps resolved creation effort from stored snake_case start without inventing current effort", async () => {
+    const rows = await fixture("codex"), first = rows[0], fold = new NativeSubagentRecords("codex", first.payload.thread_id);
+    fold.consume(first); expect(fold.snapshot()?.items[0]).toMatchObject({ reasoningEffort: "low", reasoningEffortBasis: "creation" });
+    fold.consume(rows[1]);
+    const interacted = { ...first, payload: { ...first.payload, item: { ...first.payload.item, id: "delivery", kind: "interacted", reasoning_effort: "high" } } };
+    fold.consume(interacted); expect(fold.snapshot()?.items[0]).toMatchObject({ reasoningEffort: "low", reasoningEffortBasis: "creation" });
+    const restart = structuredClone(first); restart.payload.item.id = "restart"; delete restart.payload.item.reasoning_effort;
+    fold.consume(restart); expect(fold.snapshot()?.items[0]).not.toHaveProperty("reasoningEffort");
+  });
+  it("does not infer effort from launch-looking metadata, SDK camelCase or model suffix", async () => {
+    const rows = await fixture("codex");
+    for (const effort of [undefined, "", "future-value", { effort: "high" }]) {
+      const row = structuredClone(rows[0]); row.payload.item.reasoning_effort = effort; row.payload.item.reasoningEffort = "high"; row.payload.item.model = "model-high";
+      const fold = new NativeSubagentRecords("codex", row.payload.thread_id); fold.consume(row); expect(fold.snapshot()?.items[0]).not.toHaveProperty("reasoningEffort");
+    }
+  });
+
   it("folds real Codex start/completion, ignores duplicate historical start, and never claims Claude transcript support", async () => {
     const rows = await fixture("codex"), id = rows[0].payload.thread_id;
     const fold = new NativeSubagentRecords("codex", id);

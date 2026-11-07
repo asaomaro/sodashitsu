@@ -271,3 +271,8 @@ it("keeps explicit membership and child states in agent get/list JSON without ch
  expect(JSON.parse(JSON.stringify(value))).toMatchObject({count:3,countBasis:"alive",items:[{id:"u",state:"unknown"},{id:"i",state:"idle"},{id:"w",state:"working"}]});
  const legacy=subagentsViewOf({count:1,items:[{id:"legacy",startedAt:0}]});expect(legacy).not.toHaveProperty("countBasis");expect(legacy!.items[0]).not.toHaveProperty("state");
 });
+
+it("keeps optional observed child effort and creation provenance in CLI JSON",()=>{
+ const result=subagentsViewOf({count:1,items:[{id:"generated-child",startedAt:1,reasoningEffort:"low",reasoningEffortBasis:"creation"}]});
+ expect(result?.items[0]).toMatchObject({reasoningEffort:"low",reasoningEffortBasis:"creation"});
+});
