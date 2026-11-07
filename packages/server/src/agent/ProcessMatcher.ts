@@ -74,24 +74,39 @@ export function agentResumeSessionId(job: ForegroundJob, kind: string): string |
     const end = p.argv.indexOf("--"), args = end < 0 ? p.argv : p.argv.slice(0, end);
     let raw: string | undefined;
     if (kind === "codex") raw = codexResumeIdFromArgv(args);
-    else if (kind === "muse") {
-      const at = args.indexOf("resume");
-      // The canonical resume command is positional. Never interpret another
-      // subcommand's operand, or an option's literal value, as the subcommand.
-      if (at < 1 || args[at - 1]?.startsWith("-")) continue;
-      if (args.slice(1, at).some((a, i) => !a.startsWith("-") && !args[i]?.startsWith("-") && lookupAgentKind(a) !== "muse")) continue;
-      raw = args[at + 1];
-    } else {
+    else {
+      // Only a small, unambiguous resume grammar is argv evidence. Unknown
+      // options (including prompt-bearing ones) require a later hook instead.
+      let at = lookupAgentKind(args[0] ?? "") === kind ? 1
+        : ["node", "bun"].includes(normalizedAgentLookupName(pathBasename(args[0] ?? ""))) && lookupAgentKind(args[1] ?? "") === kind ? 2 : -1;
+      if (at < 0) continue;
+      const valueFlags = kind === "muse" ? ["--model", "--reasoning-effort", "--effort"]
+        : kind === "claude" ? ["--model", "--effort"] : kind === "copilot" ? ["--model"] : ["--model"];
       const flags = kind === "agy" ? ["--conversation"] : kind === "claude" ? ["--resume", "-r"] : ["--resume"];
       const values = new Set<string>();
-      for (let i = 1; i < args.length; i++) {
-        const arg = args[i]!;
-        if (["--prompt", "-p", "--model", "--settings", "--agent", "--effort", "--reasoning-effort"].includes(args[i - 1]!)) continue;
-        for (const flag of flags) {
-          const candidate = arg === flag ? args[i + 1] : arg.startsWith(flag + "=") ? arg.slice(flag.length + 1) : undefined;
-          if (candidate !== undefined) values.add(candidate);
+      let valid = true;
+      while (at < args.length) {
+        const arg = args[at++]!;
+        const valueFlag = valueFlags.find(flag => arg === flag || arg.startsWith(flag + "="));
+        if (valueFlag) {
+          const value = arg === valueFlag ? args[at++] : arg.slice(valueFlag.length + 1);
+          if (!value || value.startsWith("-")) { valid = false; break; }
+          continue;
         }
+        if (kind === "muse" && arg === "resume") {
+          if (values.size) { valid = false; break; }
+          const id = args[at++];
+          if (!id) { valid = false; break; }
+          values.add(id);
+          continue;
+        }
+        const flag = kind !== "muse" ? flags.find(flag => arg === flag || arg.startsWith(flag + "=")) : undefined;
+        if (!flag) { valid = false; break; }
+        const id = arg === flag ? args[at++] : arg.slice(flag.length + 1);
+        if (!id) { valid = false; break; }
+        values.add(id);
       }
+      if (!valid) continue;
       if (values.size === 1) raw = [...values][0];
       else if (values.size > 1) return undefined;
     }

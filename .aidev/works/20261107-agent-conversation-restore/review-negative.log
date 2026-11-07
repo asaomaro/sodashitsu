@@ -1,0 +1,46 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-agent-conversation-parity/packages/server
+> vitest run src/agent/ProcessMatcher.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agent-conversation-parity/packages/server
+
+ ❯ src/agent/ProcessMatcher.test.ts (70 tests | 4 failed) 17ms
+   × rejects ambiguous option operands for claude rather than treating their text as resume evidence 4ms
+   × rejects ambiguous option operands for copilot rather than treating their text as resume evidence 1ms
+   × rejects ambiguous option operands for muse rather than treating their text as resume evidence 1ms
+   × rejects ambiguous option operands for agy rather than treating their text as resume evidence 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/ProcessMatcher.test.ts > rejects ambiguous option operands for claude rather than treating their text as resume evidence
+ FAIL  src/agent/ProcessMatcher.test.ts > rejects ambiguous option operands for copilot rather than treating their text as resume evidence
+ FAIL  src/agent/ProcessMatcher.test.ts > rejects ambiguous option operands for muse rather than treating their text as resume evidence
+ FAIL  src/agent/ProcessMatcher.test.ts > rejects ambiguous option operands for agy rather than treating their text as resume evidence
+AssertionError: expected '01a19c67-c59e-7060-aa2e-7f556e90b495' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"01a19c67-c59e-7060-aa2e-7f556e90b495"
+
+ ❯ src/agent/ProcessMatcher.test.ts:212:96
+    210|   for (const option of ["--system-prompt", "--append-system-prompt", "…
+    211|     for (const args of [[option, ...resume], [option, resume[0] + "=" …
+    212|       expect(agentResumeSessionId(job(10, [{ ...proc(10, [kind, ...arg…
+       |                                                                                                ^
+    213|   }
+    214|   // A known value option consumes its operand; even a resume-looking …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 66 passed (70)
+   Start at  11:52:14
+   Duration  225ms (transform 68%, import 16%, tests 14%, worker 2%)
+
+/workspaces/sodashitsu-agent-conversation-parity/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 test: `vitest run src/agent/ProcessMatcher.test.ts`
+Exit status 1

@@ -203,3 +203,15 @@ it("refuses conflicting wrapper/agent resume IDs instead of selecting a file by 
   expect(agentResumeSessionId(job(10, [a, b]), "copilot")).toBeUndefined();
   expect(agentResumeSessionId(job(10, [b, a]), "copilot")).toBeUndefined();
 });
+
+it.each(["claude", "copilot", "muse", "agy"] as const)("rejects ambiguous option operands for %s rather than treating their text as resume evidence", kind => {
+  const id = "01a19c67-c59e-7060-aa2e-7f556e90b495";
+  const resume = kind === "muse" ? ["resume", id] : [kind === "agy" ? "--conversation" : "--resume", id];
+  for (const option of ["--system-prompt", "--append-system-prompt", "--agent-name", "--unknown-future-option"]) {
+    for (const args of [[option, ...resume], [option, resume[0] + "=" + id], [...resume, option, "text"]])
+      expect(agentResumeSessionId(job(10, [{ ...proc(10, [kind, ...args]), ppid: 1 }]), kind)).toBeUndefined();
+  }
+  // A known value option consumes its operand; even a resume-looking value is
+  // never revisited as a flag/subcommand. Unknown argument arity waits for hooks.
+  expect(agentResumeSessionId(job(10, [{ ...proc(10, [kind, "--model", ...resume]), ppid: 1 }]), kind)).toBeUndefined();
+});
