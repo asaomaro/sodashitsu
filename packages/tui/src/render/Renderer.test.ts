@@ -151,7 +151,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     const lines = text.split("\n");
     const agents = lines.findIndex((l) => l.includes("Agents"));
     const sidebarOf = (l: string) => l.slice(0, l.indexOf("│")).trimEnd();
-    expect(sidebarOf(lines[agents + 1]!)).toBe(" ◐ beta t2");
+    expect(sidebarOf(lines[agents + 1]!)).toBe(" ◐ beta t2     [i]");
     expect(sidebarOf(lines[agents + 2]!)).toBe("   Claude");
     expect(outer.line(0)).toContain("t1");
     expect(outer.line(0)).toContain("session: work");
@@ -170,6 +170,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
       "workspace",
       "sectionDivider", // 狭いサイドバーでは agents の並び順のボタンは出さない（見出しと重なる）
       "agent", // エージェントの項目は 2 行（既定の行の並び）
+      "info", // 1行目の情報ボタンは同じ行の独立した当たり
       "agent",
       "collapse",
     ]);

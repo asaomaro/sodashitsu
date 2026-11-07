@@ -239,7 +239,7 @@ describe("マウス（04 ラウンド 2）", () => {
       "     space-w4",
     ]);
     expect(rows[6]).toBe("     space-w5");
-    expect(rows[8]).toBe(" ○ space-w20 t-w20");
+    expect(rows[8]).toBe(" ○ space-w20 t-w20   [i]");
     expect(rows[9]).toBe("   Claude");
     // navigate モードで下の workspace を選ぶと、そこまでずれる。
     h.io.type("\x02w");

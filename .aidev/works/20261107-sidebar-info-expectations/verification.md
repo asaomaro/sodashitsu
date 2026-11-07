@@ -1,0 +1,7 @@
+# infoボタン追加に伴う端末試験の期待値
+
+base a54cf640、製品source無変更。
+
+全体CIのTUI4failを出力diffで確認。mouse/Rendererのラベルは完全に残っており、右寄せ[i]が増えた2文字列の期待値だけが古い。Rendererは続くhit列にもinfoが増えるので期待列へ1件追加。sidebarの高さは実Grid24行のまま、試験helperが当たり数を行数として同一yのinfo2件を二重計上し26としていた。行数計測をunique yへ直し、空間・エージェント両区画で同じ基準を使う。
+
+変更はテスト3fileのみ。対象3suite61tests pass/パッケージ型check0。全体testの再実行なし。製品の不具合修正ではなく意図した表示への期待修正なので、製品sourceを差し戻す追加負例は不要。既存の全体CI失敗原文をbaseline.logへ保存。実pane/Windows/モデル操作なし。

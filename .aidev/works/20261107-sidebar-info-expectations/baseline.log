@@ -1,0 +1,72 @@
+⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/tui| src/input/mouse.r2.test.ts > マウス（04 ラウンド 2） > spaces の区画が一覧より低ければ、選んだ workspace が見える所までずらし、ホイールで動かせる
+AssertionError: expected ' ○ space-w20 t-w20   [i]' to be ' ○ space-w20 t-w20' // Object.is equality
+
+Expected: " ○ space-w20 t-w20"
+Received: " ○ space-w20 t-w20   [i]"
+
+ ❯ src/input/mouse.r2.test.ts:242:21
+    240|     ]);
+    241|     expect(rows[6]).toBe("     space-w5");
+    242|     expect(rows[8]).toBe(" ○ space-w20 t-w20");
+       |                     ^
+    243|     expect(rows[9]).toBe("   Claude");
+    244|     // navigate モードで下の workspace を選ぶと、そこまでずれる。
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  |@sodashitsu/tui| src/render/Renderer.test.ts > Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10） > サイドバーに workspace とエージェント、tab バーに tab、枠に pane の名前、中身に pane の出力
+AssertionError: expected ' ◐ beta t2     [i]' to be ' ◐ beta t2' // Object.is equality
+
+Expected: " ◐ beta t2"
+Received: " ◐ beta t2     [i]"
+
+ ❯ src/render/Renderer.test.ts:154:43
+    152|     const agents = lines.findIndex((l) => l.includes("Agents"));
+    153|     const sidebarOf = (l: string) => l.slice(0, l.indexOf("│")).trimEn…
+    154|     expect(sidebarOf(lines[agents + 1]!)).toBe(" ◐ beta t2");
+       |                                           ^
+    155|     expect(sidebarOf(lines[agents + 2]!)).toBe("   Claude");
+    156|     expect(outer.line(0)).toContain("t1");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  |@sodashitsu/tui| src/render/chrome/sidebar.test.ts > サイドバーの区画の折りたたみ > 両方開いている: 見出しは「▾ Spaces」・区切りは「▾ Agents」（今の高さのまま）
+AssertionError: expected 26 to be 24 // Object.is equality
+
+- Expected
++ Received
+
+- 24
++ 26
+
+ ❯ src/render/chrome/sidebar.test.ts:473:39
+    471|     expect(r.text(0)).toMatch(/^ ▾ Spaces/);
+    472|     expect(r.text(r.divY)).toMatch(/^─ ▾ Agents/);
+    473|     expect(r.spacesH + r.agentsH + 3).toBe(H);
+       |                                       ^
+    474|   });
+    475|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  |@sodashitsu/tui| src/render/chrome/sidebar.test.ts > サイドバーの区画の折りたたみ > spaces を畳む: 見出しは「▸ Spaces 3」・spaces は 0 行・区切りは見出しのすぐ下・agents が残りを使う（並び順は出ない）
+AssertionError: expected 23 to be 21 // Object.is equality
+
+- Expected
++ Received
+
+- 21
++ 23
+
+ ❯ src/render/chrome/sidebar.test.ts:482:23
+    480|     expect(r.divY).toBe(1);
+    481|     expect(r.spacesH).toBe(0);
+    482|     expect(r.agentsH).toBe(H - 3);
+       |                       ^
+    483|   });
+    484|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+

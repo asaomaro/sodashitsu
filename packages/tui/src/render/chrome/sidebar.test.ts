@@ -461,8 +461,9 @@ describe("サイドバーの区画の折りたたみ", () => {
       return t.trimEnd();
     };
     const divY = hits.find((h) => h.kind === "sectionDivider")?.y ?? -1;
-    const agentsH = hits.filter((h) => h.section === "agents" && h.kind !== "sectionDivider" && h.kind !== "sort").length;
-    const spacesH = hits.filter((h) => h.section === "spaces" && h.kind !== "sort" && h.kind !== "sectionHeader").length;
+    // 同じ行には親の当たりと情報ボタンの当たりがある。行数はyで数える。
+    const agentsH = new Set(hits.filter((h) => h.section === "agents" && h.kind !== "sectionDivider" && h.kind !== "sort").map(h=>h.y)).size;
+    const spacesH = new Set(hits.filter((h) => h.section === "spaces" && h.kind !== "sort" && h.kind !== "sectionHeader").map(h=>h.y)).size;
     return { hits, text, divY, agentsH, spacesH };
   }
 
