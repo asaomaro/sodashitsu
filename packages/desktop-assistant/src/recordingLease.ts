@@ -61,11 +61,13 @@ export class RecordingLease {
     this.assert(owner, token, "review");
     this.cancel();
   }
-  cancel(owner?: number): void {
+  cancel(owner?: number): string | undefined {
     if (owner !== undefined && this.lease?.owner !== owner) return;
+    const token = this.lease?.token;
     this.lease = null;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    return token;
   }
   private assert(owner: number, token: string, phase?: RecordingPhase): void {
     this.expire();

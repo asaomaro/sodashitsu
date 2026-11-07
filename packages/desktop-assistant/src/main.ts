@@ -710,7 +710,11 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
         const changed=!!publishedAudioContext;publishedAudioContext=audioContext;
         if(changed){
           transcription?.cancel();
-          if(recording?.has()){const id=recording.owner();recording.cancel();if(id!==undefined)localWindows.get(id)?.window.destroy();}
+          if(recording?.has()){
+            const id=recording.owner(),token=recording.cancel();recordingOrigin=null;
+            const owner=id===undefined?undefined:localWindows.get(id)?.window;
+            if(owner&&!owner.isDestroyed())owner.webContents.send("assistant:recording-cancelled",{token,reason:"音声の処理先が変わったため録音を破棄しました。"});
+          }
         }
       }
       // Actor readiness/busy changes also refresh the native-input controls.

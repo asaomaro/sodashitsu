@@ -2033,7 +2033,16 @@ it.each(["claude","codex","muse","agy","copilot"])("previews local transcription
   await fixture.handlers.get("assistant:transcription-draft")!(local,request);
   expect(await fixture.handlers.get("assistant:draft-state")!(chat)).toMatchObject({text:request.text});
   expect(rpc.request.mock.calls.some(([method])=>method==="assistant.prompt"||method==="assistant.audio_begin")).toBe(false);
+  const grant=await fixture.handlers.get("assistant:record-start")!(local) as {token:string};
+  const fetches=fixture.audioFetch.mock.calls.length;
   rpc.options.status(false);
+  expect(tools.isDestroyed()).toBe(false);expect(tools.isVisible()).toBe(true);
+  expect(tools.webContents.send).toHaveBeenCalledWith("assistant:recording-cancelled",{token:grant.token,reason:expect.stringContaining("処理先")});
+  // This mock renderer deliberately ignores cancellation: main must still revoke the lease.
+  await expect(fixture.handlers.get("assistant:record-stop")!(local,{token:grant.token})).rejects.toThrow("対象");
+  await expect(fixture.handlers.get("assistant:record-transcribe")!(local,{token:grant.token,mime:"audio/webm",bytes:new Uint8Array([1]).buffer})).rejects.toThrow();
+  expect(fixture.audioFetch.mock.calls.length).toBe(fetches);
+  expect(fixture.permissionChecks.get("assistant-local")!(tools.webContents,"media","soda-assistant://app",{isMainFrame:true,requestingUrl:tools.url,mediaType:"audio"})).toBe(false);
   await expect(fixture.handlers.get("assistant:transcription-draft")!(local,request)).rejects.toThrow("変わり");
   expect((await fixture.handlers.get("assistant:tools")!(local) as any).transcription.text).toBe("");
  }finally{fixture.audioRead=null;await fixture.handlers.get("assistant:save")!(event,{enabled:false});}

@@ -780,7 +780,13 @@ try {
   await expect(page.locator("#record-status")).toContainText("録音中");
   await page.evaluate(token=>window.recordCancelCallback({token,reason:"retired event"}),oldRecordingToken);
   await expect(page.locator("#record-status")).toContainText("録音中");
-  await page.locator("#record-discard").press("Enter");
+  // Main revokes only the recording lease on destination change, preserving the tools DOM.
+  await page.locator("#tool-text").fill("未保存のメモを保持");
+  const stoppedBeforeRetire=await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length);
+  await page.evaluate(()=>window.recordCancelCallback({token:window.recordGrants.at(-1),reason:"音声の処理先が変わったため録音を破棄しました。"}));
+  await expect(page.locator("#record-status")).toContainText("処理先が変わった");
+  await expect(page.locator("#tool-text")).toHaveValue("未保存のメモを保持");
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length),stoppedBeforeRetire+1);
   await expect(page.locator("#record-start")).toBeEnabled();
   await page.locator("#record-start").press("Enter");
   await expect(page.locator("#record-status")).toContainText("録音中");

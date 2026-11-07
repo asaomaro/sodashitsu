@@ -1,0 +1,44 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-audio-ui/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (67 tests | 5 failed | 62 skipped) 1347ms
+   × previews local transcription and stages an edited draft for claude without sending 48ms
+   × previews local transcription and stages an edited draft for codex without sending 18ms
+   × previews local transcription and stages an edited draft for muse without sending 13ms
+   × previews local transcription and stages an edited draft for agy without sending 14ms
+   × previews local transcription and stages an edited draft for copilot without sending 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > previews local transcription and stages an edited draft for claude without sending
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > previews local transcription and stages an edited draft for codex without sending
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > previews local transcription and stages an edited draft for muse without sending
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > previews local transcription and stages an edited draft for agy without sending
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > previews local transcription and stages an edited draft for copilot without sending
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/main.test.ts:2039:31
+    2037|   const fetches=fixture.audioFetch.mock.calls.length;
+    2038|   rpc.options.status(false);
+    2039|   expect(tools.isDestroyed()).toBe(false);expect(tools.isVisible()).to…
+       |                               ^
+    2040|   expect(tools.webContents.send).toHaveBeenCalledWith("assistant:recor…
+    2041|   // This mock renderer deliberately ignores cancellation: main must s…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 62 skipped (67)
+   Start at  11:58:12
+   Duration  1.59s (tests 89%, transform 9%, import 1%)
+
+undefined
+/workspaces/sodashitsu-audio-ui/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/main.test.ts -t previews local transcription
