@@ -1,4 +1,5 @@
 import { readCodexControlStatus, type CodexControlTarget, type CodexObservedState } from "./CodexControlStatus.js";
+import { MuseChildObservations } from "./MuseChildObservations.js";
 import { readCodexChildObservations } from "./CodexChildObservations.js";
 import { CodexSubagentStream } from "./CodexSubagentStream.js";
 import { readAntigravitySubagents } from "./AntigravitySubagentReader.js";
@@ -38,11 +39,12 @@ const MAX_LINE = 256 * 1024;
 export class NativeSubagentReader {
   private readonly states = new Map<string, State>();
   private closed = false;
+  private readonly museObservations: Pick<MuseChildObservations,"readMany"|"forget">;
   private readonly agyStates = new Map<string, { key: string; reading?: Promise<Subagents | undefined> }>();
-  constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}, private readonly codexStatus: (target: CodexControlTarget) => Promise<Map<string, CodexObservedState>> = readCodexControlStatus) {}
+  constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}, private readonly codexStatus: (target: CodexControlTarget) => Promise<Map<string, CodexObservedState>> = readCodexControlStatus, museObservations?: Pick<MuseChildObservations,"readMany"|"forget">) { this.museObservations = museObservations ?? new MuseChildObservations(roots); }
 
-  forget(paneId: string): void { this.states.get(paneId)?.abort.abort(); this.states.delete(paneId); this.agyStates.delete(paneId); }
-  close(): void { this.closed = true; for (const state of this.states.values()) state.abort.abort(); this.states.clear(); this.agyStates.clear(); }
+  forget(paneId: string): void { this.museObservations.forget(); this.states.get(paneId)?.abort.abort(); this.states.delete(paneId); this.agyStates.delete(paneId); }
+  close(): void { this.closed = true; for (const state of this.states.values()) state.abort.abort(); this.states.clear(); this.agyStates.clear(); this.museObservations.forget(); }
 
   /** Internal scheduling hint only; never a partial activity snapshot or public protocol value. */
   progress(source: NativeSubagentSource): { offset: number; pending: boolean; generation: number } | undefined {
@@ -58,7 +60,7 @@ export class NativeSubagentReader {
     const key = JSON.stringify([source.instanceId, source.kind, source.sessionId]);
     let state = this.states.get(source.paneId);
     if (!state || state.key !== key) {
-      state?.abort.abort();
+      state?.abort.abort(); this.museObservations.forget();
       state = { abort: new AbortController(), key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false, generation: 0 };
       this.states.set(source.paneId, state);
     }
@@ -103,7 +105,7 @@ export class NativeSubagentReader {
     try {
       const { fd, st } = opened;
       if (state.dev !== st.dev || state.ino !== st.ino || st.size < state.offset) {
-        state.generation++;
+        state.generation++; this.museObservations.forget();
         state.offset = 0; state.fold = new NativeSubagentRecords(source.kind as NativeSubagentKind, source.sessionId); state.invalid = false;
         delete state.codex;
       }
@@ -167,7 +169,18 @@ export class NativeSubagentReader {
       state.pending=!state.invalid&&scanning&&end>=0;
       // Do not show a historical prefix as current activity until the full available record was folded.
       if (state.invalid || scanning) return undefined;
-      return state.fold.snapshot();
+      const members=state.fold.snapshot();
+      if(source.kind!=="muse"||!members?.items.length)return members;
+      const revision=await fd.stat({bigint:true});
+      if(revision.size!==BigInt(st.size))return undefined;
+      const current=()=>!this.closed&&this.states.get(source.paneId)===state&&!state.abort.signal.aborted;
+      const observations=await this.museObservations.readMany(source.sessionId,members.items,id=>state.fold.museChildSession(id),current);
+      const after=await fd.stat({bigint:true}),reopened=await this.open(source);
+      try{
+        const path=await reopened?.fd.stat({bigint:true});
+        if(!current()||!path||![path,after].every(value=>(["dev","ino","size","mtimeNs","ctimeNs"] as const).every(k=>value[k]===revision[k])))return undefined;
+      }finally{await reopened?.fd.close();}
+      return {...members,items:members.items.map(item=>({...item,...observations.get(item.id)}))};
     } finally { await opened.fd.close(); }
   }
 }

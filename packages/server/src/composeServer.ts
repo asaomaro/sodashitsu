@@ -138,6 +138,7 @@ import { AgentForkRunner } from "./agent/AgentForkRunner.js";
 import { GraphPaneCleanup } from "./graph/GraphPaneCleanup.js";
 import { GraphMaintainer } from "./graph/GraphMaintainer.js";
 import { SubagentTracker } from "./agent/SubagentTracker.js";
+import { ClaudeChildObservations } from "./agent/ClaudeChildObservations.js";
 import { NativeSubagentService } from "./agent/NativeSubagentService.js";
 import { NativeSubagentTranscriptReader } from "./agent/NativeSubagentTranscript.js";
 import { SubagentTranscriptReader } from "./agent/SubagentTranscript.js";
@@ -676,7 +677,8 @@ export async function composeServer(
     clearTimer: (h) => clearTimeout(h as NodeJS.Timeout),
     logger,
   });
-  const nativeSubagents = new NativeSubagentService({ session, bus });
+  const claudeChildObservations = new ClaudeChildObservations({session,tracker:subagents});
+  const nativeSubagents = new NativeSubagentService({ session, bus, observeClaude: source => claudeChildObservations.read(source) });
   // サブエージェントの記録を、読むだけで追う（20261008-graph-first の PR6c）。場所は、上の数え上げが持つ報告から、サーバが組み立てる。
   const subagentTranscripts = new SubagentTranscriptReader({
     native: new NativeSubagentTranscriptReader({session}),

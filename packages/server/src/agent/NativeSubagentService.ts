@@ -1,9 +1,12 @@
+import type { ClaudeChildSource } from "./ClaudeChildObservations.js";
 import type { Pane } from "@sodashitsu/protocol";
 import type { EventBus } from "../bus/EventBus.js";
 import { NativeSubagentReader, type NativeSubagentSource } from "./NativeSubagentReader.js";
 import type { Subagents } from "./SubagentTracker.js";
 
+type Source=NativeSubagentSource|ClaudeChildSource;
 interface Deps {
+  observeClaude?: (source:ClaudeChildSource)=>Promise<Subagents|undefined>;
   session: { snapshot(): { panes: Pane[] }; getPane(id: string): Pane | undefined; setAgentSubagents(id: string, value: Subagents | undefined): boolean; hasVerifiedAgentSession(paneId: string, instanceId: string, sessionId: string): boolean };
   bus: Pick<EventBus, "subscribe">;
   reader?: Pick<NativeSubagentReader, "read" | "forget" | "close"> & Partial<Pick<NativeSubagentReader,"progress">>;
@@ -11,10 +14,10 @@ interface Deps {
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (timer: unknown) => void;
 }
-const sourceOf = (pane: Pane | undefined): NativeSubagentSource | undefined => {
+const sourceOf = (pane: Pane | undefined): Source | undefined => {
   const agent = pane?.agent, ref = pane?.agentSession;
-  if (!pane || !agent || !ref || ref.kind !== agent.kind || !["codex", "muse", "copilot", "agy"].includes(agent.kind)) return undefined;
-  return { paneId: pane.id, instanceId: agent.instanceId, kind: agent.kind as NativeSubagentSource["kind"], sessionId: ref.sessionId };
+  if (!pane || !agent || !ref || ref.kind !== agent.kind || !["codex", "muse", "copilot", "agy", "claude"].includes(agent.kind)) return undefined;
+  return { paneId: pane.id, instanceId: agent.instanceId, kind: agent.kind as Source["kind"], sessionId: ref.sessionId };
 };
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -22,9 +25,9 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export class NativeSubagentService {
   private readonly reader;
   private readonly sub;
-  private readonly known = new Map<string, NativeSubagentSource>();
+  private readonly known = new Map<string, Source>();
   private timer: unknown;
-  private readonly pending = new Map<string,NativeSubagentSource>();
+  private readonly pending = new Map<string,Source>();
   private catchup = false;
   private lastFull: number | undefined;
   private burstStart: number | undefined;
@@ -52,7 +55,7 @@ export class NativeSubagentService {
     if (this.closed || this.running) return;
     this.running = true;
     try {
-      const sources = this.deps.session.snapshot().panes.map(sourceOf).filter((s): s is NativeSubagentSource => s !== undefined && this.verified(s));
+      const sources = this.deps.session.snapshot().panes.map(sourceOf).filter((s): s is Source => s !== undefined && (s.kind!=="claude"||!!this.deps.observeClaude) && this.verified(s));
       const ids = new Set(sources.map(s => s.paneId));
       for(const [id,source] of this.pending)if(!sources.some(s=>s.paneId===id&&same(s,source)))this.pending.delete(id);
       const now=this.now(),full=!fast||this.lastFull===undefined||now-this.lastFull>=2000;
@@ -76,14 +79,16 @@ export class NativeSubagentService {
         this.known.set(source.paneId, source);
         this.pending.delete(source.paneId);
         if(!same(source,sourceOf(before))||!this.verified(source))return;
-        const position=this.reader.progress?.(source);
+        const position=source.kind==="claude"?undefined:this.reader.progress?.(source);
         let readRejected=false;
-        const value = await this.reader.read(source).catch(() => {readRejected=true;return undefined;});
+        const value = await (source.kind==="claude"?this.deps.observeClaude!(source):this.reader.read(source)).catch(() => {readRejected=true;return undefined;});
         const pane = this.deps.session.getPane(source.paneId);
         if (this.closed || !same(source, sourceOf(pane))) return;
         const verified=this.verified(source);
+        // A stale/failed metadata supplement must not erase a newer Claude hook snapshot.
+        if(source.kind==="claude"&&verified&&value===undefined)return;
         const accepted = verified ? value : undefined;
-        const progress=this.reader.progress?.(source);
+        const progress=source.kind==="claude"?undefined:this.reader.progress?.(source);
         if(verified&&!readRejected&&progress?.pending&&progress.offset>(position?.offset??0)&&(!position||progress.generation===position.generation))this.pending.set(source.paneId,source);
         if (!same(accepted, pane?.agent?.subagents)) this.deps.session.setAgentSubagents(source.paneId, accepted);
       }));
@@ -94,7 +99,7 @@ export class NativeSubagentService {
       this.catchup=!this.closed&&this.pending.size>0&&this.budget(ended);
     } finally { this.running = false; }
   }
-  private verified(source: NativeSubagentSource): boolean {
+  private verified(source: Source): boolean {
     return this.deps.session.hasVerifiedAgentSession(source.paneId, source.instanceId, source.sessionId);
   }
   close(): void {

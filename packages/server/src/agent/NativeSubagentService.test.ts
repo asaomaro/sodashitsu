@@ -82,3 +82,20 @@ describe("native activity publication", () => {
     expect(f.publish).not.toHaveBeenCalled(); f.service.close();
   });
 });
+
+it("publishes verified Claude child metadata through the shared poll and drops late instance changes",async()=>{
+ const current=pane("claude"),value={count:1,items:[{id:"child",startedAt:0,model:"actual-model",modelBasis:"turn" as const}]};
+ const publish=vi.fn(()=>true),observeClaude=vi.fn(async()=>value),reader={read:vi.fn(),forget:vi.fn(),close:vi.fn()};
+ const service=new NativeSubagentService({session:{snapshot:()=>({panes:[current]}),getPane:()=>current,setAgentSubagents:publish,hasVerifiedAgentSession:()=>true},bus:{subscribe:()=>({dispose(){}})},reader,observeClaude});
+ try{
+  await service.refresh();expect(publish).toHaveBeenCalledWith("pane",value);expect(reader.read).not.toHaveBeenCalled();publish.mockClear();
+  observeClaude.mockImplementationOnce(async()=>{current.agent!.instanceId="replacement";return value;});await service.refresh();expect(publish).not.toHaveBeenCalled();
+ }finally{service.close();}
+});
+
+it("does not erase progressed Claude hook membership when metadata is rejected, but still clears expired scope",async()=>{
+ const current=pane("claude"),original={count:1,items:[{id:"old",startedAt:0}]},progressed={count:2,items:[{id:"old",startedAt:0},{id:"new",startedAt:1}]};current.agent!.subagents=original;
+ const publish=vi.fn(()=>true);let verified=true;
+ const service=new NativeSubagentService({session:{snapshot:()=>({panes:[current]}),getPane:()=>current,setAgentSubagents:publish,hasVerifiedAgentSession:()=>verified},bus:{subscribe:()=>({dispose(){}})},observeClaude:async()=>{current.agent!.subagents=progressed;return undefined;}});
+ try{await service.refresh();expect(current.agent!.subagents).toEqual(progressed);expect(publish).not.toHaveBeenCalled();verified=false;await service.refresh();expect(publish).toHaveBeenCalledWith("pane",undefined);}finally{service.close();}
+});

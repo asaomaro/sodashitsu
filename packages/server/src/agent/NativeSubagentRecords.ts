@@ -12,6 +12,8 @@ const object = (v: unknown): Record<string, any> | undefined =>
 
 /** Folds only provider-owned lifecycle facts, never tool prompt text or inferred process counts. */
 export class NativeSubagentRecords {
+  private readonly museBindings = new Map<string, string>();
+  museChildSession(id: string): string | undefined { return this.museBindings.get(id); }
   private readonly items = new Map<string, SubagentInfo>();
   private readonly metadata = new Map<string, Partial<SubagentInfo>>();
   private readonly uncertain = new Set<string>();
@@ -57,7 +59,7 @@ export class NativeSubagentRecords {
     if (typeof id !== "string" || !ID.test(id)) return;
     this.seen = true;
     if (status === "terminal") {
-      this.items.delete(id); this.metadata.delete(id); this.uncertain.delete(id); return;
+      this.items.delete(id); this.metadata.delete(id); this.uncertain.delete(id); this.museBindings.delete(id); return;
     }
     if (!this.metadata.has(id) && this.metadata.size >= MAX) { this.limited = true; return; }
     this.metadata.set(id, { ...this.metadata.get(id), ...meta });
@@ -119,8 +121,15 @@ export class NativeSubagentRecords {
     if (typeof row.id !== "string" || !ID.test(row.id) || !this.admit(`m:${row.id}`)) return;
     const at = Number(row.recorded_at) / 1000;
     if (!Number.isFinite(at) || at < 0) return;
+    if (type === "subagent.control.child_session_bound") {
+      const child=record.child_session_id;
+      if(record.kind==="child_session_bound"&&record.schema_version===1&&record.storage_layout==="nested_session_v1"&&typeof child==="string"&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(child)&&child!==this.sessionId&&(this.museBindings.has(id)||this.museBindings.size<MAX))this.museBindings.set(id,child);
+      else this.museBindings.delete(id);
+      return;
+    }
     if (["subagent.control.spawn_accepted", "subagent.control.resume_context_recorded"].includes(type)) {
       if (!this.metadata.has(id) && this.metadata.size >= MAX) { this.limited = true; return; }
+      if(type==="subagent.control.spawn_accepted")this.museBindings.delete(id);
       const role = label(record.role, 64), description = label(record.objective, 200);
       this.metadata.set(id, { ...this.metadata.get(id), ...(role ? { type: role } : {}), ...(description ? { description } : {}), ...(Number.isInteger(record.depth) && record.depth >= 1 && record.depth <= 16 ? { depth: record.depth } : {}) });
       return;

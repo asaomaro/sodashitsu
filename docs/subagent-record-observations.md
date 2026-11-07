@@ -4,14 +4,21 @@
 
 | 種類 | 会話・親子関係 | モデル / effort の追跡根拠と現状 |
 | --- | --- | --- |
-| Claude Code | 既存のフックが報告した親transcriptとagent_idから子jsonlを読む | assistant.message.modelは実応答の根拠。子の最新effortの正式記録は今回未確認。開始時の定義から補完しない |
+| Claude Code | 既存のフックが報告した親transcriptとagent_idから子jsonlを読む | 子jsonlの最後の完全なassistant行のmessage.modelをSubagentInfo.modelへ反映し、次の応答でモデル変更を追う。親のfresh instance/sessionとhookのexact pathを前後照合。effort tierの正式記録は未確認で省略し、開始時の定義から補完しない |
 | Codex | 親の正式SubAgentActivityのUUIDと、子rollout先頭session_metaのidおよびsource.subagent.thread_spawn.parent_thread_idを二重照合して閲覧 | 子の最後の完全なturn_contextのmodelとeffortを同一rowから採用。開始より古いtimestampは不採用、最新rowの欠落fieldは以前の値で埋めない |
-| Muse Code | 以前の隔離実CLI記録にsubagent.control.child_session_boundのchild_session_idを確認。子の保存先はsession UUIDから決まる | 子のrun.model.configured.model_idを隔離実記録で確認。子の同記録にはeffort tier未取得。MSP session/readのstanding reasoningEffortはセッション既定値でありturn overrideとは別。子への結合は後段 |
-| Antigravity CLI | 既存取得は正式invoke_subagent結果と親descriptorの子UUID/spawnStepIndexを照合。子brain transcriptが候補 | 子の最新effortとモデルの公開された記録fieldは今回未確認。descriptor ALIVEは所属のみで設定を意味しない |
-| Copilot CLI | 正式子lifecycleのtoolCallIdはsession UUIDではない | lifecycleだけでは子の保存ファイルや設定へ結べない。APIが不存在との結論ではなく、現在は正式bindingの取得が未実装 |
-| Grok | ネイティブ子起動のソース契約は確認したが、導入CLIの実子生成記録は未証明 | 親usageや起動profileを子へ転用しない。正式子bindingが未実装 |
-| Cursor | SDK/CLIのnative子metadataは候補だが、現在の取得経路へ未配線 | 親afterAgentResponse hookは子の設定の証拠ではない。正式子bindingが未実装 |
+| Muse Code | 正式subagent.control.child_session_boundのsubagent_idとchild_session_idは別UUID。schema_version=1 / storage_layout=nested_session_v1を検証し、親sessiondir/subagent/child_session_id/session.jsonlを読む（履歴UIへの追加は次段） | 子run.model.configured.model_idを実行設定として反映し変更を追う。exact childのread-only view/pageのsession/reasoningEffortChangedがある場合だけeffortをbasis:sessionで反映。standing defaultでありturn一時overrideではない。子recordの初期effort tierは未取得で、最初から必ず表示できる保証はない |
+| Antigravity CLI | 既存取得は正式invoke_subagent結果と親descriptorの子UUID/spawnStepIndexを照合。子brain transcriptが候補 | 採取済み1.4.12の正式子transcript fixtureはstep_index/source/type/status/created_at/content/tool_callsで、model/effort tierの観測fieldは確認できない。descriptor ALIVEやroleから設定を推測しない。現在は未取得であり、他の正式APIでも取得不能との断定ではない |
+| Copilot CLI | 正式子lifecycleのtoolCallIdはsession UUIDではない | 導入SDKのcustom_agent.started.dataはtoolCallId/agentName/agentDisplayName/agentDescriptionでmodel/effortなし。親session.usage_recordの合計モデルをこの子へ帰属させない。現在は正式bindingの取得が未実装であり、API不存在とは断定しない |
+| Grok | ネイティブ子起動のソース契約は確認したが、導入CLIの実子生成記録は未証明 | 公開grok-build 2bdd1d6のModelChangedはmodel_idと解決済みreasoning_effortを持つのでソース上は取得候補。ただし導入1.0.77とのcommit一致・実子更新記録の形式は未実証で、正式子binding/更新readerが未実装。親usageや起動profileを子へ転用しない |
+| Cursor | SDK/CLIのnative子metadataは候補だが、現在の取得経路へ未配線 | 導入2026.11.05の正式subagentInfoはparentAgentId/rootParentAgentId/toolCallId/typeNameを保存するが、このmetadata自体にmodel/effortはない。SQLite codecと子の実設定の結合readerは未実装。親afterAgentResponse hookを子の証拠にはしない |
 
 Codexの観測は1子あたり先頭metadata最大256KiBと末尾256KiB、最大64子・4並列・全体2秒です。長いターンでturn_contextが末尾256KiBより前ならモデル・effortは未取得です。最新のCLIのライブ設定を常に示す保証ではなく、保存された最後のターン設定です。新しい記録・scope変更・ファイルの置換が検証中に起きたら値を返しません。モデル変更と古いeffortを混ぜず、未取得を開始時の値で埋めません。取得の失敗は件数や現在の作業状態を変更しません。
 
 CodexのhasTranscriptは子ファイルの安全なopenと親子照合に成功した場合だけ付けます。既存のagent.subagent_transcriptを使い、同じfdで抜粋し、パス/fdのidentityと親scopeを最後に再確認します。1MiB窓・200件・1件4000文字・2秒、同じ親instance/会話に限る64件・30分の閲覧grantです。本文・認証値・記録パスを診断ログへ出さず、reasoningや添付データ・道具のbodyを会話として表示しません。
+
+
+Claudeのモデル観測も末尾256KiB・最大64子・4並列・2秒、子開始より古いtimestampを拒否します。trackerの一覧が読取中に進んだ場合は補足だけを捨て、新しいhook件数・状態を消しません。親のscope/fresh proofが失効した場合は従来どおり旧結果を取り除きます。
+
+Museは親の正式bound記録をfoldし終えた場合だけ子を読み、子stream.idを照合します。モデルは末尾256KiBの最後のrun.model.configured、effortは保存された変更通知がview/pageの窓にある場合だけです。公式schemaにあるSnapshotStateはsession/readのhistory.snapshotの型です。今回のview/page経路は実在するsession/reasoningEffortChangedだけを使い、架空のsession/snapshot通知は扱いません。問い合わせは既存のread-only MSP helper（echo/empty、loginなし）を使い、1 CLIだけ同時実行・1秒deadline・64件の30秒cacheです。補足viewが遅延/失敗しても、先に検証したdurable modelの候補を保持し、最後に子fileのidentityを再確認します。modelとsession default effortはbasisを内部で区別し、同一turnのeffortを取得済みとは言いません。親のEOF・binding・instanceが変わったら結果を捨てます。
+
+上表の未取得には「記録でtier fieldを確認できない」と「正式binding/readerをまだ実装していない」が含まれます。製品が全種類の現在値を取得できるという意味ではありません。Grok/Cursorの会話本体の対応と、子の設定を安全に帰属させる対応も別です。
