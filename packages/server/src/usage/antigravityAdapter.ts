@@ -1,3 +1,4 @@
+import { observedSetting, reportedSettings } from "./executionSettings.js";
 import { CopilotUsageAdapter } from "./copilotAdapter.js";
 import { ExtraUsageAdapter } from "./museAdapter.js";
 import type { ExtraRoots } from "../conversation/ExtraAgentRecords.js";
@@ -53,6 +54,8 @@ export class AntigravityUsageAdapter implements UsageAdapter {
     const entry = this.panes.get(source.paneId);
     if (!entry || entry.report.sessionId !== source.sessionId) return transcript;
     const { report: r, at } = entry;
+    const effort = observedSetting(r.reasoningEffort, "statusline", "statusline");
+    const executionSettings = reportedSettings(r.executionSettings) ?? (effort ? { reasoningEffort: effort } : undefined);
     // current_usage describes the current context, not billed or lifetime totals.
     const tokens: AgentUsage["tokens"] = { basis: "context" };
     if (r.inputTokens !== undefined) tokens.input = r.inputTokens;
@@ -68,6 +71,7 @@ export class AntigravityUsageAdapter implements UsageAdapter {
       source: r.cumulativeTokens ? "statusline" : (transcript?.source ?? "statusline"),
       updatedAt: Math.max(transcript?.updatedAt ?? 0, at),
       ...(r.reasoningEffort !== undefined ? { reasoningEffort: r.reasoningEffort } : {}),
+      ...(executionSettings ? { executionSettings } : {}),
       ...(r.contextRemainingTokens !== undefined
         ? { contextRemainingTokens: r.contextRemainingTokens }
         : {}),

@@ -118,6 +118,8 @@ export class CodexUsageAdapter implements UsageAdapter {
     const t = c.total;
     const out: Omit<AgentUsage, "paneId" | "kind"> = {
       model: tail.model,
+      ...(tail.executionSettings && Object.keys(tail.executionSettings).length ? { executionSettings: tail.executionSettings } : {}),
+      ...(tail.executionSettings?.reasoningEffort ? { reasoningEffort: tail.executionSettings.reasoningEffort.value } : {}),
       // Codex の `input_tokens` は、キャッシュの読みを含む。`input` は、そのうちのキャッシュでない分（Claude と同じ意味）。`total` は記録の値。
       tokens: {
         basis: "cumulative",

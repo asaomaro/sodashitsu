@@ -97,3 +97,17 @@ it("coalesces Muse host reads, ignores foreign-session events and retries after 
   expect(await a.usageFor(source)).toBeNull();
   expect(await a.accounts()).toEqual([]);
 });
+
+it("preserves native approvalMode and standing effort as session observations without poll timestamps", () => {
+  const value = museViewUsage({ events: [
+    { method: "session/approvalModeChanged", params: { mode: "onRequest", source: "approvalReconfigure" } },
+    { method: "session/reasoningEffortChanged", params: { reasoningEffort: "high" } },
+  ] }, null, 999);
+  expect(value?.executionSettings).toEqual({ approvalMode: { value: "onRequest", source: "muse-events", basis: "session" }, reasoningEffort: { value: "high", source: "muse-events", basis: "session" } });
+  expect(value?.executionSettings?.approvalPolicy).toBeUndefined();
+});
+
+it("clears an unsupported newer native mode instead of keeping an older approval mode", () => {
+ const value = museViewUsage({ events: [{ method: "session/approvalModeChanged", params: { mode: "onRequest" } }, { method: "session/approvalModeChanged", params: { mode: "futureMode" } }] }, null, 100);
+ expect(value?.executionSettings?.approvalMode).toBeUndefined();
+});

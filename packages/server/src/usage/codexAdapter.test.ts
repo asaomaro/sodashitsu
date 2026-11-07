@@ -49,6 +49,12 @@ const adapter = (extra: ConstructorParameters<typeof CodexUsageAdapter>[0] = {})
 const src = (id = A) => ({ paneId: "p1", sessionId: id, transcriptPath: undefined });
 
 describe("CodexUsageAdapter: pane の会話", () => {
+  it("returns observed turn settings and does not reuse them for another same-kind session", async () => {
+    const text = rollout({ id: A, total: 100 }) + j({ timestamp: "2026-11-07T00:00:00Z", type: "turn_context", payload: { model: "fixture", effort: "high", approval_policy: "never", sandbox_policy: { type: "read-only" } } });
+    put("2026-10-10", A, text); put("2026-10-10", B, rollout({ id: B, total: 1 }));
+    const a = adapter(); expect(await a.usageFor(src(A))).toMatchObject({ reasoningEffort: "high", executionSettings: { approvalPolicy: { value: "never", basis: "turn" } } });
+    const other = await a.usageFor(src(B)); expect(other?.executionSettings).toBeUndefined(); expect(other?.reasoningEffort).toBeUndefined(); a.close();
+  });
   it("記録の末尾から、累計・モデル・コンテキストの率を返す。コストは無い。基準は cumulative・source は rollout", async () => {
     put("2026-10-10", A, rollout({ id: A, total: 8000, last: 50_000, window: 200_000 }));
     const u = await adapter().usageFor(src());

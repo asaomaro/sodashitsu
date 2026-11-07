@@ -1,3 +1,4 @@
+import { observedSetting } from "./executionSettings.js";
 import { join } from "node:path";
 import { windowsAgentExecutable } from "../agent/windowsAgentLaunch.js";
 import { spawn } from "node:child_process";
@@ -24,6 +25,7 @@ export function museViewUsage(
       source: "muse-events" as const,
       updatedAt: now,
     }),
+    ...(fallback?.executionSettings ? { executionSettings: { ...fallback.executionSettings } } : {}),
   };
   let found = false;
   for (const event of page.events) {
@@ -50,12 +52,21 @@ export function museViewUsage(
           found = true;
         }
         break;
-      case "session/reasoningEffortChanged":
-        if (label(p.reasoningEffort)) {
-          out.reasoningEffort = p.reasoningEffort;
-          found = true;
-        }
+      case "session/reasoningEffortChanged": {
+        const effort = observedSetting(p.reasoningEffort, "muse-events", "session");
+        if (effort) { out.reasoningEffort = effort.value; out.executionSettings = { ...out.executionSettings, reasoningEffort: effort }; }
+        else { delete out.reasoningEffort; if (out.executionSettings) delete out.executionSettings.reasoningEffort; }
+        found = true;
         break;
+      }
+      case "session/approvalModeChanged": {
+        // MSP effective mode, not a requested startup profile or a turn-scoped permission override.
+        const mode = ["allowAll", "promptUnmatched", "onRequest", "denyUnmatched"].includes(p.mode) ? observedSetting(p.mode, "muse-events", "session") : undefined;
+        if (mode) out.executionSettings = { ...out.executionSettings, approvalMode: mode };
+        else if (out.executionSettings) delete out.executionSettings.approvalMode;
+        found = true;
+        break;
+      }
       case "session/tokenUsage": {
         const c = p.cumulative;
         if (!c || !number(c.promptTokens) || !number(c.outputTokens) || !number(c.totalTokens))

@@ -74,13 +74,15 @@ describe("Antigravity statusline wrapper", () => {
         child.on("error", reject);
         child.on("close", code => resolve({ code, output }));
         child.stdin.end(JSON.stringify({ conversation_id: sid, email: "secret@example.test", transcript_path: "/secret",
-          model: { id: "Gemini" }, context_window: { current_usage: { input_tokens: 80, output_tokens: 4, cache_read_input_tokens: 20, cache_creation_input_tokens: 0 } },
+          model: { id: "Gemini", effort: "high" }, cycle_mode: "plan", sandbox: { enabled: true }, context_window: { current_usage: { input_tokens: 80, output_tokens: 4, cache_read_input_tokens: 20, cache_creation_input_tokens: 0 } },
           quota: { "gemini-weekly": { remaining_fraction: 0.75, reset_time: "2026-10-20T00:00:00Z" }, bad: { remaining_fraction: -1 } },
           agent_state: "working", tool_confirmation_pending: true,
         }));
       });
       expect(result).toEqual({ code: 7, output: "original" });
       expect(reports).toHaveLength(2);
+      expect(reports[1]?.executionSettings).toEqual({ reasoningEffort: { value: "high", source: "statusline", basis: "statusline" }, sandboxMode: { value: "enabled", source: "statusline", basis: "statusline" } });
+      expect(reports[1]?.executionSettings?.permissionMode).toBeUndefined(); // cycle_mode is not approval evidence
       expect(reports[0]).toMatchObject({ type: "session", kind: "agy", sessionId: sid });
       expect(reports[1]).toMatchObject({ type: "usage", kind: "agy", sessionId: sid, contextTokens: 100,
         inputTokens: 80, outputTokens: 4, cacheReadTokens: 20, agentState: "working", toolConfirmationPending: true,

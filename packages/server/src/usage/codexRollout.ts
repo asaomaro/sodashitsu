@@ -1,3 +1,5 @@
+import type { AgentExecutionSettings } from "@sodashitsu/protocol";
+import { codexTurnSettings } from "./executionSettings.js";
 import type { UsageWindow } from "@sodashitsu/protocol";
 import { openVerified, readRange } from "../agent/safeFile.js";
 import { safeModel } from "./claudeScan.js";
@@ -118,6 +120,7 @@ export class CodexRolloutTail {
   count: CodexCount | null = null;
   limits: CodexRateLimits | null = null;
   model: string | null = null;
+  executionSettings: AgentExecutionSettings | undefined;
   /** 次に読む位置（読み終えた最後の改行の次）。 */
   private offset = 0;
   private started = false;
@@ -162,11 +165,12 @@ export class CodexRolloutTail {
     const start = this.offset;
     if (size - start > INCREMENT_MAX_BYTES) {
       // 大きく増えた（長い間見ていなかった）: 末尾の窓だけ読み直す。窓に無かった項目は、前の値のまま。
-      const prev = { count: this.count, limits: this.limits, model: this.model };
+      const prev = { count: this.count, limits: this.limits, model: this.model, executionSettings: this.executionSettings };
       await this.readTail(fd, size);
       this.count ??= prev.count;
       this.limits ??= prev.limits;
       this.model ??= prev.model;
+      this.executionSettings ??= prev.executionSettings;
       return true;
     }
     const buf = await readRange(fd, start, size - start);
@@ -181,6 +185,7 @@ export class CodexRolloutTail {
     this.count = null;
     this.limits = null;
     this.model = null;
+    this.executionSettings = undefined;
     this.offset = 0;
     this.partial = false;
   }
@@ -204,9 +209,11 @@ export class CodexRolloutTail {
       this.count = null;
       this.limits = null;
       this.model = null;
+      this.executionSettings = undefined;
       const lines = splitLines(body);
       let gotCount = false;
       let gotModel = false;
+      let gotSettings = false;
       // 枠は、累計の行より前にあることがある（新しい行が別枠〔`codex_other`〕のとき）。小さい窓（1 MiB まで）の中では、枠も見つかるまで見る。
       const needLimits = window <= TAIL_STEP_BYTES * 4;
       const enough = (): boolean => (this.limitsOnly ? this.limits !== null : gotCount && gotModel && (!needLimits || this.limits !== null));
@@ -227,6 +234,7 @@ export class CodexRolloutTail {
             }
           }
         } else {
+          if (!gotSettings && o.type === "turn_context") { this.executionSettings = codexTurnSettings(o); gotSettings = true; }
           const m = modelOf(o);
           if (m !== undefined && m !== null) {
             this.model = m;
@@ -258,6 +266,7 @@ export class CodexRolloutTail {
           if (c.limits !== null) this.limits = c.limits;
         }
       } else {
+        if (o.type === "turn_context") this.executionSettings = codexTurnSettings(o);
         const m = modelOf(o);
         if (m !== undefined) this.model = m;
       }

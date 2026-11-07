@@ -1,3 +1,5 @@
+import type { AgentExecutionSettings } from "@sodashitsu/protocol";
+import { reportedSettings } from "../usage/executionSettings.js";
 import { createServer, type Server } from "node:net";
 import { chmod, unlink } from "node:fs/promises";
 import { platform } from "node:os";
@@ -20,6 +22,7 @@ export interface AgentReportSocket {
 
 /** 受け口が解釈した報告。`session` は `type` の無い電文（今までのセッション ID の報告）。 */
 export type AgentReport = AgentReportBody & {
+  executionSettings?: AgentExecutionSettings;
   /** 報告したエージェントのプロセスの pid（フックが足す。無ければ付かない）。pane の中のプログラムが好きに書ける値で、取り違えを防ぐための材料。 */
   agentPid?: number;
   /** 報告したエージェントの作業フォルダ（フックの入力の `cwd`）。常駐のプロセス（Codex の daemon）の報告を pane に結ぶのに使う。 */
@@ -48,6 +51,7 @@ type AgentReportBody =
 
 /** `type: "usage"` の項目（検査済み。受け口が、範囲・長さ・形を掛ける）。 */
 export interface UsageFields {
+  executionSettings?: AgentExecutionSettings;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
@@ -197,7 +201,9 @@ function parseReport(v: unknown): AgentReport | undefined {
   const cwd = pathOf(o.cwd);
   const source = typeof o.source === "string" && /^[a-z_]{1,16}$/.test(o.source) ? o.source : undefined;
   const baseTranscriptPath = pathOf(o.transcriptPath);
+  const executionSettings = reportedSettings(o.executionSettings);
   const base = {
+    ...(executionSettings ? { executionSettings } : {}),
     paneId: o.paneId,
     kind: o.kind,
     sessionId: o.sessionId,

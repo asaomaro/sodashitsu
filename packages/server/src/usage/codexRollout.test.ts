@@ -29,6 +29,15 @@ const turn = (model: string, at = "2026-10-10T00:00:01.000Z"): string => j({ tim
 const weekly = (pct: number) => ({ limit_id: "codex", primary: { used_percent: pct, window_minutes: 10080, resets_at: 1_792_150_968 }, secondary: null, plan_type: "pro" });
 
 describe("CodexRolloutTail", () => {
+  it("reads the latest turn settings, clears absent settings, and resets on truncation", async () => {
+    const settings = (effort: string, approval: string) => j({ timestamp: "2026-11-07T00:00:00Z", type: "turn_context", payload: { model: "fixture", effort, approval_policy: approval, sandbox_policy: { type: "read-only" } } });
+    writeFileSync(file, settings("low", "on-request") + tokenCount("2026-11-07T00:00:01Z", 10, 1, weekly(1)));
+    const t = new CodexRolloutTail(file); await t.refresh();
+    expect(t.executionSettings).toMatchObject({ reasoningEffort: { value: "low", basis: "turn" }, approvalPolicy: { value: "on-request" }, sandboxMode: { value: "read-only" } });
+    appendFileSync(file, settings("high", "never")); await t.refresh(); expect(t.executionSettings?.reasoningEffort?.value).toBe("high");
+    appendFileSync(file, turn("fixture")); await t.refresh(); expect(t.executionSettings).toEqual({});
+    writeFileSync(file, settings("medium", "untrusted")); await t.refresh(); expect(t.executionSettings?.reasoningEffort?.value).toBe("medium");
+  });
   it("最後の token_count（累計・直近・窓）と、最後の turn_context の model を読む。secondary が null でも、primary だけ", async () => {
     writeFileSync(file, j({ type: "session_meta", payload: { id: "x" } }) + turn("gpt-old") + tokenCount("2026-10-10T00:00:02.000Z", 1000, 100, weekly(10)) + turn("gpt-6.1-sol") + tokenCount("2026-10-10T00:00:05.000Z", 5000, 700, weekly(17)));
     const t = new CodexRolloutTail(file);

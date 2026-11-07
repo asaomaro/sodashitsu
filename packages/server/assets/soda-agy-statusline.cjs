@@ -111,7 +111,14 @@ function buildReport(payload) {
     cacheRead:num(ctx.total_cache_read_tokens,0,1e12), cacheWrite:num(ctx.total_cache_write_tokens,0,1e12),
     reasoning:num(ctx.total_reasoning_tokens,0,1e12), total:num(ctx.total_tokens,0,1e12),
   }) : undefined;
+  const observation = value => value === undefined ? undefined : { value, source: "statusline", basis: "statusline" };
+  const executionSettings = clean({
+    reasoningEffort: observation(str(model.effort, 64)),
+    // cycle_mode is a workflow selector, not evidence of the effective approval policy.
+    sandboxMode: KIND === "agy" && typeof payload.sandbox?.enabled === "boolean" ? observation(payload.sandbox.enabled ? "enabled" : "disabled") : undefined,
+  });
   return clean({ type: "usage", paneId, kind: KIND, sessionId: sid, agentPid: agentPid(),
+    ...(Object.keys(executionSettings).length ? { executionSettings } : {}),
     reasoningEffort: str(model.effort, 64), plan: str(payload.plan_tier, 64),
     costUsd: num(payload.cost?.total_usd, 0, 1e9),
     costEstimated: typeof payload.cost?.estimated === "boolean" ? payload.cost.estimated : undefined,
