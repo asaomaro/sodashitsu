@@ -1,3 +1,4 @@
+import { WslHostMemoryCache } from "./WslHostMemory.js";
 import { CpuTopologyCache } from "./CpuTopology.js";
 import { cpus, freemem, hostname, loadavg, totalmem, uptime } from "node:os";
 import { readFileSync } from "node:fs";
@@ -33,6 +34,7 @@ function availableMemory(total: number) {
 /** One sampler per server; callers share a one-second cache. No timer when unused. */
 export class SystemResourceSampler {
   private readonly topology = new CpuTopologyCache();
+  constructor(private readonly hostMemory = new WslHostMemoryCache()) {}
   private previous: ReturnType<typeof cpus> = [];
   private cached: SystemResources | undefined;
   get(): SystemResources {
@@ -45,6 +47,7 @@ export class SystemResourceSampler {
       cpuPercent: cpuDelta(this.previous, current),
       cpuCount: current.length,
       physicalCpuCount: this.topology.get(current.length),
+      ...this.hostMemory.get(),
       memoryTotalBytes: total,
       memoryAvailableBytes: availableMemory(total),
       serverRssBytes: process.memoryUsage().rss,

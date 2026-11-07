@@ -65,3 +65,9 @@ it.each([[12, "12/24 コア"], [null, "—/24 コア"]])("renders physical/logic
   const wrapper=mount(SystemFooter,{global:{plugins:[pinia],provide:{[ConnectionKey as symbol]:{request:async()=>({sampledAt:1,cpuPercent:25,cpuCount:24,physicalCpuCount,memoryTotalBytes:1,memoryAvailableBytes:1,serverRssBytes:1,uptimeSeconds:1,loadAverage:null,hostname:"fixture"})}}}});
   try { await nextTick();expect(wrapper.text()).toContain(text); } finally {wrapper.unmount();localStorage.clear();}
 });
+
+it("keeps a selectable WSL host metric separate from VM memory",async()=>{
+ const pinia=createPinia();setActivePinia(pinia);useViewStore().connectionState="open";useSettingsStore().setSystemFooterSettings({enabled:true,fields:["hostMemory"]});
+ const wrapper=mount(SystemFooter,{global:{plugins:[pinia],provide:{[ConnectionKey as symbol]:{request:async()=>({sampledAt:1,cpuPercent:25,cpuCount:1,memoryTotalBytes:4*1024**3,memoryAvailableBytes:2*1024**3,hostMemoryTotalBytes:16*1024**3,hostMemoryAvailableBytes:4*1024**3,serverRssBytes:1,uptimeSeconds:1,loadAverage:null,hostname:"fixture"})}}}});
+ try{await nextTick();expect(wrapper.text()).toContain("ホストメモリ 12.0GiB/16.0GiB 75%");expect(wrapper.text()).not.toContain("4.0GiB");}finally{wrapper.unmount();localStorage.clear();}
+});

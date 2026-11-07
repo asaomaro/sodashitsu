@@ -1,0 +1,10 @@
+{
+  "packages/protocol/src/systemFooter.ts": {
+    "sha256": "603f0328c449e8566bbfc7652ba82f8f2272313f3625e1757bc496990756ab80",
+    "exact": true
+  },
+  "packages/server/src/surface/methods/SystemResources.ts": {
+    "sha256": "094a5d6ad0102a7dc64dfe0c4e8d868635c330a9297f7c09cd2dde8eb71d1fe0",
+    "exact": true
+  }
+}

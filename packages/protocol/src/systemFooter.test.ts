@@ -160,3 +160,11 @@ it("shows unknown topology on old servers without copying logical cores or assum
   expect(systemCpuCoreLabel({cpuCount:4,physicalCpuCount:8})).toBe("—/4 コア");
   expect(systemCpuCoreLabel({cpuCount:0,physicalCpuCount:0})).toBe("—/— コア");
 });
+
+it("keeps WSL VM and Windows host memory distinct with optional host data, independent field/graph and old settings",()=>{
+ const old=loadSystemFooterSettings({fields:["memory"],graphs:{memory:{visible:true,pattern:"halfBlocks"}}});expect(old.fields).toEqual(["memory"]);expect(old.graphs.hostMemory.visible).toBe(false);
+ const base={sampledAt:1,cpuPercent:null,cpuCount:1,hostname:"fixture",uptimeSeconds:0,serverRssBytes:1,loadAverage:null,memoryTotalBytes:4*1024**3,memoryAvailableBytes:2*1024**3,hostMemoryTotalBytes:16*1024**3,hostMemoryAvailableBytes:4*1024**3} as SystemResources;
+ const settings=loadSystemFooterSettings({fields:["memory","hostMemory"],colorMode:"color",graphs:{hostMemory:{visible:true,pattern:"halfBlocks"}}});
+ expect(systemFooterSegments(base,settings.fields,settings.graphs)).toEqual(['メモリ 2.0GiB/4.0GiB 50%','ホストメモリ 12.0GiB/16.0GiB ████░ 75%']);expect(systemFooterDisplaySegments(base,settings).find(s=>s.field==='hostMemory')?.color).toBe('warning');
+ for(const missing of [{},{hostMemoryTotalBytes:16*1024**3},{hostMemoryTotalBytes:10,hostMemoryAvailableBytes:11},{hostMemoryTotalBytes:10,hostMemoryAvailableBytes:-1}])expect(systemFooterSegments({...base,hostMemoryTotalBytes:undefined,hostMemoryAvailableBytes:undefined,...missing} as unknown as SystemResources,['hostMemory'])).toEqual([]);
+});

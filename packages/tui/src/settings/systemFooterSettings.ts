@@ -27,7 +27,7 @@ export function systemFooterSettingsSections(
           label: f.label,
           toggle: true,
           value: read().fields.includes(f.id) ? "表示" : "非表示",
-          note: "接続先サーバー全体の情報。Web版・端末版で共有します。",
+          note: f.id==="hostMemory"?"WSLから取得したWindowsホストのメモリ。未取得時は表示しません。":"接続先サーバー全体の情報。Web版・端末版で共有します。",
           activate: () =>
             update((s) => {
               s.fields = s.fields.includes(f.id)

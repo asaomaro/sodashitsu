@@ -11,6 +11,7 @@ it("reserves one bottom row across screens and releases it when disabled", async
         physicalCpuCount: 2,
         memoryTotalBytes: 8 * 1024 ** 3,
         memoryAvailableBytes: 2 * 1024 ** 3,
+        hostMemoryTotalBytes:16*1024**3,hostMemoryAvailableBytes:4*1024**3,
         serverRssBytes: 512 * 1024 ** 2,
         uptimeSeconds: 90000,
         loadAverage: null,
@@ -21,13 +22,14 @@ it("reserves one bottom row across screens and releases it when disabled", async
     },
   });
   try {
-    h.app.prefs.apply({ systemFooterSettings: { enabled: true, fields: ["cpu", "memory"] } }, 2);
+    h.app.prefs.apply({ systemFooterSettings: { enabled: true, fields: ["cpu", "hostMemory"] } }, 2);
     h.app.renderNow();
     await vi.waitFor(async () => expect((await h.screen()).split("\n")[29]).toContain("CPU 25% (2/4 コア)"));
+    expect((await h.screen()).split("\n")[29]).toContain("ホストメモリ 12.0GiB/16.0GiB 75%");
     for (const screen of ["graph", "dashboard", "schedule"] as const) {
       h.app.ui.setScreen(screen);
       h.app.renderNow();
-      expect((await h.screen()).split("\n")[29]).toContain("メモリ 6.0GiB/8.0GiB 75%");
+      expect((await h.screen()).split("\n")[29]).toContain("ホストメモリ 12.0GiB/16.0GiB 75%");
     }
     h.app.prefs.apply({ systemFooterSettings: { enabled: true, fields: ["load"] } }, 3);
     h.app.renderNow();
