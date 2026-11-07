@@ -22,3 +22,5 @@
 同サイズ変更の回帰で同一metadata tickを観測したためns精度のBigIntStats比較へ変更し、fixtureはutimesで変更を明示した。任意の同サイズ・同metadataを保つin-place破壊を全履歴再hash無しで検知する保証はしない。providerのappend/rotateに対するEOF/terminal/世代境界と区別する。
 
 Windows等の現在状態transportは未対応でunknownを維持する。U8/sr-pc/音声/UAC/利用者pane操作は行わない。製品public snapshotの状態はroot統合・反映後に確認する。
+
+root承認後、固定2bcd41abのcompiled Reader/helperそのものをprivate Nodeプロセスで1connection限定のread-only実照合した。親EOF113calls（4MiB/call）後、所属3・working3、public scope不変、正式started証明あり、状態API65.08ms/総8561.32ms。モデルターン0、自WSとReaderをcloseしプロセス正常終了。非内容receiptはfinal-helper-actual.json。製品公開snapshotは統合反映後に確認する。
