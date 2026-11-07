@@ -1,0 +1,44 @@
+{
+  "exit": 0,
+  "elapsedMs": 484,
+  "source": "cli",
+  "count": 5,
+  "effortArrays": [
+    [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ]
+  ],
+  "normalConfigByteAndMtimeUnchanged": true
+}

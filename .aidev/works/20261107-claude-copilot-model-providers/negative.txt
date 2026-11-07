@@ -1,0 +1,84 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-claude-copilot-model-providers
+
+ ❯ |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts (14 tests | 7 failed) 6024ms
+   ❯ read-only model providers (14)
+     × sends only SDK initialize to owned CLI and closes it after metadata 1005ms
+     × returns unavailable on malformed without leaking raw provider output 1002ms
+     × returns unavailable on rejected without leaking raw provider output 1001ms
+     × returns unavailable on output-limit without leaking raw provider output 1001ms
+     × returns unavailable on exit without leaking raw provider output 1001ms
+     × times out an unresponsive owned process 1003ms
+     × marks Copilot installed schema references rather than fabricating account models or efforts 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts > read-only model providers > sends only SDK initialize to owned CLI and closes it after metadata
+AssertionError: expected "vi.fn()" to be called once, but got 0 times
+ ❯ src/agent/assistantModelProviders/claude.test.ts:29:44
+     27|  it('sends only SDK initialize to owned CLI and closes it after metada…
+     28|   const start=readClaudeModelOptions();
+     29|   await vi.waitFor(()=>expect(mocks.spawn).toHaveBeenCalledOnce());
+       |                                            ^
+     30|   const [file,args,options]=mocks.spawn.mock.calls[0]!;
+     31|   expect(file).toBe('claude');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts > read-only model providers > returns unavailable on malformed without leaking raw provider output
+ FAIL  |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts > read-only model providers > returns unavailable on rejected without leaking raw provider output
+ FAIL  |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts > read-only model providers > returns unavailable on output-limit without leaking raw provider output
+ FAIL  |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts > read-only model providers > returns unavailable on exit without leaking raw provider output
+AssertionError: expected "vi.fn()" to be called at least once
+ ❯ src/agent/assistantModelProviders/claude.test.ts:46:81
+     44|  });
+     45|  it.each(['malformed','rejected','output-limit','exit'])('returns unav…
+     46|   const start=readClaudeModelOptions();await vi.waitFor(()=>expect(moc…
+       |                                                                                 ^
+     47|   if(mode==='malformed')child.stdout.write('provider secret raw text\n…
+     48|   if(mode==='rejected')child.stdout.write(JSON.stringify({type:'contro…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts > read-only model providers > times out an unresponsive owned process
+AssertionError: expected "vi.fn()" to be called at least once
+ ❯ src/agent/assistantModelProviders/claude.test.ts:56:44
+     54|  it('times out an unresponsive owned process',async()=>{
+     55|   vi.useFakeTimers();const start=readClaudeModelOptions();
+     56|   await vi.waitFor(()=>expect(mocks.spawn).toHaveBeenCalled());
+       |                                            ^
+     57|   await vi.advanceTimersByTimeAsync(10_000);
+     58|   expect(await start).toMatchObject({source:'unavailable',models:[]});…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts > read-only model providers > marks Copilot installed schema references rather than fabricating account models or efforts
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/agent/assistantModelProviders/claude.test.ts:62:94
+     60|  it('marks Copilot installed schema references rather than fabricating…
+     61|   const result=await readCopilotModelOptions();expect(result.source).t…
+     62|   expect(result.models).toHaveLength(8);expect(result.models.every(m=>…
+       |                                                                                              ^
+     63|   expect(result.message).toContain('未取得');expect(mocks.spawn).not.toHa…
+     64|  });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 7 passed (14)
+   Start at  17:11:03
+   Duration  6.89s (tests 89%, transform 9%, import 3%)

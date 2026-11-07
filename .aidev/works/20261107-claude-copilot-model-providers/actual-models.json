@@ -1,0 +1,61 @@
+{
+  "models": [
+    {
+      "id": "default",
+      "label": "Default (recommended)",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "id": "opus",
+      "label": "Opus",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "id": "fable",
+      "label": "Fable",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "id": "sonnet",
+      "label": "Sonnet",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "id": "haiku",
+      "label": "Haiku",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    }
+  ],
+  "source": "cli",
+  "message": "CLIが提示したモデルとeffortです。契約上の利用可否やサーバ側の最新一覧を保証するものではありません。"
+}

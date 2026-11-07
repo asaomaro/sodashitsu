@@ -1,0 +1,10 @@
+{
+  "packages/server/src/agent/assistantModelProviders/claude.ts": {
+    "byteExact": true,
+    "sha256": "c2bf4594a1860c88ce98e93c58bd787a77369c4313edc8ca825dd889cd86c544"
+  },
+  "packages/server/src/agent/assistantModelProviders/copilot.ts": {
+    "byteExact": true,
+    "sha256": "a959880c0a710cf3d3fe3bba161b70c9e909050ecaf3e8c155ee6a9a4023f02c"
+  }
+}
