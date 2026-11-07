@@ -177,6 +177,9 @@ export interface SubagentInfo {
   /** サブエージェントの種類。分からなければ項目なし。 */
   type?: string;
   description?: string;
+  /** Latest formally recorded child-turn model; never the parent or requested launch model. */
+  model?: string;
+  modelBasis?: "turn";
   /** Provider-resolved effort, never a requested launch flag or model-name inference. */
   reasoningEffort?: string;
   /** creation is the resolved value at start, not a claim about the current turn. */
