@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-cursor-native-children/packages/server
+
+ ❯ src/agent/GrokSubagentReader.test.ts (7 tests | 1 failed) 247ms
+   × recovers after an initially invalid oversized line is shortened in place to a normal record 20ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/GrokSubagentReader.test.ts > recovers after an initially invalid oversized line is shortened in place to a normal record
+AssertionError: expected undefined to be 1 // Object.is equality
+
+- Expected:
+1
+
++ Received:
+undefined
+
+ ❯ src/agent/GrokSubagentReader.test.ts:62:90
+     60|  const f=await fixture();await writeFile(f.file,'{"bad":"'+"x".repeat(…
+     61|  expect(await f.reader.read(f.source,()=>true)).toBeUndefined();
+     62|  await writeFile(f.file,start());expect((await f.reader.read(f.source,…
+       |                                                                                          ^
+     63| });
+     64|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  00:33:53
+   Duration  1.44s (transform 64%, tests 18%, import 17%)
+
+undefined
+/workspaces/sodashitsu-grok-cursor-native-children/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/GrokSubagentReader.test.ts

@@ -56,3 +56,8 @@ it("does not reuse an EOF fold after an in-place same-size record replacement",a
  await writeFile(f.file,rewritten);await utimes(f.file,new Date(),new Date(Date.now()+1000));
  expect((await f.reader.read(f.source,()=>true))?.items[0]?.model).toBe("observed-child");f.reader.close();
 });
+it("recovers after an initially invalid oversized line is shortened in place to a normal record",async()=>{
+ const f=await fixture();await writeFile(f.file,'{"bad":"'+"x".repeat(256*1024)+'"}\n');
+ expect(await f.reader.read(f.source,()=>true)).toBeUndefined();
+ await writeFile(f.file,start());expect((await f.reader.read(f.source,()=>true))?.count).toBe(1);f.reader.close();
+});

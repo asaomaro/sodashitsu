@@ -62,6 +62,9 @@ export class GrokSubagentReader {
     try {
       if(!current())return;
       if(!identity(state,opened.st)||opened.st.size<state.offset||(state.last&&opened.st.size<=state.last.size&&!revision(state.last,opened.st))){state.dev=opened.st.dev;state.ino=opened.st.ino;state.offset=0;state.generation++;state.fold=new GrokSubagentRecords(source.sessionId);state.invalid=false;delete state.last;}
+      // Remember rejected revisions too: an initially oversized/invalid line
+      // leaves offset zero, but a subsequent in-place repair must reset the fold.
+      state.last={size:opened.st.size,mtimeMs:opened.st.mtimeMs,ctimeMs:opened.st.ctimeMs};
       if(state.invalid||opened.st.size>MAX_FILE)return;
       const bytes=await readRange(opened.fd,state.offset,Math.min(CHUNK,opened.st.size-state.offset));
       if(!current())return;
@@ -79,7 +82,6 @@ export class GrokSubagentReader {
       }
       if(!await record.unchanged()){state.offset=0;state.generation++;state.fold=new GrokSubagentRecords(source.sessionId);return;}
       if(!current())return;
-      state.last={size:opened.st.size,mtimeMs:opened.st.mtimeMs,ctimeMs:opened.st.ctimeMs};
       if(state.offset<opened.st.size){state.pending=bytes.length===CHUNK;return;}
       const snapshot=state.fold.snapshot();if(!snapshot)return;
       // Parent fd and path revision remain pinned throughout asynchronous child reads.
