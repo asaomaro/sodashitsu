@@ -1,0 +1,17 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-agent-audio-backend/packages/server
+> vitest run src/assistant/AssistantAudioCapabilities.test.ts src/assistant/LazyAssistantAudio.test.ts src/assistant/AssistantAudioUploads.test.ts src/assistant/CodexAudio.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agent-audio-backend/packages/server
+
+
+ Test Files  4 passed (4)
+      Tests  44 passed (44)
+   Start at  11:43:12
+   Duration  1.74s (transform 67%, import 19%, tests 13%)
+
+  Transform  transforming modules took 3.36s · 67% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

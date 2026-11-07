@@ -13,6 +13,7 @@ import {
   AssistantSessionPromptParams,
   AssistantSessionKeysParams,
   AssistantSessionAdoptParams,
+  assistantAudioCapabilities,
   RpcError,
   type AgentInfo,
 } from "@sodashitsu/protocol";
@@ -55,6 +56,20 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
   }});
   registerAssistantApps(surface, deps);
   registerAssistantAudio(surface,deps);
+  surface.register("assistant.audio_capabilities", {
+    schema: AssistantSessionGetParams,
+    handler: (ctx, params) => {
+      const authorized = () => {
+        ctx.signal?.throwIfAborted();
+        if (ctx.connectionAuthorized && !ctx.connectionAuthorized())
+          throw new RpcError("not_found", "接続が終了しました");
+      };
+      authorized();
+      const kind = deps.assistantSessions?.get(params.deviceId)?.kind ?? null;
+      authorized();
+      return assistantAudioCapabilities(kind);
+    },
+  });
   const imagePrompts = new Map<string, {clientId:string; active:boolean; expires:number}>();
   const scheduler = () => {
     if (!deps.scheduler) throw new RpcError("not_found", "予約を利用できません");
