@@ -6,7 +6,7 @@
   let revision = -1, transcriptRevision = -1, currentNote = null, savedNotes = [];
   let saving = false,stagedAudio=null,readingAudio=false,audioEpoch=0,audioState=null;
   const audioControls=()=>{
-    const active=readingAudio||!audioState?.transcriptionEnabled||["selecting","transcribing","stopping"].includes(audioState?.transcription?.status);
+    const active=readingAudio||!audioState?.transcriptionEnabled||(audioState?.transcriptionProvider==="agent"&&!audioState?.nativeAudioReady)||["selecting","transcribing","stopping"].includes(audioState?.transcription?.status);
     element("audio-drop").setAttribute("aria-disabled",String(active));element("audio-drop-start").disabled=active||!stagedAudio;element("audio-drop-clear").disabled=readingAudio||!stagedAudio;
     element("audio-drop-start").textContent=audioState?.transcriptionProvider==="agent"?"この音声を専用エージェントへ送る":"この音声を文字起こし";
   };
@@ -29,6 +29,7 @@
     saving = value;
     text.disabled = notes.disabled = element("save-note").disabled = element("read-clipboard").disabled = element("use-transcription").disabled = value;
     element("delete-note").disabled = value || !currentNote;
+    transcriptControls();
   };
   const report = error => { status.textContent = error?.message || "操作できませんでした。"; };
   const body = () => {
@@ -42,6 +43,11 @@
     if (value.length > 8192) throw Error("送信用の文面を含めて8192文字以内にしてください。");
     void window.assistant.draftMessage({text:value}).then(()=>{status.textContent = "会話の入力欄へ文面を入れました。内容と送信先を確認して送信してください。";}).catch(report);
   };
+  const transcriptControls=()=>{
+    const job=audioState?.transcription;
+    element("draft-transcription").disabled=saving||!audioState?.audioTargetReady||job?.status!=="done"||!job.text||!job.context||job.context!==audioState.transcriptionContext||!result.value.trim()||result.value.length>8192;
+  };
+  result.addEventListener("input",transcriptControls);
   const update = state => {
     if (!Number.isSafeInteger(state.revision) || state.revision <= revision) return;
     if(audioState&&(audioState.transcriptionContext!==state.transcriptionContext||audioState.transcriptionProvider!==state.transcriptionProvider||audioState.transcriptionOrigin!==state.transcriptionOrigin||!state.transcriptionEnabled))clearAudio();
@@ -60,16 +66,22 @@
     if (state.notesError) status.textContent = state.notesError;
     const job = state.transcription;
     const agent = state.transcriptionProvider === "agent";
-    element("transcribe-file").textContent = agent ? "音声ファイルを専用Codexへ送る" : "音声ファイルを文字起こし";
+    element("transcribe-file").textContent = agent ? "音声ファイルを専用エージェントへ送る" : "音声ファイルを文字起こし";
     if (Number.isSafeInteger(job.revision) && job.revision > transcriptRevision) {
       transcriptRevision = job.revision; result.value = job.text;
     }
-    element("transcription-route").textContent = state.transcriptionEnabled
-      ? agent ? "送信先：専用Codexとその提供元。確認した音声を明示操作で送信します。25MiB以内。接続先に通常5分間保存し、サーバ終了後の残りは次回送信時に期限切れを削除します。結果は会話に返ります。受理済みの処理は専用端末で停止してください。" : `文字起こし先：このPCのWhisper（${state.transcriptionOrigin}）。25MB以内・処理5分まで。`
-      : "音声入力は設定から有効にし、専用エージェントまたはローカルWhisperを選んでください。";
+    const target=state.audioTargetLabel||"専用セッション未選択";
+    element("transcription-route").textContent = !state.transcriptionEnabled
+      ? "音声入力は設定から有効にし、専用エージェントまたはローカルWhisperを選んでください。"
+      : agent
+        ? state.audioCapabilities?.nativeAudio
+          ? `音声の送信先：${target}とその提供元。音声をそのままモデルへ渡します。待機中の専用セッションを選び、CLI・会話ID・対応モデルを送信時にも確認します。25MiB以内、通常5分間保存。結果は会話で確認し、受理済みの処理は専用端末で停止してください。`
+          : `${target}：${state.audioCapabilities?.nativeAudioReason||"音声ファイルの直接入力を確認できません。"} 設定でローカルWhisperを明示的に選ぶと、このPCで文字起こしし、確認・編集した結果を会話の下書きへ渡せます。自動では切り替えません。`
+        : `文字起こし先：このPCのWhisper（${state.transcriptionOrigin}）。Whisperの導入・起動が別途必要です。25MiB以内・処理5分まで。確認後の下書き先：${target}。音声はエージェントへ送らず、結果も自動送信しません。`;
     element("transcription-status").textContent = `${job.name ? `${job.name}：` : ""}${job.message}`;
     const active = ["selecting", "transcribing", "stopping"].includes(job.status);
-    element("transcribe-file").disabled = active || !state.transcriptionEnabled;
+    element("transcribe-file").disabled = active || !state.transcriptionEnabled || (agent&&!state.nativeAudioReady);
+    transcriptControls();
     element("cancel-transcription").disabled = !active;
   };
   element("read-clipboard").addEventListener("click", async () => {
@@ -132,6 +144,14 @@
       utterance.onerror = event => { if (["canceled", "interrupted"].includes(event.error)) return; status.textContent = "読み上げできませんでした。OSの音声設定を確認してください。"; };
       speechSynthesis.speak(utterance); status.textContent = "このPCのローカル音声で読み上げています。";
     } catch (error) { report(error); }
+  });
+  element("draft-transcription").addEventListener("click",async()=>{
+    if(element("draft-transcription").disabled)return;
+    const job=audioState.transcription,context=job.context,text=result.value.trim();editorBusy(true);
+    try{
+      await window.assistant.draftTranscription({text,revision:job.revision,context});
+      status.textContent="確認した文字起こしを会話の下書きへ入れました。送信先と内容を確認して送信してください。";
+    }catch(error){report(error);}finally{editorBusy(false);transcriptControls();}
   });
   const stopReading = () => { if ("speechSynthesis" in window) speechSynthesis.cancel(); };
   element("stop-reading").addEventListener("click", stopReading);

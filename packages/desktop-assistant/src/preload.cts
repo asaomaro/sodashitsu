@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld(
     openTools:()=>ipcRenderer.invoke("assistant:tools-open"),
     consumeDraft:(input:unknown)=>ipcRenderer.invoke("assistant:draft-consume",input),
     draftState:()=>ipcRenderer.invoke("assistant:draft-state"),
+    draftTranscription:(input:unknown)=>ipcRenderer.invoke("assistant:transcription-draft",input),
     draftMessage:(input:unknown)=>ipcRenderer.invoke("assistant:draft-message",input),
     onDraft:(callback:(state:unknown)=>void)=>{const receive=(_event:unknown,state:unknown)=>callback(state);ipcRenderer.on("assistant:draft-changed",receive);return()=>ipcRenderer.removeListener("assistant:draft-changed",receive);},
     appearanceState:()=>ipcRenderer.invoke("assistant:appearance-state"),

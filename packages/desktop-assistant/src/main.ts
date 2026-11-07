@@ -1,5 +1,5 @@
 import {NoticeSummaries} from "./noticeSummaries.js";
-import {SummarySettingsSchema,loadSummarySettings} from "@sodashitsu/protocol";
+import {assistantAudioCapabilities,SummarySettingsSchema,loadSummarySettings} from "@sodashitsu/protocol";
 import {assistantAppearance} from "./appearance.js";
 import {AssistantSource,AssistantLaunchSettings,AssistantModelCatalog} from "@sodashitsu/protocol";
 import {presentWindow} from "./windowPresentation.js";
@@ -576,11 +576,15 @@ function openBubble(focus = true): void {
 let publishedAudioContext="";
 function audioInputContext():string {
  const p=controller.preferences,chat=assistantChat?.snapshot(),session=chat?.session;
- return createHash("sha256").update(JSON.stringify([p.enabled,p.transcriptionEnabled,p.transcriptionProvider,p.transcriptionOrigin,p.serverOrigin,session?.paneId,session?.agent?.instanceId,chat?.conversationSessionId])).digest("hex");
+ return createHash("sha256").update(JSON.stringify([p.enabled,p.transcriptionEnabled,p.transcriptionProvider,p.transcriptionOrigin,p.serverOrigin,chat?.connected,session?.kind,session?.paneId,session?.agent?.instanceId,chat?.conversationSessionId])).digest("hex");
 }
 async function toolsState(revision = toolsRevision) {
   const state = transcription.snapshot();
   const preferences = controller.preferences,transcriptionContext=audioInputContext();
+  const chat=chatState(),session=chat.session;
+  const audioCapabilities=assistantAudioCapabilities(session?.kind??null);
+  const audioTargetReady=chat.connected&&session?.state==="ready"&&!!session.agent;
+  const audioTargetLabel=chat.kinds.find(kind=>kind.kind===session?.kind)?.label??session?.kind??"専用セッション未選択";
   let notes: Awaited<ReturnType<NotesFile["read"]>> = [];
   let notesError = "";
   try {
@@ -597,6 +601,10 @@ async function toolsState(revision = toolsRevision) {
     transcriptionOrigin: preferences.transcriptionOrigin,
     transcriptionProvider:preferences.transcriptionProvider,
     transcriptionContext,
+    audioCapabilities,
+    audioTargetReady,
+    audioTargetLabel,
+    nativeAudioReady:audioCapabilities.nativeAudio&&audioTargetReady&&session?.agent?.state==="idle"&&!chat.busy,
   };
 }
 async function publishTools(): Promise<void> {
@@ -698,7 +706,15 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
       });
       publishCharacterState();
       const audioContext=audioInputContext();
-      if(audioContext!==publishedAudioContext){publishedAudioContext=audioContext;if(transcription&&notesFile)void publishTools();}
+      if(audioContext!==publishedAudioContext){
+        const changed=!!publishedAudioContext;publishedAudioContext=audioContext;
+        if(changed){
+          transcription?.cancel();
+          if(recording?.has()){const id=recording.owner();recording.cancel();if(id!==undefined)localWindows.get(id)?.window.destroy();}
+        }
+      }
+      // Actor readiness/busy changes also refresh the native-input controls.
+      if(transcription&&notesFile)void publishTools();
       chatRevision = state.revision;
       if (bubble && !bubble.isDestroyed())
         bubble.webContents.send("assistant:conversation-changed", state);
@@ -759,7 +775,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
     recording?.has() &&
     (!preferences.enabled ||
       !preferences.transcriptionEnabled ||
-      recordingOrigin !== JSON.stringify([preferences.transcriptionProvider,preferences.transcriptionOrigin,preferences.serverOrigin]))
+      recordingOrigin !== audioInputContext())
   ) {
     const recordingOwner=recording.owner();recording.cancel();
     if(recordingOwner!==undefined)localWindows.get(recordingOwner)?.window.destroy();
@@ -1161,6 +1177,7 @@ function registerIpc(): void {
     "transcribe-file",
     "transcribe-upload",
     "transcribe-cancel",
+    "transcription-draft",
     "clipboard-read",
     "clipboard-write",
     "record-start",
@@ -1309,6 +1326,14 @@ function registerIpc(): void {
         if(!controller.preferences.enabled||!owner.window.isVisible())throw Error("ツールウィンドウを開いて操作してください。");
         const {text}=z.object({text:z.string().min(1).max(8192)}).strict().parse(input);
         conversationDraft={revision:conversationDraft.revision+1,text};openBubble();
+        bubble?.webContents.send("assistant:draft-changed",conversationDraft);return;
+      }
+      if(action==="transcription-draft"){
+        if(!controller.preferences.enabled||!owner.window.isVisible()||owner.window.isMinimized())throw Error("ツール画面を開いて操作してください。");
+        const request=z.object({text:z.string().trim().min(1).max(8192),context:z.string().regex(/^[0-9a-f]{64}$/),revision:z.number().int().nonnegative()}).strict().parse(input);
+        const job=transcription.snapshot(),chat=chatState();
+        if(job.status!=="done"||!job.text||job.revision!==request.revision||job.context!==request.context||request.context!==audioInputContext()||!chat.connected||chat.session?.state!=="ready"||!chat.session.agent)throw Error("文字起こしの結果または会話の送信先が変わりました。確認してやり直してください。");
+        conversationDraft={revision:conversationDraft.revision+1,text:request.text};openBubble();
         bubble?.webContents.send("assistant:draft-changed",conversationDraft);return;
       }
       if (action === "conversation") return chatState();
@@ -1654,7 +1679,7 @@ function registerIpc(): void {
             recording.cancel(id);
             throw Error("吹き出しが閉じられました。");
           }
-          recordingOrigin = JSON.stringify([controller.preferences.transcriptionProvider,controller.preferences.transcriptionOrigin,controller.preferences.serverOrigin]);
+          recordingOrigin = audioInputContext();
           return { token, maxBytes: AUDIO_LIMIT, maxDurationMs: 300_000 };
         }
         if (action === "record-discard") {
@@ -1689,6 +1714,7 @@ function registerIpc(): void {
           .strict()
           .parse(input);
         if (transcription.isBusy()) throw Error("前の文字起こしが完了するまでお待ちください。");
+        if(recordingOrigin!==audioInputContext())throw Error("録音中に処理先が変わりました。録音し直してください。");
         recording.consume(id, request.token);
         const suffix = request.mime.startsWith("audio/ogg")
           ? "ogg"
@@ -1941,6 +1967,7 @@ else {
       if (managed) managedStreams!.output.write(JSON.stringify({type:"attached",deviceId:installationId}) + "\n");
       notesFile = new NotesFile(join(app.getPath("userData"), "assistant-notes.json"));
       transcription = new Transcription({
+        context:audioInputContext,
         prepareAgent:()=>{
           if(!assistantChat)throw Error("専用エージェントへ接続してから送信してください");
           return assistantChat.prepareAudio();
@@ -1949,7 +1976,7 @@ else {
           const owner = toolsWindow??bubble;
           if (!owner || owner.isDestroyed()) return null;
           const selection = await dialog.showOpenDialog(owner, {
-            title: controller.preferences.transcriptionProvider==="agent"?"専用Codexへ送る音声を選択":"このPCのWhisperで文字起こしする音声を選択",
+            title: controller.preferences.transcriptionProvider==="agent"?"専用エージェントへ送る音声を選択":"このPCのWhisperで文字起こしする音声を選択",
             properties: ["openFile"],
             filters: [
               {

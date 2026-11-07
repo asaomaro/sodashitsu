@@ -1,0 +1,10 @@
+{
+  "negative-unit": 1,
+  "negative-browser": 1,
+  "restore": {
+    "packages/desktop-assistant/src/transcription.ts": true,
+    "packages/desktop-assistant/assets/tools.html": true,
+    "packages/desktop-assistant/assets/tools.js": true,
+    "packages/desktop-assistant/assets/recording.js": true
+  }
+}

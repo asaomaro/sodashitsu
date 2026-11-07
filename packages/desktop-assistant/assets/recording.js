@@ -5,7 +5,7 @@
   let phase = "idle", epoch = 0, token = null, stream = null, recorder = null;
   let chunks = [], size = 0, clip = null, previewUrl = null, ticker = null;
   let operation = null, enabled = false, processing = false, revision = -1, player = null;
-  let limit = 25 * 1024 * 1024, deadline = 0, agent = false;
+  let limit = 25 * 1024 * 1024, deadline = 0, agent = false, audioContext = null;
   const supported = !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined";
   const render = () => {
     element("record-indicator").hidden = phase !== "capturing";
@@ -125,7 +125,7 @@
     if (phase !== "review" || !clip || operation || processing) return;
     const current = clip, currentToken = token, generation = epoch, job = {};
     operation = job; phase = "sending"; player?.pause();
-    status.textContent = agent ? "確認した録音を専用Codexとその提供元へ送ります。" : "録音をこのPCのWhisperへ渡します。エージェントには送りません。"; render();
+    status.textContent = agent ? "確認した録音を選択中の専用エージェントとその提供元へ送ります。" : "録音をこのPCのWhisperへ渡します。エージェントには送りません。"; render();
     try {
       const bytes = await current.arrayBuffer();
       if (generation !== epoch) return;
@@ -145,8 +145,11 @@
   });
   const updateTools = state => {
     if (!Number.isSafeInteger(state.revision) || state.revision <= revision) return;
-    revision = state.revision; enabled = state.transcriptionEnabled; agent = state.transcriptionProvider === "agent";
-    element("record-transcribe").textContent = agent ? "録音を専用Codexへ送る" : "録音を文字起こし";
+    if(audioContext&&audioContext!==state.transcriptionContext&&(phase!=="idle"||operation))cancel("音声の処理先が変わったため録音を破棄しました。");
+    audioContext=state.transcriptionContext;
+    revision = state.revision; agent = state.transcriptionProvider === "agent";
+    enabled = state.transcriptionEnabled&&(!agent||state.nativeAudioReady===true);
+    element("record-transcribe").textContent = agent ? "録音を専用エージェントへ送る" : "録音を文字起こし";
     processing = ["selecting","transcribing","stopping"].includes(state.transcription.status);
     if (!enabled && (phase !== "idle" || operation)) cancel("文字起こしが無効になったため録音を破棄しました。");
     render();

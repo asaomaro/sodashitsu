@@ -1,0 +1,75 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-audio-ui/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/transcription.test.ts (20 tests | 2 failed | 18 skipped) 92ms
+   × does not read or send selected audio after the conversation context changes 17ms
+   × rejects a late local transcript when its conversation context has changed 72ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/transcription.test.ts > does not read or send selected audio after the conversation context changes
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      "/generated.wav",
+      AbortSignal {
+        Symbol(kEvents): undefined,
+        Symbol(events.maxEventTargetListeners): 0,
+        Symbol(events.maxEventTargetListenersWarned): false,
+        Symbol(kHandlers): undefined,
+        Symbol(kAborted): false,
+        Symbol(kReason): undefined,
+        Symbol(kComposite): false,
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/transcription.test.ts:415:19
+    413|  service.configure(true,"http://127.0.0.1:8080","agent");const job=ser…
+    414|  context="actor-b";finish("/generated.wav");await job;
+    415|  expect(read).not.toHaveBeenCalled();expect(sendAudio).not.toHaveBeenC…
+       |                   ^
+    416|  expect(service.snapshot()).toMatchObject({status:"error",text:""});ex…
+    417| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/transcription.test.ts > rejects a late local transcript when its conversation context has changed
+AssertionError: expected { revision: 3, status: 'done', …(3) } to match object { status: 'error', text: '' }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "error",
+-   "text": "",
++   "status": "done",
++   "text": "old conversation text",
+  }
+
+ ❯ src/transcription.test.ts:424:29
+    422|  service.configure(true,"http://127.0.0.1:8080");const job=service.fil…
+    423|  context="actor-b";finish(Response.json({text:"old conversation text"}…
+    424|  expect(service.snapshot()).toMatchObject({status:"error",text:""});ex…
+       |                             ^
+    425| });
+    426|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 18 skipped (20)
+   Start at  11:50:01
+   Duration  2.81s (transform 70%, import 26%, tests 4%)
+
+undefined
+/workspaces/sodashitsu-audio-ui/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/transcription.test.ts -t conversation context

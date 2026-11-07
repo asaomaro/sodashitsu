@@ -1,0 +1,16 @@
+PASS: settings changes save automatically, serialized drafts survive delayed writes, invalid input waits and failed saves recover
+PASS: original Sodashitsu icon loads, rotates around its centre, and obeys rotation/reduced-motion preferences
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.press: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('#draft-transcription')[22m
+
+    at /workspaces/sodashitsu-audio-ui/packages/desktop-assistant/scripts/verify-ui.mjs:730:46 {
+  log: [ "  - waiting for locator('#draft-transcription')" ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.22.2

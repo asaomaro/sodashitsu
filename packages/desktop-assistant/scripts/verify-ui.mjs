@@ -94,7 +94,7 @@ try {
     window.ocrRevision=1; window.currentOcr={};
     window.savedNotes = [];
     window.toolsRevision = 1;
-    window.currentTools = {transcriptionContext:"a".repeat(64),revision:1,transcriptionEnabled:true,transcriptionProvider:"local",transcriptionOrigin:"http://127.0.0.1:8080",notes:[],notesError:"",transcription:{revision:1,status:"idle",name:"",text:"",message:"生成されたテストです。"}};
+    window.currentTools = {audioCapabilities:{kind:"codex",nativeAudio:true,nativeAudioReason:"",localTranscription:true},audioTargetReady:true,nativeAudioReady:true,audioTargetLabel:"Codex",transcriptionContext:"a".repeat(64),revision:1,transcriptionEnabled:true,transcriptionProvider:"local",transcriptionOrigin:"http://127.0.0.1:8080",notes:[],notesError:"",transcription:{revision:1,status:"idle",name:"",text:"",message:"生成されたテストです。"}};
     Object.defineProperty(window,"speechSynthesis",{configurable:true,value:{getVoices:()=>[{lang:"ja-JP",localService:false},{lang:"ja-JP",localService:true}],cancel:()=>window.calls.push(["stop-reading"]),speak:utterance=>window.calls.push(["speak",utterance.text,utterance.voice.localService])}});
     window.SpeechSynthesisUtterance = class {constructor(text){this.text=text;}};
     window.recordGrants=[];window.recordSequence=0;
@@ -222,6 +222,7 @@ try {
       draftState:async()=>({revision:0,text:null}),
       onDraft:callback=>{window.draftCallback=callback;return()=>{};},
       consumeDraft:async input=>window.calls.push(["consume-draft",input]),
+      draftTranscription:async input=>{window.calls.push(["transcription-draft",input]);await window.deliverToolDraft({revision:(window.mockDraftRevision=(window.mockDraftRevision||0)+1),text:input.text});},
       draftMessage:async input=>{window.calls.push(["draft-message",input]);await window.deliverToolDraft({revision:(window.mockDraftRevision=(window.mockDraftRevision||0)+1),text:input.text});},
       appearanceState:async()=>({revision:1,mode:window.preferences.appearance??"dark"}),
       onAppearance:callback=>{window.appearanceCallback=state=>{window.appearanceRevision=state.revision;callback(state);};return()=>{};},
@@ -718,18 +719,28 @@ try {
   await page.locator("#transcribe-file").press("Enter");
   assert.equal(await page.evaluate(()=>window.calls.at(-1)[0]),"transcribe-file");
   await page.evaluate(()=>{
-    window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcription:{revision:2,status:"done",name:"generated.wav",text:"<img src=x onerror=alert(1)>認識結果です。",message:"確認してください。"}};
+    window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcription:{context:window.currentTools.transcriptionContext,revision:2,status:"done",name:"generated.wav",text:"<img src=x onerror=alert(1)>認識結果です。",message:"確認してください。"}};
     window.toolsCallback(window.currentTools);
   });
   await expect(page.locator("#transcription-result")).toHaveValue("<img src=x onerror=alert(1)>認識結果です。");
   await page.locator("#use-transcription").press("Enter");
   await expect(page.locator("#tool-text")).toHaveValue("<img src=x onerror=alert(1)>認識結果です。");
   await expect(page.locator("#standard-tools img:not(#ocr-preview)")).toHaveCount(0);
+  await page.locator("#transcription-result").fill("確認して編集した文字起こし");
+  await page.locator("#draft-transcription").press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.find(c=>c[0]==="transcription-draft")[1]),{text:"確認して編集した文字起こし",revision:2,context:"b".repeat(64)});
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="send-message").length),sendsBeforeTools);
+  for(const kind of ["claude","muse","agy","copilot"]){
+    await page.evaluate(kind=>{window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcriptionProvider:"agent",nativeAudioReady:false,audioTargetLabel:kind,audioCapabilities:{kind,nativeAudio:false,nativeAudioReason:"このCLIは音声ファイルの直接入力が未対応です。",localTranscription:true}};window.toolsCallback(window.currentTools);},kind);
+    await expect(page.locator("#transcribe-file")).toBeDisabled();await expect(page.locator("#record-start")).toBeDisabled();
+    await expect(page.locator("#transcription-route")).toContainText("ローカルWhisperを明示的に選ぶ");
+  }
+  await page.evaluate(()=>{window.currentTools={...window.currentTools,revision:++window.toolsRevision,nativeAudioReady:true,audioTargetLabel:"Codex",audioCapabilities:{kind:"codex",nativeAudio:true,nativeAudioReason:"",localTranscription:true}};window.toolsCallback(window.currentTools);});
   const beforeAgentAudio=await page.evaluate(()=>window.calls.length);
   await page.evaluate(()=>{window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcriptionProvider:"agent"};window.toolsCallback(window.currentTools);});
-  await expect(page.locator("#transcription-route")).toContainText("専用Codexとその提供元");
-  await expect(page.locator("#transcribe-file")).toHaveText("音声ファイルを専用Codexへ送る");
-  await expect(page.locator("#record-transcribe")).toHaveText("録音を専用Codexへ送る");
+  await expect(page.locator("#transcription-route")).toContainText("Codexとその提供元");
+  await expect(page.locator("#transcribe-file")).toHaveText("音声ファイルを専用エージェントへ送る");
+  await expect(page.locator("#record-transcribe")).toHaveText("録音を専用エージェントへ送る");
   assert.equal(await page.evaluate(()=>window.calls.length),beforeAgentAudio);
   await page.evaluate(()=>{window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcriptionProvider:"local"};window.toolsCallback(window.currentTools);});
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);

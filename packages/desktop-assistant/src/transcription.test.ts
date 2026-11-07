@@ -37,7 +37,7 @@ it("sends reviewed audio to the configured agent without calling Whisper or impo
  const service=new Transcription({pick:async()=>"/generated/reviewed.wav",read:async()=>audio,changed:()=>{},fetch,sendAudio});
  service.configure(true,"http://127.0.0.1:8080","agent");expect(sendAudio).not.toHaveBeenCalled();
  await service.file();expect(sendAudio).toHaveBeenCalledWith(audio,expect.any(AbortSignal),expect.any(Number));expect(fetch).not.toHaveBeenCalled();
- expect(service.snapshot()).toMatchObject({status:"done",text:""});expect(service.snapshot().message).toContain("専用Codex");
+ expect(service.snapshot()).toMatchObject({status:"done",text:""});expect(service.snapshot().message).toContain("専用エージェント");
 });
 it("never falls back to another provider when agent audio fails",async()=>{
  const fetch=vi.fn();const service=new Transcription({pick:async()=>"/generated.wav",read:async()=>({name:"a.wav",mime:"audio/wav",bytes:new Uint8Array([1])}),changed:()=>{},fetch,sendAudio:async()=>{throw Error("generated unsupported model");}});
@@ -403,4 +403,23 @@ it("accepts bounded dropped audio bytes without a path/picker and rejects unsupp
  await service.uploaded("dropped.wav",new Uint8Array([1,2,3]));expect(fetch).toHaveBeenCalledOnce();expect(pick).not.toHaveBeenCalled();expect(service.snapshot()).toMatchObject({status:"done",name:"dropped.wav",text:"こんにちは、船長"});
  for(const name of ["file.txt","../audio.wav","bad\n.wav"]){expect(()=>service.uploaded(name,new Uint8Array([1]))).toThrow();}
  expect(()=>service.uploaded("big.wav",new Uint8Array(25*1024*1024+1))).toThrow("25MiB");expect(fetch).toHaveBeenCalledOnce();
+});
+
+
+it("does not read or send selected audio after the conversation context changes",async()=>{
+ let context="actor-a",finish!:(path:string)=>void;
+ const read=vi.fn(),sendAudio=vi.fn(),fetch=vi.fn();
+ const service=new Transcription({context:()=>context,pick:()=>new Promise(resolve=>{finish=resolve;}),changed:()=>{},read,sendAudio,fetch});
+ service.configure(true,"http://127.0.0.1:8080","agent");const job=service.file();
+ context="actor-b";finish("/generated.wav");await job;
+ expect(read).not.toHaveBeenCalled();expect(sendAudio).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled();
+ expect(service.snapshot()).toMatchObject({status:"error",text:""});expect(service.snapshot().message).toContain("処理先");
+});
+it("rejects a late local transcript when its conversation context has changed",async()=>{
+ let context="actor-a",finish!:(response:Response)=>void;
+ const fetch=vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;}));
+ const service=new Transcription({context:()=>context,pick:async()=>"/generated.wav",read:async()=>({name:"generated.wav",mime:"audio/wav",bytes:new Uint8Array([1])}),changed:()=>{},fetch});
+ service.configure(true,"http://127.0.0.1:8080");const job=service.file();await vi.waitFor(()=>expect(fetch).toHaveBeenCalledOnce());
+ context="actor-b";finish(Response.json({text:"old conversation text"}));await job;
+ expect(service.snapshot()).toMatchObject({status:"error",text:""});expect(service.snapshot().message).toContain("処理先");
 });

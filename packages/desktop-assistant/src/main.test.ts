@@ -2003,3 +2003,38 @@ it("shows a simple notice when its shared headline stalls without announcing a l
   expect(fixture.windows.at(-1)).toBe(compact);expect(fixture.windows).toHaveLength(count+1);
  }finally{timeout.mockRestore();rpc.options.prefsChanged!({rev:20001,prefs:{}});rpc.request.mockImplementation(original!);await save(event,{enabled:false});}
 });
+
+
+it.each(["claude","codex","muse","agy","copilot"])("previews local transcription and stages an edited draft for %s without sending",async kind=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/settings.html")).at(-1)!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ try{
+  await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false,transcriptionEnabled:true,transcriptionProvider:"local"});
+  const rpc=fixture.controls.at(-1)!,actor={instanceId:randomUUID(),kind,label:kind,state:"idle",completionSeq:0,serverSeenSeq:0,verified:true,since:1};
+  const scope={workspaceId:randomUUID(),tabId:randomUUID(),paneId:randomUUID()};
+  rpc.request.mockImplementation(async(method:string,p:Record<string,unknown>)=>{
+   if(method==="assistant.get")return{deviceId:p.deviceId,...scope,kind,state:"ready",agent:actor,observedAgent:actor};
+   if(method==="agent.kinds")return{kinds:[{kind,label:kind,available:true}]};
+   if(method==="assistant.conversation")throw Error("no generated transcript");return{};
+  });rpc.options.status(true);await fixture.handlers.get("assistant:chat")!(event);
+  const bubble=fixture.windows.at(-1)!,chat={sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame};
+  await vi.waitFor(async()=>expect(await fixture.handlers.get("assistant:conversation")!(chat)).toMatchObject({connected:true,session:{kind,state:"ready"}}));
+  await fixture.handlers.get("assistant:tools-open")!(chat);const tools=fixture.windows.at(-1)!,local={sender:tools.webContents,senderFrame:tools.webContents.mainFrame};
+  await vi.waitFor(()=>expect(tools.isVisible()).toBe(true));
+  fixture.audioRead=async()=>({name:"generated.wav",mime:"audio/wav",bytes:new Uint8Array([1])});
+  const {dialog}=await import("electron");vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({canceled:false,filePaths:["/generated.wav"]});
+  await fixture.handlers.get("assistant:transcribe-file")!(local);
+  const snapshot=await fixture.handlers.get("assistant:tools")!(local) as any;
+  expect(snapshot.audioCapabilities).toMatchObject({kind,nativeAudio:kind==="codex",localTranscription:true});
+  expect(snapshot.audioTargetReady).toBe(true);expect(snapshot.transcription).toMatchObject({status:"done",text:"generated recording transcription",context:snapshot.transcriptionContext});
+  const request={text:"確認・編集した文章",revision:snapshot.transcription.revision,context:snapshot.transcriptionContext};
+  await expect(fixture.handlers.get("assistant:transcription-draft")!(local,{...request,context:"0".repeat(64)})).rejects.toThrow("変わり");
+  await expect(fixture.handlers.get("assistant:transcription-draft")!(local,{...request,revision:request.revision+1})).rejects.toThrow("変わり");
+  await expect(fixture.handlers.get("assistant:transcription-draft")!(chat,request)).rejects.toThrow("許可");
+  await fixture.handlers.get("assistant:transcription-draft")!(local,request);
+  expect(await fixture.handlers.get("assistant:draft-state")!(chat)).toMatchObject({text:request.text});
+  expect(rpc.request.mock.calls.some(([method])=>method==="assistant.prompt"||method==="assistant.audio_begin")).toBe(false);
+  rpc.options.status(false);
+  await expect(fixture.handlers.get("assistant:transcription-draft")!(local,request)).rejects.toThrow("変わり");
+  expect((await fixture.handlers.get("assistant:tools")!(local) as any).transcription.text).toBe("");
+ }finally{fixture.audioRead=null;await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
+});

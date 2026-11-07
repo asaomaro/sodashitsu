@@ -22,6 +22,7 @@ export interface AudioFile {
 }
 export interface TranscriptionState {
   revision: number;
+  context: string | null;
   status: "idle" | "selecting" | "transcribing" | "stopping" | "done" | "error";
   name: string;
   text: string;
@@ -93,12 +94,14 @@ interface Options {
   fetch?: typeof fetch;
   now?: () => number;
   sendAudio?:(audio:AudioFile,signal:AbortSignal,expires:number)=>Promise<void>;
+  context?:()=>string;
   prepareAgent?:()=>((audio:AudioFile,signal:AbortSignal,expires:number)=>Promise<void>);
 }
 /** One explicit local job. Never automatically records, uploads, launches a model or retries. */
 export class Transcription {
   private state: TranscriptionState = {
     revision: 0,
+    context: null,
     status: "idle",
     name: "",
     text: "",
@@ -133,6 +136,7 @@ export class Transcription {
       status: this.inFlight ? "stopping" : "idle",
       name: "",
       text: "",
+      context: null,
       message: this.inFlight
         ? "中止しています。ファイル選択中はダイアログも閉じてください。"
         : "文字起こしの送受信を中止しました。",
@@ -177,21 +181,23 @@ export class Transcription {
     this.inFlight = true;
     this.currentKey = key;
     const generation = ++this.generation;
-    const origin = this.origin;
+    const origin = this.origin, context=this.options.context?.()??null;
     const agent=this.provider==="agent";
     const controller = new AbortController();
     this.active = controller;
     const live = () => {
       if (generation !== this.generation || !this.enabled) return false;
+      if(context!==null && context!==this.options.context?.())throw Error("音声の処理先が変更されました。確認してやり直してください。");
       if (controller.signal.aborted) throw Error("文字起こしの制限時間を超えました。");
       return true;
     };
     this.state = {
       ...this.state,
       status: "selecting",
+      context,
       name: "",
       text: "",
-      message:agent?"確認した音声を専用Codexとその提供元へ送ります。音声ファイルを選んでください。":key ? "録音データを確認しています。送信先はこのPCのWhisperです。" : "音声ファイルを選んでください。送信先はこのPCのWhisperです。",
+      message:agent?"確認した音声を専用エージェントとその提供元へ送ります。音声ファイルを選んでください。":key ? "録音データを確認しています。送信先はこのPCのWhisperです。" : "音声ファイルを選んでください。送信先はこのPCのWhisperです。",
     };
     this.publish();
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -214,7 +220,7 @@ export class Transcription {
         ...this.state,
         status: "transcribing",
         name: audio.name,
-        message:agent?"確認した音声を専用Codexへ送っています。結果は会話に返ります。":"このPCのWhisperで文字起こししています。エージェントにはまだ送っていません。",
+        message:agent?"確認した音声を専用エージェントへ送っています。結果は会話に返ります。":"このPCのWhisperで文字起こししています。エージェントにはまだ送っていません。",
       };
       this.publish();
       if (!live()) return;
@@ -223,7 +229,7 @@ export class Transcription {
         if(now()>=expires)throw Error("音声の送信期限が切れました");
         await sendAudio(audio,controller.signal,expires);
         if(!live())return;
-        this.state={...this.state,status:"done",text:"",message:"専用Codexへ音声を送りました。結果は吹き出しの会話・専用端末で確認してください。送信済みの処理は専用端末で停止します。"};this.publish();return;
+        this.state={...this.state,status:"done",text:"",message:"専用エージェントへ音声を送りました。結果は吹き出しの会話・専用端末で確認してください。送信済みの処理は専用端末で停止します。"};this.publish();return;
       }
       const form = new FormData();
       form.set(

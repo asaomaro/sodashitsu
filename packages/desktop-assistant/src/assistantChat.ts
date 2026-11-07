@@ -6,6 +6,7 @@ import {
   ASSISTANT_AUDIO_CHUNK_BYTES,
   ASSISTANT_AUDIO_MAX_BYTES,
   AssistantAudioMime,
+  assistantAudioCapabilities,
   AssistantAgentKind,
   AssistantConversationKind,
   AssistantLaunchSettings,
@@ -326,8 +327,8 @@ export class AssistantChat {
 
   /** Reviewed main-owned audio only. The renderer cannot choose a server path or thread. */
   prepareAudio(): (audio:{bytes:Uint8Array;mime:string},signal:AbortSignal,expires:number)=>Promise<void> {
-    const generation=this.generation,paneId=this.state.session?.paneId,instanceId=this.state.session?.agent?.instanceId;
-    if(!this.state.connected || this.state.session?.kind!=="codex" || this.state.session.state!=="ready" || this.state.session.agent?.state!=="idle")throw Error("待機中のCodex専用セッションを選んでください");
+    const session=this.state.session,generation=this.generation,paneId=session?.paneId,instanceId=session?.agent?.instanceId;
+    if(!this.state.connected || !session || !assistantAudioCapabilities(session.kind).nativeAudio || session.state!=="ready" || session.agent?.state!=="idle")throw Error("音声入力対応の待機中専用セッションを選んでください");
     return(audio,signal,expires)=>{
       if(generation!==this.generation || !this.state.connected || this.state.session?.paneId!==paneId || this.state.session?.agent?.instanceId!==instanceId)throw Error("音声を選んでいる間に送信先が変更されました");
       return this.audio(audio.bytes,audio.mime,signal,expires);
@@ -337,7 +338,7 @@ export class AssistantChat {
     const type=AssistantAudioMime.parse(mime.split(";")[0]);
     if(!bytes.length || bytes.length>ASSISTANT_AUDIO_MAX_BYTES)throw Error("音声は25MiB以内にしてください");
     const session=this.state.session,actor=session?.agent;
-    if(!this.state.connected || session?.state!=="ready" || session.kind!=="codex" || !actor || actor.state!=="idle")throw Error("音声入力対応モデルを使う、待機中のCodex専用セッションを選んでください");
+    if(!this.state.connected || session?.state!=="ready" || !assistantAudioCapabilities(session.kind).nativeAudio || !actor || actor.state!=="idle")throw Error("音声入力対応モデルを使う、待機中の専用セッションを選んでください");
     const generation=this.generation,expires=Math.min(originalExpires,performance.now()+300000),audio=new Uint8Array(bytes);
     const live=()=>{
       signal.throwIfAborted();

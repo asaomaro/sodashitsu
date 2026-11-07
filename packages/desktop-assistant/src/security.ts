@@ -59,7 +59,7 @@ export function authorizeLocalSender(
   if (action === "hide") return sender.role === "bubble" || sender.role === "tools";
   if(action==="tools-open")return sender.role==="bubble" || sender.role==="settings";
   if(action==="draft-state"||action==="draft-consume")return sender.role==="bubble";
-  if(action==="draft-message")return sender.role==="tools";
+  if(action==="draft-message"||action==="transcription-draft")return sender.role==="tools";
   if(sender.role==="tools")return ["ocr-upload","transcribe-upload","tools","apps","app-open","app-call","screenshot-sources","screenshot-approve","screenshot-submit","screenshot-cancel","reminders","reminder-save","reminder-remove","reminder-ack","ocr-state","ocr-file","ocr-clipboard","ocr-crop","ocr-run","ocr-discard","note-save","note-delete","transcribe-file","transcribe-cancel","clipboard-read","clipboard-write","record-start","record-stop","record-discard","record-transcribe"].includes(action);
   if (
     [

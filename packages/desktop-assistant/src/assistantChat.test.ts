@@ -255,7 +255,7 @@ it("cancels physical audio when a pending begin is aborted and never commits it"
 });
 it("refuses audio for a different or working agent without trying another provider",async()=>{
  const f=await audioFixture();f.info({...f.ready,kind:"claude",agent:{...f.ready.agent!,kind:"claude"}});await f.chat.refresh();
- f.request.mockClear();expect(()=>f.chat.audio(new Uint8Array([1]),"audio/wav",new AbortController().signal)).toThrow("Codex");
+ f.request.mockClear();expect(()=>f.chat.audio(new Uint8Array([1]),"audio/wav",new AbortController().signal)).toThrow("専用セッション");
  expect(f.request).not.toHaveBeenCalled();
 });
 it("binds the destination before the audio picker/read and keeps the original remaining deadline",async()=>{
