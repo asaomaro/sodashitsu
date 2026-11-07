@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-subagent-catchup/packages/server
+
+
+ Test Files  3 passed (3)
+      Tests  47 passed (47)
+   Start at  16:33:58
+   Duration  1.42s (tests 81%, transform 15%, import 3%, worker 1%)
+

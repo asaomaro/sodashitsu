@@ -22,6 +22,8 @@ interface State {
   dev: number;
   ino: number;
   invalid: boolean;
+  generation: number;
+  pending?: boolean;
   codex?: CodexSubagentStream;
   reading?: Promise<Subagents | undefined>;
 }
@@ -39,6 +41,13 @@ export class NativeSubagentReader {
   forget(paneId: string): void { this.states.delete(paneId); this.agyStates.delete(paneId); }
   close(): void { this.closed = true; this.states.clear(); this.agyStates.clear(); }
 
+  /** Internal scheduling hint only; never a partial activity snapshot or public protocol value. */
+  progress(source: NativeSubagentSource): { offset: number; pending: boolean; generation: number } | undefined {
+    const state=this.states.get(source.paneId);
+    if(this.closed||source.kind==="agy"||!state||state.invalid||state.key!==JSON.stringify([source.instanceId,source.kind,source.sessionId]))return undefined;
+    return {offset:state.offset,pending:state.pending===true,generation:state.generation};
+  }
+
   async read(source: NativeSubagentSource): Promise<Subagents | undefined> {
     if (this.closed) return undefined;
     if (source.kind === "agy") return this.readAgy(source);
@@ -46,7 +55,7 @@ export class NativeSubagentReader {
     const key = JSON.stringify([source.instanceId, source.kind, source.sessionId]);
     let state = this.states.get(source.paneId);
     if (!state || state.key !== key) {
-      state = { key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false };
+      state = { key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false, generation: 0 };
       this.states.set(source.paneId, state);
     }
     const current = state;
@@ -83,11 +92,13 @@ export class NativeSubagentReader {
   }
 
   private async refresh(source: NativeSubagentSource, state: State): Promise<Subagents | undefined> {
+    state.pending=false;
     const opened = await this.open(source);
     if (!opened) return undefined;
     try {
       const { fd, st } = opened;
       if (state.dev !== st.dev || state.ino !== st.ino || st.size < state.offset) {
+        state.generation++;
         state.offset = 0; state.fold = new NativeSubagentRecords(source.kind as NativeSubagentKind, source.sessionId); state.invalid = false;
         delete state.codex;
       }
@@ -99,6 +110,7 @@ export class NativeSubagentReader {
         state.codex.consume(bytes, state.fold);
         state.offset += bytes.length;
         if (state.codex.invalid) state.invalid = true;
+        state.pending=!state.invalid&&bytes.length>0&&state.offset<st.size;
         // A current snapshot requires all available bytes and a complete final line.
         return state.invalid || state.offset < st.size || state.codex.partial ? undefined : state.fold.snapshot();
       }
@@ -120,6 +132,7 @@ export class NativeSubagentReader {
         start = next + 1;
       }
       state.offset += end + 1;
+      state.pending=!state.invalid&&scanning&&end>=0;
       // Do not show a historical prefix as current activity until the full available record was folded.
       if (state.invalid || scanning) return undefined;
       return state.fold.snapshot();

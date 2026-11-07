@@ -146,3 +146,24 @@ describe("owned native records reader", () => {
     expect(await reader.read(f.source)).toBeUndefined(); reader.close();
   });
 });
+
+it("reports only owned advancing unread bytes for catchup and never loops at partial EOF or invalid data",async()=>{
+ const f=await setup(),reader=new NativeSubagentReader({codexHome:f.home});
+ const filler=JSON.stringify({type:"response_item",payload:{text:"x".repeat(5*1024*1024)}});
+ await writeFile(f.file,JSON.stringify(f.rows[0])+"\n"+filler+"\n");
+ expect(reader.progress(f.source)).toBeUndefined();expect(await reader.read(f.source)).toBeUndefined();
+ expect(reader.progress(f.source)).toMatchObject({offset:4*1024*1024,pending:true});expect(reader.progress({...f.source,instanceId:"other"})).toBeUndefined();
+ expect((await reader.read(f.source))?.count).toBe(1);expect(reader.progress(f.source)?.pending).toBe(false);
+ await appendFile(f.file,'{"type":"response_item","payload":');expect(await reader.read(f.source)).toBeUndefined();expect(reader.progress(f.source)?.pending).toBe(false);
+ await appendFile(f.file,'not-json\n');expect(await reader.read(f.source)).toBeUndefined();expect(reader.progress(f.source)).toBeUndefined();
+ reader.forget(f.source.paneId);expect(reader.progress(f.source)).toBeUndefined();reader.close();
+});
+
+
+it("clears continuation on unavailable paths and changes private generation on replacement",async()=>{
+ const f=await setup(),reader=new NativeSubagentReader({codexHome:f.home});
+ const large=JSON.stringify(f.rows[0])+"\n"+JSON.stringify({type:"response_item",payload:{text:"x".repeat(5*1024*1024)}})+"\n";
+ await writeFile(f.file,large);await reader.read(f.source);const first=reader.progress(f.source)!;expect(first.pending).toBe(true);
+ await rename(f.file,f.file+".old");expect(await reader.read(f.source)).toBeUndefined();expect(reader.progress(f.source)?.pending).toBe(false);
+ await writeFile(f.file,large);expect(await reader.read(f.source)).toBeUndefined();const replaced=reader.progress(f.source)!;expect(replaced.generation).not.toBe(first.generation);expect(replaced.offset).toBe(first.offset);reader.close();
+});

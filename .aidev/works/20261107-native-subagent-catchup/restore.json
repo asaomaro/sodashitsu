@@ -1,0 +1,5 @@
+{
+  "byteExact": true,
+  "serviceSha256": "f032bfe52ac36da201ec4dabf7cf6cbaf811182a0fe2c58e39a80c4c43ea7910",
+  "negative": "only service restored to old fixed 2s scheduler; reader progress and tests unchanged"
+}

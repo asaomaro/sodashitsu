@@ -6,7 +6,8 @@ import type { Subagents } from "./SubagentTracker.js";
 interface Deps {
   session: { snapshot(): { panes: Pane[] }; getPane(id: string): Pane | undefined; setAgentSubagents(id: string, value: Subagents | undefined): boolean; hasVerifiedAgentSession(paneId: string, instanceId: string, sessionId: string): boolean };
   bus: Pick<EventBus, "subscribe">;
-  reader?: Pick<NativeSubagentReader, "read" | "forget" | "close">;
+  reader?: Pick<NativeSubagentReader, "read" | "forget" | "close"> & Partial<Pick<NativeSubagentReader,"progress">>;
+  now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (timer: unknown) => void;
 }
@@ -23,43 +24,73 @@ export class NativeSubagentService {
   private readonly sub;
   private readonly known = new Map<string, NativeSubagentSource>();
   private timer: unknown;
+  private readonly pending = new Map<string,NativeSubagentSource>();
+  private catchup = false;
+  private lastFull: number | undefined;
+  private burstStart: number | undefined;
+  private fastTicks = 0;
+  private cooldownUntil = 0;
   private running = false;
   private closed = false;
   constructor(private readonly deps: Deps) {
     this.reader = deps.reader ?? new NativeSubagentReader();
     this.sub = deps.bus.subscribe(event => {
-      if (event.event === "pane.closed") { this.reader.forget(event.data.paneId); this.known.delete(event.data.paneId); }
+      if (event.event === "pane.closed") { this.reader.forget(event.data.paneId); this.known.delete(event.data.paneId); this.pending.delete(event.data.paneId); }
     });
   }
   start(): void { if (!this.closed && this.timer === undefined) this.schedule(); }
+  private now():number {return (this.deps.now??(()=>performance.now()))();}
+  private budget(now:number):boolean {return this.burstStart!==undefined&&now-this.burstStart<10000&&this.fastTicks<32&&now>=this.cooldownUntil;}
   private schedule(): void {
+    const fast=this.catchup, delay=fast?250:this.lastFull===undefined?2000:Math.max(0,2000-(this.now()-this.lastFull));
     this.timer = (this.deps.setTimer ?? ((fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; }))(() => {
       this.timer = undefined;
-      void this.refresh().finally(() => { if (!this.closed) this.schedule(); });
-    }, 2000);
+      void this.refresh(fast).finally(() => { if (!this.closed) this.schedule(); });
+    }, delay);
   }
-  async refresh(): Promise<void> {
+  async refresh(fast=false): Promise<void> {
     if (this.closed || this.running) return;
     this.running = true;
     try {
       const sources = this.deps.session.snapshot().panes.map(sourceOf).filter((s): s is NativeSubagentSource => s !== undefined && this.verified(s));
       const ids = new Set(sources.map(s => s.paneId));
+      for(const [id,source] of this.pending)if(!sources.some(s=>s.paneId===id&&same(s,source)))this.pending.delete(id);
+      const now=this.now(),full=!fast||this.lastFull===undefined||now-this.lastFull>=2000;
+      if(!fast){this.burstStart=undefined;this.fastTicks=0;}
+      const eligible=!fast||this.budget(now);
+      // Catch-up reads only a rotating batch of four pending sources. Every two seconds
+      // all sources still receive their normal poll, even during a large initial scan.
+      const selected=full?sources:eligible?[...this.pending.values()].slice(0,4):[];
+      this.catchup=false;
+      if(fast&&eligible)this.fastTicks++;
+      if(fast&&!eligible)this.cooldownUntil=now+2000;
       for (const [id, owner] of this.known) if (!ids.has(id)) {
-        this.reader.forget(id); this.known.delete(id);
+        this.reader.forget(id); this.known.delete(id); this.pending.delete(id);
         const pane = this.deps.session.getPane(id);
         if (pane?.agent?.instanceId === owner.instanceId && pane.agent.kind === owner.kind && pane.agent.subagents !== undefined) this.deps.session.setAgentSubagents(id, undefined);
       }
       // Four bounded readers at once, independently of how many panes are open.
-      for (let at = 0; at < sources.length && !this.closed; at += 4) await Promise.all(sources.slice(at, at + 4).map(async source => {
+      for (let at = 0; at < selected.length && !this.closed; at += 4) await Promise.all(selected.slice(at, at + 4).map(async source => {
         const previous = this.known.get(source.paneId), before = this.deps.session.getPane(source.paneId);
         if (previous && !same(previous, source) && before?.agent?.instanceId === previous.instanceId && before.agent.kind === previous.kind && before.agent.subagents !== undefined) this.deps.session.setAgentSubagents(source.paneId, undefined);
         this.known.set(source.paneId, source);
+        this.pending.delete(source.paneId);
+        if(!same(source,sourceOf(before))||!this.verified(source))return;
+        const position=this.reader.progress?.(source);
         const value = await this.reader.read(source).catch(() => undefined);
         const pane = this.deps.session.getPane(source.paneId);
         if (this.closed || !same(source, sourceOf(pane))) return;
-        const accepted = this.verified(source) ? value : undefined;
+        const verified=this.verified(source);
+        const accepted = verified ? value : undefined;
+        const progress=this.reader.progress?.(source);
+        if(verified&&progress?.pending&&progress.offset>(position?.offset??0)&&(!position||progress.generation===position.generation))this.pending.set(source.paneId,source);
         if (!same(accepted, pane?.agent?.subagents)) this.deps.session.setAgentSubagents(source.paneId, accepted);
       }));
+      const ended=this.now();
+      if(full)this.lastFull=ended;
+      if(!fast&&ended>=this.cooldownUntil&&this.pending.size)this.burstStart=ended;
+      if(fast&&!this.budget(ended))this.cooldownUntil=Math.max(this.cooldownUntil,ended+2000);
+      this.catchup=!this.closed&&this.pending.size>0&&this.budget(ended);
     } finally { this.running = false; }
   }
   private verified(source: NativeSubagentSource): boolean {
@@ -69,6 +100,6 @@ export class NativeSubagentService {
     this.closed = true;
     this.sub.dispose();
     if (this.timer !== undefined) (this.deps.clearTimer ?? (t => clearTimeout(t as ReturnType<typeof setTimeout>)))(this.timer);
-    this.timer = undefined; this.known.clear(); this.reader.close();
+    this.timer = undefined; this.known.clear(); this.pending.clear(); this.reader.close();
   }
 }

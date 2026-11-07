@@ -1,0 +1,92 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-subagent-catchup/packages/server
+
+ ❯ src/agent/NativeSubagentCatchup.test.ts (11 tests | 8 failed) 517ms
+   × catches up a 464MiB record within bounded bursts without publishing historical prefixes 10ms
+   × rotates only four catchup readers while normal sources still poll every two seconds 3ms
+   × a queued catchup never reads or publishes across unverified 1ms
+   × a queued catchup never reads or publishes across instance 1ms
+   × a queued catchup never reads or publishes across session 0ms
+   × a queued catchup never reads or publishes across closed 1ms
+   × stops an existing fast burst after readerror without offset-only authority 1ms
+   × stops an existing fast burst after rotate without offset-only authority 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/NativeSubagentCatchup.test.ts > catches up a 464MiB record within bounded bursts without publishing historical prefixes
+AssertionError: expected 232000 to be less than or equal to 45000
+ ❯ src/agent/NativeSubagentCatchup.test.ts:19:124
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  src/agent/NativeSubagentCatchup.test.ts > rotates only four catchup readers while normal sources still poll every two seconds
+AssertionError: expected 9 to be 4 // Object.is equality
+
+- Expected
++ Received
+
+- 4
++ 9
+
+ ❯ src/agent/NativeSubagentCatchup.test.ts:23:46
+     21| it("rotates only four catchup readers while normal sources still poll …
+     22|  const h=harness({a:100,b:100,c:100,d:100,e:100,f:100,g:100,h:100,quie…
+     23|  await h.tick();expect(h.reads.length-first).toBe(4);expect(h.reads.sl…
+       |                                              ^
+     24|  await h.tick();expect(h.reads.slice(second).map(x=>x.id)).toEqual(["e…
+     25|  for(let i=0;i<7;i++)await h.tick();expect(h.reads.filter(x=>x.id==="q…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  src/agent/NativeSubagentCatchup.test.ts > a queued catchup never reads or publishes across unverified
+ FAIL  src/agent/NativeSubagentCatchup.test.ts > a queued catchup never reads or publishes across instance
+ FAIL  src/agent/NativeSubagentCatchup.test.ts > a queued catchup never reads or publishes across session
+ FAIL  src/agent/NativeSubagentCatchup.test.ts > a queued catchup never reads or publishes across closed
+AssertionError: expected 2000 to be 250 // Object.is equality
+
+- Expected
++ Received
+
+- 250
++ 2000
+
+ ❯ src/agent/NativeSubagentCatchup.test.ts:32:88
+     30| });
+     31| it.each(["unverified","instance","session","closed"])("a queued catchu…
+     32|  const h=harness({large:100});h.service.start();await h.tick();expect(…
+       |                                                                                        ^
+     33|  if(change==="unverified")h.setVerified(false);
+     34|  if(change==="instance")h.panes[0]!.agent={...h.panes[0]!.agent!,insta…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  src/agent/NativeSubagentCatchup.test.ts > stops an existing fast burst after readerror without offset-only authority
+ FAIL  src/agent/NativeSubagentCatchup.test.ts > stops an existing fast burst after rotate without offset-only authority
+AssertionError: expected 2000 to be 250 // Object.is equality
+
+- Expected
++ Received
+
+- 250
++ 2000
+
+ ❯ src/agent/NativeSubagentCatchup.test.ts:58:88
+     56|
+     57| it.each(["readerror","rotate"])("stops an existing fast burst after %s…
+     58|  const h=harness({large:100});h.service.start();await h.tick();expect(…
+       |                                                                                        ^
+     59|  if(mode==="readerror")h.reader.read.mockRejectedValueOnce(Error("gene…
+     60|  else{const original=h.reader.progress;let calls=0;h.reader.progress=s…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 failed | 3 passed (11)
+   Start at  16:33:57
+   Duration  748ms (tests 79%, transform 18%, import 3%)
+
+undefined
+/workspaces/sodashitsu-native-subagent-catchup/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/NativeSubagentCatchup.test.ts

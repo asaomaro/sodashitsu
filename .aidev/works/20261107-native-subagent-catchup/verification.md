@@ -1,0 +1,11 @@
+# Bounded native subagent initial catch-up
+
+Fixed2s delay after every4MiB makes a464MiB initial record require116polls (~232s timer delay). Reader still requires full available EOF/complete final line and verified ownership; no prefix/falsezero/working inference is introduced.
+
+Internal reader progress is only offset/pending/file-generation, never public protocol. Missing/unreadable/invalid/EOFpartial stops fast scheduling. Generation changes on inode/dev replacement or shrink; old generation cannot authorize new-file continuation even if its offset increases. Service checks exact instance/kind/session and verified parent immediately before/after read. Existing maximum4inflight and4MiB/read/512MiBfile limits remain.
+
+Only progressing pending sources receive250ms catch-up in rotating batches≤4. All sources retain normal2s polls while catching up. Each burst is≤32fastticks or10s (checked around bounded reads), followed by≥2s cooldown. Closed/changed/unverified sources do not use queued continuation, no-progress/readerror stops acceleration. No unbounded read loop or CLI/model launch.
+
+47related reader/service/scheduler tests pass; server tsc-b build and server typecheck are recorded separately. Fixtures cover late loss/close/scope change, no duplicate source inflight,4source rotation, normal poll fairness, burst/deadline/cooldown, rename/unavailable/replaced generation, invalid and partial EOF with no fast loop. Old fixed2s service restored alone makes new scheduler tests fail (negative-service.log), then byte-exact restored SHA256 and final47pass (restore.json/unit.log). No whole-repository CI repeated.
+
+Measurements are separate: real own generated32MiB record uses8bounded4MiB reads; measurement.json/log record per-read wall time and CPU (about330ms total read/346ms CPU in first measurement, not a live user record). A separate fake-clock scheduler464MiB/116read simulation publishes only atEOF after36000ms vs old232000ms. This is a scheduler bound/estimate, not an actual36s production readback claim.250ms was chosen over50ms to leave ample event-loop/IO headroom. Generated file is removed afterward. No actual user record, pane, settings, sr-pc, OS clipboard or hardware is touched.
