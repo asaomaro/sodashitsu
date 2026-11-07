@@ -1,3 +1,4 @@
+import {museChildStreamPresent} from "./MuseChildRecord.js";
 import {lstat,realpath} from "node:fs/promises";
 import {dirname,join} from "node:path";
 import {locateExtra,type ExtraRoots} from "../conversation/ExtraAgentRecords.js";
@@ -5,7 +6,7 @@ import {openVerified,readRange} from "./safeFile.js";
 import {museSession} from "./museSession.js";
 import {safeModel} from "../usage/claudeScan.js";
 import {ASSISTANT_EFFORTS,type SubagentInfo} from "@sodashitsu/protocol";
-type Observation=Pick<SubagentInfo,"model"|"modelBasis"|"reasoningEffort"|"reasoningEffortBasis">;
+type Observation=Pick<SubagentInfo,"model"|"modelBasis"|"reasoningEffort"|"reasoningEffortBasis"|"hasTranscript">;
 /** Per-parent/subagent/session cache; model source is durable run config, effort source is a default-state view. */
 export class MuseChildObservations {
  private active=false;
@@ -33,7 +34,7 @@ export class MuseChildObservations {
   try{
    if(opened.st.dev!==leaf.dev||opened.st.ino!==leaf.ino||(process.geteuid&&opened.st.uid!==process.geteuid()))return {};
    const rev=await opened.fd.stat({bigint:true}),start=Math.max(0,opened.st.size-256*1024),bytes=await readRange(opened.fd,start,opened.st.size-start);
-   const model=museChildModel(bytes,child,item.startedAt,start>0);
+   const model={...museChildModel(bytes,child,item.startedAt,start>0),...(await museChildStreamPresent(opened,child)?{hasTranscript:true}:{})};
    const unchanged=async()=>{
     const pathAfter=await lstat(path,{bigint:true}).catch(()=>undefined);
     return !!pathAfter&&!pathAfter.isSymbolicLink()&&await realpath(path).catch(()=>null)===path&&await locateExtra("muse",parent,this.roots)===parentPath&&(["dev","ino","size","mtimeNs","ctimeNs"] as const).every(k=>pathAfter[k]===rev[k]);

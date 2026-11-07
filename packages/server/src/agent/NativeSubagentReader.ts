@@ -46,6 +46,18 @@ export class NativeSubagentReader {
   forget(paneId: string): void { this.museObservations.forget(); this.states.get(paneId)?.abort.abort(); this.states.delete(paneId); this.agyStates.delete(paneId); }
   close(): void { this.closed = true; for (const state of this.states.values()) state.abort.abort(); this.states.clear(); this.agyStates.clear(); this.museObservations.forget(); }
 
+  /** Internal provider-owned relation, never a client path or a guessed child UUID. */
+  museChildSession(source:NativeSubagentSource,child:string):string|undefined {
+    const state=this.states.get(source.paneId);
+    if(this.closed||source.kind!=="muse"||!state||state.invalid||state.pending||state.reading||state.key!==JSON.stringify([source.instanceId,source.kind,source.sessionId])||!state.fold.snapshot()?.items.some(item=>item.id===child))return undefined;
+    return state.fold.museChildSession(child);
+  }
+
+  museChildInput(source:NativeSubagentSource,child:string):{text:string;truncated:boolean}|undefined {
+    if(!this.museChildSession(source,child))return undefined;
+    return this.states.get(source.paneId)?.fold.museChildInput(child);
+  }
+
   /** Internal scheduling hint only; never a partial activity snapshot or public protocol value. */
   progress(source: NativeSubagentSource): { offset: number; pending: boolean; generation: number } | undefined {
     const state=this.states.get(source.paneId);

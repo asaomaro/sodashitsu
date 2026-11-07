@@ -681,7 +681,7 @@ export async function composeServer(
   const nativeSubagents = new NativeSubagentService({ session, bus, observeClaude: source => claudeChildObservations.read(source) });
   // サブエージェントの記録を、読むだけで追う（20261008-graph-first の PR6c）。場所は、上の数え上げが持つ報告から、サーバが組み立てる。
   const subagentTranscripts = new SubagentTranscriptReader({
-    native: new NativeSubagentTranscriptReader({session}),
+    native: new NativeSubagentTranscriptReader({session,museChildSession:(pane,child)=>nativeSubagents.museChildSession(pane,child),museChildInput:(pane,child)=>nativeSubagents.museChildInput(pane,child)}),
     tracker: subagents,
     agentInstanceOf: (paneId) => session.getPane(paneId)?.agent?.instanceId ?? null,
     logger,

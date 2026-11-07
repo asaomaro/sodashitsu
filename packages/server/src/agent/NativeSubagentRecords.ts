@@ -12,6 +12,8 @@ const object = (v: unknown): Record<string, any> | undefined =>
 
 /** Folds only provider-owned lifecycle facts, never tool prompt text or inferred process counts. */
 export class NativeSubagentRecords {
+  private readonly museInputs = new Map<string,{text:string;truncated:boolean}>();
+  museChildInput(id:string): {text:string;truncated:boolean}|undefined { const input=this.museInputs.get(id);return input?{...input}:undefined; }
   private readonly museBindings = new Map<string, string>();
   museChildSession(id: string): string | undefined { return this.museBindings.get(id); }
   private readonly items = new Map<string, SubagentInfo>();
@@ -59,7 +61,7 @@ export class NativeSubagentRecords {
     if (typeof id !== "string" || !ID.test(id)) return;
     this.seen = true;
     if (status === "terminal") {
-      this.items.delete(id); this.metadata.delete(id); this.uncertain.delete(id); this.museBindings.delete(id); return;
+      this.items.delete(id); this.metadata.delete(id); this.uncertain.delete(id); this.museBindings.delete(id); this.museInputs.delete(id); return;
     }
     if (!this.metadata.has(id) && this.metadata.size >= MAX) { this.limited = true; return; }
     this.metadata.set(id, { ...this.metadata.get(id), ...meta });
@@ -129,7 +131,14 @@ export class NativeSubagentRecords {
     }
     if (["subagent.control.spawn_accepted", "subagent.control.resume_context_recorded"].includes(type)) {
       if (!this.metadata.has(id) && this.metadata.size >= MAX) { this.limited = true; return; }
-      if(type==="subagent.control.spawn_accepted")this.museBindings.delete(id);
+      {
+        if(type==="subagent.control.spawn_accepted")this.museBindings.delete(id);
+        this.museInputs.delete(id);
+        if(typeof record.objective==="string"){
+          let text=record.objective.slice(0,4000);if(/[\uD800-\uDBFF]$/.test(text))text=text.slice(0,-1);
+          this.museInputs.set(id,{text,truncated:record.objective.length>text.length});
+        }
+      }
       const role = label(record.role, 64), description = label(record.objective, 200);
       this.metadata.set(id, { ...this.metadata.get(id), ...(role ? { type: role } : {}), ...(description ? { description } : {}), ...(Number.isInteger(record.depth) && record.depth >= 1 && record.depth <= 16 ? { depth: record.depth } : {}) });
       return;

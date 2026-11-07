@@ -9,7 +9,7 @@ interface Deps {
   observeClaude?: (source:ClaudeChildSource)=>Promise<Subagents|undefined>;
   session: { snapshot(): { panes: Pane[] }; getPane(id: string): Pane | undefined; setAgentSubagents(id: string, value: Subagents | undefined): boolean; hasVerifiedAgentSession(paneId: string, instanceId: string, sessionId: string): boolean };
   bus: Pick<EventBus, "subscribe">;
-  reader?: Pick<NativeSubagentReader, "read" | "forget" | "close"> & Partial<Pick<NativeSubagentReader,"progress">>;
+  reader?: Pick<NativeSubagentReader, "read" | "forget" | "close"> & Partial<Pick<NativeSubagentReader,"progress"|"museChildSession"|"museChildInput">>;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (timer: unknown) => void;
@@ -101,6 +101,16 @@ export class NativeSubagentService {
   }
   private verified(source: Source): boolean {
     return this.deps.session.hasVerifiedAgentSession(source.paneId, source.instanceId, source.sessionId);
+  }
+  museChildSession(paneId:string,child:string):string|undefined {
+    const source=sourceOf(this.deps.session.getPane(paneId));
+    if(!source||source.kind!=="muse"||!same(source,this.known.get(paneId))||!this.verified(source))return undefined;
+    return this.reader.museChildSession?.(source,child);
+  }
+  museChildInput(paneId:string,child:string):{text:string;truncated:boolean}|undefined {
+    const source=sourceOf(this.deps.session.getPane(paneId));
+    if(!source||source.kind!=="muse"||!same(source,this.known.get(paneId))||!this.verified(source))return undefined;
+    return this.reader.museChildInput?.(source,child);
   }
   close(): void {
     this.closed = true;

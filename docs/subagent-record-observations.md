@@ -6,8 +6,8 @@
 | --- | --- | --- |
 | Claude Code | 既存のフックが報告した親transcriptとagent_idから子jsonlを読む | 子jsonlの最後の完全なassistant行のmessage.modelをSubagentInfo.modelへ反映し、次の応答でモデル変更を追う。親のfresh instance/sessionとhookのexact pathを前後照合。effort tierの正式記録は未確認で省略し、開始時の定義から補完しない |
 | Codex | 親の正式SubAgentActivityのUUIDと、子rollout先頭session_metaのidおよびsource.subagent.thread_spawn.parent_thread_idを二重照合して閲覧 | 子の最後の完全なturn_contextのmodelとeffortを同一rowから採用。開始より古いtimestampは不採用、最新rowの欠落fieldは以前の値で埋めない |
-| Muse Code | 正式subagent.control.child_session_boundのsubagent_idとchild_session_idは別UUID。schema_version=1 / storage_layout=nested_session_v1を検証し、親sessiondir/subagent/child_session_id/session.jsonlを読む（履歴UIへの追加は次段） | 子run.model.configured.model_idを実行設定として反映し変更を追う。exact childのread-only view/pageのsession/reasoningEffortChangedがある場合だけeffortをbasis:sessionで反映。standing defaultでありturn一時overrideではない。子recordの初期effort tierは未取得で、最初から必ず表示できる保証はない |
-| Antigravity CLI | 既存取得は正式invoke_subagent結果と親descriptorの子UUID/spawnStepIndexを照合。子brain transcriptが候補 | 採取済み1.4.12の正式子transcript fixtureはstep_index/source/type/status/created_at/content/tool_callsで、model/effort tierの観測fieldは確認できない。descriptor ALIVEやroleから設定を推測しない。現在は未取得であり、他の正式APIでも取得不能との断定ではない |
+| Muse Code | 正式subagent.control.child_session_boundのsubagent_idとchild_session_idは別UUID。schema_version=1 / storage_layout=nested_session_v1を検証し、親sessiondir/subagent/child_session_id/session.jsonlを読む。履歴は親の公開objectiveと子の明示的な公開結果/assistant messageのみ | 子run.model.configured.model_idを実行設定として反映し変更を追う。exact childのread-only view/pageのsession/reasoningEffortChangedがある場合だけeffortをbasis:sessionで反映。standing defaultでありturn一時overrideではない。子recordの初期effort tierは未取得で、最初から必ず表示できる保証はない |
+| Antigravity CLI | 既存取得は正式invoke_subagent結果と親descriptorの子UUID/spawnStepIndexを照合。子brain transcriptを読むが、exact親宛send_messageの明示的な送信要求だけを発言として表示（一般planner content/内部system本文は対象外） | 採取済み1.4.12の正式子transcript fixtureはstep_index/source/type/status/created_at/content/tool_callsで、model/effort tierの観測fieldは確認できない。descriptor ALIVEやroleから設定を推測しない。現在は未取得であり、他の正式APIでも取得不能との断定ではない |
 | Copilot CLI | 正式子lifecycleのtoolCallIdはsession UUIDではない | 導入SDKのcustom_agent.started.dataはtoolCallId/agentName/agentDisplayName/agentDescriptionでmodel/effortなし。親session.usage_recordの合計モデルをこの子へ帰属させない。現在は正式bindingの取得が未実装であり、API不存在とは断定しない |
 | Grok | ネイティブ子起動のソース契約は確認したが、導入CLIの実子生成記録は未証明 | 公開grok-build 2bdd1d6のModelChangedはmodel_idと解決済みreasoning_effortを持つのでソース上は取得候補。ただし導入1.0.77とのcommit一致・実子更新記録の形式は未実証で、正式子binding/更新readerが未実装。親usageや起動profileを子へ転用しない |
 | Cursor | SDK/CLIのnative子metadataは候補だが、現在の取得経路へ未配線 | 導入2026.11.05の正式subagentInfoはparentAgentId/rootParentAgentId/toolCallId/typeNameを保存するが、このmetadata自体にmodel/effortはない。SQLite codecと子の実設定の結合readerは未実装。親afterAgentResponse hookを子の証拠にはしない |
@@ -22,3 +22,14 @@ Claudeのモデル観測も末尾256KiB・最大64子・4並列・2秒、子開�
 Museは親の正式bound記録をfoldし終えた場合だけ子を読み、子stream.idを照合します。モデルは末尾256KiBの最後のrun.model.configured、effortは保存された変更通知がview/pageの窓にある場合だけです。公式schemaにあるSnapshotStateはsession/readのhistory.snapshotの型です。今回のview/page経路は実在するsession/reasoningEffortChangedだけを使い、架空のsession/snapshot通知は扱いません。問い合わせは既存のread-only MSP helper（echo/empty、loginなし）を使い、1 CLIだけ同時実行・1秒deadline・64件の30秒cacheです。補足viewが遅延/失敗しても、先に検証したdurable modelの候補を保持し、最後に子fileのidentityを再確認します。modelとsession default effortはbasisを内部で区別し、同一turnのeffortを取得済みとは言いません。親のEOF・binding・instanceが変わったら結果を捨てます。
 
 上表の未取得には「記録でtier fieldを確認できない」と「正式binding/readerをまだ実装していない」が含まれます。製品が全種類の現在値を取得できるという意味ではありません。Grok/Cursorの会話本体の対応と、子の設定を安全に帰属させる対応も別です。
+
+
+## AGY / Muse の子履歴
+
+既存のagent.subagent_transcriptを使用します。新たな入力操作は追加しません。親のfresh instance/sessionと正式な子の所属・保存先を照合し、同fdから抜粋して、読了後にもfile identityと親scopeを確かめます。最大1MiBの窓・200件・1件4000文字・2秒、閲覧済みの同親instance/会話に限る64件・30分grantを維持します。
+
+AGYの一般PLANNER_RESPONSE.contentは公開発言と確認できないため表示しません。採取済みの正式native記録で実証したsend_messageのargs.Message/RecipientのJSON文字列形式のみを使い、Recipientがexact親UUIDである場合だけ「親への送信要求」として表示します。送信完了の保証ではありません。SYSTEM_MESSAGE、内部plan、一般GENERIC、toolの結果本文、他の宛先は出しません。初期の指示はprivateなsystem envelopeから取り出さず省略します。正式KILLED descriptorも過去の所属証拠として履歴にだけ使い、件数/現在一覧へ復活させません。descriptorの欠落・未知状態は拒否します。
+
+Museのrun.started.promptは、実自作記録で公開objective48字に対して3882字の内部組立promptを含んでいたため表示しません。初期入力は親の正式spawn_accepted/resume_context_recordedのobjectiveのみを4000字以内で内部bindingへ保持し、閲覧時に添えます。子からはexact child streamのassistant_message_committed.textとworkflow_child_result_submitted.payload.text（child_session_stream一致）だけを表示します。reasoning、model_input_trace、内部prompt、tool outputは出しません。公開objectiveは保存やdiagnosticログへ追加せず、内部の256件/4000字と閲覧grant64件の上限内です。
+
+Grok/Cursor/Copilotの子履歴はこの段では未実装です。正式bindingの取得不足であり、各CLIに読み取りAPIがないという結論ではありません。

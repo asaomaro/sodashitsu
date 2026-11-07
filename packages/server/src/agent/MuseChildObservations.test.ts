@@ -43,7 +43,7 @@ it("publishes bound Muse child settings through the actual native reader without
  Object.assign(rows[3].payload.record,{child_session_id:child,schema_version:1,storage_layout:"nested_session_v1"});
  const end=rows.findIndex(r=>r.payload_type==="subagent.control.result_ready");await writeFile(join(dir,"session.jsonl"),rows.slice(0,end).map(r=>JSON.stringify(r)).join("\n")+"\n");
  const reader=new NativeSubagentReader({dataHome},undefined,{forget(){},async readMany(id,items,binding){expect(id).toBe(parent);expect(binding(subagent)).toBe(child);return new Map([[subagent,{model:"observed-child",modelBasis:"turn",reasoningEffort:"high",reasoningEffortBasis:"session"}]]);}});
- try{expect(await reader.read({paneId:"p",instanceId:"instance",kind:"muse",sessionId:parent})).toMatchObject({count:1,items:[{id:subagent,model:"observed-child",reasoningEffort:"high",reasoningEffortBasis:"session"}]});}finally{reader.close();}
+ try{const source={paneId:"p",instanceId:"instance",kind:"muse" as const,sessionId:parent};expect(await reader.read(source)).toMatchObject({count:1,items:[{id:subagent,model:"observed-child",reasoningEffort:"high",reasoningEffortBasis:"session"}]});expect(reader.museChildSession(source,subagent)).toBe(child);expect(reader.museChildInput(source,subagent)?.text).toBe(rows[0].payload.record.objective);expect(reader.museChildSession({...source,instanceId:"replacement"},subagent)).toBeUndefined();}finally{reader.close();}
 });
 
 it("preserves durable model when optional view ignores its deadline longer than the total budget",async()=>{
@@ -51,5 +51,5 @@ it("preserves durable model when optional view ignores its deadline longer than 
  const dataHome=join(home,"data"),dir=join(dataHome,"muse","sessions","2026","11","07",parent),nested=join(dir,"subagent",child);await mkdir(nested,{recursive:true});await writeFile(join(dir,"session.jsonl"),"{}\n");await writeFile(join(nested,"session.jsonl"),configured("durable-model"));
  const query=vi.fn(()=>new Promise<any>(()=>{}));const observer=new MuseChildObservations({dataHome},query as any);
  const result=await observer.readMany(parent,[{id:subagent,startedAt:0}],()=>child,()=>true);
- expect(query).toHaveBeenCalledOnce();expect(result.get(subagent)).toEqual({model:"durable-model",modelBasis:"turn"});
+ expect(query).toHaveBeenCalledOnce();expect(result.get(subagent)).toEqual({model:"durable-model",modelBasis:"turn",hasTranscript:true});
 });

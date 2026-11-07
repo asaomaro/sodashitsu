@@ -1,6 +1,6 @@
 import { lstat, opendir, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { locateExtra, type ExtraRoots } from "../conversation/ExtraAgentRecords.js";
+import { locateExtra, openExtra, type ExtraRoots } from "../conversation/ExtraAgentRecords.js";
 import { openVerified, readRange } from "./safeFile.js";
 import type { SubagentInfo } from "@sodashitsu/protocol";
 import type { Subagents } from "./SubagentTracker.js";
@@ -39,6 +39,14 @@ async function spawnProofs(transcript: string): Promise<Map<number, { id: string
 }
 /** Provider-owned direct-child snapshots. ALIVE means membership, never proof of a working task. */
 export async function readAntigravitySubagents(sessionId: string, roots: ExtraRoots): Promise<Subagents | undefined> {
+  return scanAntigravitySubagents(sessionId, roots, false);
+}
+/** Read-only history proof also accepts an explicitly KILLED descriptor, never a missing one. */
+export async function verifyAntigravityChild(sessionId: string, child: string, roots: ExtraRoots): Promise<boolean> {
+  const proof = await scanAntigravitySubagents(sessionId, roots, true);
+  return proof?.items.some(item => item.id === child) === true;
+}
+async function scanAntigravitySubagents(sessionId: string, roots: ExtraRoots, includeRetired: boolean): Promise<Subagents | undefined> {
   const transcript = await locateExtra("agy", sessionId, roots);
   if (!transcript) return undefined;
   const parentBefore = await lstat(transcript).catch(() => null);
@@ -74,10 +82,13 @@ export async function readAntigravitySubagents(sessionId: string, roots: ExtraRo
       const proof = proofs.get(row.spawnStepIndex);
       if (!proof || proof.id !== id || seenSpawns.has(row.spawnStepIndex)) return undefined;
       seenSpawns.add(row.spawnStepIndex);
-      if (row.state === "SUBAGENT_STATE_KILLED") continue;
-      if (row.state !== "SUBAGENT_STATE_ALIVE") return undefined;
+      if (row.state === "SUBAGENT_STATE_KILLED" && !includeRetired) continue;
+      if (!["SUBAGENT_STATE_ALIVE", "SUBAGENT_STATE_KILLED"].includes(row.state)) return undefined;
       const description = label(row.subagentDescriptor?.role), type = label(row.subagentDescriptor?.typeName);
-      items.push({ id, state: "unknown", startedAt: proof.at, depth: 1, ...(description ? { description } : {}), ...(type ? { type } : {}) });
+      // Availability hint only; actual viewing revalidates the complete formal relation.
+      const childFile = includeRetired ? null : await openExtra("agy", id, roots).catch(() => null);
+      const hasTranscript = !!childFile; await childFile?.fd.close();
+      items.push({ id, state: "unknown", ...(hasTranscript ? {hasTranscript:true} : {}), startedAt: proof.at, depth: 1, ...(description ? { description } : {}), ...(type ? { type } : {}) });
     } catch { return undefined; }
     finally { await opened.fd.close(); }
   }
@@ -91,5 +102,5 @@ export async function readAntigravitySubagents(sessionId: string, roots: ExtraRo
   const parentAfter = await lstat(transcript).catch(() => null);
   if (!parentAfter || parentAfter.dev !== parentBefore.dev || parentAfter.ino !== parentBefore.ino || parentAfter.size !== parentBefore.size || parentAfter.mtimeMs !== parentBefore.mtimeMs) return undefined;
   items.sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id));
-  return { count: items.length, countBasis: "alive", items: items.slice(0, 64) };
+  return { count: items.length, countBasis: "alive", items: items.slice(0, includeRetired ? 256 : 64) };
 }
