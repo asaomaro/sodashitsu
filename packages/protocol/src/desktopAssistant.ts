@@ -240,6 +240,7 @@ export const AssistantWorkspaceBinding = z
   );
 export type AssistantWorkspaceBinding = z.infer<typeof AssistantWorkspaceBinding>;
 export const AssistantSessionGetParams = z.object({ deviceId: AssistantDeviceId }).strict();
+export const AssistantSessionStopParams = AssistantSessionGetParams.extend({ instanceId: z.uuid() }).strict();
 export const AssistantSessionEnsureParams = AssistantSessionGetParams.extend({
   kind: AssistantAgentKind,
   retry: z.boolean().default(false),
@@ -270,7 +271,7 @@ export interface AssistantSessionInfo {
   kind: string;
   /** Requested at launch; not a measurement of later changes in the agent CLI. */
   launchSettings?: AssistantLaunchSettings | undefined;
-  state: "shell" | "starting" | "ready" | "stopped" | "conflict";
+  state: "shell" | "starting" | "ready" | "stopping" | "stopped" | "conflict";
   agent: AgentInfo | null;
   /** Visible candidate for an explicit user choice; it never grants permission to send input. */
   observedAgent: AgentInfo | null;

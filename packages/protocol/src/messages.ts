@@ -8,7 +8,7 @@ import {AssistantSettingsGetParams,AssistantSettingsSetParams,type AssistantSett
 import { UsageHistoryParams, type UsageHistory, UsageReportParams, type UsageReport } from "./usageAnalytics.js";
 import { ExecMethods, type ExecResults } from "./exec.js";
 import { AssistantAudioBeginParams,AssistantAudioChunkParams,AssistantAudioIdParams,type AssistantAudioCapabilities } from "./desktopAssistant.js";
-import { AssistantImageCancelParams, AssistantAppParams, AssistantAppOpenParams, AssistantAppCallParams, type AssistantAppsInfo, AssistantReminderSaveParams, AssistantReminderIdParams, type AssistantRemindersInfo, AssistantSourceParams, AssistantReplyParams, AssistantReplyKeysParams, type AssistantSourceInfo, AssistantSessionGetParams, AssistantSessionEnsureParams, AssistantSessionPromptParams, AssistantSessionKeysParams, AssistantSessionAdoptParams, type AssistantSessionInfo } from "./desktopAssistant.js";
+import { AssistantSessionStopParams, AssistantImageCancelParams, AssistantAppParams, AssistantAppOpenParams, AssistantAppCallParams, type AssistantAppsInfo, AssistantReminderSaveParams, AssistantReminderIdParams, type AssistantRemindersInfo, AssistantSourceParams, AssistantReplyParams, AssistantReplyKeysParams, type AssistantSourceInfo, AssistantSessionGetParams, AssistantSessionEnsureParams, AssistantSessionPromptParams, AssistantSessionKeysParams, AssistantSessionAdoptParams, type AssistantSessionInfo } from "./desktopAssistant.js";
 import { WorkMethods, WorkTransferMethods, type WorkResults } from "./work.js";
 import { WorkAgentMethods, type WorkAgentResults } from "./workAgent.js";
 import { ViewerTabMethods, type ViewerTabResults, type ViewerTab } from "./viewerTabs.js";
@@ -1615,6 +1615,7 @@ export const METHOD_SCHEMAS = {
   "assistant.reply": AssistantReplyParams,
   "assistant.reply_key": AssistantReplyKeysParams,
   "assistant.conversation": AssistantConversationParams,
+  "assistant.stop": AssistantSessionStopParams,
   "assistant.get": AssistantSessionGetParams,
   "assistant.ensure": AssistantSessionEnsureParams,
   "assistant.adopt": AssistantSessionAdoptParams,
@@ -1817,6 +1818,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "assistant.reply": {sent:true};
   "assistant.reply_key": {sent:true};
   "assistant.conversation": AssistantConversationPage;
+  "assistant.stop": { stopped: true };
   "assistant.get": AssistantSessionInfo | null;
   "assistant.ensure": AssistantSessionInfo;
   "assistant.adopt": AssistantSessionInfo;

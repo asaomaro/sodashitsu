@@ -349,3 +349,10 @@ export interface WorktreeEntry {
   /** detached HEAD なら null。 */
   branch: string | null;
 }
+
+/** Presentation only. Keep the exact owned PTY in snapshots for dedicated terminal attachment.
+ * Additional panes in the workspace and unrelated agents remain ordinary work. */
+export function isAssistantPane(pane: Pick<Pane, "id" | "tabId">, workspace: Workspace | undefined, tab: Tab | undefined): boolean {
+  return !!workspace?.assistant && workspace.assistant.paneId === pane.id &&
+    tab?.id === pane.tabId && tab.workspaceId === workspace.id;
+}
