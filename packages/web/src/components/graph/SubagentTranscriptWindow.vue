@@ -61,7 +61,7 @@ function apply(r: AgentSubagentTranscriptResult): void {
     clipped.value = false;
   }
   if (r.omittedBefore) omittedBefore.value = true;
-  if (r.clipped) clipped.value = true;
+  if (r.clipped || r.entries.some(entry=>entry.truncated)) clipped.value = true;
   running.value = r.running;
   observedState.value = r.state;
   offset = r.offset;

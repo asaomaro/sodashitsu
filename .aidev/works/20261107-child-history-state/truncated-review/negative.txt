@@ -1,0 +1,83 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-history-observation
+
+ ❯ |@sodashitsu/web| src/components/graph/SubagentTranscriptWindow.test.ts (15 tests | 1 failed) 93ms
+   × shows the existing omitted note for a truncated tool entry 10ms
+ ❯ |@sodashitsu/server| src/agent/AntigravityChildRecord.test.ts (8 tests | 1 failed) 252ms
+   × preserves truncation metadata on a bounded parent-directed tool message 6ms
+ ❯ |@sodashitsu/tui| src/modes/SubagentTranscript.test.ts (6 tests | 1 failed) 15ms
+   × shows the existing omission note when an entry was truncated by the server 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/components/graph/SubagentTranscriptWindow.test.ts > shows the existing omitted note for a truncated tool entry
+Error: Unable to get [data-subagent-transcript-clipped] within: <section data-v-27acd6db="" class="sat" role="region" aria-label="サブエージェントの記録（読むだけ）" tabindex="-1" data-subagent-transcript="" data-agent-id="a1" style="left: 16px; top: 56px; width: 440px; height: 380px;">
+  <header data-v-27acd6db="" class="sat-head">
+    <div data-v-27acd6db="" class="sat-grip"><span data-v-27acd6db="" class="sat-name" title="Explore 調べる — impl">Explore 調べる — impl</span><span data-v-27acd6db="" class="sat-state" data-subagent-transcript-state="">実行中</span></div><button data-v-27acd6db="" data-assistant-feature="" type="button" class="sat-btn sat-close" aria-label="記録の窓を閉じる"> × </button>
+  </header>
+  <div data-v-27acd6db="" class="sat-body" role="log" aria-live="off" tabindex="0" aria-label="記録">
+    <!--v-if-->
+    <!--v-if-->
+    <div data-v-27acd6db="" class="sat-row sat-tool" data-kind="tool"><span data-v-27acd6db="" class="sat-tag">道具</span><span data-v-27acd6db="" class="sat-text"><strong data-v-27acd6db="">send_message</strong> cut message</span></div>
+    <!--v-if-->
+  </div>
+  <footer data-v-27acd6db="" class="sat-foot">読むだけ。サブエージェントには、入力できません</footer>
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/components/graph/SubagentTranscriptWindow.test.ts:217:17
+    215| it('shows the existing omitted note for a truncated tool entry',async(…
+    216|  const {wrapper}=open(()=>res({entries:[{kind:'tool',name:'send_messag…
+    217|  expect(wrapper.get('[data-subagent-transcript-clipped]').text()).toBe…
+       |                 ^
+    218| });
+    219|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |@sodashitsu/tui| src/modes/SubagentTranscript.test.ts > shows the existing omission note when an entry was truncated by the server
+AssertionError: expected 'Child task\n読むだけ。指示はメインエージェントへ送ってください…' to contain '長い記録の一部を省いています'
+
+- Expected
++ Received
+
+- 長い記録の一部を省いています
++ Child task
++ 読むだけ。指示はメインエージェントへ送ってください
++ 道具 send_message: cut message
++ ↑↓ スクロール · Esc 情報へ戻る
+
+ ❯ src/modes/SubagentTranscript.test.ts:36:182
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AntigravityChildRecord.test.ts > preserves truncation metadata on a bounded parent-directed tool message
+AssertionError: expected { kind: 'tool', …(2) } to match object { kind: 'tool', …(2) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "kind": "tool",
+    "name": "send_message",
+-   "truncated": true,
+  }
+
+ ❯ src/agent/AntigravityChildRecord.test.ts:66:16
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  3 failed | 26 passed (29)
+   Start at  00:08:17
+   Duration  1.52s (transform 69%, import 14%, tests 11%, environment 5%)
+

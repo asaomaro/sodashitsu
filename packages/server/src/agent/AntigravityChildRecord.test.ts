@@ -60,3 +60,8 @@ it("keeps native task state unknown when omitted and does not derive completion 
  }
  f.pane.agent!.subagents!.items=[];expect(await f.reader.read("p",child,undefined)).toMatchObject({state:"unknown",running:false});
 });
+
+it("preserves truncation metadata on a bounded parent-directed tool message",()=>{
+ const entry=antigravityChildEntries({source:"MODEL",type:"PLANNER_RESPONSE",status:"DONE",tool_calls:[{name:"send_message",args:{Recipient:JSON.stringify(parent),Message:JSON.stringify("g".repeat(4100))}}]},parent)[0]!;
+ expect(entry).toMatchObject({kind:"tool",name:"send_message",truncated:true});expect(entry.text).toHaveLength(4000);
+});

@@ -31,7 +31,7 @@ export function antigravityChildEntries(row:unknown,parent:string):SubagentTrans
   try{
    const recipient=JSON.parse(call.args.Recipient),message=JSON.parse(call.args.Message);
    if(recipient!==parent||typeof message!=="string"||!message)continue;
-   out.push(...entriesOfLine({type:"assistant",timestamp:r.created_at,message:{content:"【親への送信要求】\n"+message}}).map(entry=>({kind:"tool" as const,name:"send_message",text:entry.text,...(entry.at?{at:entry.at}:{})})));
+   out.push(...entriesOfLine({type:"assistant",timestamp:r.created_at,message:{content:"【親への送信要求】\n"+message}}).map(entry=>({kind:"tool" as const,name:"send_message",text:entry.text,...(entry.truncated!==undefined?{truncated:entry.truncated}:{}),...(entry.at?{at:entry.at}:{})})));
   }catch{/* Unknown argument encoding is not public chat. */}
  }
  return out;

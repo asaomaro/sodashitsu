@@ -211,3 +211,8 @@ it.each([['unknown','状態不明'],['idle','待機中'],['working','実行中']
  const {wrapper}=open(()=>res({state,running:false,entries:[{kind:'tool',name:'send_message',text:'【親への送信要求】\ngenerated public message'}]}));await flush();
  expect(wrapper.get('[data-subagent-transcript-state]').text()).toBe(label);expect(wrapper.findAll('[data-kind="tool"]')).toHaveLength(1);expect(wrapper.text()).toContain('send_message');expect(wrapper.text()).toContain('【親への送信要求】');expect(wrapper.findAll('[data-kind="say"]')).toHaveLength(0);wrapper.unmount();
 });
+
+it('shows the existing omitted note for a truncated tool entry',async()=>{
+ const {wrapper}=open(()=>res({entries:[{kind:'tool',name:'send_message',text:'cut message',truncated:true}]}));await flush();
+ expect(wrapper.get('[data-subagent-transcript-clipped]').text()).toBe('一部を省いています');wrapper.unmount();
+});

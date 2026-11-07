@@ -43,7 +43,7 @@ export class SubagentTranscript {
       if (!this.valid()) return;
       this.offset = result.offset;
       if (result.reset) { this.rows = []; this.omitted = false; }
-      this.omitted ||= !!result.omittedBefore || !!result.clipped;
+      this.omitted ||= !!result.omittedBefore || !!result.clipped || result.entries.some(entry=>entry.truncated);
       if (result.status === "ok") {
         this.rows.push(...result.entries);
         // The Web reader keeps at most 800 entries; additionally cap retained text at one API read (1 MiB).

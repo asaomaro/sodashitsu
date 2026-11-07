@@ -31,3 +31,7 @@ it("bounds retained rows/text, sanitizes terminal controls, and replaces reset d
 it("stops after not_found and keeps unprovided records distinct from an empty history",async()=>{
  const request=vi.fn().mockRejectedValue({code:"not_found"}),view=open(request);await flush();await vi.advanceTimersByTimeAsync(4500);expect(request).toHaveBeenCalledTimes(1);expect(view.lines(80).join("\n")).toContain("無効");
 });
+
+it("shows the existing omission note when an entry was truncated by the server",async()=>{
+ const view=open(vi.fn().mockResolvedValue(result({entries:[{kind:"tool",name:"send_message",text:"cut message",truncated:true}]})));await flush();expect(view.lines(80).join("\n")).toContain("長い記録の一部を省いています");
+});

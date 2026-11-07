@@ -1257,7 +1257,7 @@ export type SubagentTranscriptEntry =
   /** 発言。 */
   | { kind: "say"; text: string; truncated?: boolean; at?: string }
   /** 使った道具の 1 行（道具の名前と、説明・コマンド・ファイル名などの先頭）。 */
-  | { kind: "tool"; name: string; text: string; at?: string }
+  | { kind: "tool"; name: string; text: string; truncated?: boolean; at?: string }
   /** 道具の結果の先頭。 */
   | { kind: "result"; text: string; truncated?: boolean; error?: boolean; at?: string };
 export interface AgentSubagentTranscriptResult {
