@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process';
+import {ASSISTANT_EFFORTS} from '@sodashitsu/protocol';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -10,7 +11,7 @@ const requestId='sodashitsu-model-options';
 const MAX_BYTES=2*1024*1024;
 const MAX_MODELS=512;
 const validId=/^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,199}$/;
-const EFFORTS=['none','minimal','low','medium','high','xhigh','max','ultra'] as const;
+const EFFORTS=ASSISTANT_EFFORTS.claude;
 /** Pure projection of the SDK initialize model metadata; never infers effort by model name. */
 export function parseClaudeModelOptions(value:unknown):AssistantModelProviderResult['models'] {
  if(!Array.isArray(value)||value.length>MAX_MODELS)throw Error('invalid model metadata');

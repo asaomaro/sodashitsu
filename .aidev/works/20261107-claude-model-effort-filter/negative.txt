@@ -1,0 +1,51 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-claude-copilot-model-providers
+
+ ❯ |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts (14 tests | 1 failed) 333ms
+   ❯ read-only model providers (14)
+     × projects only explicit model efforts and sanitizes labels 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/assistantModelProviders/claude.test.ts > read-only model providers > projects only explicit model efforts and sanitizes labels
+AssertionError: expected [ { id: 'opus', …(2) }, …(2) ] to deeply equal [ { id: 'opus', …(2) }, …(2) ]
+
+- Expected
++ Received
+
+@@ -2,10 +2,13 @@
+    {
+      "efforts": [
+        "low",
+        "xhigh",
+        "max",
++       "none",
++       "minimal",
++       "ultra",
+      ],
+      "id": "opus",
+      "label": "Opus name",
+    },
+    {
+
+ ❯ src/agent/assistantModelProviders/claude.test.ts:21:7
+     19|    {value:'haiku',displayName:'Haiku',supportsEffort:false,supportedEf…
+     20|    {value:'sonnet',displayName:'Sonnet'},
+     21|   ])).toEqual([{id:'opus',label:'Opus name',efforts:['low','xhigh','ma…
+       |       ^
+     22|  });
+     23|  it.each([null,{},[{value:'../bad id'}],[{value:'opus'},{value:'opus'}…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  17:15:34
+   Duration  1.41s (transform 58%, tests 26%, import 16%)

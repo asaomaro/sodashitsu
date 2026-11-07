@@ -15,7 +15,7 @@ describe('read-only model providers',()=>{
  afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();});
  it('projects only explicit model efforts and sanitizes labels',()=>{
   expect(parseClaudeModelOptions([
-   {value:'opus',displayName:'Opus\nname',supportsEffort:true,supportedEffortLevels:['low','xhigh','max','max','future']},
+   {value:'opus',displayName:'Opus\nname',supportsEffort:true,supportedEffortLevels:['low','xhigh','max','max','future','none','minimal','ultra']},
    {value:'haiku',displayName:'Haiku',supportsEffort:false,supportedEffortLevels:['high']},
    {value:'sonnet',displayName:'Sonnet'},
   ])).toEqual([{id:'opus',label:'Opus name',efforts:['low','xhigh','max']},{id:'haiku',label:'Haiku',efforts:[]},{id:'sonnet',label:'Sonnet',efforts:[]}]);

@@ -1,0 +1,3 @@
+# Model effort domain review fix
+
+Root P2: f08aa670 accepted none/minimal/ultra from untrusted metadata although the Claude launcher accepts only the shared kind-specific set. Filter now uses ASSISTANT_EFFORTS.claude directly. No other product source changes. Regression adds none/minimal/ultra to metadata and keeps only accepted low/xhigh/max. Old f08 provider fails1test, fixed provider byte-exact restored (SHA2567ab48f07eee85f7e26c53859bf0c7dacee14f9bc5fbe8813e3a1bdd69a0608e8),14tests pass; servertsc-b exit0. Rawnegative/restored logs attached. No CLI/model/remote operation repeated for this pure filter change. Root independent re-review requested.
