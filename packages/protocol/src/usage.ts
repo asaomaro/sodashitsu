@@ -75,6 +75,7 @@ export interface AgentSettingObservation {
 export interface AgentExecutionSettings {
   reasoningEffort?: AgentSettingObservation;
   approvalPolicy?: AgentSettingObservation;
+  approvalMode?: AgentSettingObservation;
   permissionMode?: AgentSettingObservation;
   sandboxMode?: AgentSettingObservation;
 }
