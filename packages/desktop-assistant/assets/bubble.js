@@ -137,7 +137,7 @@
  const fill=(select,rows,value)=>{select.replaceChildren();for(const row of rows){const option=document.createElement("option");option.value=row.id;option.textContent=row.label;select.append(option);}select.value=value;};
  const setChoiceDisabled=()=>{
   kinds.disabled=choiceSaving||!!chatState?.busy;
-  models.disabled=efforts.disabled=choiceLoading||choiceSaving||!!chatState?.busy;
+  models.disabled=efforts.disabled=document.getElementById("refresh-models").disabled=choiceLoading||choiceSaving||!!chatState?.busy;
   if(choiceLoading||choiceSaving||!choiceValid)start.disabled=true;
  };
  const fillEfforts=(wanted="",retainSaved=false)=>{
@@ -146,16 +146,16 @@
   if(retainSaved&&!row&&wanted&&!tiers.includes(wanted))rows.push({id:wanted,label:`保存済み：${wanted}`});
   fill(efforts,rows,rows.some(r=>r.id===wanted)?wanted:"");
  };
- const loadSelection=async()=>{
+ const loadSelection=async(force=true)=>{
   const kind=kinds.value,epoch=++catalogEpoch;selectedKind=kind;choiceLoading=true;setChoiceDisabled();
-  catalogStatus.textContent="モデル候補を読み込んでいます。";
-  let catalog;try{if(!catalogs.has(kind))catalogs.set(kind,window.assistant.agentModels({kind}));catalog=await catalogs.get(kind);}catch{catalogs.delete(kind);catalog={models:[],message:"モデル候補を取得できません。既定値と保存済みの指定を表示します。"};}
+  catalogStatus.textContent="モデル候補を読み込んでいます。";if(force)catalogs.delete(kind);
+  let catalog;try{if(!catalogs.has(kind))catalogs.set(kind,window.assistant.agentModels({kind,refresh:force}));catalog=await catalogs.get(kind);}catch{catalogs.delete(kind);catalog={models:[],message:"モデル候補を取得できません。既定値と保存済みの指定を表示します。"};}
   if(epoch!==catalogEpoch)return false;
   modelRows=catalog.models??[];const profile=preferences.agentProfiles?.[kind]??{model:"",effort:""};
   const rows=[{id:"",label:"エージェントの既定値"},...modelRows];
   if(profile.model&&!rows.some(r=>r.id===profile.model))rows.push({id:profile.model,label:`保存済み：${profile.model}`});
   fill(models,rows,profile.model);fillEfforts(profile.effort,true);
-  catalogStatus.textContent=catalog.message??"";choiceLoading=false;setChoiceDisabled();if(chatState)updateChatControls();
+  catalogStatus.textContent=[catalog.message,catalog.source?`取得元：${({cli:"CLIの候補","local-cache":"CLIのローカルキャッシュ",reference:"参考候補（利用可否は未確認）",unavailable:"未取得"})[catalog.source]}`:"",catalog.fetchedAt!==undefined?`照会日時：${new Date(catalog.fetchedAt).toLocaleString("ja-JP")}（モデル一覧の更新日時ではありません）`:"",catalog.cached?"保存された照会結果を表示しています。":""].filter(Boolean).join(" ");choiceLoading=false;setChoiceDisabled();if(chatState)updateChatControls();
   if(profile.effort!==efforts.value&&modelRows.some(row=>row.id===models.value))await saveChoice();
   return true;
  };
@@ -166,6 +166,8 @@
   catch(error){choiceStatus.textContent=`保存できません：${error.message}。もう一度選択してください。`;}
   finally{choiceSaving=false;setChoiceDisabled();if(chatState)updateChatControls();}
  };
+ document.addEventListener("visibilitychange",()=>{++catalogEpoch;catalogs.clear();if(document.hidden){choiceLoading=false;return;}if(kinds.value)void loadSelection(true);});
+ document.getElementById("refresh-models").addEventListener("click",()=>void loadSelection(true));
  kinds.addEventListener("change",()=>{void loadSelection().then(current=>{if(current)return saveChoice();});});
  models.addEventListener("change",()=>{fillEfforts(efforts.value);void saveChoice();});
  efforts.addEventListener("change",()=>void saveChoice());
@@ -178,8 +180,9 @@
  const updateChat = state => {
    if (!Number.isSafeInteger(state.revision) || state.revision <= chatRevision) return;
    const reconnected=state.connected&&!chatState?.connected;
+   const connectionChanged=chatState&&state.connected!==chatState.connected;
    chatRevision = state.revision; chatState = state;
-   if(reconnected){catalogs.clear();selectedKind="";}
+   if(reconnected||connectionChanged){++catalogEpoch;catalogs.clear();selectedKind="";}
    const viewport=document.querySelector(".speech-content");
    const follow = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 24;
    const info = state.session;

@@ -324,7 +324,7 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
   if (starter) {
     // 起動できる種類の一覧（20261008-graph-first の PR3。読み取りだけ。実行ファイルの名前は返さない）。
     const listModels=createAssistantModelLister();
-    surface.register("agent.model_options",{schema:AssistantModelCatalogParams,handler:(_ctx,params)=>listModels(params.kind)});
+    surface.register("agent.model_options",{schema:AssistantModelCatalogParams,handler:(_ctx,params)=>listModels(params.kind,params.refresh)});
     const listKinds = createAgentKindsLister();
     surface.register("agent.kinds", { schema: AgentKindsParams, handler: () => listKinds() });
     surface.register("agent.start", {

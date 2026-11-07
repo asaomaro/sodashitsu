@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-assistant-model-refresh/packages/web
+
+
+ Test Files  1 passed (1)
+      Tests  147 passed (147)
+   Start at  17:15:13
+   Duration  23.19s (tests 88%, transform 9%, import 2%, environment 1%)
+

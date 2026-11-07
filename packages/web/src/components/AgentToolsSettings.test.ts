@@ -63,3 +63,21 @@ it("selects a Cursor variant while keeping unobserved independent effort at defa
  await w.get('[aria-label="要約エージェントのモデル"]').setValue("cursor-generated-high");
  expect(settings.summarySettings).toMatchObject({kind:"cursor",model:"cursor-generated-high",effort:""});expect(w.get('[aria-label="要約エージェントのeffort"]').findAll('option')).toHaveLength(1);
 });
+
+it("force refreshes on open and the update button, while labelling observation time",async()=>{
+ const request=vi.fn(async()=>({models:[],message:"Generated",source:"reference" as const,fetchedAt:1000,cached:true}));const {w}=fixture(request);await flushPromises();
+ expect(request).toHaveBeenCalledWith("agent.model_options",{kind:"codex",refresh:true});expect(w.text()).toContain("参考候補");expect(w.text()).toContain("照会日時");expect(w.text()).toContain("モデル一覧の更新日時ではありません");
+ await w.findAll('button').find(b=>b.text()==="モデル候補を再取得")!.trigger('click');await flushPromises();expect(request).toHaveBeenCalledTimes(2);
+});
+it("falls back once only for an old host's invalid refresh parameter, preserving saved choices",async()=>{
+ const request=vi.fn(async(_method:string,params:any)=>{if(params.refresh)throw {code:"invalid_params"};return {models:[],message:"Old host"};});const {w,settings}=fixture(request as never);await flushPromises();
+ expect(request.mock.calls.map(c=>c[1])).toEqual([{kind:"codex",refresh:true},{kind:"codex"}]);expect(w.text()).toContain("強制更新に未対応");expect(settings.summarySettings).toMatchObject({model:"model-high",effort:"high"});expect(w.text()).toContain("保存済み：model-high");
+});
+it("does not retry network or authentication failures as compatibility fallback",async()=>{
+ const request=vi.fn(async()=>{throw {code:"unauthorized"};});const {w}=fixture(request as never);await flushPromises();expect(request).toHaveBeenCalledTimes(1);expect(w.text()).toContain("取得できません");
+});
+it("refreshes on each dialog open and retires a pending result when closed",async()=>{
+ let complete!:(v:any)=>void;const request=vi.fn().mockImplementationOnce(()=>new Promise(done=>complete=done)).mockResolvedValue({models:[],message:"Fresh reopen"});
+ const {w}=fixture(request as never);await w.setProps({active:false});complete({models:[{id:"stale-model",label:"Stale",efforts:[]}],message:"stale"});await flushPromises();expect(w.text()).not.toContain("stale-model");
+ await w.setProps({active:true});await flushPromises();expect(request).toHaveBeenCalledTimes(2);expect(request.mock.calls[1]).toEqual(["agent.model_options",{kind:"codex",refresh:true}]);expect(w.text()).toContain("Fresh reopen");
+});

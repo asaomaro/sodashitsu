@@ -1850,7 +1850,7 @@ function onNativeCancel(ev: Event): void {
         </p>
       </section>
       <ExtensionSettings />
-      <AgentToolsSettings />
+      <AgentToolsSettings :active="view.dialogContext?.kind === 'settings' && view.connectionState === 'open'" />
       <VscodeSharingSettings :active="view.dialogContext?.kind === 'settings' && view.connectionState === 'open'" />
       <AssistantSettings :active="view.dialogContext?.kind === 'settings' && view.connectionState === 'open'" />
       <DesktopSettings :active="view.dialogContext?.kind === 'settings' && view.connectionState === 'open'" />

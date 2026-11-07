@@ -10,6 +10,7 @@ import type { AssistantModelCatalog } from "@sodashitsu/protocol";
 import { ConnectionKey } from "../injection.js";
 import { useMachinesStore } from "../store/machines.js";
 import { useSettingsStore } from "../store/settings.js";
+const props=withDefaults(defineProps<{active?:boolean}>(),{active:true});
 const settings=useSettingsStore(),machines=useMachinesStore(),conn=inject(ConnectionKey,null),error=ref("");
 const loading=ref(false),catalogMessage=ref(""),rows=ref<AssistantModelCatalog["models"]>([]);
 const catalogs=new Map<string,AssistantModelCatalog>(),profiles=new Map<string,{model:string;effort:string}>();
@@ -32,19 +33,23 @@ const effortOptions=computed(()=>{
  if(!model&&config.effort&&!options.some(row=>row.id===config.effort))options.push({id:config.effort,label:`保存済み：${config.effort}`});
  return options;
 });
-async function loadModels(force=false){
+async function loadModels(force=true){
+ if(!props.active){++epoch;loading.value=false;catalogs.clear();return;}
  if(!settings.summaryConfigured){++epoch;loading.value=false;rows.value=[];catalogMessage.value="未設定の場合は従来のシンプルな通知を使います。";return;}
  const own=++epoch,kind=settings.summarySettings.kind,machine=machines.selectedId,key=JSON.stringify([machine,kind]);
  loading.value=true;rows.value=[];catalogMessage.value="モデル候補を読み込んでいます。";
  if(force)catalogs.delete(key);
  let catalog:AssistantModelCatalog;
  try{
-  catalog=catalogs.get(key)??await conn!.request("agent.model_options",{kind});
+  try{catalog=catalogs.get(key)??await conn!.request("agent.model_options",{kind,refresh:force});}
+  catch(error){if(!force||!error||typeof error!=="object"||!("code" in error)||error.code!=="invalid_params")throw error;
+   const old=await conn!.request("agent.model_options",{kind});catalog={...old,message:`${old.message} この接続先は強制更新に未対応です。通常の候補を表示しています。`};
+  }
   if(own!==epoch||kind!==settings.summarySettings.kind||machine!==machines.selectedId)return;
   if(catalog.models.length)catalogs.set(key,catalog);
  }catch{catalog={models:[],message:"モデル候補を取得できません。既定値または保存済みの指定を選べます。"};}
  if(own!==epoch||kind!==settings.summarySettings.kind||machine!==machines.selectedId)return;
- rows.value=catalog.models;catalogMessage.value=catalog.message;loading.value=false;
+ rows.value=catalog.models;catalogMessage.value=[catalog.message,catalog.source?`取得元：${({cli:"CLIの候補", "local-cache":"CLIのローカルキャッシュ",reference:"参考候補（利用可否は未確認）",unavailable:"未取得"})[catalog.source]}`:"",catalog.fetchedAt!==undefined?`照会日時：${new Date(catalog.fetchedAt).toLocaleString("ja-JP")}（モデル一覧の更新日時ではありません）`:"",catalog.cached?"保存された照会結果を表示しています。":""].filter(Boolean).join(" ");loading.value=false;
  const config=settings.summarySettings,model=rows.value.find(row=>row.id===config.model);
  if(model&&config.effort&&!model.efforts.includes(config.effort))save({effort:""});
 }
@@ -53,7 +58,7 @@ function changeKind(event:Event){
  const kind=(event.target as HTMLSelectElement).value;if(!kind){settings.clearSummarySettings();return;}const profile=profiles.get(profileKey(kind))??{model:"",effort:""};save({kind,...profile});
 }
 function changeModel(event:Event){save({model:(event.target as HTMLSelectElement).value,effort:""});}
-watch(()=>[settings.summarySettings.kind,machines.selectedId,settings.summaryConfigured],()=>void loadModels(),{immediate:true});
+watch(()=>[props.active,settings.summarySettings.kind,machines.selectedId,settings.summaryConfigured],()=>void loadModels(),{immediate:true});
 onBeforeUnmount(()=>{++epoch;});
 </script>
 <template>

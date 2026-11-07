@@ -2,7 +2,7 @@ import { PanelClipboard } from "./panelClipboard.js";
 import {NoticeSummaries} from "./noticeSummaries.js";
 import {assistantAudioCapabilities,SummarySettingsSchema,loadSummarySettings} from "@sodashitsu/protocol";
 import {assistantAppearance} from "./appearance.js";
-import {AssistantSource,AssistantLaunchSettings,AssistantModelCatalog} from "@sodashitsu/protocol";
+import {AssistantSource,AssistantLaunchSettings,AssistantModelCatalog,AssistantModelCatalogParams} from "@sodashitsu/protocol";
 import {presentWindow} from "./windowPresentation.js";
 import {resourceHostIdentity,resourceProcessIdentities} from "@sodashitsu/client-core/nodeResourceIdentity";
 import { cpus } from "node:os";
@@ -135,6 +135,7 @@ let panelTargeted = false;
 let panelNavigation = 0;
 const responseNavigations = new WeakMap<BrowserWindow, number>();
 let control: AssistantRpc | null = null;
+let modelCatalogEpoch=0;
 let assistantChat: AssistantChat | null = null;
 let controlOrigin: string | null = null;
 let installationId: string;
@@ -689,6 +690,7 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
       ),
     status: (connected) => {
       if (control === rpc) {
+        ++modelCatalogEpoch;
         if(connected){noticeSummaries.reconnect();void rpc.request("prefs.get",{}).then(state=>receiveAppearance(rpc,state)).catch(()=>{});}
         assistantChat?.connection(connected);
         reminders?.connection(connected);
@@ -1800,9 +1802,16 @@ function registerIpc(): void {
         openPanel(source.serverOrigin,{paneId:source.paneId,workspaceId:source.workspaceId,instanceId:source.agentInstanceId,machineId:source.machineId},"reply");return;
       }
       if(action==="agent-models"){
-        const request=z.object({kind:z.enum(["claude","codex","muse","agy","copilot","grok","cursor"])}).strict().parse(input);
-        if(!control)throw Error("操舵室に接続してください。");
-        return AssistantModelCatalog.parse(await control.request("agent.model_options",request));
+        const request=AssistantModelCatalogParams.parse(input);
+        const rpc=control,origin=controller.preferences.serverOrigin,epoch=modelCatalogEpoch;
+        if(!rpc)throw Error("操舵室に接続してください。");
+        const read=async(params:typeof request)=>{const value=await rpc.request("agent.model_options",params);if(control!==rpc||controller.preferences.serverOrigin!==origin||modelCatalogEpoch!==epoch)throw Error("接続先が変わりました。候補を取得し直してください。");return AssistantModelCatalog.parse(value);};
+        try{return await read(request);}
+        catch(error){if(!request.refresh||!error||typeof error!=="object"||!("code" in error)||error.code!=="invalid_params")throw error;
+          if(control!==rpc||controller.preferences.serverOrigin!==origin||modelCatalogEpoch!==epoch)throw Error("接続先が変わりました。候補を取得し直してください。");
+          const value=await read({kind:request.kind});
+          return {...value,message:`${value.message} この接続先は強制更新に未対応です。通常の候補を表示しています。`.trim().slice(0,500)};
+        }
       }
       if(action==="captain-choice"){
         const request=z.object({kind:z.enum(["claude","codex","muse","agy","copilot","grok","cursor"]),profile:AssistantLaunchSettings,notificationSummary:z.boolean()}).strict().parse(input);

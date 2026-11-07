@@ -39,10 +39,11 @@ async function query(command:string,args:string[],msp:boolean|"grok"=false):Prom
  });
 }
 export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatalog>{
- const rows:AssistantModelCatalog['models']=[];
+ const rows:AssistantModelCatalog['models']=[];let source:NonNullable<AssistantModelCatalog['source']>='cli';
  const add=(id:unknown,label:unknown,tiers:unknown)=>{if(typeof id==='string'&&validId.test(id)&&!rows.some(r=>r.id===id)&&rows.length<ASSISTANT_MODEL_MAX_OPTIONS)rows.push({id,label:typeof label==='string'?label.slice(0,200):id,efforts:efforts(kind,tiers)});};
  try{
   if(kind==='codex'){
+   source='local-cache';
    const opened=await openVerified(join(process.env.CODEX_HOME||join(homedir(),'.codex'),'models_cache.json'));if(!opened)throw Error('cache file');let raw='';
    try{if(opened.st.size>2*1024*1024)throw Error('cache limit');const bytes=await readRange(opened.fd,0,2*1024*1024+1);if(bytes.length>2*1024*1024)throw Error('cache limit');raw=bytes.toString('utf8');}finally{await opened.fd.close();}
    const data=JSON.parse(raw);for(const m of (Array.isArray(data.models)?data.models:[])){if(m.visibility==='hide')continue;add(m.slug,m.display_name,m.supported_reasoning_levels?.map((e:any)=>e.effort));}
@@ -58,14 +59,16 @@ export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatal
   }else if(kind==='agy'){
    const raw=await query('agy',['models']) as string;for(const line of raw.split('\n')){const [id,label]=line.split('\t');if(!label)continue;const effort=id?.match(/-(low|medium|high)$/)?.[1];add(id,label,effort?[effort]:[]);}
   }else if(kind==='claude'){
+   source='reference';
    add('opus','Opus（CLIの別名）',['low','medium','high','max']);add('sonnet','Sonnet（CLIの別名）',['low','medium','high']);add('haiku','Haiku（CLIの別名）',[]);
   }else{
+   source='reference';
    add('auto','Auto',[]);add('gpt-5.4','GPT-5.4',['low','medium','high','xhigh']);
   }
-  return {models:rows,message:rows.length?(kind==='cursor'?'Cursor CLIから取得したモデル候補です。effort等のvariantはモデルIDで選び、独立effortは未取得です。最大5分キャッシュし、この画面内では再接続まで保持します。':kind==='grok'?'Grok CLIから取得したモデル・effort候補です。最大5分キャッシュし、この画面内では再接続まで保持します。':['claude','copilot'].includes(kind)?'代表的なモデル候補です。利用可否は契約とCLIの版に従います。':''):'候補を取得できません。既定値または保存済みモデルを使用できます。'};
- }catch{return {models:[],message:'モデル候補を取得できません。既定値または保存済みモデルを使用できます。'};}
+  return {models:rows,source:rows.length?source:'unavailable',fetchedAt:Date.now(),cached:false,message:rows.length?(kind==='cursor'?'Cursor CLIから取得したモデル候補です。effort等のvariantはモデルIDで選び、独立effortは未取得です。最大5分キャッシュします。再取得で照会し直せます。':kind==='grok'?'Grok CLIから取得したモデル・effort候補です。最大5分キャッシュします。再取得で照会し直せます。':['claude','copilot'].includes(kind)?'代表的なモデル候補です。利用可否は契約とCLIの版に従います。':''):'候補を取得できません。既定値または保存済みモデルを使用できます。'};
+ }catch{return {models:[],source:'unavailable',fetchedAt:Date.now(),cached:false,message:'モデル候補を取得できません。既定値または保存済みモデルを使用できます。'};}
 }
 export function createAssistantModelLister(){
  const cache=new Map<string,{at:number,value:AssistantModelCatalog}>(),pending=new Map<string,Promise<AssistantModelCatalog>>();
- return (kind:Kind)=>{const saved=cache.get(kind);if(saved&&Date.now()-saved.at<(saved.value.models.length?300000:5000))return Promise.resolve(saved.value);let work=pending.get(kind);if(!work){work=readAssistantModels(kind).then(value=>{cache.set(kind,{at:Date.now(),value});return value;}).finally(()=>pending.delete(kind));pending.set(kind,work);}return work;};
+ return (kind:Kind,refresh=false)=>{const saved=cache.get(kind);if(!refresh&&saved&&Date.now()-saved.at<(saved.value.models.length?300000:5000))return Promise.resolve({...saved.value,cached:true});let work=pending.get(kind);if(!work){work=readAssistantModels(kind).then(value=>{cache.set(kind,{at:Date.now(),value});return value;}).finally(()=>pending.delete(kind));pending.set(kind,work);}return work;};
 }

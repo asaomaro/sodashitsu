@@ -1,0 +1,78 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-assistant-model-refresh/packages/server
+
+ ❯ src/agent/assistantModels.test.ts (11 tests | 2 failed) 44ms
+   × reads bounded Codex metadata and filters hidden/invalid models and unsupported effort tiers 15ms
+   × bypasses completed cache only on explicit refresh and preserves catalog provenance 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/assistantModels.test.ts > reads bounded Codex metadata and filters hidden/invalid models and unsupported effort tiers
+AssertionError: expected { models: [ { …(3) } ], message: '' } to deeply equal { models: [ { …(3) } ], …(4) }
+
+- Expected
++ Received
+
+@@ -1,8 +1,6 @@
+  {
+-   "cached": false,
+-   "fetchedAt": Any<Number>,
+    "message": "",
+    "models": [
+      {
+        "efforts": [
+          "low",
+@@ -10,7 +8,6 @@
+        ],
+        "id": "gpt-test",
+        "label": "Generated GPT",
+      },
+    ],
+-   "source": "local-cache",
+  }
+
+ ❯ src/agent/assistantModels.test.ts:15:45
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/agent/assistantModels.test.ts > bypasses completed cache only on explicit refresh and preserves catalog provenance
+AssertionError: expected { …(2) } to match object { source: 'local-cache', …(2) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "cached": false,
+-   "fetchedAt": Any<Number>,
+-   "source": "local-cache",
++   "message": "",
++   "models": [
++     {
++       "efforts": [],
++       "id": "first",
++       "label": "first",
++     },
++   ],
+  }
+
+ ❯ src/agent/assistantModels.test.ts:74:112
+     72| it('bypasses completed cache only on explicit refresh and preserves ca…
+     73|  const dir=await mkdtemp(join(tmpdir(),'soda-model-refresh-'));dirs.pu…
+     74|  await writeFile(file,JSON.stringify({models:[{slug:'first'}]}));const…
+       |                                                                                                                ^
+     75|  await writeFile(file,JSON.stringify({models:[{slug:'second'}]}));expe…
+     76|  expect(await list('codex',true)).toMatchObject({models:[{id:'second'}…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 9 passed (11)
+   Start at  17:14:13
+   Duration  963ms (transform 74%, import 21%, tests 5%)
+
+undefined
+/workspaces/sodashitsu-assistant-model-refresh/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/assistantModels.test.ts

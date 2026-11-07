@@ -5,14 +5,14 @@ import {join} from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {spawn} from 'node:child_process';
-import {readAssistantModels} from './assistantModels.js';
+import {readAssistantModels,createAssistantModelLister} from './assistantModels.js';
 vi.mock('node:child_process',()=>({spawn:vi.fn()}));
 const dirs:string[]=[];
 afterEach(async()=>{vi.unstubAllEnvs();vi.useRealTimers();vi.mocked(spawn).mockReset();for(const dir of dirs.splice(0))await rm(dir,{recursive:true,force:true});});
 it('reads bounded Codex metadata and filters hidden/invalid models and unsupported effort tiers',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'soda-model-cache-'));dirs.push(dir);vi.stubEnv('CODEX_HOME',dir);
  await writeFile(join(dir,'models_cache.json'),JSON.stringify({models:[{slug:'gpt-test',display_name:'Generated GPT',supported_reasoning_levels:[{effort:'low'},{effort:'xhigh'},{effort:'unknown'}]},{slug:'private-hidden',visibility:'hide'},{slug:'--unsafe'}]}));
- expect(await readAssistantModels('codex')).toEqual({models:[{id:'gpt-test',label:'Generated GPT',efforts:['low','xhigh']}],message:''});
+ expect(await readAssistantModels('codex')).toEqual({models:[{id:'gpt-test',label:'Generated GPT',efforts:['low','xhigh']}],message:'',source:'local-cache',fetchedAt:expect.any(Number),cached:false});
  await writeFile(join(dir,'models_cache.json'),' '.repeat(2*1024*1024+1));expect((await readAssistantModels('codex')).models).toEqual([]);
 });
 it('uses only MSP initialize and model/list, then terminates the reader',async()=>{
@@ -67,4 +67,19 @@ it('reads Cursor advertised variant IDs without inferring separate effort from s
  const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),stdout:new PassThrough(),stderr:new PassThrough(),kill:vi.fn()});vi.mocked(spawn).mockReturnValue(child as never);
  const result=readAssistantModels('cursor');queueMicrotask(()=>{child.stdout.write('Available models\nauto - Auto (current, default)\ngpt-generated-high - Generated High\n--unsafe - Invalid\nTip: not a model\n');child.emit('close',0);});
  expect((await result).models).toEqual([{id:'auto',label:'Auto',efforts:[]},{id:'gpt-generated-high',label:'Generated High',efforts:[]}]);expect(vi.mocked(spawn).mock.calls[0]!.slice(0,2)).toEqual(['cursor-agent',['--list-models']]);
+});
+
+it('bypasses completed cache only on explicit refresh and preserves catalog provenance',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'soda-model-refresh-'));dirs.push(dir);vi.stubEnv('CODEX_HOME',dir);const file=join(dir,'models_cache.json'),list=createAssistantModelLister();
+ await writeFile(file,JSON.stringify({models:[{slug:'first'}]}));const first=await list('codex');expect(first).toMatchObject({source:'local-cache',cached:false,fetchedAt:expect.any(Number)});
+ await writeFile(file,JSON.stringify({models:[{slug:'second'}]}));expect(await list('codex')).toMatchObject({models:[{id:'first'}],cached:true,fetchedAt:first.fetchedAt});
+ expect(await list('codex',true)).toMatchObject({models:[{id:'second'}],source:'local-cache',cached:false});
+ await writeFile(file,'invalid');expect(await list('codex',true)).toMatchObject({models:[],source:'unavailable',cached:false});
+});
+
+it('deduplicates a forced refresh with an already running query',async()=>{
+ const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),stdout:new PassThrough(),stderr:new PassThrough(),kill:vi.fn(()=>{queueMicrotask(()=>child.emit('close',null));return true;})});vi.mocked(spawn).mockReturnValue(child as never);
+ child.stdin.on('data',chunk=>{const r=JSON.parse(chunk.toString());if(r.id===1)queueMicrotask(()=>child.stdout.write(JSON.stringify({id:1,result:{}})+'\n'));});
+ const list=createAssistantModelLister(),first=list('grok'),second=list('grok',true);expect(first).toBe(second);await Promise.resolve();
+ child.stdout.write(JSON.stringify({id:2,result:{result:{availableModels:[]}}})+'\n');expect((await first).models).toEqual([]);expect(spawn).toHaveBeenCalledTimes(1);
 });

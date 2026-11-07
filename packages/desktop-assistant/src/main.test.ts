@@ -2083,3 +2083,20 @@ it.each(["grok","cursor"])("saves %s captain choices only through the authorized
  expect(await fixture.handlers.get("assistant:captain-choice")!(local,input)).toMatchObject({captainKind:kind,agentProfiles:{[kind]:input.profile}});
  }finally{await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
 });
+
+it.each(["invalid_params","unauthorized"])("refresh compatibility retries only invalid_params (%s)",async code=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ const rpc=fixture.controls.at(-1)!,original=rpc.request.getMockImplementation()! as (...args:any[])=>any,requests:unknown[]=[];
+ try{await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!,local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame};
+ rpc.request.mockImplementation(async(method:string,params:any)=>{if(method!=="agent.model_options")return original(method,params);requests.push(params);if(params.refresh)throw {code};return {models:[],message:"Old host"};});
+ const pending=fixture.handlers.get("assistant:agent-models")!(local,{kind:"grok",refresh:true});if(code==="invalid_params"){expect(await pending).toMatchObject({message:expect.stringContaining("強制更新に未対応")});expect(requests).toEqual([{kind:"grok",refresh:true},{kind:"grok"}]);}else{await expect(pending).rejects.toMatchObject({code});expect(requests).toHaveLength(1);}
+ }finally{rpc.request.mockImplementation(original);await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
+});
+it("rejects a model catalog completed after the control connection changed",async()=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ const rpc=fixture.controls.at(-1)!,original=rpc.request.getMockImplementation()! as (...args:any[])=>any;let complete!:(v:unknown)=>void;
+ try{await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!,local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame};
+ rpc.request.mockImplementation(async(method:string,params:any)=>method==="agent.model_options"?new Promise(done=>complete=done):original(method,params));
+ const pending=fixture.handlers.get("assistant:agent-models")!(local,{kind:"grok",refresh:true});rpc.options.status(false);complete({models:[],message:"Stale control"});await expect(pending).rejects.toThrow("接続先が変わりました");
+ }finally{rpc.request.mockImplementation(original);await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
+});

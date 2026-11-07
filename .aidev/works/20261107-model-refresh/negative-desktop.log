@@ -1,0 +1,122 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-assistant-model-refresh/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (74 tests | 3 failed) 4359ms
+   × refresh compatibility retries only invalid_params (invalid_params) 15ms
+   × refresh compatibility retries only invalid_params (unauthorized) 20ms
+   × rejects a model catalog completed after the control connection changed 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > refresh compatibility retries only invalid_params (invalid_params)
+ZodError: [
+  {
+    "code": "unrecognized_keys",
+    "keys": [
+      "refresh"
+    ],
+    "path": [],
+    "message": "Unrecognized key: \"refresh\""
+  }
+]
+ ❯ src/main.ts:1803:115
+    1801|       }
+    1802|       if(action==="agent-models"){
+    1803|         const request=z.object({kind:z.enum(["claude","codex","muse","…
+       |                                                                                                                   ^
+    1804|         if(!control)throw Error("操舵室に接続してください。");
+    1805|         return AssistantModelCatalog.parse(await control.request("agen…
+ ❯ src/main.test.ts:2092:62
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > refresh compatibility retries only invalid_params (unauthorized)
+AssertionError: expected ZodError: [
+  {
+    "code": "unrecognized… { …(2) } to match object { code: 'unauthorized' }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+- {
+-   "code": "unauthorized",
++ ZodError {
++   "message": "[
++   {
++     \"code\": \"unrecognized_keys\",
++     \"keys\": [
++       \"refresh\"
++     ],
++     \"path\": [],
++     \"message\": \"Unrecognized key: \\\"refresh\\\"\"
++   }
++ ]",
++   "name": "ZodError",
+  }
+
+ ❯ src/main.test.ts:2092:305
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > rejects a model catalog completed after the control connection changed
+TypeError: complete is not a function
+ ❯ src/main.test.ts:2100:124
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+ZodError: [
+  {
+    "code": "unrecognized_keys",
+    "keys": [
+      "refresh"
+    ],
+    "path": [],
+    "message": "Unrecognized key: \"refresh\""
+  }
+]
+ ❯ src/main.ts:1803:115
+    1801|       }
+    1802|       if(action==="agent-models"){
+    1803|         const request=z.object({kind:z.enum(["claude","codex","muse","…
+       |                                                                                                                   ^
+    1804|         if(!control)throw Error("操舵室に接続してください。");
+    1805|         return AssistantModelCatalog.parse(await control.request("agen…
+ ❯ src/main.test.ts:2100:62
+ ❯ ../../node_modules/.pnpm/vitest@5.0.1_@types+node@24.13.5_happy-dom@20.14.5_vite@8.3.0_@types+node@24.13.5_jiti@2.7.0_/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { _zod: { def: [ { code: 'unrecognized_keys', keys: [ 'refresh' ], path: [], message: 'Unrecognized key: "refresh"' } ], constr: 'Function<ZodError>', traits: { constructor: 'Function<Set>', has: 'Function<has>', add: 'Function<add>', delete: 'Function<delete>', difference: 'Function<difference>', clear: 'Function<clear>', entries: 'Function<entries>', forEach: 'Function<forEach>', intersection: 'Function<intersection>', isSubsetOf: 'Function<isSubsetOf>', isSupersetOf: 'Function<isSupersetOf>', isDisjointFrom: 'Function<isDisjointFrom>', size: 2, symmetricDifference: 'Function<symmetricDifference>', union: 'Function<union>', values: 'Function<values>', keys: 'Function<values>' }, message: '[
+  {
+    "code": "unrecognized_keys",
+    "keys": [
+      "refresh"
+    ],
+    "path": [],
+    "message": "Unrecognized key: \"refresh\""
+  }
+]' }, issues: [ { code: 'unrecognized_keys', keys: [ 'refresh' ], path: [], message: 'Unrecognized key: "refresh"' } ], format: 'Function<anonymous>', flatten: 'Function<anonymous>', addIssue: 'Function<anonymous>', addIssues: 'Function<anonymous>', isEmpty: false }
+This error originated in "src/main.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "rejects a model catalog completed after the control connection changed". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 71 passed (74)
+     Errors  1 error
+   Start at  17:14:15
+   Duration  4.74s (tests 94%, transform 5%, import 1%)
+
+undefined
+/workspaces/sodashitsu-assistant-model-refresh/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/main.test.ts
