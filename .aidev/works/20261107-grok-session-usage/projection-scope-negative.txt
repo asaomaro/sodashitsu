@@ -1,0 +1,199 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-session-usage
+
+ ❯ |@sodashitsu/server| src/usage/grokUsage.test.ts (14 tests | 3 failed) 15ms
+   ❯ Grok session usage ledger (14)
+     × reads the cumulative session once, separates cached input and converts only reported USD ticks 8ms
+     × marks partial cost and incomplete usage separately 2ms
+     × rejects wrong parent or invalid ledger 1ms
+ ❯ |@sodashitsu/server| src/usage/grokAdapter.test.ts (10 tests | 5 failed) 54ms
+   ❯ GrokUsageAdapter scoped ledger read (10)
+     × does not read unverified source or publish after proof changes 10ms
+     × invalidates an in-flight read on forget 5ms
+     × invalidates an in-flight read on new-instance 3ms
+     × invalidates an in-flight read on unverified 3ms
+     × rejects wrong parent, oversized file and invalid UTF8 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/usage/grokAdapter.test.ts > GrokUsageAdapter scoped ledger read > does not read unverified source or publish after proof changes
+AssertionError: expected { model: null, …(3) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "model": null,
+  "source": "grok-usage",
+  "tokens": {
+    "basis": "cumulative",
+    "cacheRead": 3,
+    "cacheWrite": 1,
+    "input": 6,
+    "output": 2,
+    "reasoning": 1,
+    "total": 12,
+  },
+  "updatedAt": 1794009600000,
+}
+
+ ❯ src/usage/grokAdapter.test.ts:25:42
+     23|   const s=await setup();s.setProof(undefined);expect(await s.adapter.u…
+     24|   let proof='verified',reads=0;const adapter=new GrokUsageAdapter({ope…
+     25|   expect(await adapter.usageFor(source)).toBeNull();expect(reads).toBe…
+       |                                          ^
+     26|  });
+     27|  it.each(['forget','close','new-instance','unverified'])('invalidates …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  |@sodashitsu/server| src/usage/grokAdapter.test.ts > GrokUsageAdapter scoped ledger read > invalidates an in-flight read on forget
+ FAIL  |@sodashitsu/server| src/usage/grokAdapter.test.ts > GrokUsageAdapter scoped ledger read > invalidates an in-flight read on new-instance
+ FAIL  |@sodashitsu/server| src/usage/grokAdapter.test.ts > GrokUsageAdapter scoped ledger read > invalidates an in-flight read on unverified
+AssertionError: expected { model: null, …(3) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "model": null,
+  "source": "grok-usage",
+  "tokens": {
+    "basis": "cumulative",
+    "cacheRead": 3,
+    "cacheWrite": 1,
+    "input": 6,
+    "output": 2,
+    "reasoning": 1,
+    "total": 12,
+  },
+  "updatedAt": 1794009600000,
+}
+
+ ❯ src/usage/grokAdapter.test.ts:32:35
+     30|   const pending=adapter.usageFor(source);
+     31|   if(mode==='forget')adapter.forget(source.paneId);if(mode==='close')a…
+     32|   release();expect(await pending).toBeNull();
+       |                                   ^
+     33|  });
+     34|  it('does not retain previously known values after the usage file is m…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  |@sodashitsu/server| src/usage/grokAdapter.test.ts > GrokUsageAdapter scoped ledger read > rejects wrong parent, oversized file and invalid UTF8
+AssertionError: expected { model: null, …(3) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "model": null,
+  "source": "grok-usage",
+  "tokens": {
+    "basis": "cumulative",
+    "cacheRead": 3,
+    "cacheWrite": 1,
+    "input": 6,
+    "output": 2,
+    "reasoning": 1,
+    "total": 12,
+  },
+  "updatedAt": 1794009600000,
+}
+
+ ❯ src/usage/grokAdapter.test.ts:38:147
+     36|  });
+     37|  it('rejects wrong parent, oversized file and invalid UTF8',async()=>{
+     38|   const s=await setup();await writeFile(s.file,JSON.stringify({...s.va…
+       |                                                                                                                                                   ^
+     39|   await writeFile(s.file,Buffer.alloc(2*1024*1024+1));expect(await s.a…
+     40|   await writeFile(s.file,Buffer.from([0xc3,0x28]));expect(await s.adap…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  |@sodashitsu/server| src/usage/grokUsage.test.ts > Grok session usage ledger > reads the cumulative session once, separates cached input and converts only reported USD ticks
+AssertionError: expected { model: null, …(6) } to deeply equal { model: null, …(6) }
+
+- Expected
++ Received
+
+@@ -1,9 +1,9 @@
+  {
+    "costAsOf": 1794009600000,
+    "costBasis": "reported",
+-   "costUsd": 0.0123456789,
++   "costUsd": 123.456789,
+    "model": null,
+    "source": "grok-usage",
+    "tokens": {
+      "basis": "cumulative",
+      "cacheRead": 30,
+
+ ❯ src/usage/grokUsage.test.ts:6:55
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  |@sodashitsu/server| src/usage/grokUsage.test.ts > Grok session usage ledger > marks partial cost and incomplete usage separately
+AssertionError: expected { model: null, …(8) } to match object { partial: true, …(2) }
+(13 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "costPartial": true,
+-   "costUsd": 0.0123456789,
++   "costUsd": 123.456789,
+    "partial": true,
+  }
+
+ ❯ src/usage/grokUsage.test.ts:20:51
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  |@sodashitsu/server| src/usage/grokUsage.test.ts > Grok session usage ledger > rejects wrong parent or invalid ledger
+AssertionError: expected { model: null, …(6) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "costAsOf": 1794009600000,
+  "costBasis": "reported",
+  "costUsd": 123.456789,
+  "model": null,
+  "source": "grok-usage",
+  "tokens": {
+    "basis": "cumulative",
+    "cacheRead": 30,
+    "cacheWrite": 10,
+    "input": 60,
+    "output": 20,
+    "reasoning": 5,
+    "total": 120,
+  },
+  "updatedAt": 1794009600000,
+}
+
+ ❯ src/usage/grokUsage.test.ts:22:532
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  8 failed | 16 passed (24)
+   Start at  17:31:04
+   Duration  208ms (transform 43%, tests 38%, import 15%, worker 4%)

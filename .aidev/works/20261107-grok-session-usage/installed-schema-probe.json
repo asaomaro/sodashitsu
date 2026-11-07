@@ -1,0 +1,11 @@
+{
+  "generatedFixtureOnly": true,
+  "realModelAccountingVerified": false,
+  "modelTurnSent": false,
+  "installedCliVersion": "1.0.77",
+  "exitCode": 0,
+  "stderrBytes": 0,
+  "numericFieldsMatch": true,
+  "falseFlagsOmittedAsSourceSerdeContract": true,
+  "fixtureTemporaryHomeRemoved": true
+}

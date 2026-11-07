@@ -141,6 +141,8 @@ import { NativeSubagentService } from "./agent/NativeSubagentService.js";
 import { SubagentTranscriptReader } from "./agent/SubagentTranscript.js";
 import { UsageInsightsReader } from "./usage/UsageInsights.js";
 import { UsageService } from "./usage/UsageService.js";
+import { GrokUsageAdapter } from "./usage/grokAdapter.js";
+import { openGrokSessionRecord } from "./agent/grokSession.js";
 import { UsageFeed } from "./usage/UsageFeed.js";
 import { ReportedUsage, UsageReportIntake } from "./usage/reportedUsage.js";
 import { StatusLineWrapper } from "./agent/statusLineWrap.js";
@@ -680,7 +682,14 @@ export async function composeServer(
   // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（Claude Code・Codex）。pane が閉じたら、その pane の集計を捨てる。
   const agyUsage = new AntigravityUsageAdapter();
   const copilotUsage = new AntigravityUsageAdapter(Date.now, {}, "copilot");
-  const usage = new UsageService({ session, adapters: [new MuseUsageAdapter(), agyUsage, new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), copilotUsage], logger, reported: reportedUsage });
+  const grokUsage=new GrokUsageAdapter({
+    openUsage:id=>openGrokSessionRecord(id,"usage.json"),
+    currentProof:source=>{
+      const pane=session.getPane(source.paneId),agent=pane?.agent,ref=pane?.agentSession;
+      return agent?.kind==="grok"&&ref?.kind==="grok"&&ref.sessionId===source.sessionId&&session.hasVerifiedAgentSession(source.paneId,agent.instanceId,source.sessionId)?JSON.stringify([agent.instanceId,source.sessionId]):undefined;
+    },
+  });
+  const usage = new UsageService({ session, adapters: [new MuseUsageAdapter(), agyUsage, new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), copilotUsage,grokUsage], logger, reported: reportedUsage });
   // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
   // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
   // Claude Code の分だけ覚える。Codex は、記録を会話の id で探す（報告の `transcript_path` は使わない。報告の `paneId` は当てにならず、付ける pane は SessionService が決める〔#132〕）。

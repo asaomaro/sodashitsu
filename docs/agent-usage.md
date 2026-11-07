@@ -316,3 +316,5 @@ Claude Code／Codexそれぞれ最大32MiB・64ファイル・約1.8秒、発見
 Museの契約枠はモデルを呼ばない`muse usage --json`を背景で最大毎分1回取得します。schema v1の`allowance`内の`window`・`weekly`・`tier`・`asOfMs`を使い、解除日時はUnixミリ秒のまま保持します。初回使用前などの`allowance:null`は未取得であり、残量100%とはしません。期間の長さが報告されない場合に「5時間」と決め打ちしません。この環境のアカウントではnullを確認し、値のある枠は生成したデータで検証しています。
 
 追加情報はWebのpane情報・アカウント枠、端末版の利用状況、`sodactl agent usage`（全項目は`--json`）で確認できます。会話本文・メール・ユーザー名・作業フォルダ・transcriptの場所は、利用状況の電文に含めません。既存のClaude Code・Codexの累計と制限の取り方は継続します。
+
+Grok CLI の保存済み集計については [Grok の利用状況](grok-usage.md)を参照してください。現在の親会話を確認できる場合だけ読み取り、集計に無い項目は未取得のままです。

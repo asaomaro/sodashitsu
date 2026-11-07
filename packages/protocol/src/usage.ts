@@ -45,7 +45,9 @@ export type UsageSource =
   /** GitHub Copilot CLI の記録（`session-state/<id>/events.jsonl`。同上）。 */
   | "copilot-events"
   | "muse-events"
-  | "agy-transcript";
+  | "agy-transcript"
+  /** Grok CLI persisted session usage.json ledger (already includes its reported child usage). */
+  | "grok-usage";
 
 /**
  * USD でない、エージェントの製品のクレジット（20261016-agent-usage-bob-copilot）。**USD に換算しない**（換算の率を製品は持たない）。
