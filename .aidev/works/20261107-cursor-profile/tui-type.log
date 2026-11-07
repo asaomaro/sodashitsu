@@ -1,0 +1,4 @@
+
+> @sodashitsu/tui@0.1.0 typecheck /workspaces/sodashitsu-cursor-assistant-profile/packages/tui
+> tsc --noEmit -p tsconfig.typecheck.json
+

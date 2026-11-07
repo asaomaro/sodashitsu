@@ -960,6 +960,7 @@ function agentToolsSection(env: SettingsEnv): SettingsSection {
             { value: "agy" as const, label: "Antigravity CLI" },
             { value: "copilot" as const, label: "GitHub Copilot CLI" },
             { value: "grok" as const, label: "Grok Build" },
+            { value: "cursor" as const, label: "Cursor CLI" },
           ],
           summary.kind,
           (kind) => setSummary({ kind, sessionId: "" }),

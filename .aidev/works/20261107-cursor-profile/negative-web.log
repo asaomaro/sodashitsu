@@ -1,0 +1,42 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-assistant-profile/packages/web
+
+ ❯ src/components/AgentToolsSettings.test.ts (8 tests | 1 failed) 136ms
+   × selects a Cursor variant while keeping unobserved independent effort at default 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/AgentToolsSettings.test.ts > selects a Cursor variant while keeping unobserved independent effort at default
+AssertionError: expected { kind: 'claude', model: '', …(1) } to match object { kind: 'cursor', …(2) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "effort": "",
+-   "kind": "cursor",
+-   "model": "cursor-generated-high",
++   "kind": "claude",
++   "model": "",
+  }
+
+ ❯ src/components/AgentToolsSettings.test.ts:64:35
+     62|  await w.get('[aria-label="要約エージェントの種類"]').setValue("cursor");await fl…
+     63|  await w.get('[aria-label="要約エージェントのモデル"]').setValue("cursor-generated…
+     64|  expect(settings.summarySettings).toMatchObject({kind:"cursor",model:"…
+       |                                   ^
+     65| });
+     66|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  17:04:17
+   Duration  1.86s (transform 66%, import 16%, environment 10%, tests 8%)
+
+undefined
+/workspaces/sodashitsu-cursor-assistant-profile/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/AgentToolsSettings.test.ts

@@ -56,3 +56,10 @@ it("selects Grok with fetched model-specific effort choices",async()=>{
  await w.get('[aria-label="要約エージェントのモデル"]').setValue("grok-generated");await w.get('[aria-label="要約エージェントのeffort"]').setValue("low");
  expect(settings.summarySettings).toMatchObject({kind:"grok",model:"grok-generated",effort:"low"});expect(w.text()).toContain("Grok CLIから取得");
 });
+
+it("selects a Cursor variant while keeping unobserved independent effort at default",async()=>{
+ const {w,settings}=fixture(vi.fn(async()=>({models:[{id:"cursor-generated-high",label:"Generated variant",efforts:[]}],message:"Cursor CLIから取得"})));await flushPromises();
+ await w.get('[aria-label="要約エージェントの種類"]').setValue("cursor");await flushPromises();
+ await w.get('[aria-label="要約エージェントのモデル"]').setValue("cursor-generated-high");
+ expect(settings.summarySettings).toMatchObject({kind:"cursor",model:"cursor-generated-high",effort:""});expect(w.get('[aria-label="要約エージェントのeffort"]').findAll('option')).toHaveLength(1);
+});

@@ -2022,7 +2022,7 @@ it("shows a simple notice when its shared headline stalls without announcing a l
 });
 
 
-it.each(["claude","codex","muse","agy","copilot","grok"])("previews local transcription and stages an edited draft for %s without sending",async kind=>{
+it.each(["claude","codex","muse","agy","copilot","grok","cursor"])("previews local transcription and stages an edited draft for %s without sending",async kind=>{
  const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/settings.html")).at(-1)!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
  try{
   await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false,transcriptionEnabled:true,transcriptionProvider:"local"});
@@ -2075,11 +2075,11 @@ it.each(["claude","codex","muse","agy","copilot","grok"])("previews local transc
  }finally{fixture.audioRead=null;await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
 });
 
-it("saves Grok captain choices only through the authorized chat window",async()=>{
+it.each(["grok","cursor"])("saves %s captain choices only through the authorized chat window",async kind=>{
  const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
  await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
- try{await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!,local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame},input={kind:"grok",profile:{model:"grok-generated",effort:"high"},notificationSummary:true};
+ try{await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!,local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame},input={kind,profile:{model:`${kind}-generated`,effort:kind==="cursor"?"":"high"},notificationSummary:true};
  await expect(fixture.handlers.get("assistant:captain-choice")!(event,input)).rejects.toThrow("許可");
- expect(await fixture.handlers.get("assistant:captain-choice")!(local,input)).toMatchObject({captainKind:"grok",agentProfiles:{grok:input.profile}});
+ expect(await fixture.handlers.get("assistant:captain-choice")!(local,input)).toMatchObject({captainKind:kind,agentProfiles:{[kind]:input.profile}});
  }finally{await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
 });

@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-assistant-profile/packages/desktop-assistant
+
+
+ Test Files  2 passed (2)
+      Tests  96 passed (96)
+   Start at  17:04:27
+   Duration  4.42s (tests 78%, transform 18%, import 4%)
+

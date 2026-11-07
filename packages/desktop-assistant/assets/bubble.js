@@ -196,7 +196,7 @@
    const differs=launch&&desired&&(launch.model!==desired.model||launch.effort!==desired.effort);
    document.getElementById("launch-settings").textContent=info ? `${requested}${differs?"。保存済み設定と異なります。停止後、新しく開始すると反映します。":""}（CLI内での変更は追跡しません）` : "種類・モデル・effortは専用セッション欄で選べます。";
    const before = kinds.value || preferences.captainKind || info?.kind;
-   const options = state.kinds.filter(kind => ["claude","codex","muse","agy","copilot","grok"].includes(kind.kind)&&(kind.available||kind.kind===preferences.captainKind));
+   const options = state.kinds.filter(kind => ["claude","codex","muse","agy","copilot","grok","cursor"].includes(kind.kind)&&(kind.available||kind.kind===preferences.captainKind));
    const signature = JSON.stringify(options);
    if (kinds.dataset.signature !== signature) {
      kinds.replaceChildren(); kinds.dataset.signature = signature;

@@ -48,6 +48,9 @@ export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatal
    const data=JSON.parse(raw);for(const m of (Array.isArray(data.models)?data.models:[])){if(m.visibility==='hide')continue;add(m.slug,m.display_name,m.supported_reasoning_levels?.map((e:any)=>e.effort));}
   }else if(kind==='muse'){
    const data=await query('muse',['serve','--disable-shell','--disable-write'],true) as any;for(const m of Array.isArray(data?.models)?data.models:[])add(m.modelId,m.displayLabel,m.variants);
+  }else if(kind==='cursor'){
+   const raw=await query('cursor-agent',['--list-models']) as string;
+   for(const line of raw.replace(/\x1b\[[0-9;]*m/g,'').split('\n')){const match=/^([A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,199}) - (.+)$/.exec(line);if(match)add(match[1],match[2]!.replace(/ \(current(?:, default)?\)$| \(default\)$/,''),[]);}
   }else if(kind==='grok'){
    const data=await query('grok',['agent','--no-leader','stdio'],'grok') as any;
    if(data?.error)throw Error('model catalog error');
@@ -59,7 +62,7 @@ export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatal
   }else{
    add('auto','Auto',[]);add('gpt-5.4','GPT-5.4',['low','medium','high','xhigh']);
   }
-  return {models:rows,message:rows.length?(kind==='grok'?'Grok CLIから取得したモデル・effort候補です。最大5分キャッシュし、この画面内では再接続まで保持します。':['claude','copilot'].includes(kind)?'代表的なモデル候補です。利用可否は契約とCLIの版に従います。':''):'候補を取得できません。既定値または保存済みモデルを使用できます。'};
+  return {models:rows,message:rows.length?(kind==='cursor'?'Cursor CLIから取得したモデル候補です。effort等のvariantはモデルIDで選び、独立effortは未取得です。最大5分キャッシュし、この画面内では再接続まで保持します。':kind==='grok'?'Grok CLIから取得したモデル・effort候補です。最大5分キャッシュし、この画面内では再接続まで保持します。':['claude','copilot'].includes(kind)?'代表的なモデル候補です。利用可否は契約とCLIの版に従います。':''):'候補を取得できません。既定値または保存済みモデルを使用できます。'};
  }catch{return {models:[],message:'モデル候補を取得できません。既定値または保存済みモデルを使用できます。'};}
 }
 export function createAssistantModelLister(){

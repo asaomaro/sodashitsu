@@ -1,0 +1,67 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-assistant-profile/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/noticeFeed.test.ts (25 tests | 1 failed) 89ms
+   × cursor completion includes the originating agent and can load its reply 5ms
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (71 tests | 1 failed) 4058ms
+   × saves cursor captain choices only through the authorized chat window 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > saves cursor captain choices only through the authorized chat window
+ZodError: [
+  {
+    "code": "invalid_value",
+    "values": [
+      "claude",
+      "codex",
+      "muse",
+      "agy",
+      "copilot",
+      "grok"
+    ],
+    "path": [
+      "kind"
+    ],
+    "message": "Invalid option: expected one of \"claude\"|\"codex\"|\"muse\"|\"agy\"|\"copilot\"|\"grok\""
+  }
+]
+ ❯ src/main.ts:1808:170
+    1806|       }
+    1807|       if(action==="captain-choice"){
+    1808|         const request=z.object({kind:z.enum(["claude","codex","muse","…
+       |                                                                                                                                                                          ^
+    1809|         const saved=await controller.chooseCaptain(request.kind,reques…
+    1810|         assistantChat?.configure(saved.agentProfiles,activeCharacterId…
+ ❯ src/main.test.ts:2083:63
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/noticeFeed.test.ts > cursor completion includes the originating agent and can load its reply
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/noticeFeed.test.ts:376:107
+    374|  const f=fixture();const actor={...f.agent,kind,label:kind};f.feed.sna…
+    375|  f.feed.event({event:"pane.agent_status_changed",data:{paneId:f.ids.pa…
+    376|  const notice=f.feed.notices[0]!;expect(notice.title).toContain(kind);…
+       |                                                                                                           ^
+    377|  f.feed.details(notice.id,{messages:[{role:"assistant",text:"作業完了です"}]…
+    378| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 94 passed (96)
+   Start at  17:04:12
+   Duration  4.38s (tests 77%, transform 19%, import 4%)
+
+undefined
+/workspaces/sodashitsu-cursor-assistant-profile/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/main.test.ts src/noticeFeed.test.ts

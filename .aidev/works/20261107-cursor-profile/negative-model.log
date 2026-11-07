@@ -1,0 +1,41 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-assistant-profile/packages/server
+
+ ❯ src/agent/assistantModels.test.ts (9 tests | 1 failed) 45ms
+   × reads Cursor advertised variant IDs without inferring separate effort from suffixes 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/assistantModels.test.ts > reads Cursor advertised variant IDs without inferring separate effort from suffixes
+AssertionError: expected [ { id: 'auto', …(2) }, …(1) ] to deeply equal [ { id: 'auto', …(2) }, …(1) ]
+
+- Expected
++ Received
+
+@@ -4,9 +4,9 @@
+      "id": "auto",
+      "label": "Auto",
+    },
+    {
+      "efforts": [],
+-     "id": "gpt-generated-high",
+-     "label": "Generated High",
++     "id": "gpt-5.4",
++     "label": "GPT-5.4",
+    },
+  ]
+
+ ❯ src/agent/assistantModels.test.ts:69:32
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  17:04:11
+   Duration  957ms (transform 73%, import 22%, tests 5%)
+
+undefined
+/workspaces/sodashitsu-cursor-assistant-profile/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/assistantModels.test.ts

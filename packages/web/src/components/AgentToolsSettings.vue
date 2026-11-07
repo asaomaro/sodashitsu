@@ -79,7 +79,7 @@ onBeforeUnmount(()=>{++epoch;});
     <h4>会話・通知の作業要約</h4>
     <label>種類
       <select aria-label="要約エージェントの種類" :value="settings.summaryConfigured?settings.summarySettings.kind:''" @change="changeKind"><option value="">未設定（従来の通知）</option>
-        <option value="claude">Claude Code</option><option value="codex">Codex</option><option value="muse">Muse Code</option><option value="agy">Antigravity CLI</option><option value="copilot">GitHub Copilot CLI</option><option value="grok">Grok Build</option>
+        <option value="claude">Claude Code</option><option value="codex">Codex</option><option value="muse">Muse Code</option><option value="agy">Antigravity CLI</option><option value="copilot">GitHub Copilot CLI</option><option value="grok">Grok Build</option><option value="cursor">Cursor CLI</option>
       </select>
     </label>
     <label>モデル

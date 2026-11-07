@@ -62,3 +62,9 @@ it('keeps large actual catalogs bounded at 512 rather than silently dropping aft
  await writeFile(join(dir,'models_cache.json'),JSON.stringify({models:Array.from({length:600},(_,i)=>({slug:`generated-${i}`}))}));
  const result=await readAssistantModels('codex');expect(result.models).toHaveLength(512);expect(result.models.at(-1)?.id).toBe('generated-511');
 });
+
+it('reads Cursor advertised variant IDs without inferring separate effort from suffixes',async()=>{
+ const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),stdout:new PassThrough(),stderr:new PassThrough(),kill:vi.fn()});vi.mocked(spawn).mockReturnValue(child as never);
+ const result=readAssistantModels('cursor');queueMicrotask(()=>{child.stdout.write('Available models\nauto - Auto (current, default)\ngpt-generated-high - Generated High\n--unsafe - Invalid\nTip: not a model\n');child.emit('close',0);});
+ expect((await result).models).toEqual([{id:'auto',label:'Auto',efforts:[]},{id:'gpt-generated-high',label:'Generated High',efforts:[]}]);expect(vi.mocked(spawn).mock.calls[0]!.slice(0,2)).toEqual(['cursor-agent',['--list-models']]);
+});
