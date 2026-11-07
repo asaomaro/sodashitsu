@@ -1,0 +1,113 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-captain-window-controls
+
+ ❯ |@sodashitsu/desktop-assistant| src/assistantChat.test.ts (28 tests | 6 failed) 1734ms
+   × stops only the owned ready actor and keeps start gated until physical-stop receipt and fresh observation 54ms
+   × rejects stale revisions, arbitrary panes and wrong actors without issuing stop 55ms
+   × discards an in-flight old ready refresh once stop starts 52ms
+   × does not overwrite a new connection's captain with a late stop response 53ms
+   × keeps uncertain retirement in stopping and never treats an RPC failure as permission to restart 52ms
+   × does not publish a stale null stop observation over a newer actor in the same connection 52ms
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (75 tests | 3 failed) 4012ms
+   × opens the dedicated terminal or its pinned form in a reply popup while ordinary Soda remains separate 17ms
+   × waits for the first Soda document, then activates and repaints without a second open 7ms
+   × permits captain stop only from the visible conversation, keeps it running after hide, and re-enables explicit start after verified completion 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/assistantChat.test.ts > stops only the owned ready actor and keeps start gated until physical-stop receipt and fresh observation
+TypeError: f.chat.stopSession is not a function
+ ❯ src/assistantChat.test.ts:340:23
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/assistantChat.test.ts > rejects stale revisions, arbitrary panes and wrong actors without issuing stop
+AssertionError: expected [Function] to throw error including '変わり' but got 'f.chat.stopSession is not a function'
+
+Expected: "変わり"
+Received: "f.chat.stopSession is not a function"
+
+ ❯ src/assistantChat.test.ts:347:93
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/assistantChat.test.ts > discards an in-flight old ready refresh once stop starts
+TypeError: f.chat.stopSession is not a function
+ ❯ src/assistantChat.test.ts:352:49
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/assistantChat.test.ts > does not overwrite a new connection's captain with a late stop response
+TypeError: f.chat.stopSession is not a function
+ ❯ src/assistantChat.test.ts:357:23
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/assistantChat.test.ts > keeps uncertain retirement in stopping and never treats an RPC failure as permission to restart
+TypeError: f.chat.stopSession is not a function
+ ❯ src/assistantChat.test.ts:361:22
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/assistantChat.test.ts > does not publish a stale null stop observation over a newer actor in the same connection
+TypeError: f.chat.stopSession is not a function
+ ❯ src/assistantChat.test.ts:366:24
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > opens the dedicated terminal or its pinned form in a reply popup while ordinary Soda remains separate
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/main.test.ts:1578:175
+    1576|  const target=new URLSearchParams(new URL(remoteOf(reply).url).hash.sl…
+    1577|  expect(remoteOf(full).url).toBe("http://127.0.0.1:7780/");
+    1578|  await fixture.handlers.get("assistant:session-open")!(local,{terminal…
+       |                                                                                                                                                                               ^
+    1579|  const previous=remoteOf(reply).url;let finish!:(value:unknown)=>void;…
+    1580|  const delayed=fixture.handlers.get("assistant:session-open")!(local);…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > waits for the first Soda document, then activates and repaints without a second open
+TypeError: finish is not a function
+ ❯ src/main.test.ts:1593:2
+    1591|  expect(panel.options.show).toBe(false);expect(panel.options.icon).toM…
+    1592|  expect(panel.show).not.toHaveBeenCalled();
+    1593|  finish();await vi.waitFor(()=>expect(panel.show).toHaveBeenCalledOnce…
+       |  ^
+    1594|  expect(panel.focus).toHaveBeenCalledOnce();expect(panel.webContents.i…
+    1595|  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > permits captain stop only from the visible conversation, keeps it running after hide, and re-enables explicit start after verified completion
+TypeError: fixture.handlers.get(...) is not a function
+ ❯ src/main.test.ts:2111:202
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  9 failed | 104 passed (113)
+   Start at  22:45:01
+   Duration  4.39s (tests 71%, transform 24%, import 5%)
+

@@ -1,0 +1,30 @@
+{
+  "packages/desktop-assistant/assets/bubble.html": {
+    "sha256": "f9706095eded03beacbb3fbead56bd9562a1697d1c4df85e9dd60f250a76b1f0",
+    "exact": true
+  },
+  "packages/desktop-assistant/assets/bubble.js": {
+    "sha256": "7b331f78df70afb95ea9b9fc505cd34ae7537a2c84ac0abbdf0cb99e0d64b3e9",
+    "exact": true
+  },
+  "packages/desktop-assistant/src/assistantChat.ts": {
+    "sha256": "dfb5d2e9bc7e3f82c0aa4c0197b98ee6fe03a90a57bb22c7dd8f5a0ea2b02c79",
+    "exact": true
+  },
+  "packages/desktop-assistant/src/assistantRpc.ts": {
+    "sha256": "da0d908bf68083ff8a993d076afd688024c9a590edf074ecff970b888877303a",
+    "exact": true
+  },
+  "packages/desktop-assistant/src/main.ts": {
+    "sha256": "64eacda1701d72621ce169d52cc7b2adbd39d643cbc7c8f6b6efb13cf64ef232",
+    "exact": true
+  },
+  "packages/desktop-assistant/src/preload.cts": {
+    "sha256": "29cf58239142967fe23caa3a69fc3824072591ee308458eee15a8f02e20f07b0",
+    "exact": true
+  },
+  "packages/desktop-assistant/src/security.ts": {
+    "sha256": "8c89fe3809f4d4cefcd873e460f16eb482673f73a0e2b8ea4f766f075db24f32",
+    "exact": true
+  }
+}

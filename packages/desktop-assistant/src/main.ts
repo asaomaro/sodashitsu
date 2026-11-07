@@ -1148,6 +1148,7 @@ function registerIpc(): void {
     "agent-open",
     "notification-summary-refresh",
     "start-session",
+    "stop-session",
     "adopt-session",
     "send-message",
     "apps",
@@ -1572,14 +1573,15 @@ function registerIpc(): void {
         return action === "reminder-ack" ? reminders.acknowledge(id) : reminders.remove(id);
       }
       if (action === "session-open") {
+        const terminalOnly=z.object({terminalOnly:z.literal(true)}).strict().optional().parse(input)?.terminalOnly===true;
         if (!owner.window.isVisible()) throw Error("吹き出しを開いて操作してください。");
         const info=chatState().session,rpc=control,origin=controller.preferences.serverOrigin,epoch=bubbleEpoch;
-        if(!info?.agent||!chatState().connected||!rpc)throw Error("専用セッションを確認してください。");
+        if(!info?.agent||info.state!=="ready"||chatState().busy||!chatState().connected||!rpc)throw Error("専用セッションを確認してください。");
         const instanceId=info.agent.instanceId;
         const pending=z.object({asks:z.array(z.object({askId:z.string().min(1).max(200),paneId:z.uuid()})).max(128)}).parse(await rpc.request("ask.subscribe",{renderer:"assistant"}));
         const current=chatState();
-        if(control!==rpc||controller.preferences.serverOrigin!==origin||!controller.preferences.enabled||epoch!==bubbleEpoch||bubble!==owner.window||owner.window.isDestroyed()||!owner.window.isVisible()||!current.connected||current.session?.paneId!==info.paneId||current.session.workspaceId!==info.workspaceId||current.session.agent?.instanceId!==instanceId)throw Error("専用セッションが変更されました。開き直してください。");
-        const question=pending.asks.find(ask=>ask.paneId===info.paneId);
+        if(control!==rpc||controller.preferences.serverOrigin!==origin||!controller.preferences.enabled||epoch!==bubbleEpoch||bubble!==owner.window||owner.window.isDestroyed()||!owner.window.isVisible()||!current.connected||current.busy||current.session?.state!=="ready"||current.session?.paneId!==info.paneId||current.session.workspaceId!==info.workspaceId||current.session.agent?.instanceId!==instanceId)throw Error("専用セッションが変更されました。開き直してください。");
+        const question=terminalOnly?undefined:pending.asks.find(ask=>ask.paneId===info.paneId);
         openPanel(origin,{
           paneId:info.paneId,workspaceId:info.workspaceId,instanceId:instanceId,machineId:"local",
           ...(question?{askId:question.askId}:{}),
@@ -1819,9 +1821,10 @@ function registerIpc(): void {
         assistantChat?.configure(saved.agentProfiles,activeCharacterId());
         return saved;
       }
-      if (["start-session", "adopt-session", "send-message"].includes(action)) {
+      if (["start-session", "stop-session", "adopt-session", "send-message"].includes(action)) {
         if (!assistantChat || !controller.preferences.enabled)
           throw Error("アシスタントは接続していません。");
+        if(action==="stop-session"){if(owner.window!==bubble||!owner.window.isVisible()||owner.window.isMinimized())throw Error("会話ウィンドウを開いて操作してください。");return assistantChat.stopSession(input);}
         if (action === "start-session") return assistantChat.start(input);
         if (action === "adopt-session") return assistantChat.adopt(input);
         return assistantChat.send(input);

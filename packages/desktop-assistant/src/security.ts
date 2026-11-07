@@ -34,7 +34,7 @@ export function authorizeLocalSender(
   if (!sender.mainFrame || !sender.current || localRole(sender.frameUrl) !== sender.role)
     return false;
   if(action==="appearance-state")return true;
-  if(action==="captain-choice"||action==="agent-models"||action==="agent-open"||action==="notification-summary-refresh")return sender.role==="bubble";
+  if(action==="stop-session"||action==="captain-choice"||action==="agent-models"||action==="agent-open"||action==="notification-summary-refresh")return sender.role==="bubble";
   if (sender.role === "panel") return action === "window-action" || action === "window-resize" || action === "window-state";
   if (action === "read" || action === "settings" || action === "open" || action === "chat")
     return true;

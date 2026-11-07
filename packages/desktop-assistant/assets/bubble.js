@@ -6,7 +6,7 @@
  document.getElementById("portrait").src=portrait.uri;
  document.getElementById("captain-name").textContent=portrait.name;
  const greeting=document.querySelector("#conversation > .spoken:not([id])");if(greeting&&portrait.greeting)greeting.textContent=portrait.greeting;
- document.getElementById("expand-session").addEventListener("click",()=>window.assistant.openSession().catch(error=>{document.getElementById("status").textContent=error.message;}));
+ document.getElementById("expand-session").addEventListener("click",()=>window.assistant.openSession({terminalOnly:true}).catch(error=>{document.getElementById("status").textContent=error.message;}));
  document.getElementById("open").addEventListener("click", () => window.assistant.open());
  document.getElementById("settings").addEventListener("click", () => window.assistant.settings());
  const log = document.getElementById("conversation");
@@ -127,7 +127,7 @@
  const offDraft=window.assistant.onDraft(updateDraft);window.addEventListener("pagehide",offDraft,{once:true});window.assistant.draftState().then(updateDraft).catch(()=>{});
  const send = document.getElementById("send");
  const kinds = document.getElementById("agent-kind");
- const start = document.getElementById("start-session");
+ const start = document.getElementById("start-session"),stopSession=document.getElementById("stop-session"),openSession=document.getElementById("expand-session");
  const adopt = document.getElementById("adopt-session");
  const sessionStatus = document.getElementById("session-status");
  const models=document.getElementById("agent-model"),efforts=document.getElementById("agent-effort");
@@ -174,6 +174,7 @@
  efforts.addEventListener("change",()=>void saveChoice());
  const updateChatControls=()=>{
   const info=chatState?.session;
+  stopSession.disabled=openSession.disabled=!chatState?.connected||chatState.busy||info?.state!=="ready"||!info.agent;
   start.disabled=!chatState?.connected||chatState.busy||!chatState.kinds.some(k=>k.kind===kinds.value&&k.available)||!!info&&!["shell","stopped"].includes(info.state)||choiceLoading||choiceSaving||!choiceValid;
   setChoiceDisabled();
  };
@@ -230,6 +231,7 @@
  start.addEventListener("click", () => {
    if (chatState) window.assistant.startSession({ revision: chatState.revision, kind: kinds.value, retry: chatState.session?.state === "stopped" }).catch(report);
  });
+ stopSession.addEventListener("click",()=>{const actor=chatState?.session?.agent;if(actor&&!stopSession.disabled)window.assistant.stopSession({revision:chatState.revision,instanceId:actor.instanceId}).catch(report);});
  adopt.addEventListener("click", () => {
    const actor = chatState?.session?.observedAgent;
    if (actor) window.assistant.adoptSession({ revision: chatState.revision, instanceId: actor.instanceId }).catch(report);

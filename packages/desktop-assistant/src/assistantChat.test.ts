@@ -333,3 +333,36 @@ it.each(["copilot", "agy"] as const)("displays %s conversation text, replaces th
  await f.chat.send({revision:f.chat.snapshot().revision,instanceId:info.agent.instanceId,text:"reply"});expect(f.request).toHaveBeenCalledWith("assistant.prompt",{deviceId:f.deviceId,instanceId:info.agent.instanceId,text:"reply"});
 });
 it("keeps unsupported providers on their dedicated terminal without guessing another transcript",async()=>{const f=fixture();f.info({...f.ready,kind:"bob",agent:{...f.ready.agent!,kind:"bob"}});await connected(f);expect(f.chat.snapshot().hint).toContain("未対応");expect(f.request.mock.calls.some(c=>c[0]==="assistant.conversation")).toBe(false);});
+
+it("stops only the owned ready actor and keeps start gated until physical-stop receipt and fresh observation",async()=>{
+ const f=fixture();f.info(f.ready);await connected(f);const base=f.request.getMockImplementation()!;let finish!:(value:unknown)=>void;
+ f.request.mockImplementation((method,input)=>method==='assistant.stop'?new Promise(resolve=>finish=resolve):base(method,input));
+ const stopped=f.chat.stopSession({revision:f.chat.snapshot().revision,instanceId:f.ready.agent!.instanceId});expect(f.chat.snapshot()).toMatchObject({busy:true,session:{state:'stopping'}});expect(()=>f.chat.start({revision:f.chat.snapshot().revision,kind:'codex'})).toThrow('終了');
+ f.info(null);await f.chat.refresh();expect(f.chat.snapshot().busy).toBe(true);await expect(f.chat.start({revision:f.chat.snapshot().revision,kind:'codex'})).rejects.toThrow('前の操作');expect(f.request.mock.calls.some(c=>c[0]==='assistant.ensure')).toBe(false);
+ finish({stopped:true});await stopped;await vi.waitFor(()=>expect(f.chat.snapshot()).toMatchObject({busy:false,session:null}));
+ expect(f.request).toHaveBeenCalledWith('assistant.stop',{deviceId:f.deviceId,instanceId:f.ready.agent!.instanceId});await f.chat.start({revision:f.chat.snapshot().revision,kind:'codex'});expect(f.request).toHaveBeenCalledWith('assistant.ensure',expect.objectContaining({deviceId:f.deviceId,activate:true}));
+});
+it("rejects stale revisions, arbitrary panes and wrong actors without issuing stop",async()=>{
+ const f=fixture();f.info(f.ready);await connected(f);const revision=f.chat.snapshot().revision;
+ expect(()=>f.chat.stopSession({revision:revision-1,instanceId:f.ready.agent!.instanceId})).toThrow('変わり');expect(()=>f.chat.stopSession({revision,instanceId:randomUUID()})).toThrow('船長');expect(()=>f.chat.stopSession({revision,instanceId:f.ready.agent!.instanceId,paneId:randomUUID()})).toThrow();expect(f.request.mock.calls.some(c=>c[0]==='assistant.stop')).toBe(false);
+});
+it("discards an in-flight old ready refresh once stop starts",async()=>{
+ const f=fixture();f.info(f.ready);await connected(f);const base=f.request.getMockImplementation()!;let old!:(value:unknown)=>void,finish!:(value:unknown)=>void,hold=true;
+ f.request.mockImplementation((method,input)=>{if(method==='assistant.get'&&hold){hold=false;return new Promise(resolve=>old=resolve);}if(method==='assistant.stop')return new Promise(resolve=>finish=resolve);return base(method,input);});
+ const refresh=f.chat.refresh(),stopping=f.chat.stopSession({revision:f.chat.snapshot().revision,instanceId:f.ready.agent!.instanceId});old(f.ready);await refresh;expect(f.chat.snapshot()).toMatchObject({busy:true,session:{state:'stopping'}});f.info(null);finish({stopped:true});await stopping;
+});
+it("does not overwrite a new connection's captain with a late stop response",async()=>{
+ const f=fixture();f.info(f.ready);await connected(f);const base=f.request.getMockImplementation()!;let finish!:(value:unknown)=>void;
+ f.request.mockImplementation((method,input)=>method==='assistant.stop'?new Promise(resolve=>finish=resolve):base(method,input));
+ const stopped=f.chat.stopSession({revision:f.chat.snapshot().revision,instanceId:f.ready.agent!.instanceId});f.chat.connection(false);const next={...f.ready,agent:{...f.ready.agent!,instanceId:randomUUID()}};f.info(next);f.chat.connection(true);await vi.waitFor(()=>expect(f.chat.snapshot().session?.agent?.instanceId).toBe(next.agent.instanceId));finish({stopped:true});await expect(stopped).rejects.toThrow('接続');expect(f.chat.snapshot().session?.agent?.instanceId).toBe(next.agent.instanceId);
+});
+it("keeps uncertain retirement in stopping and never treats an RPC failure as permission to restart",async()=>{
+ const f=fixture();f.info(f.ready);await connected(f);const base=f.request.getMockImplementation()!;f.request.mockImplementation((method,input)=>method==='assistant.stop'?Promise.reject(Error('Unconfirmed exit')):base(method,input));f.info({...f.ready,state:'stopping'});
+ await expect(f.chat.stopSession({revision:f.chat.snapshot().revision,instanceId:f.ready.agent!.instanceId})).rejects.toThrow('Unconfirmed');await vi.waitFor(()=>expect(f.chat.snapshot()).toMatchObject({busy:false,session:{state:'stopping'}}));expect(()=>f.chat.start({revision:f.chat.snapshot().revision,kind:'codex'})).toThrow('終了');
+});
+it("does not publish a stale null stop observation over a newer actor in the same connection",async()=>{
+ const f=fixture();f.info(f.ready);await connected(f);const base=f.request.getMockImplementation()!;let old!:(value:unknown)=>void,hold=true;
+ f.request.mockImplementation((method,input)=>{if(method==='assistant.stop')return Promise.resolve({stopped:true});if(method==='assistant.get'&&hold){hold=false;return new Promise(resolve=>old=resolve);}return base(method,input);});
+ const stopping=f.chat.stopSession({revision:f.chat.snapshot().revision,instanceId:f.ready.agent!.instanceId});await vi.waitFor(()=>expect(old).toBeTypeOf('function'));const next={...f.ready,agent:{...f.ready.agent!,instanceId:randomUUID()}};f.info(next);await f.chat.refresh();const mark=f.changed.mock.calls.length;old(null);await stopping;
+ expect(f.chat.snapshot().session?.agent?.instanceId).toBe(next.agent.instanceId);expect(f.changed.mock.calls.slice(mark).some(([state])=>state.session===null)).toBe(false);
+});

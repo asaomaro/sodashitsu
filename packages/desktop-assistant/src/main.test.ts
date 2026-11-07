@@ -1575,6 +1575,7 @@ it("opens the dedicated terminal or its pinned form in a reply popup while ordin
  await fixture.handlers.get("assistant:session-open")!(local);
  const target=new URLSearchParams(new URL(remoteOf(reply).url).hash.slice(1));expect(target.get("assistantAsk")).toBe(askId);expect(target.get("assistantPane")).toBe(scope.paneId);
  expect(remoteOf(full).url).toBe("http://127.0.0.1:7780/");
+ await fixture.handlers.get("assistant:session-open")!(local,{terminalOnly:true});expect(new URLSearchParams(new URL(remoteOf(reply).url).hash.slice(1)).has("assistantAsk")).toBe(false);
  const previous=remoteOf(reply).url;let finish!:(value:unknown)=>void;rpc.request.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
  const delayed=fixture.handlers.get("assistant:session-open")!(local);rpc.options.status(false);finish({asks:pending});
  await expect(delayed).rejects.toThrow("専用セッションが変更");expect(remoteOf(reply).url).toBe(previous);
@@ -2099,4 +2100,17 @@ it("rejects a model catalog completed after the control connection changed",asyn
  rpc.request.mockImplementation(async(method:string,params:any)=>method==="agent.model_options"?new Promise(done=>complete=done):original(method,params));
  const pending=fixture.handlers.get("assistant:agent-models")!(local,{kind:"grok",refresh:true});rpc.options.status(false);complete({models:[],message:"Stale control"});await expect(pending).rejects.toThrow("接続先が変わりました");
  }finally{rpc.request.mockImplementation(original);await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
+});
+
+it("permits captain stop only from the visible conversation, keeps it running after hide, and re-enables explicit start after verified completion",async()=>{
+ const settings=fixture.windows.find(w=>!w.isDestroyed()&&w.url.endsWith('settings.html'))!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};await fixture.handlers.get('assistant:save')!(event,{enabled:true,mode:'tray',quietFullscreen:false,voiceEnabled:false});
+ const rpc=fixture.controls.at(-1)!,original=rpc.request.getMockImplementation()! as (...args:any[])=>any,actor={instanceId:randomUUID(),kind:'codex',label:'Generated captain',state:'idle',completionSeq:0,serverSeenSeq:0,verified:true,since:1},scope={workspaceId:randomUUID(),tabId:randomUUID(),paneId:randomUUID()};let ready=true,finish!:(value:unknown)=>void;
+ rpc.request.mockImplementation(async(method:string,p:any)=>{if(method==='assistant.get')return ready?{deviceId:p.deviceId,...scope,kind:'codex',state:'ready',agent:actor,observedAgent:actor}:null;if(method==='agent.kinds')return{kinds:[{kind:'codex',label:'Codex',available:true}]};if(method==='assistant.stop')return new Promise(resolve=>finish=resolve);if(method==='assistant.conversation')throw Error('No generated record');if(method==='ask.subscribe')return{asks:[]};return original(method,p);});
+ try{
+  rpc.options.status(true);await fixture.handlers.get('assistant:chat')!(event);const chat=fixture.windows.at(-1)!,local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame};await vi.waitFor(async()=>expect(await fixture.handlers.get('assistant:conversation')!(local)).toMatchObject({connected:true,session:{state:'ready'}}));
+  const state=await fixture.handlers.get('assistant:conversation')!(local) as any,input={revision:state.revision,instanceId:actor.instanceId};await expect(fixture.handlers.get('assistant:stop-session')!(event,input)).rejects.toThrow('許可');
+  const stopping=fixture.handlers.get('assistant:stop-session')!(local,input);await vi.waitFor(async()=>expect(await fixture.handlers.get('assistant:conversation')!(local)).toMatchObject({busy:true,session:{state:'stopping'}}));await expect(fixture.handlers.get('assistant:session-open')!(local)).rejects.toThrow('専用セッション');
+  await fixture.handlers.get('assistant:hide')!(local);expect(chat.isVisible()).toBe(false);ready=false;finish({stopped:true});await stopping;expect(chat.isVisible()).toBe(false);await vi.waitFor(async()=>expect(await fixture.handlers.get('assistant:conversation')!(local)).toMatchObject({busy:false,session:null}));
+  const after=await fixture.handlers.get('assistant:conversation')!(local) as any;await fixture.handlers.get('assistant:start-session')!(local,{revision:after.revision,kind:'codex'});expect(rpc.request).toHaveBeenCalledWith('assistant.ensure',expect.objectContaining({kind:'codex',activate:true}));
+ }finally{rpc.request.mockImplementation(original);await fixture.handlers.get('assistant:save')!(event,{enabled:false});}
 });

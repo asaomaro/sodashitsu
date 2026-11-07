@@ -39,7 +39,7 @@ const Info = z.object({
   paneId: z.uuid(),
   kind: AssistantAgentKind,
   launchSettings: AssistantLaunchSettings.optional(),
-  state: z.enum(["shell", "starting", "ready", "stopped", "conflict"]),
+  state: z.enum(["shell", "starting", "ready", "stopping", "stopped", "conflict"]),
   agent: Actor.nullable(),
   observedAgent: Actor.nullable(),
 });
@@ -115,6 +115,7 @@ export class AssistantChat {
   }
   private generation = 0;
   private reading = false;
+  private readEpoch = 0;
   private refreshAgain = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private cursor = 0;
@@ -166,7 +167,8 @@ export class AssistantChat {
     }
     this.reading = true;
     const generation = this.generation;
-    const live = () => this.state.connected && generation === this.generation;
+    const readEpoch=this.readEpoch;
+    const live = () => this.state.connected && generation === this.generation && readEpoch===this.readEpoch;
     try {
       const raw = await this.rpc.request("assistant.get", { deviceId: this.deviceId });
       if (!live()) return;
@@ -244,9 +246,28 @@ export class AssistantChat {
       }
     }
   }
+  stopSession(input: unknown): Promise<void> {
+    const request=Adopt.parse(input);this.assertRevision(request.revision);
+    const session=this.state.session;
+    if(session?.state!=="ready"||session.agent?.instanceId!==request.instanceId)throw Error("船長が変更されたか、停止できる状態ではありません。");
+    return this.act(async()=>{
+      const generation=this.generation,epoch=++this.readEpoch;
+      const live=()=>this.state.connected&&generation===this.generation&&epoch===this.readEpoch;
+      this.apply({...session,state:"stopping"});this.publish();
+      const result=await this.rpc.request("assistant.stop",{deviceId:this.deviceId,instanceId:request.instanceId});
+      if(!live())return;z.object({stopped:z.literal(true)}).strict().parse(result);
+      // Only a fresh observation after verified stop may release the start gate.
+      const revision=this.state.revision,raw=await this.rpc.request("assistant.get",{deviceId:this.deviceId});
+      if(!live()||revision!==this.state.revision)return;
+      const current=raw===null?null:Info.parse(raw) as AssistantSessionInfo;
+      if(current&&current.deviceId!==this.deviceId)throw Error("端末の識別情報が一致しません。");
+      this.apply(current);
+    });
+  }
   start(input: unknown): Promise<void> {
     const request = Start.parse(input);
     this.assertRevision(request.revision);
+    if(this.state.session?.state==="stopping")throw Error("船長の終了を確認するまでお待ちください。");
     if (!this.state.kinds.some((kind) => kind.kind === request.kind && kind.available))
       throw Error("このエージェントは接続先で利用できません。");
     return this.act(async () => {
@@ -415,6 +436,8 @@ export class AssistantChat {
       ? "使うエージェントを選び、専用セッションを開始してください。"
       : info.state === "conflict"
         ? "専用端末のエージェントが変わりました。操舵室で対象を確認して選び直してください。"
+        : info.state === "stopping"
+          ? "船長を停止しています。終了を確認するまでお待ちください。"
         : info.state === "starting"
           ? "専用エージェントの起動を待っています。"
           : info.state === "stopped"

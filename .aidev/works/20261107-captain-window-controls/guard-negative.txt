@@ -1,0 +1,55 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-captain-window-controls
+
+ ❯ |@sodashitsu/desktop-assistant| src/assistantChat.test.ts (28 tests | 2 failed) 1864ms
+   × discards an in-flight old ready refresh once stop starts 63ms
+   × does not publish a stale null stop observation over a newer actor in the same connection 104ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/assistantChat.test.ts > discards an in-flight old ready refresh once stop starts
+AssertionError: expected { revision: 5, connected: true, …(8) } to match object { busy: true, …(1) }
+(38 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "busy": true,
+    "session": {
+-     "state": "stopping",
++     "state": "ready",
+    },
+  }
+
+ ❯ src/assistantChat.test.ts:352:190
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/assistantChat.test.ts > does not publish a stale null stop observation over a newer actor in the same connection
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/assistantChat.test.ts:367:162
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 26 passed (28)
+   Start at  22:44:57
+   Duration  2.97s (tests 65%, transform 28%, import 7%)
+

@@ -30,6 +30,7 @@ export type AssistantMethod =
   | "assistant.conversation"
   | "assistant.get"
   | "assistant.ensure"
+  | "assistant.stop"
   | "assistant.adopt"
   | "assistant.cancel_image"
   | "assistant.audio_begin"

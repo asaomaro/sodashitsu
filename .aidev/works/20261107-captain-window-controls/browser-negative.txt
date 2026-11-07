@@ -1,0 +1,117 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+ExpectError: expect(locator).toBeEnabled() failed
+
+Locator: locator('#stop-session')
+Expected: enabled
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeEnabled" locator('#stop-session') with timeout 5000ms
+  - waiting for locator('#stop-session')
+
+    at captureRawStack (/workspaces/sodashitsu-captain-window-controls/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js:8588:17)
+    at callMatcherAsStep (/workspaces/sodashitsu-captain-window-controls/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13310:57)
+    at Object.toBeEnabled (/workspaces/sodashitsu-captain-window-controls/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13302:23)
+    at /workspaces/sodashitsu-captain-window-controls/.aidev/works/20261107-captain-window-controls/browser.mjs:255:175 {
+  matcherResult: {
+    message: 'expect(locator).toBeEnabled() failed\n' +
+      '\n' +
+      "Locator: locator('#stop-session')\n" +
+      'Expected: enabled\n' +
+      'Timeout: 5000ms\n' +
+      'Error: element(s) not found\n' +
+      '\n' +
+      'Call log:\n' +
+      `  - Expect "toBeEnabled" locator('#stop-session') with timeout 5000ms\n` +
+      "  - waiting for locator('#stop-session')\n",
+    pass: false,
+    actual: undefined,
+    name: 'toBeEnabled',
+    expected: 'enabled',
+    log: [
+      `  - Expect "toBeEnabled" locator('#stop-session') with timeout 5000ms`,
+      "  - waiting for locator('#stop-session')"
+    ],
+    timeout: 5000,
+    ariaSnapshot: '- main:\n' +
+      '  - img "船長"\n' +
+      '  - strong: 船長\n' +
+      '  - paragraph: 専用アシスタント・codex・00000000\n' +
+      '  - button "最大化"\n' +
+      '  - button "吹き出しを閉じる"\n' +
+      '  - group:\n' +
+      '    - text: 通知・確認待ち（1件）\n' +
+      '    - region "確認待ち・質問":\n' +
+      '      - group:\n' +
+      '        - button "通知元"\n' +
+      '        - strong: 作業要約・判断事項\n' +
+      '        - paragraph: 作業要約を確認しています。\n' +
+      '        - paragraph\n' +
+      '        - button "要約を再試行"\n' +
+      '        - group: 原文・詳細\n' +
+      '        - button "小窓で応答"\n' +
+      '        - button "操舵室で開く"\n' +
+      '        - textbox "通知元への返答"\n' +
+      '        - button "この通知元へ返答"\n' +
+      '  - group:\n' +
+      '    - text: エージェント一覧（3件・作業中 1件・確認待ち 1件） 表示する状態\n' +
+      '    - combobox "表示する状態":\n' +
+      '      - option "すべて" [selected]\n' +
+      '      - option "作業中"\n' +
+      '      - option "確認待ち"\n' +
+      '      - option "待機中"\n' +
+      '    - list "起動中のエージェント":\n' +
+      '      - listitem:\n' +
+      '        - button "作業中 実装担当 (12345678) / 操舵室"\n' +
+      '      - listitem:\n' +
+      '        - button "確認待ち レビュー担当 (23456789) / 操舵室"\n' +
+      '      - listitem:\n' +
+      '        - button "待機中 待機担当 (34567890) / 操舵室"\n' +
+      '  - group:\n' +
+      '    - text: 会話\n' +
+      '    - log:\n' +
+      '      - paragraph: こんにちは。操舵室の船長です。\n' +
+      '    - text: 船長へのメッセージ\n' +
+      '    - textbox "船長へのメッセージ"\n' +
+      '    - button "送信"\n' +
+      '  - group:\n' +
+      '    - text: 専用セッション\n' +
+      '    - status: Generated ready\n' +
+      '    - text: 種類\n' +
+      '    - combobox "種類":\n' +
+      '      - option "claude"\n' +
+      '      - option "codex" [selected]\n' +
+      '      - option "muse"\n' +
+      '      - option "agy"\n' +
+      '      - option "copilot"\n' +
+      '      - option "grok"\n' +
+      '      - option "cursor"\n' +
+      '    - text: モデル\n' +
+      '    - combobox "モデル":\n' +
+      '      - option "エージェントの既定値"\n' +
+      '      - option "codex model" [selected]\n' +
+      '    - text: effort\n' +
+      '    - combobox "effort":\n' +
+      '      - option "エージェントの既定値"\n' +
+      '      - option "high" [selected]\n' +
+      '    - status: Generated catalog 取得元：CLIの候補 照会日時：1970/1/1 9:00:01（モデル一覧の更新日時ではありません）\n' +
+      '    - button "モデル候補を再取得"\n' +
+      '    - status\n' +
+      '    - button "専用セッションを開始" [disabled]\n' +
+      '  - navigation "アシスタントの操作":\n' +
+      '    - button "ツールを開く"\n' +
+      '    - button "専用端末・フォームを開く"\n' +
+      '    - button "操舵室を開く"\n' +
+      '    - button "設定"\n' +
+      '  - group:\n' +
+      '    - text: 接続・起動情報\n' +
+      '    - status: 通知を受信しています。\n' +
+      '    - status: 起動時のモデル・effort指定は不明です（CLI内での変更は追跡しません）'
+  }
+}
+
+Node.js v24.15.0
