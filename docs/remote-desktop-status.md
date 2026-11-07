@@ -157,3 +157,5 @@ Windows通常サーバーも8542306dから全体build/handoffを実施し、2pan
 ### マイク転送の途中停止を修正（2026-11-07）
 
 Opusの入力時刻に穴が空く処理と、Chromium出力の1µs丸めを完全一致で扱う処理を修正しました。実ブラウザUIで生成音の10秒/15秒転送が完走し、不要な圧縮器再起動はなく、仮想captureでも997Hzを約7.74秒分検出しています。この範囲の途中停止は解決扱いです。設定は各回復元済みです。全frameの受音・物理マイク/実通話・他ブラウザ全般まで検証したものではありません。詳細は[実機/回帰検査](../.aidev/works/20261107-microphone-opus-timeline/tasks.md)。
+
+修正版cf8c1013はmainとsr-pcのC:\git\sodashitsuへ反映済みです。Windowsの型チェックを含むWeb buildも成功し、通常7780の配信HTML/JavaScriptと実buildの一致、既存2paneの保持を確認しました。既存のWeb画面は再読み込みで反映されます。
