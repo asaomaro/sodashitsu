@@ -121,7 +121,7 @@ onBeforeUnmount(() => {
         <span ref="text" class="statusline-text"
           ><template v-for="(segment, i) in segments" :key="`${segment.field}-${i}`"
             ><span v-if="i" class="separator"> · </span
-            ><span :class="`color-${segment.color}`">{{ segment.text }}</span></template
+            ><span :class="`color-${segment.color}`" :title="segment.title">{{ segment.text }}</span></template
           ></span
         >
       </div>

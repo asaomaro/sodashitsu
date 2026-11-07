@@ -1,0 +1,48 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-state-ui/packages/protocol
+
+ ❯ src/statusline.test.ts (16 tests | 5 failed | 11 skipped) 31ms
+   × shows native subagents in claude footer without usage or kind gates 14ms
+   × shows native subagents in codex footer without usage or kind gates 5ms
+   × shows native subagents in muse footer without usage or kind gates 3ms
+   × shows native subagents in copilot footer without usage or kind gates 2ms
+   × shows native subagents in agy footer without usage or kind gates 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/statusline.test.ts > shows native subagents in claude footer without usage or kind gates
+ FAIL  src/statusline.test.ts > shows native subagents in codex footer without usage or kind gates
+ FAIL  src/statusline.test.ts > shows native subagents in muse footer without usage or kind gates
+ FAIL  src/statusline.test.ts > shows native subagents in copilot footer without usage or kind gates
+ FAIL  src/statusline.test.ts > shows native subagents in agy footer without usage or kind gates
+AssertionError: expected { field: 'subagents', …(2) } to match object { text: 'Subagents 所属 2', …(1) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "text": "Subagents 所属 2",
+-   "title": StringContaining "作業中の件数ではありません",
++   "text": "Subagents 2",
+  }
+
+ ❯ src/statusline.test.ts:220:88
+    218|  expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field…
+    219|  pane.agent!.subagents!.countBasis="alive";
+    220|  expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field…
+       |                                                                                        ^
+    221| });
+    222|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 11 skipped (16)
+   Start at  13:28:52
+   Duration  390ms (transform 64%, tests 18%, import 14%, worker 4%)
+
+undefined
+/workspaces/sodashitsu-subagent-state-ui/packages/protocol:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/statusline.test.ts -t native subagents

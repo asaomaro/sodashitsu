@@ -211,3 +211,11 @@ it("shows known context token counts for Bob and agy without requiring a reporte
     expect(statuslineSegments(pane, { ...usage, tokens: { basis: "context" } }, [], loadStatuslineSettings({})).find(s => s.field === "tokens")).toBeUndefined();
   }
 });
+
+it.each(["claude","codex","muse","copilot","agy"])("shows native subagents in %s footer without usage or kind gates",kind=>{
+ const pane={agent:{kind,label:kind,state:"idle",subagents:{count:2,items:[]}}} as unknown as import("./model.js").Pane;
+ const settings=loadStatuslineSettings({fields:{subagents:true}});
+ expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")).toMatchObject({text:"Subagents 2"});
+ pane.agent!.subagents!.countBasis="alive";
+ expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")).toMatchObject({text:"Subagents 所属 2",title:expect.stringContaining("作業中の件数ではありません")});
+});

@@ -141,6 +141,7 @@ export interface StatuslineSegment {
   field: StatuslineField;
   text: string;
   color: StatuslineColor;
+  title?: string;
 }
 /** A single formatter for Web/TUI. Missing values never produce placeholders. */
 export function statuslineSegments(
@@ -200,7 +201,11 @@ export function statuslineSegments(
     pane.agentSession?.kind === pane.agent.kind ? pane.agentSession.sessionId : undefined,
   );
   add("cwd", pane.cwd);
-  if (pane.agent.subagents) add("subagents", `Subagents ${pane.agent.subagents.count}`);
+  if (pane.agent.subagents) {
+    add("subagents", `Subagents ${pane.agent.subagents.countBasis==="alive"?"所属 ":""}${pane.agent.subagents.count}`);
+    const segment=values.get("subagents")?.[0];
+    if(segment&&pane.agent.subagents.countBasis==="alive")segment.title="所属するサブエージェントの数。作業中の件数ではありません。";
+  }
   for (const account of accounts)
     if (account.kind === pane.agent.kind)
       for (const w of account.windows) {

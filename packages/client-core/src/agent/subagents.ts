@@ -1,4 +1,4 @@
-import type { AgentInfo } from "@sodashitsu/protocol";
+import type { AgentInfo, SubagentInfo } from "@sodashitsu/protocol";
 
 /**
  * エージェントが動かしているサブエージェントの表示に使う共有の部品（20261004-subagent-display）。web・tui が同じ文言・同じ引き方を使う。
@@ -37,4 +37,15 @@ export function subagentsHiddenCount(subagents: NonNullable<AgentInfo["subagents
 export function subagentsMoreLabel(subagents: NonNullable<AgentInfo["subagents"]>): string | null {
   const hidden = subagentsHiddenCount(subagents);
   return hidden > 0 ? `ほか ${hidden} 件` : null;
+}
+
+/** Missing state is the existing working-only contract; an unknown state is never active. */
+export function subagentStateLabel(item: Pick<SubagentInfo,"state">):string {
+  return item.state===undefined||item.state==="working"?"実行中":item.state==="idle"?"待機中":"状態不明";
+}
+export function subagentCountLabel(subagents:AgentInfo["subagents"]):string {
+  return subagents?`サブエージェント ${subagents.countBasis==="alive"?"所属 ":""}${subagents.count} 件`:"サブエージェントの状況は未取得";
+}
+export function subagentEmptyLabel(subagents:AgentInfo["subagents"]):string {
+  return !subagents?"サブエージェントの状況は未取得です":subagents.count>0?"サブエージェントの個別情報は未取得です":subagents.countBasis==="alive"?"所属するサブエージェントはありません":"実行中のサブエージェントはありません";
 }
