@@ -53,6 +53,12 @@ public static class SodaMicrophoneChecks {
         using(var worker=new SodaDesktopMicrophone(name,Process.GetCurrentProcess().Id+100000,()=>true,(Func<SodaDesktopMicrophone.ISink>)(()=>{activated=true;return new Sink();})))
         using(var client=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous)){client.Connect(2000);var bytes=new byte[16];int count=SodaDesktopPipeOperation.Wait(callback=>client.BeginRead(bytes,0,bytes.Length,callback,null),value=>client.EndRead(value),2000,()=>true);worker.Dispose();Require(!activated&&count==0,"Wrong PID activated endpoint");}
         activated=false;using(var worker=new SodaDesktopMicrophone("SodaDesktopMicrophone-"+Guid.NewGuid().ToString("N"),Process.GetCurrentProcess().Id,()=>false,(Func<SodaDesktopMicrophone.ISink>)(()=>{activated=true;return new Sink();}))){}Require(!activated,"Denied owner activated endpoint");
+        activated=false;int peerChecks=0;name="SodaDesktopMicrophone-"+Guid.NewGuid().ToString("N");
+        using(var worker=new SodaDesktopMicrophone(name,Process.GetCurrentProcess().Id,()=>true,(Func<SodaDesktopMicrophone.ISink>)(()=>{activated=true;return new Sink();}),pid=>{peerChecks++;return false;}))
+        using(var client=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous)){client.Connect(2000);var bytes=new byte[16];int count=SodaDesktopPipeOperation.Wait(callback=>client.BeginRead(bytes,0,bytes.Length,callback,null),value=>client.EndRead(value),2000,()=>true);worker.Dispose();Require(peerChecks==1&&!activated&&count==0,"Unverified peer activated microphone endpoint");}
+        activated=false;allowed=true;name="SodaDesktopMicrophone-"+Guid.NewGuid().ToString("N");
+        using(var worker=new SodaDesktopMicrophone(name,Process.GetCurrentProcess().Id,()=>allowed,(Func<SodaDesktopMicrophone.ISink>)(()=>{activated=true;return new Sink();}),pid=>{allowed=false;return true;}))
+        using(var client=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous)){client.Connect(2000);var bytes=new byte[16];int count=SodaDesktopPipeOperation.Wait(callback=>client.BeginRead(bytes,0,bytes.Length,callback,null),value=>client.EndRead(value),2000,()=>true);worker.Dispose();Require(!activated&&count==0,"Revoked peer activated microphone endpoint");}
         return "microphone_generated_pcm_checks_passed";
     }
 }

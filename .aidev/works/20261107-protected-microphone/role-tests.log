@@ -1,0 +1,13 @@
+
+> @sodashitsu/client-core@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/client-core
+> vitest run src/desktop/DesktopNativeRoleBinary.node.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/client-core
+
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  12:14:13
+   Duration  303ms (tests 48%, transform 28%, import 23%, worker 1%)
+

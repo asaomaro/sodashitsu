@@ -2,7 +2,7 @@
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $request=[Console]::In.ReadToEnd()|ConvertFrom-Json
-if($request.operation-notin@('host','module') -or $request.role-notin@('copy','audio','selection','user-audio')){throw 'invalid native role'}
+if($request.operation-notin@('host','module') -or $request.role-notin@('copy','audio','selection','user-audio','user-microphone')){throw 'invalid native role'}
 $source=[string]$request.source
 if($source.Length-gt4096 -or $source-match '["\x00-\x1f]'){throw 'invalid SDK source directory'}
 $framework=Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319'
@@ -77,6 +77,7 @@ try{
   switch($request.role){
    'copy'{$files=@('WindowsNativeDragLease.cs','WindowsNativeDragStreams.cs','WindowsNativeDragDataObject.cs','WindowsNativeDragPackets.cs','WindowsNativeDragPump.cs','WindowsNativeDragSlot.cs','WindowsNativeDragWorker.cs');$refs=@('System.dll','System.Core.dll','System.Web.Extensions.dll','System.Security.dll','System.Windows.Forms.dll')}
    'user-audio'{$files=@('WindowsUserAudioRole.cs','WindowsDesktopAudio.cs','WindowsDesktopPipeKernel.cs');$refs=@('System.dll','System.Core.dll','System.Web.Extensions.dll','System.Security.dll')}
+   'user-microphone'{$files=@('WindowsUserMicrophoneRole.cs','WindowsUserMicrophonePolicy.cs','WindowsDesktopMicrophone.cs','WindowsDesktopPipeKernel.cs');$refs=@('System.dll','System.Core.dll','System.Web.Extensions.dll','System.Security.dll')}
    'audio'{$files=@('WindowsAudioPipeBridge.cs');$refs=@('System.dll','System.Core.dll','System.Web.Extensions.dll','System.Security.dll')}
    'selection'{$files=@('WindowsExplorerSelection.cs','WindowsExplorerSelectionWorker.cs');$refs=@('System.dll','System.Core.dll','System.Web.Extensions.dll','WPF\WindowsBase.dll','WPF\UIAutomationClient.dll','WPF\UIAutomationTypes.dll')}
   }

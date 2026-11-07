@@ -1,0 +1,40 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/server
+> vitest run src/desktop/DesktopProtectedMicrophone.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/server
+
+ ❯ src/desktop/DesktopProtectedMicrophone.test.ts (8 tests | 1 failed) 1087ms
+   × does not release an activated endpoint slot on physical close without a retirement receipt 30ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopProtectedMicrophone.test.ts > does not release an activated endpoint slot on physical close without a retirement receipt
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/desktop/DesktopProtectedMicrophone.test.ts:53:44
+     51|   f.microphones[0].hooks.write({ type: 'native_microphone', id: x.id, …
+     52|   x.microphone.stop(); x.child.emit('close', 1, null); await new Promi…
+     53|   expect(x.protectedMicrophoneAvailable()).toBe(false); expect(x.hooks…
+       |                                            ^
+     54| });
+     55| it('cancels delayed preparation and never spawns after the source chan…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  12:14:52
+   Duration  1.21s (tests 95%, transform 3%, import 1%)
+
+/workspaces/sodashitsu-protected-microphone/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 test: `vitest run src/desktop/DesktopProtectedMicrophone.test.ts`
+Exit status 1

@@ -10,13 +10,16 @@ using Microsoft.Win32.SafeHandles;
 public sealed class SodaDesktopMicrophone : IDisposable {
     public interface ISink : IDisposable { void Write(byte[] pcm,Func<bool> allowed); }
     public static readonly byte[] Hello={83,68,77,73,1,1,16,0,128,187,0,0,192,3,0,0};
-    readonly string name;readonly int clientPid;readonly Func<bool> allowed;readonly Func<ISink> factory;readonly Thread thread;
+    readonly string name;readonly int clientPid;readonly Func<bool> allowed;readonly Func<ISink> factory;readonly Thread thread;readonly Func<int,bool> peerGuard;
     volatile bool stopping;NamedPipeServerStream pipe;
     public SodaDesktopMicrophone(string name,int clientPid,Func<bool> allowed,string endpoint)
         :this(name,clientPid,allowed,delegate{return new Wasapi(endpoint);}){}
-    public SodaDesktopMicrophone(string name,int clientPid,Func<bool> allowed,Func<ISink> factory) {
+    public SodaDesktopMicrophone(string name,int clientPid,Func<bool> allowed,string endpoint,Func<int,bool> peerGuard)
+        :this(name,clientPid,allowed,delegate{return new Wasapi(endpoint);},peerGuard){}
+    public SodaDesktopMicrophone(string name,int clientPid,Func<bool> allowed,Func<ISink> factory):this(name,clientPid,allowed,factory,null){}
+    public SodaDesktopMicrophone(string name,int clientPid,Func<bool> allowed,Func<ISink> factory,Func<int,bool> peerGuard) {
         Guid guid;if(name==null||!name.StartsWith("SodaDesktopMicrophone-",StringComparison.Ordinal)||name.Length!="SodaDesktopMicrophone-".Length+32||!Guid.TryParseExact(name.Substring("SodaDesktopMicrophone-".Length),"N",out guid)||clientPid<=0||allowed==null||factory==null)throw new ArgumentException("Microphone owner");
-        this.name=name;this.clientPid=clientPid;this.allowed=allowed;this.factory=factory;
+        this.name=name;this.clientPid=clientPid;this.allowed=allowed;this.factory=factory;this.peerGuard=peerGuard;
         thread=new Thread(Run);thread.IsBackground=true;thread.SetApartmentState(ApartmentState.MTA);thread.Start();
     }
     [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe,out uint pid);
@@ -27,7 +30,7 @@ public sealed class SodaDesktopMicrophone : IDisposable {
             if(!Alive())return;
             server=new NamedPipeServerStream(name,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous,4096,4096,SodaDesktopPipeSecurity.OwnerSecurity());pipe=server;
             Complete(callback=>server.BeginWaitForConnection(callback,null),2000,value=>{server.EndWaitForConnection(value);return 0;});
-            uint pid;if(!Alive()||!GetNamedPipeClientProcessId(server.SafePipeHandle,out pid)||pid!=(uint)clientPid)return;
+            uint pid;if(!Alive()||!GetNamedPipeClientProcessId(server.SafePipeHandle,out pid)||pid!=(uint)clientPid||peerGuard!=null&&!peerGuard((int)pid)||!Alive())return;
             // Enumerate/activate no endpoint before the private pipe is authenticated.
             using(var sink=factory()) {
                 if(!Alive())return;
