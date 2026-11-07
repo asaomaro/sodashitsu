@@ -1,0 +1,9 @@
+# Verification record
+
+Own worktree /workspaces/sodashitsu-subagent-ui, baseline e84ef715. Node 24.22.2. Installed own dependencies offline with ignore-scripts and built only own protocol/client-core dependencies. No live daemon, user agent, microphone, actual conversation or user preferences were touched. Generated fixture runs through a localhost Vite instance with real source Sidebar.vue/Pinia/theme CSS.
+
+Raw outputs are in evidence. Baseline Sidebar.vue and three TUI implementation files were restored while keeping new tests/fixture. New Web expansion test failed, TUI inline expansion test failed, and actual browser DOM lacked aria-expanded on the old dialog button. Negative exit codes and byte-for-byte restored SHA256 checks for every file are in restore.json. Browser tests consume Vite-transformed source, not a stale built Sidebar artifact. Only unchanged protocol/client-core dependency dist is imported.
+
+After exact restoration, run related Sidebar Web tests, TUI subagent/sidebar/mouse tests and package typechecks. No full repository build/test duplicated. Browser fixture confirms the collapsed-only badge, readonly child rendering, keyboard activation, preserved expansion through updates, 64-item remainder and theme-inherited foreground/rounded rows for Dracula, One Light, assistant dark and assistant normal. /tmp/subagent-sidebar-ui-final.png is the optional generated screenshot, visually inspected separately. Fixture output does not prove provider-specific collection; it validates rendering of the shared active-only contract.
+
+Final result: Web Sidebar suite 3 files / 206 tests passed; TUI related suite 3 files / 70 tests passed; Web and TUI typechecks passed; browser fixture passed. Existing default-layout golden HTML changed only to add the intended unknown-subagent title to parent rows; reviewed as a metadata change and the snapshot suite passed. Root read-only review reported no must findings before final evidence collection.

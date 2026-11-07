@@ -2,6 +2,7 @@ import { scrollbarThumb, type ScrollMetrics, type Track } from "../scrollbar.js"
 import type { DisplayState, ItemTarget, MachineState, Pane, Workspace } from "@sodashitsu/protocol";
 import { remoteKey, type MachineSection } from "../../model/MachinesModel.js";
 import {
+  subagentsMoreLabel,
   aggregate,
   themeModeOf,
   sameItemTarget,
@@ -112,6 +113,7 @@ export type SidebarHit = SidebarTarget & {
 export interface SidebarScroll {
   spaces: number;
   agents: number;
+  expandedSubagents?: Set<string>;
   reveal: { workspaceId?: string | null; paneId?: string | null } | null;
 }
 
@@ -587,9 +589,19 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
         hit: { kind: "agent", paneId: id },
         // サブエージェントの件数（1 件以上のとき。20261004-subagent-display）。`⤷` は unicode11 で 1 桁（環境で崩れるなら別の記号にする。decisions D11）。
         ...((p.agent?.subagents?.count ?? 0) > 0
-          ? { badge: { text: `⤷${p.agent!.subagents!.count}`, paneId: id } }
+          ? { badge: { text: ctx.sidebarScroll?.expandedSubagents?.has(`${ctx.machines?.selectedId??LOCAL_MACHINE_ID}:${p.agent!.instanceId}`) ? "▾" : `▸${p.agent!.subagents!.count}`, paneId: id } }
           : {}),
       });
+      const subs=p.agent!.subagents;
+      if(subs&&subs.count>0&&ctx.sidebarScroll?.expandedSubagents?.has(`${ctx.machines?.selectedId??LOCAL_MACHINE_ID}:${p.agent!.instanceId}`)){
+        const items=subs.items.slice(0,64);
+        const plain=(value:string)=>value.replace(/[\x00-\x1f\x7f-\x9f\u2028-\u202e\u2066-\u2069]/g," ");
+        for(const child of items)agentLines.push({indent:2,selected:false,rows:[[
+          {text:`↳ ${plain(child.type??"サブエージェント")}${child.background?"（裏実行）":""}`},
+        ],[{text:`実行中${child.description?` · ${plain(child.description)}`:""}`,fg:stateColor(ctx.theme,"working")}]]});
+        const more=subagentsMoreLabel({...subs,items});
+        if(more)agentLines.push({indent:2,selected:false,rows:[[{text:more}]]});
+      }
     }
   }
 

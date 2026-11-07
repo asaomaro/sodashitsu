@@ -184,7 +184,7 @@ export class TuiApp {
   protected newTabButton: TabBarHits["newTab"] = null;
   protected tabBarHits: TabBarHits = { tabs: [], newTab: null };
   /** サイドバーの区画・tab バーの表示の位置（描くたびに収まる範囲へ寄せ直される）。 */
-  protected readonly sidebarScroll: SidebarScroll = { spaces: 0, agents: 0, reveal: null };
+  protected readonly sidebarScroll: SidebarScroll = { spaces: 0, agents: 0, reveal: null, expandedSubagents:new Set() };
   protected readonly tabScroll: TabScroll = { first: 0, reveal: true };
   /** 前のフレームで見せた workspace・tab・pane・navigate の選択（変わったら区画・tab バーをそこまで動かす）。 */
   private shown = {
@@ -630,6 +630,14 @@ export class TuiApp {
       switchMachine: (id, target) => this.switchMachine(id, target),
       toggleMachine: (id) => this.machines.toggleCollapsed(id),
       toggleSidebarSection: (section) => this.toggleSidebarSection(section),
+      toggleSidebarSubagents: (paneId) => {
+        const agent=this.model.panes.get(paneId)?.agent;
+        if(!agent||(agent.subagents?.count??0)<1)return;
+        const key=`${this.machines.selectedId}:${agent.instanceId}`,expanded=this.sidebarScroll.expandedSubagents!;
+        if(expanded.has(key))expanded.delete(key);else expanded.add(key);
+        if(expanded.size>256)expanded.delete(expanded.values().next().value!);
+        this.scheduleRender();
+      },
       sectionsCollapsed: () => this.prefs.sectionsCollapsed,
       copyOnSelect: () => this.prefs.copyOnSelect,
       toastHits: () => this.toastHits,

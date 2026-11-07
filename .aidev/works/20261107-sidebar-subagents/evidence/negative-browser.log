@@ -1,0 +1,50 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+ExpectError: expect(locator).toHaveAttribute(expected) failed
+
+Locator:  locator('.sidebar-subagent-btn')
+Expected: "false"
+Received: ""
+Timeout:  5000ms
+
+Call log:
+  - Expect "toHaveAttribute" locator('.sidebar-subagent-btn') with timeout 5000ms
+  - waiting for locator('.sidebar-subagent-btn')
+    14 × locator resolved to <button type="button" data-v-6dec5f19="" data-assistant-feature="" class="sidebar-subagent-btn" aria-label="サブエージェント 3 件を表示" data-subagent-pane="fixture-pane">…</button>
+       - unexpected value "null"
+
+    at captureRawStack (/workspaces/sodashitsu-subagent-ui/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js:8588:17)
+    at callMatcherAsStep (/workspaces/sodashitsu-subagent-ui/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13310:57)
+    at Object.toHaveAttribute (/workspaces/sodashitsu-subagent-ui/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13302:23)
+    at /workspaces/sodashitsu-subagent-ui/scripts/verify-sidebar-subagents.mjs:38:74 {
+  matcherResult: {
+    name: 'toHaveAttribute',
+    expected: 'false',
+    message: 'expect(locator).toHaveAttribute(expected) failed\n' +
+      '\n' +
+      "Locator:  locator('.sidebar-subagent-btn')\n" +
+      'Expected: "false"\n' +
+      'Received: ""\n' +
+      'Timeout:  5000ms\n' +
+      '\n' +
+      'Call log:\n' +
+      `  - Expect "toHaveAttribute" locator('.sidebar-subagent-btn') with timeout 5000ms\n` +
+      "  - waiting for locator('.sidebar-subagent-btn')\n" +
+      '    14 × locator resolved to <button type="button" data-v-6dec5f19="" data-assistant-feature="" class="sidebar-subagent-btn" aria-label="サブエージェント 3 件を表示" data-subagent-pane="fixture-pane">…</button>\n' +
+      '       - unexpected value "null"\n',
+    pass: false,
+    actual: null,
+    log: [
+      `  - Expect "toHaveAttribute" locator('.sidebar-subagent-btn') with timeout 5000ms`,
+      "  - waiting for locator('.sidebar-subagent-btn')",
+      '    14 × locator resolved to <button type="button" data-v-6dec5f19="" data-assistant-feature="" class="sidebar-subagent-btn" aria-label="サブエージェント 3 件を表示" data-subagent-pane="fixture-pane">…</button>',
+      '       - unexpected value "null"'
+    ],
+    timeout: 5000,
+    ariaSnapshot: '- button "サブエージェント 3 件を表示"'
+  }
+}
+
+Node.js v24.22.2

@@ -1,0 +1,41 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-ui/packages/web
+
+ ❯ src/components/Sidebar.test.ts (196 tests | 1 failed | 195 skipped) 70ms
+   ❯ Sidebar — サブエージェントの件数のボタン (11)
+     × 展開状態は更新/並び替えで保持、別instanceでは閉じ、上限と残り件数を表示する 67ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > 展開状態は更新/並び替えで保持、別instanceでは閉じ、上限と残り件数を表示する
+AssertionError: expected [] to have a length of 64 but got +0
+
+- Expected
++ Received
+
+- 64
++ 0
+
+ ❯ src/components/Sidebar.test.ts:738:78
+    736|   it("展開状態は更新/並び替えで保持、別instanceでは閉じ、上限と残り件数を表示する",async()=>{
+    737|     const session=setup(makeAgent({subagents:subs(70)}));const w=mount…
+    738|     await btn(w).trigger("click");expect(w.findAll(".sidebar-subagent-…
+       |                                                                              ^
+    739|     expect(w.get(".sidebar-subagent-more").text()).toBe("ほか 6 件");
+    740|     useViewStore(pinia).toggleAgentSort();session.paneUpserted(makePan…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 195 skipped (196)
+   Start at  12:23:01
+   Duration  6.50s (transform 83%, import 11%, environment 4%, tests 1%)
+
+  Transform  transforming modules took 5.27s · 83% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-subagent-ui/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/Sidebar.test.ts -t 展開状態

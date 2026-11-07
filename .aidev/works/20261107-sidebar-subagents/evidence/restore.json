@@ -1,0 +1,23 @@
+{
+  "negative-web": 1,
+  "negative-tui": 1,
+  "negative-browser": 1,
+  "restore": {
+    "packages/web/src/components/Sidebar.vue": {
+      "exact": true,
+      "sha256": "e5ce16395a4b638d9f1fbbe54cefeda1bda9f3bb6f83cb6a12378069133d1de0"
+    },
+    "packages/tui/src/render/chrome/sidebar.ts": {
+      "exact": true,
+      "sha256": "0b3112c3ee92ac17cfb7f016d6047483ff674af88cfbf2e84a7d9d4a5d149396"
+    },
+    "packages/tui/src/app/TuiApp.ts": {
+      "exact": true,
+      "sha256": "85ca721b1dc5e97193169eb6ca20e6550f212b42a0933c8c3a3488b8ca0602b7"
+    },
+    "packages/tui/src/input/mouse.ts": {
+      "exact": true,
+      "sha256": "a7aa3d81e12d9c5a80bc52f681802e30d46e6a914f63ed8613aeb1bd7e7bdbf4"
+    }
+  }
+}

@@ -1,0 +1,45 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-ui/packages/tui
+
+ ❯ src/app/TuiApp.subagents.test.ts (15 tests | 1 failed | 14 skipped) 140ms
+   ❯ 端末版のサブエージェントの表示 (15)
+     × 右端の開閉で子行を表示し、開いている間は件数を隠す（親paneは移動しない） 138ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > 右端の開閉で子行を表示し、開いている間は件数を隠す（親paneは移動しない）
+AssertionError: expected { kind: 'subagents', …(2) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "instanceId": "a1",
+  "kind": "subagents",
+  "paneId": "p3",
+}
+
+ ❯ src/app/TuiApp.subagents.test.ts:80:36
+     78|     const h=await start({subagents:subs(2)});let b=h.badge()!;
+     79|     h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();
+     80|     expect(h.app.ui.dialogContext).toBeNull();expect(h.app.model.focus…
+       |                                    ^
+     81|     let screen=await h.screen();expect(screen).toContain("実行中");expect…
+     82|     h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({s…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  12:23:09
+   Duration  3.33s (transform 79%, import 16%, tests 4%)
+
+  Transform  transforming modules took 2.53s · 79% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-subagent-ui/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/app/TuiApp.subagents.test.ts -t 右端の開閉

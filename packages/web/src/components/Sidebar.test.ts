@@ -629,8 +629,8 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     setup(makeAgent({ subagents: subs(3) }));
     const b = btn(mountSidebar(makeConnection()));
     expect(b.exists()).toBe(true);
-    expect(b.text()).toBe("3");
-    expect(b.attributes("aria-label")).toBe("サブエージェント 3 件を表示");
+    expect(b.find(".sidebar-subagent-count").text()).toBe("3");
+    expect(b.attributes("aria-label")).toBe("サブエージェント 3 件を展開");
   });
 
   it("1 行目（状態の印のある行）の中にあり、行の数を増やさない", () => {
@@ -642,7 +642,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     expect(rows[0]!.findAll(".sidebar-row-line1")).toHaveLength(1);
   });
 
-  it("押すと、そのエージェントの一覧のダイアログを開く（選んでいるマシンの pane）。行の click・pointerdown へ伝えない", async () => {
+  it("押すと子行を展開し、行の click・pointerdown へ伝えない", async () => {
     setup(makeAgent({ subagents: subs(2) }));
     const view = useViewStore(pinia);
     const conn = makeConnection();
@@ -657,7 +657,10 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     rowPointerdown.mockClear();
     btn(w).element.dispatchEvent(pointerEvent("pointerdown", { clientX: 1, clientY: 1 }));
     await btn(w).trigger("click");
-    expect(view.dialogContext).toEqual({ kind: "subagents", machineId: "local", paneId: "p1", opener: "button" });
+    expect(view.dialogContext).toBeNull();
+    expect(btn(w).attributes("aria-expanded")).toBe("true");
+    expect(w.findAll(".sidebar-subagent-row")).toHaveLength(2);
+    expect(w.find(".sidebar-subagent-count").exists()).toBe(false);
     expect(rowClick).not.toHaveBeenCalled();
     expect(rowPointerdown).not.toHaveBeenCalled();
     expect(conn.requests).toEqual([]); // pane.focus を送らない（pane へ移らない）
@@ -672,6 +675,8 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     machines.select(M2);
     const w = mountSidebar(makeConnection());
     await btn(w).trigger("click");
+    expect(btn(w).attributes("aria-expanded")).toBe("true");
+    await w.get(".sidebar-subagent-details").trigger("click");
     expect(useViewStore(pinia).dialogContext).toEqual({ kind: "subagents", machineId: M2, paneId: "p1", opener: "button" });
   });
 
@@ -683,7 +688,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     expect(row.text()).toContain("Claude Code");
     expect(row.findAll(".sidebar-row-line1")).toHaveLength(1);
     // 行の DOM は、subagents のある行からボタンを除いたものと同じ（ほかの表示は変わらない）。
-    const strip = (html: string) => html.replace(/<button[^>]*sidebar-subagent-btn[\s\S]*?<\/button>/g, "").replace(/<!--[\s\S]*?-->/g, "").replace(/ data-v-[0-9a-f]+=""/g, "").replace(/>\s+</g, "><");
+    const strip = (html: string) => html.replace(/ title="[^"]*"/g, "").replace(/<button[^>]*sidebar-subagent-btn[\s\S]*?<\/button>/g, "").replace(/<!--[\s\S]*?-->/g, "").replace(/ data-v-[0-9a-f]+=""/g, "").replace(/>\s+</g, "><");
     const oldHtml = strip(row.html());
     pinia = createPinia();
     setup(makeAgent({ subagents: subs(2) }));
@@ -716,7 +721,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     const w = mountSidebar(makeConnection());
     session.paneUpserted(makePane("p1", "t1", makeAgent({ subagents: subs(5) })));
     await nextTick();
-    expect(btn(w).text()).toBe("5");
+    expect(btn(w).find(".sidebar-subagent-count").text()).toBe("5");
     session.paneUpserted(makePane("p1", "t1", makeAgent({ subagents: subs(0) })));
     await nextTick();
     expect(btn(w).exists()).toBe(false);
@@ -725,8 +730,24 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
   it("別のエージェントの行には、それぞれの件数が出る", () => {
     const session = setup(makeAgent({ subagents: subs(2) }));
     session.paneUpserted(makePane("p2", "t1", makeAgent({ instanceId: "a2", subagents: subs(7) })));
-    const texts = mountSidebar(makeConnection()).findAll(".sidebar-agents .sidebar-subagent-btn").map((b) => b.text()).sort();
+    const texts = mountSidebar(makeConnection()).findAll(".sidebar-agents .sidebar-subagent-btn").map((b) => b.find(".sidebar-subagent-count").text()).sort();
     expect(texts).toEqual(["2", "7"]);
+  });
+  it("展開状態は更新/並び替えで保持、別instanceでは閉じ、上限と残り件数を表示する",async()=>{
+    const session=setup(makeAgent({subagents:subs(70)}));const w=mountSidebar(makeConnection());
+    await btn(w).trigger("click");expect(w.findAll(".sidebar-subagent-row")).toHaveLength(64);
+    expect(w.get(".sidebar-subagent-more").text()).toBe("ほか 6 件");
+    useViewStore(pinia).toggleAgentSort();session.paneUpserted(makePane("p1","t1",makeAgent({subagents:subs(2)})));await nextTick();
+    expect(btn(w).attributes("aria-expanded")).toBe("true");expect(w.findAll(".sidebar-subagent-row")).toHaveLength(2);
+    await btn(w).trigger("click");expect(w.findAll(".sidebar-subagent-row")).toHaveLength(0);expect(btn(w).find(".sidebar-subagent-count").text()).toBe("2");
+    await btn(w).trigger("click");session.paneUpserted(makePane("p1","t1",makeAgent({instanceId:"replacement",subagents:subs(2)})));await nextTick();
+    expect(btn(w).attributes("aria-expanded")).toBe("false");
+  });
+  it("未取得と0件を区別し、展開は別machineに漏れない",async()=>{
+    const session=setup(makeAgent());const w=mountSidebar(makeConnection());expect(w.get("[data-agent-pane]").attributes("title")).toContain("未取得");
+    session.paneUpserted(makePane("p1","t1",makeAgent({subagents:subs(0)})));await nextTick();expect(w.get("[data-agent-pane]").attributes("title")).toContain("0 件");
+    session.paneUpserted(makePane("p1","t1",makeAgent({subagents:subs(1)})));await nextTick();await btn(w).trigger("click");
+    useMachinesStore(pinia).select("other");await nextTick();expect(btn(w).attributes("aria-expanded")).toBe("false");
   });
 });
 

@@ -7,7 +7,7 @@ import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { type SectionBox, clampRatio, ratioFromOffset, ratioPercent, stepRatio } from "../sidebar/sectionSizing.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
-import { orderedAgentPaneIds, paneMoveBlock } from "@sodashitsu/client-core";
+import { subagentsMoreLabel, orderedAgentPaneIds, paneMoveBlock } from "@sodashitsu/client-core";
 import { type DropAnchor, type ItemRow, dropBefore, nextAnchorOf, sameItemTarget, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfUngrouped, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../store/sidebarTree.js";
 import ThemeModeToggle from "./ThemeModeToggle.vue";
@@ -486,10 +486,17 @@ function onButtonKeydown(ev: KeyboardEvent): void {
   }
 }
 
-/** サブエージェントの件数（報告を受けていない・0 件は 0。件数のボタンは 1 件以上のときだけ出す）。 */
-function subagentCount(agent: AgentInfo): number {
-  return agent.subagents?.count ?? 0;
+// Local, identity-scoped expansion survives pane updates/sort and does not leak across machines.
+const expandedSubagents = ref(new Set<string>());
+function subagentKey(agent:AgentInfo):string {return `${machines.selectedId}:${agent.instanceId}`;}
+function subagentsExpanded(agent:AgentInfo):boolean {return expandedSubagents.value.has(subagentKey(agent));}
+function toggleSubagents(agent:AgentInfo):void {
+ const key=subagentKey(agent),next=new Set(expandedSubagents.value);
+ if(next.has(key))next.delete(key);else next.add(key);
+ if(next.size>256)next.delete(next.values().next().value!);expandedSubagents.value=next;
 }
+function subagentCount(agent:AgentInfo):number {return agent.subagents?.count??0;}
+function subagentStatus(agent:AgentInfo):string {return agent.subagents?`サブエージェント ${agent.subagents.count} 件`:'サブエージェントの状況は未取得';}
 
 /** その pane のエージェントのサブエージェントの一覧を開く（ダイアログ。対象は選んでいるマシンの pane）。 */
 function openSubagents(paneId: string): void {
@@ -1071,7 +1078,8 @@ watchDragInterrupt(view, () => {
       </div>
       <div id="sidebar-agents-body" class="sidebar-section-body">
       <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
-      <div v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id" class="sidebar-row" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
+      <template v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id">
+      <div class="sidebar-row" :title="subagentStatus(agent)" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
         <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
         <ShortcutNumber :number="agentNumbers.get(pane.id)" target="agent" />
         <div v-if="view.sidebarCollapsed" class="sidebar-row-line1">
@@ -1083,23 +1091,34 @@ watchDragInterrupt(view, () => {
               <StateIcon v-if="t.kind === 'state_icon'" class="sidebar-state-icon" :state="state" :style="tokenStyleAttr(t.style)" />
               <span v-else-if="t.kind === 'text'" v-bind="textTokenAttrs(t, i)">{{ t.text }}</span>
             </template>
-            <!-- サブエージェントの件数（20261004-subagent-display）。1 行目の右端（利用者の行の並びの設定で 1 行目が空なら出ない）。行のクリック（その pane へ移る）・ドラッグの開始へ伝えない。 -->
+            <!-- 親の右端の開閉。件数は閉じたときだけ。親への移動やドラッグを発火しない。 -->
             <button data-assistant-feature
               v-if="i === 0 && subagentCount(agent) > 0"
               type="button"
               class="sidebar-subagent-btn"
               :data-subagent-pane="pane.id"
-              :aria-label="`サブエージェント ${subagentCount(agent)} 件を表示`"
+              :aria-label="`サブエージェント ${subagentCount(agent)} 件を${subagentsExpanded(agent) ? '折りたたむ' : '展開'}`"
+              :aria-expanded="subagentsExpanded(agent)"
+              :aria-controls="`sidebar-subagents-${pane.id}`"
               @pointerdown.stop
-              @click.stop="openSubagents(pane.id)"
+              @click.stop="toggleSubagents(agent)"
               @keydown="onButtonKeydown"
             >
-              <svg class="sidebar-subagent-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" /></svg>
-              <span aria-hidden="true">{{ subagentCount(agent) }}</span>
+              <span class="sidebar-subagent-icon" :class="{'is-expanded':subagentsExpanded(agent)}" aria-hidden="true">▸</span>
+              <span v-if="!subagentsExpanded(agent)" class="sidebar-subagent-count" aria-hidden="true">{{ subagentCount(agent) }}</span>
             </button>
           </div>
         </template>
       </div>
+      <div v-if="!view.sidebarCollapsed && subagentCount(agent)>0 && subagentsExpanded(agent)" :id="`sidebar-subagents-${pane.id}`" class="sidebar-subagents" role="group" :aria-label="`${agent.label} のサブエージェント`">
+        <div v-for="child in agent.subagents!.items.slice(0,64)" :key="child.id" class="sidebar-row sidebar-subagent-row" :data-subagent-id="child.id" title="親エージェント内で実行中（独立した端末はありません）">
+          <div class="sidebar-row-line1"><span class="sidebar-subagent-status">実行中</span><span class="sidebar-label">{{ child.type || 'サブエージェント' }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
+          <div v-if="child.description" class="sidebar-row-line2 sidebar-label">{{ child.description }}</div>
+        </div>
+        <div v-if="subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)})" class="sidebar-subagent-more">{{ subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)}) }}</div>
+        <button data-assistant-feature type="button" class="sidebar-btn sidebar-subagent-details" @click="openSubagents(pane.id)" @keydown="onButtonKeydown">詳細・記録…</button>
+      </div>
+      </template>
       </div>
     </section>
     </div>
@@ -1397,10 +1416,14 @@ watchDragInterrupt(view, () => {
 .sidebar-subagent-btn:hover {
   background: var(--soda-menu-hover-bg, #343746);
 }
-.sidebar-subagent-icon {
-  width: 0.9em;
-  height: 0.9em;
-}
+.sidebar-subagent-icon { display:inline-block; transition:transform .15s; }
+.sidebar-subagent-icon.is-expanded { transform:rotate(90deg); }
+.sidebar-subagent-count { border-radius:1em; padding-inline:.2em; background:var(--soda-menu-hover-bg); }
+.sidebar-subagents { margin-left:1.1em; border-left:1px solid var(--soda-menu-border); }
+.sidebar-subagent-row { cursor:default; }
+.sidebar-subagent-status { color:var(--soda-accent); font-size:.8em; flex:none; }
+.sidebar-subagent-more,.sidebar-subagent-details { margin:.3em .8em; font-size:.85em; }
+@media(prefers-reduced-motion:reduce) { .sidebar-subagent-icon { transition:none; } }
 .sidebar-row-line2 {
   display: flex;
   gap: 0.6em;

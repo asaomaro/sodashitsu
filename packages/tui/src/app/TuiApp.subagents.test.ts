@@ -6,7 +6,7 @@ import { plainText } from "../modes/SubagentList.js";
 import { startedApp } from "../testing/appHarness.js";
 import { agent, pane, snapshot } from "../testing/fixtures.js";
 
-// 20261004-subagent-display。端末版: サイドバーの行の末尾の `⤷n`・クリック・一覧の overlay・pane のメニュー・操作 show_subagents・自動で閉じる。
+// 20261004-subagent-display。端末版: サイドバーの行の末尾の `▸n`・クリック・一覧の overlay・pane のメニュー・操作 show_subagents・自動で閉じる。
 
 const down = (x: number, y: number, b = 0) => `\x1b[<${b};${x + 1};${y + 1}M`;
 const up = (x: number, y: number, b = 0) => `\x1b[<${b};${x + 1};${y + 1}m`;
@@ -58,43 +58,39 @@ describe("端末版のサブエージェントの表示", () => {
   const dispatcherOf = (app: object): TuiDispatcher =>
     (app as unknown as { dispatcher: TuiDispatcher }).dispatcher;
 
-  it("1 件以上のとき、エージェントの行の 1 行目の末尾に ⤷n が出る。0 件・項目なしでは出ない", async () => {
+  it("1 件以上のとき、エージェントの行の 1 行目の末尾に ▸n が出る。0 件・項目なしでは出ない", async () => {
     const h = await start({ subagents: subs(3) });
     const screen = await h.screen();
-    const line = screen.split("\n").find((l) => l.includes("⤷3"));
+    const line = screen.split("\n").find((l) => l.includes("▸3"));
     expect(line).toBeDefined();
-    expect(line!.slice(0, line!.indexOf("│")).trimEnd().endsWith("⤷3")).toBe(true);
+    expect(line!.slice(0, line!.indexOf("│")).trimEnd().endsWith("▸3")).toBe(true);
     expect(h.badge()).toMatchObject({ paneId: "p3", w: 2 });
     await h.close();
     closers.pop();
     for (const extra of [{ subagents: { count: 0, items: [] } }, {}] as Partial<AgentInfo>[]) {
       const g = await start(extra);
       expect(g.badge()).toBeUndefined();
-      expect(await g.screen()).not.toContain("⤷");
+      expect(await g.screen()).not.toContain("▸");
     }
   });
 
-  it("⤷n の桁範囲のクリックで一覧が開く（pane へは移らない）。行のほかの場所のクリックは今までどおり pane へ", async () => {
-    const h = await start({ subagents: subs(2) });
-    const b = h.badge()!;
-    h.io.type(down(b.x!, b.y) + up(b.x!, b.y));
-    expect(h.app.ui.dialogContext).toMatchObject({ kind: "subagents", paneId: "p3" });
-    expect(h.app.model.focusedPaneId).toBe("p1");
-    h.app.renderNow();
-    const screen = await h.screen();
-    expect(screen).toContain("サブエージェント — worker");
-    expect(screen).toContain("Explore");
-    expect(screen).toContain("説明0");
-    expect(screen).toContain("1分");
+  it("右端の開閉で子行を表示し、開いている間は件数を隠す（親paneは移動しない）",async()=>{
+    const h=await start({subagents:subs(2)});let b=h.badge()!;
+    h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();
+    expect(h.app.ui.dialogContext).toBeNull();expect(h.app.model.focusedPaneId).toBe("p1");
+    let screen=await h.screen();expect(screen).toContain("実行中");expect(screen).toContain("説明0");expect(screen).not.toContain("▸2");expect(h.badge()!.w).toBe(1);
+    h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({state:"working",subagents:subs(1,"更新")})});h.app.renderNow();expect(await h.screen()).toContain("更新");
+    b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();screen=await h.screen();expect(screen).toContain("▸1");expect(screen).not.toContain("説明0");
+    b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({instanceId:"new",subagents:subs(2)})});h.app.renderNow();expect(await h.screen()).toContain("▸2");
     expect(h.ws.requests("pane.focus")).toHaveLength(0);
-    h.io.type("\x1b"); // Esc
-    await vi.waitFor(() => expect(h.app.ui.dialogContext).toBeNull());
-    // 行の別の場所（印の桁）は今までどおり
-    h.app.renderNow();
-    const row = h.hits().find((x) => x.kind === "agent")!;
-    h.io.type(down(3, row.y) + up(3, row.y));
-    expect(h.app.model.focusedPaneId).toBe("p3");
-    expect(h.app.ui.dialogContext).toBeNull();
+  });
+
+  it("展開行の上限と残り件数をsidebarスクロールで確認できる",async()=>{
+    const h=await start({subagents:{count:70,items:Array.from({length:64},(_,i)=>sub(`s${i}`,{type:`担当${i}`,description:`作業${i}`}))}});
+    const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();
+    expect(await h.screen()).toContain("担当0");
+    (h.app as unknown as {sidebarScroll:{agents:number}}).sidebarScroll.agents=10000;h.app.renderNow();
+    const screen=await h.screen();expect(screen).toContain("担当63");expect(screen).toContain("ほか 6 件");expect(screen).not.toContain("担当64");
   });
 
   it("上下で読み（ホイールも）、Esc で閉じる。一覧が長ければ ↑↓ の印が出る。64 件を超えれば「ほか n 件」", async () => {
@@ -281,7 +277,7 @@ describe("端末版のサブエージェントの表示", () => {
     expect(screen).toContain("行1 [2J 行2");
   });
 
-  it("⤷n の桁を右クリックすると、その pane のメニュー（サブエージェントの一覧つき）が開く", async () => {
+  it("▸n の桁を右クリックすると、その pane のメニュー（サブエージェントの一覧つき）が開く", async () => {
     const h = await start({ subagents: subs(2) });
     const b = h.badge()!;
     h.io.type(down(b.x!, b.y, 2));
@@ -302,10 +298,10 @@ describe("端末版のサブエージェントの表示", () => {
       },
     });
     const b = h.badge()!;
-    expect(b.w).toBe(4); // ⤷123
+    expect(b.w).toBe(4); // ▸123
     const screen = await h.screen();
-    const line = screen.split("\n").find((l) => l.includes("⤷123"))!;
-    expect(line.slice(0, line.indexOf("│")).trimEnd().endsWith("⤷123")).toBe(true);
+    const line = screen.split("\n").find((l) => l.includes("▸123"))!;
+    expect(line.slice(0, line.indexOf("│")).trimEnd().endsWith("▸123")).toBe(true);
     dispatcherOf(h.app).showSubagentsOf("p3");
     h.app.renderNow();
     const box = (await h.screen()).split("\n").filter((l) => l.includes("調査担当"));
@@ -322,7 +318,7 @@ describe("端末版のサブエージェントの表示", () => {
     expect(w).toBeLessThan(26);
     const screen = await h.screen();
     const showing = h.badge() !== undefined;
-    expect(screen.includes("⤷2")).toBe(showing);
+    expect(screen.includes("▸2")).toBe(showing);
     for (const hit of h.hits().filter((x) => x.kind === "subagents"))
       expect(hit.x! + hit.w!).toBeLessThanOrEqual(w - 1);
   });
