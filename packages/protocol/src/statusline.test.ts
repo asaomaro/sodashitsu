@@ -228,7 +228,8 @@ it("shows supplied subagent membership by default while respecting explicit hidd
   expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")?.text).toBe("Subagents 所属 3");
  }
  expect(statuslineSegments(pane,undefined,[],loadStatuslineSettings({fields:{subagents:false}})).some(s=>s.field==="subagents")).toBe(false);
- expect(statuslineSegments({...pane,agent:{...pane.agent!,subagents:undefined}},undefined,[],loadStatuslineSettings({})).some(s=>s.field==="subagents")).toBe(false);
+ const unknownAgent={...pane.agent!};delete unknownAgent.subagents;
+ expect(statuslineSegments({...pane,agent:unknownAgent},undefined,[],loadStatuslineSettings({})).some(s=>s.field==="subagents")).toBe(false);
 });
 
 it("adds optional effort and approval settings without changing saved field order or visibility",()=>{
@@ -247,10 +248,12 @@ it("formats observed effort and distinct approval/permission values with source 
  expect(result[0]!.title).toContain("ターンの記録 / rollout / 1970-01-01T00:00:01.000Z");expect(result[0]!.title).toContain("現在のCLI設定とは異なる");
  expect(result.some(s=>s.text.includes("workspace-write")||s.text.includes("stale"))).toBe(false);
  expect(statuslineSegments(pane,{...usage,kind:"claude"},[],settings).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
- expect(statuslineSegments(pane,{...usage,reasoningEffort:undefined,executionSettings:{sandboxMode:usage.executionSettings!.sandboxMode}},[],settings).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
+ const sandboxOnly={...usage,executionSettings:{sandboxMode:usage.executionSettings!.sandboxMode!}};delete sandboxOnly.reasoningEffort;
+ expect(statuslineSegments(pane,sandboxOnly,[],settings).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
  expect(statuslineSegments(pane,undefined,[],settings).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
  expect(statuslineSegments(pane,usage,[],loadStatuslineSettings({fields:{effort:false,approval:false}})).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
- const legacy=statuslineSegments(pane,{...usage,executionSettings:undefined,reasoningEffort:"medium"},[],settings).find(s=>s.field==="effort")!;
+ const legacyUsage={...usage,reasoningEffort:"medium"};delete legacyUsage.executionSettings;
+ const legacy=statuslineSegments(pane,legacyUsage,[],settings).find(s=>s.field==="effort")!;
  expect(legacy.text).toBe("effort medium（報告）");expect(legacy.title).toContain("範囲・時点は未取得");
  for(const value of ["", "\u001b[31mhigh", "x".repeat(129)])expect(statuslineSegments(pane,{...usage,executionSettings:{reasoningEffort:{value,source:"rollout",basis:"turn"}}},[],settings).some(s=>s.field==="effort")).toBe(false);
  const session=statuslineSegments(pane,{...usage,executionSettings:{reasoningEffort:{value:"low",source:"muse-events",basis:"session",observedAt:1e30}}},[],settings).find(s=>s.field==="effort")!;
