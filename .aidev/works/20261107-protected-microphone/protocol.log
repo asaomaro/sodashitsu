@@ -1,0 +1,13 @@
+
+> @sodashitsu/protocol@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/protocol
+> vitest run src/desktopFeatures.test.ts src/desktopProtectedMicrophone.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/protocol
+
+
+ Test Files  2 passed (2)
+      Tests  28 passed (28)
+   Start at  12:21:37
+   Duration  383ms (transform 61%, import 33%, tests 5%, worker 1%)
+

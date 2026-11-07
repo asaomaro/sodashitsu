@@ -1,3 +1,4 @@
+import {DesktopProtectedMicrophone,protectedMicrophoneAvailable} from './DesktopProtectedMicrophone.js';
 import {DesktopNativeAudio} from "./DesktopNativeAudio.js";
 import {DesktopNativeMonitorRestore,DesktopNativeMonitorRestores} from "./DesktopNativeMonitorRestore.js";
 import {DesktopNativeMicrophoneHost} from './DesktopNativeMicrophoneHost.js';
@@ -80,7 +81,7 @@ type Share = {
   microphoneOwned?:boolean;
   endpointActive?:()=>boolean;
   inputCapabilities?:DesktopInputCapabilities;
-  microphone?:DesktopMicrophone; microphoneSocket?:WebSocket;
+  microphone?:Pick<DesktopMicrophone,'fromViewer'|'stop'>; microphoneSocket?:WebSocket;
   files?:Promise<DesktopFiles|undefined>;fileSocket?:WebSocket;
   richClipboard?:DesktopRichClipboard;clipboardSocket?:WebSocket;
   imageExpected?:boolean; imageSocket?: WebSocket; imageReady?: boolean; imageFailed?: boolean; heldImage?: Uint8Array;
@@ -269,16 +270,17 @@ export class DesktopProvider {
     if(p.options.sharedAudio&&(!p.options.sharedDesktop||!p.options.sharedNative||!p.options.nativeAudio))throw new RpcError("invalid_params","共有音声には対応する共有動画が必要です。");
     if(p.options.sharedMicrophone&&(!p.options.sharedDesktop||!p.options.microphone||!p.options.features||!cfg.allowMicrophone||!cfg.microphoneEndpoint))throw new RpcError("unauthorized","Shared microphone is not permitted");
     if(p.options.microphoneOpus&&!p.options.microphone)throw new RpcError("invalid_params","Microphone codec not negotiated");
-    if(p.options.microphone&&(p.options.elevatedDesktop||(p.options.sharedDesktop&&!p.options.sharedMicrophone)))throw new RpcError("invalid_params","マイク転送には通常の単独デスクトップ共有を使用してください。");
+    if(p.options.microphone&&(p.options.elevatedDesktop&&!p.options.protectedMicrophone||(p.options.sharedDesktop&&!p.options.sharedMicrophone)))throw new RpcError("invalid_params","マイク転送には通常の単独デスクトップ共有を使用してください。");
     if(p.options.sharedDatagrams&&(!p.options.sharedNative||!p.options.nativeDatagrams||!cfg.allowNativeVideo))throw new RpcError("unauthorized","共有動画のUDP経路が許可されていません。");
     if(p.options.sharedNative&&(!p.options.sharedDesktop||!p.options.nativeVideo||!cfg.allowNativeVideo))throw new RpcError("unauthorized","共有動画が接続先で許可されていません。");
     if(p.options.elevatedDesktop){
       if(!cfg.allowElevated||!p.options.features)throw new RpcError("unauthorized","管理者画面の共有が接続先で許可されていません。");
       if(p.options.protectedVideo&&(!p.options.nativeVideo||p.options.sharedDesktop&&!p.options.sharedProtectedVideo||!cfg.allowNativeVideo))throw new RpcError("unauthorized","管理者画面の動画には明示した単独の動画経路と接続先の許可が必要です。");
       if(p.options.protectedAudio&&(!p.options.protectedVideo||!p.options.nativeAudio||(cfg.allowSystemAudio??cfg.allowMedia)!==true))throw new RpcError("unauthorized","管理者画面の音声には接続先ユーザーのシステム音声許可が必要です。");
-      if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||(p.options.files&&!p.options.protectedFiles)||p.options.richClipboard||p.options.nativeVideo&&!p.options.protectedVideo||p.options.nativeAudio&&!p.options.protectedAudio||p.options.microphone||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||((p.options.nativeVideoWindow||p.options.nativeMaxFps)&&!p.options.protectedVideo)||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
+      if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||(p.options.files&&!p.options.protectedFiles)||p.options.richClipboard||p.options.nativeVideo&&!p.options.protectedVideo||p.options.nativeAudio&&!p.options.protectedAudio||p.options.microphone&&!p.options.protectedMicrophone||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||((p.options.nativeVideoWindow||p.options.nativeMaxFps)&&!p.options.protectedVideo)||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
     }
     if(p.options.sharedProtectedVideo&&(!p.options.sharedDesktop||!p.options.sharedProtected||!p.options.protectedVideo||!p.options.sharedNative||!cfg.allowElevated||!cfg.allowNativeVideo))throw new RpcError("unauthorized","管理者画面の共有動画には明示した共有経路と接続先の許可が必要です。");
+    if(p.options.protectedMicrophone&&(!p.microphoneTicket||!p.options.elevatedDesktop||!p.options.features||!p.options.microphone||p.options.microphoneOpus||p.options.sharedDesktop||!cfg.allowElevated||!cfg.allowProtectedMicrophone||!cfg.allowMicrophone||!cfg.microphoneEndpoint||cfg.nativePlatform))throw new RpcError("unauthorized","管理者画面中のマイク転送には、接続先の個別許可と単独の管理者画面共有が必要です。");
     if(p.options.protectedAudio&&!p.options.elevatedDesktop)throw new RpcError("invalid_params","管理者画面を明示してください。");
     if(p.options.protectedVideo&&!p.options.elevatedDesktop)throw new RpcError("invalid_params","管理者画面を明示してください。");
     if(p.options.virtualDisplay&&p.options.monitors&&!p.options.virtualMonitors)throw new RpcError("invalid_params","仮想画面のモニター一覧には明示した対応機能が必要です。");
@@ -765,9 +767,18 @@ export class DesktopProvider {
               ...legacyReady
             } = ready;
             if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&this.ownsResource(s,"clipboard")&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
-            if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(cfg.nativePlatform&&ready.backend!=="synthetic"?{nativeOutput:(name:string,active:()=>boolean)=>this.nativeMicrophones.open(cfg.nativePlatform!,cfg.microphoneEndpoint!,name,active)}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true,cfg.nativePlatform&&ready.backend!=="synthetic"?false:true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
+            if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(cfg.nativePlatform&&ready.backend!=="synthetic"?{nativeOutput:(name:string,active:()=>boolean)=>this.nativeMicrophones.open(cfg.nativePlatform!,cfg.microphoneEndpoint!,name,active)}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!protectedMicrophoneAvailable()||!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true,cfg.nativePlatform&&ready.backend!=="synthetic"?false:true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
+            const protectedMicrophone=options.protectedMicrophone===true&&options.elevatedDesktop===true&&!!s.protectedDesktop&&s.secureDesktop&&cfg.allowElevated===true&&cfg.allowProtectedMicrophone===true&&cfg.allowMicrophone===true&&!!cfg.microphoneEndpoint&&!options.sharedDesktop;
+            if(protectedMicrophone&&s.process?.resourceChannel?.supported===true&&s.microphoneSocket&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes))s.microphone=new DesktopProtectedMicrophone({
+              endpoint:cfg.microphoneEndpoint!,mode:s.protectedDesktop!,
+              ...(s.audioPipes?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),
+              claim:()=>{if(!this.claimResource(s,"microphone"))return false;s.microphoneOwned=true;return true;},
+              release:()=>{s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},
+              allowed:()=>this.live(s)&&s.ready&&this.config===cfg&&cfg.allowProtectedMicrophone===true&&!!s.protectedDesktop&&s.secureDesktop===true&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,
+              send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;},
+            });
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
-            if(ready.sharedProtectedVideo||ready.protectedAudio||s.secureDesktop&&ready.nativeAudio)throw Error("Privileged helper must not claim user audio");
+            if(ready.protectedMicrophone||ready.sharedProtectedVideo||ready.protectedAudio||s.secureDesktop&&(ready.nativeAudio||ready.microphone))throw Error("Privileged helper must not claim user audio");
             if(options.protectedAudio&&protectedAudioClock!=="windows-qpc-v1")throw Error("Protected audio video clock proof missing");
             if(ready.protectedVideo&&!options.protectedVideo)throw Error("Unrequested protected native video proof");
             if(options.protectedVideo&&ready.protectedVideo!==true)throw Error("Protected native video helper proof missing");
@@ -798,7 +809,7 @@ export class DesktopProvider {
               ...(nativeEnabled&&options.nativeCadence&&(!options.sharedDesktop||options.sharedRate)&&nativeCadence?{nativeCadence:true}:{}),
               ...(udpEnabled?{nativeDatagrams:true}:{}),
               ...(audioEnabled?{nativeAudio:true}:{}),
-              ...(s.microphone?{microphone:true,...(options.microphoneOpus?{microphoneOpus:true}:{})}:{}),
+              ...(s.microphone?{microphone:true,...(protectedMicrophone?{protectedMicrophone:true}:{}),...(options.microphoneOpus?{microphoneOpus:true}:{})}:{}),
               ...(nativeWindow===3?{nativeVideoWindow:3}:{}),
               ...(nativeRate?{nativeMaxFps:nativeRate}:{}),
               ...(s.cursor?{cursor:true}:{}),
@@ -905,7 +916,7 @@ export class DesktopProvider {
     });
     const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop&&!cfg.nativePlatform;
     const poolVideo=options.sharedDesktop===true&&(!options.elevatedDesktop||options.sharedProtectedVideo===true);
-    const {protectedFiles:_protectedFiles,sharedVirtual:_sharedVirtual,independentMonitors:_independentMonitors,sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {protectedMicrophone:_protectedMicrophone,protectedFiles:_protectedFiles,sharedVirtual:_sharedVirtual,independentMonitors:_independentMonitors,sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       ...(cfg.nativePlatform?{nativePlatform:cfg.nativePlatform}:{}),
@@ -921,7 +932,7 @@ export class DesktopProvider {
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
       ...(options.sharedProtected?{allowSharedProtected:true}:{}),
       ...rolePlan,
-      ...((poolVideo||options.microphone)&&cfg.allowMicrophone&&cfg.microphoneEndpoint?{microphoneEndpoint:cfg.microphoneEndpoint,microphoneClientPid:process.pid}:{}),
+      ...((poolVideo||options.microphone)&&!options.elevatedDesktop&&cfg.allowMicrophone&&cfg.microphoneEndpoint?{microphoneEndpoint:cfg.microphoneEndpoint,microphoneClientPid:process.pid}:{}),
       audioClientPid:process.pid,
       ...(s.audioPipes?{audioPipeBridge:true}:{}),
       nativeAdaptive:(poolMedia||options.nativeAdaptive===true)&&cfg.allowNativeVideo===true,

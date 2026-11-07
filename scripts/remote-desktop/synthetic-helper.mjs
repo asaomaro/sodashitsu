@@ -265,6 +265,7 @@ function run() {
           ...(m.richClipboard===true&&m.allowClipboard===true&&process.argv.includes("--allow-clipboard")&&process.argv.includes("--rich-clipboard")&&!secure?{richClipboard:true}:{}),
           ...(m.allowMicrophone===true&&m.microphoneEndpoint&&process.argv.includes("--microphone-fixture")&&!secure?{microphone:true}:{}),
           ...(protectedAudio&&!process.argv.includes("--protected-clock-missing")?{protectedAudioClock:process.argv.includes("--protected-clock-wrong")?"process-relative":"windows-qpc-v1"}:{}),
+          ...(protectedMode&&process.argv.includes("--protected-microphone-forged")?{microphone:true,protectedMicrophone:true}:{}),
           ...(protectedAudio&&process.argv.includes("--protected-audio-forged")?{protectedAudio:true,nativeAudio:true}:{}),
           ...(nativeFixture&&m.allowSystemAudio===true&&process.argv.includes("--native-audio")&&!secure?{nativeAudio:true}:{}),
           ...(cursorEnabled?{cursor:true}:{}),

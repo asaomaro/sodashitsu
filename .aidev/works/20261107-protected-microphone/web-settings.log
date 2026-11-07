@@ -1,0 +1,13 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/web
+> vitest run src/components/DesktopSettings.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/web
+
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  12:32:30
+   Duration  745ms (environment 41%, transform 29%, tests 17%, import 12%, worker 1%)
+

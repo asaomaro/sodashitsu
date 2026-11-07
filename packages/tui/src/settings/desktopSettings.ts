@@ -27,6 +27,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
     ["enabled", "画面共有を許可"],
     ["allowInput", "マウス・キーボードを許可"],
     ["allowElevated","管理者権限のアプリ・UAC画面を許可（保護サービス更新が必要）"],
+    ["allowProtectedMicrophone","管理者画面中のマイク転送を個別に許可（通常ユーザー・単独共有）"],
     ["allowProtectedFiles","管理者画面中も共有フォルダーを転送（soda実行ユーザーの権限）"],
     ["allowMonitors","全モニターの共有と切替を許可"],
     ["allowVirtualDisplay","一時仮想画面の作成を許可（署名済みdriver/保護サービスが必要）"],
@@ -90,13 +91,13 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
         label:key==="allowVirtualDisplay"&&state?.nativePlatform==="linux-portal"?"OS Portalによる一時仮想画面の作成を許可":originalLabel,
         value: onOff(state?.permissions[key] === true),
         toggle: true,
-        disabled: busy || !state?.canConfigure || (!state.supported && !state.permissions.enabled) || (key==="allowProtectedFiles"&&(!state.permissions.allowElevated||!state.permissions.fileRoot?.trim())),
+        disabled: busy || !state?.canConfigure || (!state.supported && !state.permissions.enabled) || (key==="allowProtectedMicrophone"&&(!state.permissions.allowElevated||!state.permissions.allowMicrophone||!state.permissions.microphoneEndpoint?.trim())) || (key==="allowProtectedFiles"&&(!state.permissions.allowElevated||!state.permissions.fileRoot?.trim())),
         note: "共有するPCに保存し、即時反映します。",
         activate: () => {
           if (busy || !state?.canConfigure) return;
           busy = true;
           port
-            .set({ ...state.permissions, [key]: !state.permissions[key],...(key==="allowElevated"&&state.permissions.allowElevated&&state.permissions.allowProtectedFiles?{allowProtectedFiles:false}:{}) })
+            .set({ ...state.permissions, [key]: !state.permissions[key],...(key==="allowElevated"&&state.permissions.allowElevated&&state.permissions.allowProtectedFiles?{allowProtectedFiles:false}:{}),...((key==="allowElevated"||key==="allowMicrophone")&&state.permissions[key]&&state.permissions.allowProtectedMicrophone?{allowProtectedMicrophone:false}:{}) })
             .then((result) => {
               state = result;
               message = "保存しました。接続し直すと新しい許可で共有します。";

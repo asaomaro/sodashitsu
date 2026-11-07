@@ -1,0 +1,13 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/server
+> vitest run src/desktop/DesktopRelay.test.ts -t microphone\|protected
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/server
+
+
+ Test Files  1 passed (1)
+      Tests  72 passed | 249 skipped (321)
+   Start at  12:27:54
+   Duration  11.71s (tests 83%, transform 14%, import 3%)
+

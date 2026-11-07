@@ -1,0 +1,17 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/server
+> vitest run src/desktop/DesktopHelperRolePlan.test.ts src/desktop/DesktopProvider.test.ts src/desktop/DesktopSettings.test.ts src/desktop/DesktopProtectedMicrophone.test.ts src/desktop/DesktopMicrophone.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/server
+
+
+ Test Files  5 passed (5)
+      Tests  82 passed (82)
+   Start at  12:29:49
+   Duration  3.11s (tests 46%, transform 42%, import 12%)
+
+  Transform  transforming modules took 3.41s · 42% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

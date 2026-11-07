@@ -1,0 +1,17 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/web
+> vitest run src/desktop/microphoneClient.test.ts src/components/RemoteDesktopNativeSharing.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/web
+
+
+ Test Files  2 passed (2)
+      Tests  32 passed (32)
+   Start at  12:22:56
+   Duration  2.70s (transform 66%, import 14%, environment 13%, tests 8%)
+
+  Transform  transforming modules took 2.97s · 66% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

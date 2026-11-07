@@ -1,0 +1,37 @@
+MTA
+soda-user-microphone-preflight-v1
+user_microphone_common_host_MTA_hash_and_actual_preflight_passed: no device activation
+user_microphone_policy_checks_passed: ordinary SID/logon/session, UAC/Default only, irreversible lock, deadline/heartbeat/stream; fake facts only
+microphone_generated_pcm_checks_passed
+negative lock
+System.Exception: Microphone survived lock
+   場所 SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   場所 Validator.Main()
+negative system
+System.Exception: SYSTEM audio actor admitted
+   場所 SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   場所 Validator.Main()
+negative elevation
+System.Exception: Elevated audio actor admitted
+   場所 SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   場所 Validator.Main()
+negative logon
+System.Exception: Other logon microphone admitted
+   場所 SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   場所 Validator.Main()
+negative startup
+System.Exception: Microphone startup extended
+   場所 SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   場所 Validator.Main()
+negative heartbeat
+System.Exception: Microphone heartbeat expired
+   場所 SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   場所 Validator.Main()
+negative peer
+user_microphone_policy_checks_passed: ordinary SID/logon/session, UAC/Default only, irreversible lock, deadline/heartbeat/stream; fake facts only
+System.Exception: Unverified peer activated microphone endpoint
+   場所 SodaMicrophoneChecks.Run()
+   場所 Validator.Main()
+user_microphone_policy_checks_passed: ordinary SID/logon/session, UAC/Default only, irreversible lock, deadline/heartbeat/stream; fake facts only
+microphone_generated_pcm_checks_passed
+user_microphone_7_source_negative_controls_and_byte_exact_restore_passed

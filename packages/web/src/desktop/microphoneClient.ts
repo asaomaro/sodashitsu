@@ -8,7 +8,7 @@ export class DesktopMicrophoneClient {
   private epoch=0;private id:string|undefined;private stream:MediaStream|undefined;
   private context:AudioContext|undefined;private source:MediaStreamAudioSourceNode|undefined;private node:AudioWorkletNode|undefined;
   private pending=new Map<number,number>();private seq=0;private timer:ReturnType<typeof setTimeout>|undefined;private running=false;private requested=false;
-  constructor(private send:(value:unknown)=>boolean,private state:(state:MicrophoneState)=>void,private options:{opus?:boolean;codec?(codec:"pcm"|"opus"):void}={}) {}
+  constructor(private send:(value:unknown)=>boolean,private state:(state:MicrophoneState)=>void,private options:{protectedActor?:boolean;opus?:boolean;codec?(codec:"pcm"|"opus"):void}={}) {}
   static supported(){return typeof AudioContext!=="undefined"&&typeof AudioWorkletNode!=="undefined"&&typeof navigator.mediaDevices?.getUserMedia==="function";}
   async start() {
     this.stop();const epoch=++this.epoch;this.state("preparing");
@@ -41,7 +41,7 @@ export class DesktopMicrophoneClient {
       await context.resume();if(epoch!==this.epoch)return;
       this.id=crypto.randomUUID();this.seq=0;this.requested=true;this.state("starting");
       if(!this.send({type:"microphone_start",id:this.id,...(opus?{codec:"opus"}:{})}))throw Error("Microphone disconnected");
-      this.timer=setTimeout(()=>this.fail(),3000);
+      this.timer=setTimeout(()=>this.fail(),this.options.protectedActor===true?50000:3000);
     }catch{if(epoch===this.epoch)this.fail();}
   }
   receive(raw:unknown) {

@@ -26,3 +26,4 @@ it.each(['linux-portal','macos-sck'] as const)('prepares native audio and microp
 });
 
 it('never loads optional user audio into the protected helper even with an ordinary-user audio request',()=>{expect(desktopHelperRolePlan(all,{...options,elevatedDesktop:true,protectedVideo:true,protectedAudio:true,nativeVideo:true,nativeAudio:true})).toEqual(off);});
+it('never loads a microphone endpoint or WASAPI role into a protected helper',()=>{const plan=desktopHelperRolePlan({...all,allowProtectedMicrophone:true,allowElevated:true},{...options,elevatedDesktop:true,microphone:true,protectedMicrophone:true});expect(plan).toEqual(off);expect(desktopHelperRoleEnvironment(plan).SODA_DESKTOP_LOAD_MICROPHONE).toBe('0');});

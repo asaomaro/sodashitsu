@@ -1,0 +1,38 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/web
+> vitest run src/desktop/microphoneClient.test.ts -t 'bounded original startup deadline'
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/web
+
+ ❯ src/desktop/microphoneClient.test.ts (25 tests | 1 failed | 23 skipped) 30ms
+   × uses a bounded original startup deadline for protected actor=true without replaying start 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/microphoneClient.test.ts > uses a bounded original startup deadline for protected actor=true without replaying start
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array []
+
+
+Number of calls: 1
+
+ ❯ src/desktop/microphoneClient.test.ts:102:564
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 23 skipped (25)
+   Start at  12:32:50
+   Duration  1.64s (transform 58%, environment 25%, import 14%, tests 2%)
+
+/workspaces/sodashitsu-protected-microphone/packages/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/web@0.1.0 test: `vitest run src/desktop/microphoneClient.test.ts -t 'bounded original startup deadline'`
+Exit status 1

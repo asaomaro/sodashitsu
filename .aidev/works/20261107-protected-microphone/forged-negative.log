@@ -1,0 +1,38 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/server
+> vitest run src/desktop/DesktopRelay.test.ts -t 'forges ordinary-user protected microphone authority'
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/server
+
+ ❯ src/desktop/DesktopRelay.test.ts (321 tests | 1 failed | 320 skipped) 1048ms
+   × rejects a protected helper that forges ordinary-user protected microphone authority 1046ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopRelay.test.ts > rejects a protected helper that forges ordinary-user protected microphone authority
+AssertionError: expected 1 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 1
+
+ ❯ src/desktop/DesktopRelay.test.ts:2038:571
+
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:2038:532
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 320 skipped (321)
+   Start at  12:27:50
+   Duration  3.23s (transform 55%, tests 34%, import 12%)
+
+/workspaces/sodashitsu-protected-microphone/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 test: `vitest run src/desktop/DesktopRelay.test.ts -t 'forges ordinary-user protected microphone authority'`
+Exit status 1

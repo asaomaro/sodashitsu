@@ -1,0 +1,13 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-protected-microphone/packages/web
+> vitest run src/desktop/microphoneClient.test.ts -t 'bounded original startup deadline'
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-microphone/packages/web
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 23 skipped (25)
+   Start at  12:32:53
+   Duration  1.43s (transform 61%, import 19%, environment 18%, tests 2%)
+

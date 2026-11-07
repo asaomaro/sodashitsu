@@ -35,6 +35,13 @@ import { performance } from "node:perf_hooks";
 import type { Writable } from "node:stream";
 import { DESKTOP_VIRTUAL_DISPLAY_PROTOCOL, DESKTOP_AUDIO_PROTOCOL, isDesktopAudio, DESKTOP_RICH_CLIPBOARD_PROTOCOL, decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_DATAGRAM_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
 
+const protectedMicrophoneFixture=vi.hoisted(()=>({instances:[] as any[]}));
+vi.mock('./DesktopProtectedMicrophone.js',async original=>{const actual=await original<typeof import('./DesktopProtectedMicrophone.js')>();return {...actual,DesktopProtectedMicrophone:class {
+  private id:string|undefined;
+  constructor(public hooks:any){protectedMicrophoneFixture.instances.push(this);}
+  fromViewer(message:any){if(message.type==='microphone_start'){if(!this.hooks.allowed()||!this.hooks.claim(message.id))throw Error('Fixture microphone permission');this.id=message.id;this.hooks.send({type:'microphone_status',id:message.id,state:'running'});}else if(message.type==='microphone_stop')this.stop();}
+  stop(){if(this.id){this.hooks.release(this.id);this.id=undefined;}}
+}};});
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
@@ -2012,3 +2019,20 @@ it("uses the public callback for a viewer opened on localhost",async()=>{
  const f=await fixture();f.relayOrigins.push("https://controller.example");const viewer=await f.viewer();viewer.send(start);
  await expect.poll(()=>f.startRequests.length).toBe(1);expect(f.startRequests[0]!.url).toBe("wss://controller.example/desktop-share");
 });
+
+// The ordinary-user actor is an in-memory sink here; native role/pipe checks are separate.
+it.each(['elevated-default','elevated-uac'] as const)('routes protected %s microphone controls to the ordinary actor and revokes them on source loss',async mode=>{
+ protectedMicrophoneFixture.instances=[];const f=await protectedFixture({mode,allowed:true}),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,allowMicrophone:true,allowProtectedMicrophone:true,microphoneEndpoint:'fixed-virtual-render'});
+ const v=await f.viewer([DESKTOP_PROTECTED_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_MICROPHONE_OPUS_FEATURE,desktopFeaturesProtocol(['protectedMicrophone'])]);
+ v.send(protectedStart);await expect.poll(()=>v.messages.find(m=>m.type==='ready')).toMatchObject({microphone:true,protectedMicrophone:true,protectedDesktop:mode});
+ expect(f.startRequests[0]!.options).toMatchObject({microphone:true,protectedMicrophone:true});expect(f.startRequests[0]!.options).not.toHaveProperty('microphoneOpus');
+ const ticket=v.messages.find(m=>m.type==='microphone_ticket')!;expect(ticket).toMatchObject({protectedMicrophone:true});expect(ticket).not.toHaveProperty('codec');
+ const lane=new WebSocket(f.endpoint,DESKTOP_MICROPHONE_PROTOCOL,{headers:{origin:f.origin,cookie:'test=ok'}});cleanup.push(async()=>{lane.terminate();});const statuses:any[]=[];lane.on('message',raw=>statuses.push(JSON.parse(raw.toString())));await new Promise<void>(resolve=>lane.once('open',()=>{lane.send(JSON.stringify({type:'video_viewer',ticket:ticket.ticket}));resolve();}));
+ await expect.poll(()=>v.messages.some(m=>m.type==='microphone_ready')).toBe(true);const id=crypto.randomUUID();lane.send(JSON.stringify({type:'microphone_start',id}));await expect.poll(()=>statuses).toContainEqual({type:'microphone_status',id,state:'running'});
+ const actor=protectedMicrophoneFixture.instances.at(-1);expect(actor.hooks.endpoint).toBe('fixed-virtual-render');expect(actor.hooks.mode).toBe(mode);expect(actor.hooks.allowed()).toBe(true);
+ await writeFile(f.endedMarker,'ended');await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(actor.hooks.allowed()).toBe(false);
+ const input=await readFile(f.record,'utf8').catch(()=> '');expect(input).not.toContain('native_microphone');
+});
+it.each(['permission','viewer','provider'])('does not activate protected microphone without independent %s opt-in',async missing=>{const f=await protectedFixture({mode:'elevated-default',allowed:true}),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMicrophone:true,allowProtectedMicrophone:missing!=='permission',microphoneEndpoint:'fixed-virtual-render'});if(missing==='provider'){const original=f.provider.capabilities.bind(f.provider);vi.spyOn(f.provider,'capabilities').mockImplementation(()=>({...original(),protectedMicrophone:false}));}const v=await f.viewer([DESKTOP_PROTECTED_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,...(missing==='viewer'?[]:[desktopFeaturesProtocol(['protectedMicrophone'])])]);v.send(protectedStart);await expect.poll(()=>v.messages.some(m=>m.type==='ready')).toBe(true);expect(v.messages.find(m=>m.type==='ready')).not.toHaveProperty('microphone');expect(v.messages.some(m=>m.type==='microphone_ticket')).toBe(false);});
+it('rejects a protected helper that forges ordinary-user protected microphone authority',async()=>{const f=await protectedFixture({mode:'elevated-uac',allowed:true}),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMicrophone:true,allowProtectedMicrophone:true,microphoneEndpoint:'fixed-virtual-render',command:[...cfg.command,'--protected-microphone-forged']});const v=await f.viewer([DESKTOP_PROTECTED_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,desktopFeaturesProtocol(['protectedMicrophone'])]);v.send(protectedStart);await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(v.messages.some(m=>m.type==='ready')).toBe(false);});

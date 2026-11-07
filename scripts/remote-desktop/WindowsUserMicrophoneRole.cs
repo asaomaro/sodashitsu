@@ -60,7 +60,7 @@ public static class SodaDesktopUserMicrophoneRole {
         string id=null,nonce=null;bool enabled=false;
         try{
             started=heartbeat=Clock.ElapsedMilliseconds;
-            var watch=new Thread(()=>{while(Thread.VolatileRead(ref stopping)==0){Thread.Sleep(50);if((policy!=null&&!Allowed())||microphone==null&&Clock.ElapsedMilliseconds-started>=2500){Interlocked.Exchange(ref stopping,1);try{Console.OpenStandardInput().Dispose();}catch{};Environment.Exit(2);}}});watch.IsBackground=true;watch.Start();
+            var watch=new Thread(()=>{while(Thread.VolatileRead(ref stopping)==0){Thread.Sleep(50);if((policy!=null&&!Allowed())||microphone==null&&Clock.ElapsedMilliseconds-started>=2500){Interlocked.Exchange(ref stopping,1);var retireDeadline=new Thread(()=>{Thread.Sleep(1500);Environment.Exit(2);});retireDeadline.IsBackground=true;retireDeadline.Start();return;}}});watch.IsBackground=true;watch.Start();
             var hello=Record();Guid parsed;
             if(hello.Count!=4||!hello.ContainsKey("id")||!(hello["id"] is string)||!Guid.TryParseExact((string)hello["id"],"D",out parsed)||!hello.ContainsKey("nonce")||!(hello["nonce"] is string)||!Regex.IsMatch((string)hello["nonce"],@"\A[a-f0-9]{64}\z")||!hello.ContainsKey("endpoint")||!(hello["endpoint"] is string)||String.IsNullOrWhiteSpace((string)hello["endpoint"])||((string)hello["endpoint"]).Length>512||((string)hello["endpoint"]).IndexOf('\0')>=0||!hello.ContainsKey("mode")||!(hello["mode"] is string)||Clock.ElapsedMilliseconds-started>=2500)return 2;
             policy=new SodaDesktopUserMicrophonePolicy(Self(),(string)hello["mode"]);if(!Allowed())return 2;
