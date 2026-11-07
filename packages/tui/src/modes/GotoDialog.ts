@@ -72,24 +72,25 @@ export function gotoRows(
   expanded: ReadonlySet<string>,
   machines?: MachinesModel,
 ): GotoRow[] {
+  const normal=model.normalView();
   const q = query.trim().toLowerCase();
   const filtering = filter !== null || q !== "";
   const textMatch = (v: string) => q === "" || v.toLowerCase().includes(q);
   const statusMatch = (s: DisplayState | null) => filter === null || s === filter;
   const paneState = (paneId: string): DisplayState | null => {
-    const p = model.panes.get(paneId);
+    const p = normal.panes.get(paneId);
     return p ? model.displayStateOf(p) : null;
   };
   const out: GotoRow[] = [];
-  for (const ws of model.normalView().workspaces.values()) {
+  for (const ws of normal.workspaces.values()) {
     const tabRows: GotoRow[] = [];
     for (const tabId of ws.tabIds) {
-      const tab = model.tabs.get(tabId);
+      const tab = normal.tabs.get(tabId);
       if (!tab) continue;
       const paneIds = depthFirstPaneIds(tab.layout);
       const paneRows: GotoRow[] = [];
       for (const [index, paneId] of paneIds.entries()) {
-        const pane = model.panes.get(paneId);
+        const pane = normal.panes.get(paneId);
         if (!pane) continue;
         const state = paneState(paneId);
         const label = paneNameOf(pane, `pane ${index + 1}`);
@@ -141,7 +142,7 @@ export function gotoRows(
   if (machines?.hasMachines) {
     for (const s of machines.sections) {
       if (s.id === machines.selectedId) continue;
-      for (const ws of machines.summaries[s.id]?.workspaces ?? []) {
+      for (const ws of machines.normalSummary(s.id)?.workspaces ?? []) {
         const state = aggregate(
           machines.agentsInWorkspace(s.id, ws.id).map((a) => displayStateFor(a, a.serverSeenSeq)),
         );

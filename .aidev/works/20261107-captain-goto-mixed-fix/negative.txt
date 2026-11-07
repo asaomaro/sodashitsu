@@ -1,0 +1,70 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-captain-normal-view
+
+ ❯ |@sodashitsu/tui| src/modes/GotoDialog.captain.test.ts (3 tests | 2 failed) 22ms
+   × uses normal tabs/layout/panes throughout a mixed captain and worker tab 15ms
+   × uses normal remote summaries and retains an old peer without exact ownership proof 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/tui| src/modes/GotoDialog.captain.test.ts > uses normal tabs/layout/panes throughout a mixed captain and worker tab
+AssertionError: expected [ { kind: 'pane', …(1) }, …(1) ] to deeply equal [ { kind: 'pane', paneId: 'worker' } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "kind": "pane",
++     "paneId": "captain",
++   },
++   {
++     "kind": "pane",
+      "paneId": "worker",
+    },
+  ]
+
+ ❯ src/modes/GotoDialog.captain.test.ts:10:116
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/tui| src/modes/GotoDialog.captain.test.ts > uses normal remote summaries and retains an old peer without exact ownership proof
+AssertionError: expected [ { depth: +0, label: 'w', …(4) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "current": false,
++     "depth": 0,
++     "label": "w",
++     "meta": "@remote",
++     "state": null,
++     "target": {
++       "kind": "remote",
++       "machineId": "remote",
++       "workspaceId": "w",
++     },
++   },
++ ]
+
+ ❯ src/modes/GotoDialog.captain.test.ts:17:427
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  23:11:44
+   Duration  2.14s (transform 82%, import 17%, tests 1%)
+
