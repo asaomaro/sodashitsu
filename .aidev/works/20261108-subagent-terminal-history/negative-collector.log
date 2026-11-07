@@ -1,0 +1,110 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-terminal-history/packages/server
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts (10 tests | 4 failed) 20ms
+   × requires current verified parent instance/ref kind/session before accepting or returning notes 4ms
+   × rechecks exact parent and authorization after an asynchronous record proof 3ms
+   × replaces the whole observed settings pair, rejects inferred model labels and preserves unknown dates 1ms
+   × bounds caller waiting and physical verifier slots, and discards late results 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/SubagentTerminalHistory.test.ts > requires current verified parent instance/ref kind/session before accepting or returning notes
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:27:98
+     25| });
+     26| it("requires current verified parent instance/ref kind/session before …
+     27|  const f=fixture();f.verified=false;expect(f.history.note(f.source,ite…
+       |                                                                                                  ^
+     28|  f.verified=true;expect(f.history.note(f.source,item(),"stop",async()=…
+     29|  f.pane={...f.pane,agentSession:{kind:"codex",sessionId:parent,reporte…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/agent/SubagentTerminalHistory.test.ts > rechecks exact parent and authorization after an asynchronous record proof
+AssertionError: expected { status: 'ok', …(7) } to match object { status: 'unavailable', …(2) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "items": [],
+-   "reset": true,
+-   "status": "unavailable",
++   "items": [
++     {
++       "hasTranscript": true,
++       "id": "child",
++       "startedAt": 1000,
++       "terminalStatus": "completed",
++     },
++   ],
++   "reset": false,
++   "status": "ok",
+  }
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:36:24
+     34|  const f=fixture();let resolve!:(value:boolean)=>void;f.history.note(f…
+     35|  const pending=f.history.read({paneId});f.pane={...f.pane,agentSession…
+     36|  expect(await pending).toMatchObject({status:"unavailable",items:[],re…
+       |                        ^
+     37| });
+     38| it("does not turn failed owned-record verification into an empty succe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/agent/SubagentTerminalHistory.test.ts > replaces the whole observed settings pair, rejects inferred model labels and preserves unknown dates
+AssertionError: expected { id: 'inferred', …(4) } to not have property "model"
+
+- Expected:
+undefined
+
++ Received:
+"requested-parent"
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:58:69
+     56|  let value=(await f.history.read({paneId})).items[0]!;expect(value.mod…
+     57|  f.history.note(f.source,{id:"inferred",terminalStatus:"error",model:"…
+     58|  value=(await f.history.read({paneId})).items[0]!;expect(value).not.to…
+       |                                                                     ^
+     59| });
+     60| it("expires returned grants on authorization loss and explicit retirem…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/agent/SubagentTerminalHistory.test.ts > bounds caller waiting and physical verifier slots, and discards late results
+AssertionError: expected [ [Function], [Function], …(6) ] to have a length of 4 but got 8
+
+- Expected
++ Received
+
+- 4
++ 8
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:70:60
+     68|  try{
+     69|   const calls=Array.from({length:8},()=>f.history.read({paneId}));awai…
+     70|   const results=await Promise.all(calls);expect(resolvers).toHaveLengt…
+       |                                                            ^
+     71|   for(const resolve of resolvers)resolve(true);await Promise.resolve()…
+     72|  }finally{for(const resolve of resolvers)resolve(true);await Promise.r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 6 passed (10)
+   Start at  01:13:28
+   Duration  162ms (transform 52%, tests 26%, import 18%, worker 4%)
+
+undefined
+/workspaces/sodashitsu-subagent-terminal-history/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/SubagentTerminalHistory.test.ts

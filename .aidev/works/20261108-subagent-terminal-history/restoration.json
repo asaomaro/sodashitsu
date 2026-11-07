@@ -1,0 +1,25 @@
+{
+  "results": [
+    {
+      "log": "negative-protocol.log",
+      "exitCode": 1
+    },
+    {
+      "log": "negative-collector.log",
+      "exitCode": 1
+    },
+    {
+      "log": "restored-protocol.log",
+      "exitCode": 0
+    },
+    {
+      "log": "restored-collector.log",
+      "exitCode": 0
+    }
+  ],
+  "byteExact": true,
+  "sha256": {
+    "packages/protocol/src/subagentHistory.ts": "65c6c83fe6e7035aa90c05e6576f22c2a14e68bb45ee25ba9d5ffeb5ed7f5c72",
+    "packages/server/src/agent/SubagentTerminalHistory.ts": "090020bff90dd367eab082b391f1d914e4b77f31fa85666f87efeda739bda161"
+  }
+}

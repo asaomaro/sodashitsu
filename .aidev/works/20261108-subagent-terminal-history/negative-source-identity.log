@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-terminal-history/packages/server
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts (10 tests | 1 failed) 17ms
+   × compares only exact source identity fields, independent of property order, and retains no extra source payload 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/SubagentTerminalHistory.test.ts > compares only exact source identity fields, independent of property order, and retains no extra source payload
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:21:65
+     19| it("compares only exact source identity fields, independent of propert…
+     20|  const f=fixture(),reordered={sessionId:f.source.sessionId,kind:f.sour…
+     21|  expect(f.history.note(reordered,item(),"event",async()=>true)).toBe(t…
+       |                                                                 ^
+     22|  expect((await f.history.read({paneId})).items).toEqual([item()]);
+     23|  const stored=(f.history as unknown as {states:Map<string,{source:unkn…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  01:15:29
+   Duration  172ms (transform 54%, tests 23%, import 18%, worker 4%)
+
+undefined
+/workspaces/sodashitsu-subagent-terminal-history/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/SubagentTerminalHistory.test.ts
