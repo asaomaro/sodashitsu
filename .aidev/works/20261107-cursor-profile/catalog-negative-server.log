@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-assistant-profile/packages/server
+
+ ❯ src/agent/assistantModels.test.ts (8 tests | 1 failed) 76ms
+   × keeps large actual catalogs bounded at 512 rather than silently dropping after 128 21ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/assistantModels.test.ts > keeps large actual catalogs bounded at 512 rather than silently dropping after 128
+AssertionError: expected [ { id: 'generated-0', …(2) }, …(127) ] to have a length of 512 but got 128
+
+- Expected
++ Received
+
+- 512
++ 128
+
+ ❯ src/agent/assistantModels.test.ts:63:72
+     61|  const dir=await mkdtemp(join(tmpdir(),'soda-model-cap-'));dirs.push(d…
+     62|  await writeFile(join(dir,'models_cache.json'),JSON.stringify({models:…
+     63|  const result=await readAssistantModels('codex');expect(result.models)…
+       |                                                                        ^
+     64| });
+     65|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  17:00:53
+   Duration  1.78s (transform 70%, import 25%, tests 5%)
+
+undefined
+/workspaces/sodashitsu-cursor-assistant-profile/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/assistantModels.test.ts

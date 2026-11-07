@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-assistant-profile/packages/server
+
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  17:00:19
+   Duration  1.79s (transform 72%, import 24%, tests 4%)
+

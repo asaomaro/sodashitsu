@@ -56,3 +56,9 @@ it('does not substitute fixed models when Grok rejects model discovery',async()=
  child.stdin.on('data',chunk=>{const r=JSON.parse(chunk.toString());queueMicrotask(()=>child.stdout.write(JSON.stringify(r.id===1?{id:1,result:{}}:{id:2,error:{code:-32601}})+'\n'));});vi.mocked(spawn).mockReturnValue(child as never);
  expect((await readAssistantModels('grok')).models).toEqual([]);
 });
+
+it('keeps large actual catalogs bounded at 512 rather than silently dropping after 128',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'soda-model-cap-'));dirs.push(dir);vi.stubEnv('CODEX_HOME',dir);
+ await writeFile(join(dir,'models_cache.json'),JSON.stringify({models:Array.from({length:600},(_,i)=>({slug:`generated-${i}`}))}));
+ const result=await readAssistantModels('codex');expect(result.models).toHaveLength(512);expect(result.models.at(-1)?.id).toBe('generated-511');
+});

@@ -4,7 +4,7 @@ import {windowsAgentExecutable} from './windowsAgentLaunch.js';
 import {StringDecoder} from 'node:string_decoder';
 import {homedir,tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {ASSISTANT_EFFORTS,type AssistantModelCatalog,type AssistantAgentKind} from '@sodashitsu/protocol';
+import {ASSISTANT_MODEL_MAX_OPTIONS,ASSISTANT_EFFORTS,type AssistantModelCatalog,type AssistantAgentKind} from '@sodashitsu/protocol';
 type Kind=keyof typeof ASSISTANT_EFFORTS;
 type Effort=AssistantModelCatalog["models"][number]["efforts"][number];
 const validId=/^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,199}$/;
@@ -40,7 +40,7 @@ async function query(command:string,args:string[],msp:boolean|"grok"=false):Prom
 }
 export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatalog>{
  const rows:AssistantModelCatalog['models']=[];
- const add=(id:unknown,label:unknown,tiers:unknown)=>{if(typeof id==='string'&&validId.test(id)&&!rows.some(r=>r.id===id)&&rows.length<128)rows.push({id,label:typeof label==='string'?label.slice(0,200):id,efforts:efforts(kind,tiers)});};
+ const add=(id:unknown,label:unknown,tiers:unknown)=>{if(typeof id==='string'&&validId.test(id)&&!rows.some(r=>r.id===id)&&rows.length<ASSISTANT_MODEL_MAX_OPTIONS)rows.push({id,label:typeof label==='string'?label.slice(0,200):id,efforts:efforts(kind,tiers)});};
  try{
   if(kind==='codex'){
    const opened=await openVerified(join(process.env.CODEX_HOME||join(homedir(),'.codex'),'models_cache.json'));if(!opened)throw Error('cache file');let raw='';

@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-assistant-profile/packages/protocol
+
+ ❯ src/desktopAssistantLaunch.test.ts (6 tests | 1 failed) 37ms
+   × bounds large advertised model catalogs at 512 entries 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktopAssistantLaunch.test.ts > bounds large advertised model catalogs at 512 entries
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktopAssistantLaunch.test.ts:48:76
+     46| it("bounds large advertised model catalogs at 512 entries",()=>{
+     47|  const rows=Array.from({length:512},(_,i)=>({id:`generated-${i}`,label…
+     48|  expect(AssistantModelCatalog.safeParse({models:rows,message:""}).succ…
+       |                                                                            ^
+     49|  expect(AssistantModelCatalog.safeParse({models:[...rows,rows[0]],mess…
+     50| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  17:00:51
+   Duration  626ms (transform 54%, import 34%, tests 9%, worker 2%)
+
+undefined
+/workspaces/sodashitsu-cursor-assistant-profile/packages/protocol:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/desktopAssistantLaunch.test.ts
