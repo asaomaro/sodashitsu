@@ -1,0 +1,4 @@
+
+> @sodashitsu/protocol@0.1.0 typecheck /workspaces/sodashitsu-captain-private-session/packages/protocol
+> tsc --noEmit -p tsconfig.typecheck.json
+

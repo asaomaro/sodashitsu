@@ -1,0 +1,155 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-captain-private-session
+
+ ❯ |@sodashitsu/server| src/terminal/TerminalHost.test.ts (28 tests | 2 failed) 99ms
+   × observes real PTY exit after disposal rather than treating kill request as completion 3ms
+   × fails closed when disposed PTY never confirms exit 1ms
+ ❯ |@sodashitsu/server| src/assistant/AssistantSessions.test.ts (66 tests | 6 failed) 1712ms
+   × explicit stop closes only the owned working captain, blocks restart until persisted, then permits fresh start 10ms
+   × dedicated captain remains attachable in raw snapshot but is excluded from ordinary agent counts 7ms
+   × registers explicit captain stop with strict instance scope 10ms
+   × keeps restart blocked on unconfirmed close and never stops a replaced actor 5ms
+   × does not report completion or permit restart on model removal before actual PTY exit 4ms
+   × keeps sibling panes in the captain workspace visible and live after the captain stops 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantSessions.test.ts > explicit stop closes only the owned working captain, blocks restart until persisted, then permits fresh start
+TypeError: f.manager.stop is not a function
+ ❯ src/assistant/AssistantSessions.test.ts:892:26
+    890|  const ordinary=await f.session.createWorkspace(f.stateDir,"ordinary");
+    891|  let done!:()=>void;f.flush.mockImplementationOnce(()=>new Promise<voi…
+    892|  const stopped=f.manager.stop({deviceId:device,instanceId:agent.instan…
+       |                          ^
+    893|  expect(f.manager.get(device)?.state).toBe("stopping");
+    894|  expect(f.manager.stop({deviceId:device,instanceId:agent.instanceId}))…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantSessions.test.ts > dedicated captain remains attachable in raw snapshot but is excluded from ordinary agent counts
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/assistant/AssistantSessions.test.ts:913:40
+    911|  const f=await fixture();const {info}=await f.ready();
+    912|  expect(f.session.snapshot().panes.some(p=>p.id===info.paneId)).toBe(t…
+    913|  expect(f.session.agentCounts().total).toBe(0);
+       |                                        ^
+    914|  const ordinary=await f.session.createWorkspace(f.stateDir,"ordinary");
+    915|  const pane=f.session.snapshot().panes.find(p=>p.tabId===ordinary.tab.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantSessions.test.ts > registers explicit captain stop with strict instance scope
+AssertionError: expected { ok: false, error: { …(2) } } to match object { ok: true, result: { stopped: true } }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
+-   "result": {
+-     "stopped": true,
+-   },
++   "ok": false,
+  }
+
+ ❯ src/assistant/AssistantSessions.test.ts:924:99
+    922|  const ctx={clientId:randomUUID(),sink:{} as never};
+    923|  expect((await surface.invoke(ctx,"assistant.stop",{deviceId:device,in…
+    924|  expect(await surface.invoke(ctx,"assistant.stop",{deviceId:device,ins…
+       |                                                                                                   ^
+    925|  expect(f.session.getPane(info.paneId)).toBeUndefined();
+    926| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantSessions.test.ts > keeps restart blocked on unconfirmed close and never stops a replaced actor
+TypeError: f.manager.stop is not a function
+ ❯ src/assistant/AssistantSessions.test.ts:931:25
+    929|  const f=await fixture();const {device,info,agent}=await f.ready();
+    930|  vi.spyOn(f.session,"closePane").mockRejectedValueOnce(Error("generate…
+    931|  await expect(f.manager.stop({deviceId:device,instanceId:agent.instanc…
+       |                         ^
+    932|  expect(f.session.getPane(info.paneId)).toBeDefined();expect(f.manager…
+    933|  expect(()=>f.manager.ensure({deviceId:device,kind:"codex",activate:tr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantSessions.test.ts > does not report completion or permit restart on model removal before actual PTY exit
+TypeError: f.manager.stop is not a function
+ ❯ src/assistant/AssistantSessions.test.ts:941:26
+    939| it("does not report completion or permit restart on model removal befo…
+    940|  const f=await fixture();const {device,info,agent}=await f.ready();con…
+    941|  const stopped=f.manager.stop({deviceId:device,instanceId:agent.instan…
+       |                          ^
+    942|  await vi.waitFor(()=>expect(f.session.getPane(info.paneId)).toBeUndef…
+    943|  expect(f.manager.get(device)?.state).toBe("stopping");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantSessions.test.ts > keeps sibling panes in the captain workspace visible and live after the captain stops
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ src/assistant/AssistantSessions.test.ts:951:40
+    949|  const {pane}=await f.session.splitPane(info.paneId,"right",undefined);
+    950|  f.session.updatePaneRuntime(pane.id,{agent:{...agent,instanceId:rando…
+    951|  expect(f.session.agentCounts().total).toBe(1);
+       |                                        ^
+    952|  await f.manager.stop({deviceId:device,instanceId:agent.instanceId});
+    953|  expect(f.session.getPane(pane.id)).toBeDefined();expect(f.session.age…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  |@sodashitsu/server| src/terminal/TerminalHost.test.ts > observes real PTY exit after disposal rather than treating kill request as completion
+TypeError: host.waitForExit is not a function
+ ❯ src/terminal/TerminalHost.test.ts:419:61
+    417|
+    418| it("observes real PTY exit after disposal rather than treating kill re…
+    419|  const {pty,host}=setup();let settled=false;const exit=host.waitForExi…
+       |                                                             ^
+    420|  host.dispose();await Promise.resolve();expect(settled).toBe(false);
+    421|  pty.exit(0);await exit;expect(settled).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  |@sodashitsu/server| src/terminal/TerminalHost.test.ts > fails closed when disposed PTY never confirms exit
+TypeError: host.waitForExit is not a function
+ ❯ src/terminal/TerminalHost.test.ts:424:39
+    422| });
+    423| it("fails closed when disposed PTY never confirms exit",async()=>{
+    424|  const {host}=setup();const exit=host.waitForExit(1000);const rejected…
+       |                                       ^
+    425|  host.dispose();await vi.advanceTimersByTimeAsync(1000);await rejected;
+    426| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  8 failed | 86 passed (94)
+   Start at  22:28:50
+   Duration  3.48s (transform 48%, tests 42%, import 10%)
+
+  Transform  |@sodashitsu/server| transforming modules took 2.09s · 48% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
