@@ -1,0 +1,55 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-captain-private-session
+
+ ❯ |@sodashitsu/server| src/assistant/AssistantSessions.test.ts (69 tests | 3 failed) 1849ms
+   × persists an uncertain retirement across manager recreation and refuses activation without exit proof 12ms
+   × does not initiate terminal closure when retirement persistence fails 10ms
+   × clears the retirement marker only after exit proof and successful final persistence 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantSessions.test.ts > persists an uncertain retirement across manager recreation and refuses activation without exit proof
+AssertionError: expected undefined to be 'stopping' // Object.is equality
+
+- Expected:
+"stopping"
+
++ Received:
+undefined
+
+ ❯ src/assistant/AssistantSessions.test.ts:965:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantSessions.test.ts > does not initiate terminal closure when retirement persistence fails
+AssertionError: expected [Function] to throw an error
+ ❯ src/assistant/AssistantSessions.test.ts:970:76
+    968|  const f=await fixture();const {device,info,agent}=await f.ready();
+    969|  await writeFile(join(f.stateDir,"assistant-retiring"),"generated obst…
+    970|  expect(()=>f.manager.stop({deviceId:device,instanceId:agent.instanceI…
+       |                                                                            ^
+    971| });
+    972| it("clears the retirement marker only after exit proof and successful …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantSessions.test.ts > clears the retirement marker only after exit proof and successful final persistence
+AssertionError: expected null not to be null
+ ❯ src/assistant/AssistantSessions.test.ts:975:135
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 66 passed (69)
+   Start at  22:43:47
+   Duration  3.55s (tests 54%, transform 38%, import 8%)
+

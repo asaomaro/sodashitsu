@@ -1,0 +1,13 @@
+{
+  "negativeExitCode": 1,
+  "restoration": {
+    "packages/server/src/assistant/AssistantSessions.ts": {
+      "sha256": "ba2217a4252862f3e1ab2ad3cd64c3ffbf2beb1bcc54f83b321f8e43dd34aad8",
+      "exact": true
+    },
+    "packages/server/src/composeServer.ts": {
+      "sha256": "560e1f337b0bca6413728232a5994c0c74732e0370f7d2acb528a690f28778a8",
+      "exact": true
+    }
+  }
+}

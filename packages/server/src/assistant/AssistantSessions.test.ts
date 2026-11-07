@@ -955,3 +955,25 @@ it("keeps sibling panes in the captain workspace visible and live after the capt
  expect(f.session.getWorkspace(info.workspaceId)?.assistant).toBeUndefined();
  const next=await f.manager.ensure({deviceId:device,kind:"codex",activate:true});expect(next.workspaceId).not.toBe(info.workspaceId);
 });
+
+it("persists an uncertain retirement across manager recreation and refuses activation without exit proof",async()=>{
+ const f=await fixture();const {device,info,agent}=await f.ready();const host=f.hosts.get(info.paneId)!;host.holdExit=true;
+ vi.spyOn(host,"waitForExit").mockRejectedValueOnce(Error("generated exit unconfirmed"));
+ await expect(f.manager.stop({deviceId:device,instanceId:agent.instanceId})).rejects.toThrow("generated exit unconfirmed");
+ expect(f.session.getPane(info.paneId)).toBeUndefined();await f.manager.suspend();
+ const recreated=new AssistantSessions({session:f.session,terminals:f.terminals,starter:{start:f.start,isShellAvailable:f.available},flush:f.flush,stateDir:f.stateDir});
+ try{recreated.activate(device);expect(recreated.get(device)?.state).toBe("stopping");expect(()=>recreated.ensure({deviceId:device,kind:"codex",activate:true})).toThrow();expect(f.start).toHaveBeenCalledTimes(1);}finally{await recreated.suspend();}
+});
+it("does not initiate terminal closure when retirement persistence fails",async()=>{
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ await writeFile(join(f.stateDir,"assistant-retiring"),"generated obstruction");const close=vi.spyOn(f.session,"closePane");
+ expect(()=>f.manager.stop({deviceId:device,instanceId:agent.instanceId})).toThrow();expect(close).not.toHaveBeenCalled();expect(f.session.getPane(info.paneId)).toBeDefined();
+});
+it("clears the retirement marker only after exit proof and successful final persistence",async()=>{
+ const f=await fixture();const {device,info,agent}=await f.ready();f.flush.mockRejectedValueOnce(Error("generated persist failure"));
+ await expect(f.manager.stop({deviceId:device,instanceId:agent.instanceId})).rejects.toThrow("generated persist failure");
+ const {AssistantRetirements}=await import("./AssistantRetirements.js");expect(new AssistantRetirements(f.stateDir).read(device)).not.toBeNull();
+ const g=await fixture();const ready=await g.ready();await g.manager.stop({deviceId:ready.device,instanceId:ready.agent.instanceId});expect(new AssistantRetirements(g.stateDir).read(ready.device)).toBeNull();
+ const recreated=new AssistantSessions({session:g.session,terminals:g.terminals,starter:{start:g.start,isShellAvailable:g.available},flush:g.flush,stateDir:g.stateDir});
+ try{const next=await recreated.ensure({deviceId:ready.device,kind:"codex",activate:true});expect(next.paneId).not.toBe(ready.info.paneId);}finally{await recreated.suspend();}
+});

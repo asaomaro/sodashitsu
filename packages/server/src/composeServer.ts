@@ -1,3 +1,4 @@
+import {AssistantRetirements} from "./assistant/AssistantRetirements.js";
 import {AssistantPersonaPrompts} from "./assistant/AssistantPersonaPrompts.js";
 import { VoiceHost } from "./voice/VoiceHost.js";
 import { AssistantDisabledDevices } from "./assistant/AssistantDisabledDevices.js";
@@ -393,8 +394,9 @@ export async function composeServer(
   /** pane の環境の `SODA_SERVER_URL`（`listen()` で待ち受けた後に決める。それまでは undefined）。`SessionService` が読むので、それより前に宣言する。 */
   let paneUrl: string | undefined;
   const disabledAssistantDevices = new AssistantDisabledDevices(options.stateDir);
+  const retiringAssistantDevices = new AssistantRetirements(options.stateDir);
   const session = new SessionService({
-    isAssistantDisabled: deviceId => disabledAssistantDevices.isDisabled(deviceId),
+    isAssistantDisabled: deviceId => !!retiringAssistantDevices.read(deviceId) || disabledAssistantDevices.isDisabled(deviceId),
     manualAgentResume: async paneId => {
       try { await lstat(join(options.stateDir, "work-agents", "panes", paneId)); return true; }
       catch (e) { return (e as NodeJS.ErrnoException).code !== "ENOENT"; }

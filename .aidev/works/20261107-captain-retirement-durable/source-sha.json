@@ -1,0 +1,5 @@
+{
+  "packages/server/src/assistant/AssistantRetirements.ts": "cb4e75a5af3c45c7deec5dee2d536e2a6d5eedbb2573e8075627ab8f1be031d8",
+  "packages/server/src/assistant/AssistantSessions.ts": "ba2217a4252862f3e1ab2ad3cd64c3ffbf2beb1bcc54f83b321f8e43dd34aad8",
+  "packages/server/src/composeServer.ts": "560e1f337b0bca6413728232a5994c0c74732e0370f7d2acb528a690f28778a8"
+}

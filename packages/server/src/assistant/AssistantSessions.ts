@@ -1,3 +1,4 @@
+import {AssistantRetirements} from "./AssistantRetirements.js";
 import { AssistantDisabledDevices } from "./AssistantDisabledDevices.js";
 import { assistantLaunchArgs } from "@sodashitsu/protocol";
 import { mkdir, lstat, realpath } from "node:fs/promises";
@@ -49,6 +50,7 @@ export class AssistantSessions {
   private readonly stopRequests = new Set<Promise<unknown>>();
   private draining: Promise<void> | null = null;
   private drainAgain = false;
+  private readonly retirements:AssistantRetirements;
   private readonly disabledDevices: AssistantDisabledDevices;
   private readonly stopTokens = new Map<string, object>();
   private generation = 0;
@@ -58,7 +60,7 @@ export class AssistantSessions {
   private runtimeOwners = new Map<string, { paneId: string; instanceId: string }>();
   private creation: Promise<void> = Promise.resolve();
   private closed = false;
-  constructor(private readonly deps: AssistantSessionDeps) { this.disabledDevices = new AssistantDisabledDevices(deps.stateDir); }
+  constructor(private readonly deps: AssistantSessionDeps) { this.disabledDevices = new AssistantDisabledDevices(deps.stateDir); this.retirements=new AssistantRetirements(deps.stateDir); }
 
   close(): void {
     this.closed = true;
@@ -80,7 +82,7 @@ export class AssistantSessions {
       if (pending.instanceId !== request.instanceId) throw new RpcError("agent_not_found", "停止対象が変更されました");
       return pending.promise;
     }
-    if (this.closed) throw new RpcError("agent_pane_busy", "専用セッションの操作を停止しています");
+    if (this.closed || this.retirements.read(request.deviceId)) throw new RpcError("agent_pane_busy", "専用セッションの終了確認が完了していません");
     const workspace = this.find(request.deviceId);
     const binding = workspace?.assistant;
     if (!workspace || !binding || this.info(workspace).state !== "ready" ||
@@ -93,6 +95,7 @@ export class AssistantSessions {
     const generation = this.generation;
     let completed = false;
     // Invalidate queued prompts and prevent background ensure from relaunching.
+    const retirement=this.retirements.begin(stoppedInfo);
     this.disabledDevices.disable(request.deviceId);
     const token = {}; this.stopTokens.set(request.deviceId, token);
     const promise = Promise.resolve().then(async () => {
@@ -106,6 +109,7 @@ export class AssistantSessions {
       if (this.deps.session.getWorkspace(workspace.id)?.assistant === binding)
         this.deps.session.detachAssistantBinding(workspace.id, binding);
       await this.deps.flush();
+      this.retirements.complete(retirement);
       completed = true;
       return {stopped:true as const};
     }).finally(() => {
@@ -120,7 +124,7 @@ export class AssistantSessions {
   /** Disable only this installation's dedicated agent; active work may finish before closure. */
   private isStopped(deviceId: string): boolean {
     const id = AssistantSessionGetParams.parse({deviceId}).deviceId;
-    return this.stopTokens.has(id) || this.disabledDevices.isDisabled(id);
+    return this.stopTokens.has(id) || !!this.retirements.read(id) || this.disabledDevices.isDisabled(id);
   }
   requestStop(deviceId: string): Promise<void> {
     const id = AssistantSessionGetParams.parse({deviceId}).deviceId;
@@ -143,7 +147,7 @@ export class AssistantSessions {
   }
   activate(deviceId: string): void {
     const id = AssistantSessionGetParams.parse({deviceId}).deviceId;
-    if (this.closed || this.explicitStops.has(id)) return;
+    if (this.closed || this.explicitStops.has(id) || this.retirements.read(id)) return;
     this.disabledDevices.activate(id);
     this.stopTokens.delete(id);
     const workspace = this.find(id);
@@ -184,6 +188,7 @@ export class AssistantSessions {
     const id = AssistantSessionGetParams.parse({ deviceId }).deviceId;
     const stopping = this.explicitStops.get(id);
     if (stopping) return structuredClone(stopping.info);
+    const retirement=this.retirements.info(id);if(retirement)return retirement;
     const workspace = this.find(id);
     return workspace ? this.info(workspace) : null;
   }
@@ -193,7 +198,7 @@ export class AssistantSessions {
     assistantLaunchArgs(request.kind, request.launchSettings ?? {});
 
     if (this.closed) throw new RpcError("agent_pane_busy", "専用セッションの起動を停止しています");
-    if (this.explicitStops.has(request.deviceId)) throw new RpcError("agent_pane_busy", "専用セッションの停止完了を待ってください");
+    if (this.explicitStops.has(request.deviceId) || this.retirements.read(request.deviceId)) throw new RpcError("agent_pane_busy", "専用セッションの停止完了を待ってください");
     if (request.activate) this.activate(request.deviceId);
     if (this.isStopped(request.deviceId) || this.find(request.deviceId)?.assistant?.stopWhenIdle)
       throw new RpcError("agent_pane_busy", "アシスタントは無効です。明示的に有効化してください");
