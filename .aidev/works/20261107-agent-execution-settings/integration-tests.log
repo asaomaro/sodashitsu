@@ -1,0 +1,32 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agent-execution-settings
+
+{"ts":"2026-11-07T06:50:21.997Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-07T06:50:21.998Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-07T06:50:21.999Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-07T06:50:21.999Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-07T06:50:22.001Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-statusline-it-giewBw/state-H4mPHp/commands.json","count":0}
+{"ts":"2026-11-07T06:50:23.722Z","level":"info","msg":"agent session attached","paneId":"87e87f09-a467-4586-afed-8058e30b5aef","kind":"claude","session":"3e81f9a7","source":"hook"}
+{"ts":"2026-11-07T06:50:26.987Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-07T06:50:26.987Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-07T06:50:26.988Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-07T06:50:26.988Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-07T06:50:26.990Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-statusline-it-giewBw/state-4Pg5bD/commands.json","count":0}
+{"ts":"2026-11-07T06:50:28.597Z","level":"info","msg":"agent session attached","paneId":"9035ea69-cd45-4449-a65c-3c5f7fbb798d","kind":"claude","session":"3e81f9a7","source":"hook"}
+{"ts":"2026-11-07T06:50:28.621Z","level":"info","msg":"usage report ignored","paneId":"9035ea69-cd45-4449-a65c-3c5f7fbb798d","kind":"claude","reason":"the reporting process is not a descendant of the pane's shell"}
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 3 skipped (5)
+   Start at  15:50:18
+   Duration  11.72s (tests 70%, transform 25%, import 5%)
+
+  Transform  |@sodashitsu/server| transforming modules took 2.91s · 25% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

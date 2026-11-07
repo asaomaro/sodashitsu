@@ -1,0 +1,45 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agent-execution-settings
+
+ ❯ |@sodashitsu/server| src/agent/agentHookExecution.test.ts (1 test | 1 failed) 60ms
+   × piggybacks only parent permission-mode facts and never hook input/child overrides 59ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/agentHookExecution.test.ts > piggybacks only parent permission-mode facts and never hook input/child overrides
+AssertionError: expected { permissionMode: { …(3) } } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "permissionMode": {
+    "basis": "hook",
+    "source": "hook",
+    "value": "bypassPermissions",
+  },
+}
+
+ ❯ src/agent/agentHookExecution.test.ts:20:119
+     18|     });
+     19|     await run({}); expect(reports.at(-1)?.executionSettings).toEqual({…
+     20|     await run({ agent_id: "child", permission_mode: "bypassPermissions…
+       |                                                                                                                       ^
+     21|     await run({ permission_mode: "future-policy" }); expect(reports.at…
+     22|     await run({ permission_mode: "bypassPermissions" }); expect(report…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:50:14
+   Duration  202ms (tests 48%, transform 40%, import 10%, worker 2%)
+

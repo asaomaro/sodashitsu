@@ -1,0 +1,51 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agent-execution-settings
+
+ ❯ |@sodashitsu/server| src/usage/codexRollout.test.ts (13 tests | 1 failed | 12 skipped) 11ms
+   ❯ CodexRolloutTail (13)
+     × reads the latest turn settings, clears absent settings, and resets on truncation 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/usage/codexRollout.test.ts > CodexRolloutTail > reads the latest turn settings, clears absent settings, and resets on truncation
+AssertionError: expected undefined to match object { reasoningEffort: { …(2) }, …(2) }
+
+- Expected:
+{
+  "approvalPolicy": {
+    "value": "on-request",
+  },
+  "reasoningEffort": {
+    "basis": "turn",
+    "value": "low",
+  },
+  "sandboxMode": {
+    "value": "read-only",
+  },
+}
+
++ Received:
+undefined
+
+ ❯ src/usage/codexRollout.test.ts:36:33
+     34|     writeFileSync(file, settings("low", "on-request") + tokenCount("20…
+     35|     const t = new CodexRolloutTail(file); await t.refresh();
+     36|     expect(t.executionSettings).toMatchObject({ reasoningEffort: { val…
+       |                                 ^
+     37|     appendFileSync(file, settings("high", "never")); await t.refresh()…
+     38|     appendFileSync(file, turn("fixture")); await t.refresh(); expect(t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 skipped (13)
+   Start at  15:50:12
+   Duration  173ms (transform 69%, import 16%, tests 12%, worker 3%)
+
