@@ -1,6 +1,6 @@
 # エージェントのeffortと承認設定の観測
 
-paneフッターへ渡す値は、CLIの正式な記録・現在のCLIからのhook/statusline・既存のread-only APIで観測できたものだけです。起動プロファイルの希望値や設定ファイルの既定値から、現在のCLI設定を推定しません。未取得の項目はありません（0・許可済みとはしません）。値の表示選択はフッター設定で行います。
+paneフッターへ渡す値は、CLIの正式な記録・現在のCLIからのhook/statusline・既存のread-only APIで観測できたものだけです。起動プロファイルの希望値や設定ファイルの既定値から、現在のCLI設定を推定しません。未取得の項目は表示しません（0・許可済みとはしません）。値の表示選択はフッター設定で行います。
 
 `AgentUsage.reasoningEffort`は互換のため維持し、`executionSettings`の各項目は`value`・`source`・`basis`・分かる場合だけ`observedAt`を持ちます。承認policy・承認mode・権限mode・sandbox種別は別の項目です。sandboxだけ分かっても承認値にはしません。観測は権限を設定する機能ではなく、実際の承認要求を省略する根拠にも使いません。
 
