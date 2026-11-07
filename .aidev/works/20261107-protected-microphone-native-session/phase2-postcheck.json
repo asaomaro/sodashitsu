@@ -1,0 +1,34 @@
+[
+  {
+    "ok": true,
+    "parentPreserved": true,
+    "panesPreserved": true,
+    "paneCount": 2,
+    "sourceHead": "be88b257b78f95c57fc18c4c98baef38f57c1d81",
+    "sourceClean": true
+  },
+  {
+    "portListening": false,
+    "privateStatePresent": false,
+    "ownServerAlive": false
+  },
+  {
+    "render": {
+      "masterVolumeScalar": 0.999999,
+      "muted": false,
+      "activeDevice": true,
+      "sessions": 1,
+      "activeSessions": 0
+    },
+    "capture": {
+      "masterVolumeScalar": 0.999999,
+      "muted": false,
+      "activeDevice": true,
+      "sessions": 1,
+      "activeSessions": 0
+    },
+    "defaultRolesUsingCable": 0,
+    "audioClientStarted": false,
+    "defaultChanged": false
+  }
+]
