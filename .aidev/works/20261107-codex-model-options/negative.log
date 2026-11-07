@@ -1,0 +1,50 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-model-discovery/packages/server
+
+ ❯ src/agent/assistantModelProviders/codex.test.ts (10 tests | 1 failed | 9 skipped) 14ms
+   × uses a catalog-only allowlist and maps returned model/effort values without a session 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/assistantModelProviders/codex.test.ts > uses a catalog-only allowlist and maps returned model/effort values without a session
+AssertionError: expected { models: [], …(2) } to match object { source: 'cli', models: [ { …(3) } ] }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "models": [
+-     {
+-       "efforts": [
+-         "low",
+-         "high",
+-       ],
+-       "id": "actual-model",
+-       "label": "Generated Model",
+-     },
+-   ],
+-   "source": "cli",
++   "models": [],
++   "source": "unavailable",
+  }
+
+ ❯ src/agent/assistantModelProviders/codex.test.ts:19:17
+     17| it('uses a catalog-only allowlist and maps returned model/effort value…
+     18|  const f=await fixture();const result=await readCodexModelOptions(f);
+     19|  expect(result).toMatchObject({source:'cli',models:[{id:'actual-model'…
+       |                 ^
+     20|  expect(f.open).toHaveBeenCalledWith(expect.objectContaining({key:'mod…
+     21|  expect(f.requests.map(r=>r.method)).toEqual(['initialize','model/list…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 skipped (10)
+   Start at  17:09:14
+   Duration  1.01s (transform 74%, import 24%, tests 2%)
+
+undefined
+/workspaces/sodashitsu-codex-model-discovery/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/assistantModelProviders/codex.test.ts -t uses a catalog-only allowlist
