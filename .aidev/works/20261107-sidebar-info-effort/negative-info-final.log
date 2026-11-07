@@ -1,0 +1,78 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-agent-information/packages/web
+
+ ❯ src/dashboard/PaneInfoView.test.ts (16 tests | 6 failed) 181ms
+   ❯ PaneInfoView (10)
+     × 入口: ダッシュボードは窓を閉じ、サブエージェントは同じ窓へ埋め込む 11ms
+   × labels codex native membership counts with inline children 7ms
+   × labels muse native membership counts with inline children 6ms
+   × labels copilot native membership counts with inline children 5ms
+   × labels agy native membership counts with inline children 6ms
+   × bounds inline child rows at 64 without opening a separate list 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/dashboard/PaneInfoView.test.ts > PaneInfoView > 入口: ダッシュボードは窓を閉じ、サブエージェントは同じ窓へ埋め込む
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/dashboard/PaneInfoView.test.ts:178:70
+    176|     const { wrapper, view, emitted } = setup(pane("p1", agent({ name: …
+    177|     expect(wrapper.get("[data-pane-info-subagents]").text()).toContain…
+    178|     expect(wrapper.find("[data-pane-info-open-subagents]").exists()).t…
+       |                                                                      ^
+    179|     expect(wrapper.find(".subagent-list").exists()).toBe(true);expect(…
+    180|     await wrapper.get("[data-pane-info-open-dashboard]").trigger("clic…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels codex native membership counts with inline children
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels muse native membership counts with inline children
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels copilot native membership counts with inline children
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels agy native membership counts with inline children
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/dashboard/PaneInfoView.test.ts:213:50
+    211|  const {wrapper,view}=setup(pane("p1",agent({kind,subagents:{count:2,i…
+    212|  expect(wrapper.get('[data-pane-info-subagents]').text()).toContain("所…
+    213|  expect(wrapper.find('.subagent-list').exists()).toBe(true);expect(vie…
+       |                                                  ^
+    214| });
+    215|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/dashboard/PaneInfoView.test.ts > bounds inline child rows at 64 without opening a separate list
+AssertionError: expected [] to have a length of 64 but got +0
+
+- Expected
++ Received
+
+- 64
++ 0
+
+ ❯ src/dashboard/PaneInfoView.test.ts:218:49
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 10 passed (16)
+   Start at  17:51:48
+   Duration  2.32s (transform 70%, import 13%, tests 8%, environment 8%)
+
+undefined
+/workspaces/sodashitsu-sidebar-agent-information/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/dashboard/PaneInfoView.test.ts

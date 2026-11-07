@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-agent-information/packages/tui
+
+
+ Test Files  2 passed (2)
+      Tests  32 passed (32)
+   Start at  17:46:02
+   Duration  4.14s (transform 51%, tests 38%, import 11%)
+
+  Transform  transforming modules took 2.74s · 51% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

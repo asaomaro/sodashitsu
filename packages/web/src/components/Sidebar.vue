@@ -1402,7 +1402,7 @@ watchDragInterrupt(view, () => {
   align-items: center;
   gap: 0.5em;
 }
-/* サブエージェントの件数のボタン。1 行目の右端に置き、行の高さを変えない（枠線・余白を最小に。文字の高さに収める）。 */
+/* サブエージェントの件数のボタン。2 行目（1 行設定ならその行）の右端に置く（枠線・余白を最小に。文字の高さに収める）。 */
 .sidebar-subagent-btn {
   display: inline-flex;
   align-items: center;

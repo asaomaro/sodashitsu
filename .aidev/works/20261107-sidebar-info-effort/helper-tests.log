@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-agent-information/packages/client-core
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  17:45:55
+   Duration  863ms (transform 77%, import 21%, worker 1%, tests 1%)
+

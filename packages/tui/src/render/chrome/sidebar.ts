@@ -145,7 +145,7 @@ interface Line {
   navigated?: boolean;
   hit?: SidebarTarget;
   drag?: SidebarDragInfo;
-  /** 1 行目の末尾に右寄せで出す印（サブエージェントの件数）。 */
+  /** 指定行の末尾に右寄せで出す印（サブエージェントの件数）。 */
   badge?: { text: string; paneId: string; row?:number };
   info?:{paneId:string};
 }
@@ -917,7 +917,7 @@ function paintSection(
     // 1 行目は項目の頭から、2 行目からは状態の印の幅（2 桁）だけ下げる（web の line2 と同じ）。
     let x = rect.x + 1 + line.indent + (sub > 0 ? (line.subIndent ?? 2) : 0);
     const lineEnd = rect.x + inner - 1;
-    // 1 行目の末尾の印（件数）。名前の行の幅（字下げを除く）が印＋2 桁を超えるときだけ出し、文字はその手前（印と 1 桁あけて）までに縮める。
+    // 行の末尾の情報・開閉の印。名前の行の幅（字下げを除く）が印＋2 桁を超えるときだけ出し、文字はその手前（印と 1 桁あけて）までに縮める。
     // 入らない狭い幅では出さない（文字の最小幅の保証はしない。一覧へは pane のメニュー・`show_subagents` からも行ける）。
     const badge = sub === Math.min(line.badge?.row??0,line.rows.length-1) ? line.badge : undefined;
     const controls:Array<{kind:"info"|"subagents";paneId:string;text:string}>=[];

@@ -1,0 +1,53 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+ExpectError: expect(locator).toContainText(expected) failed
+
+Locator: locator('[data-agent-pane="p"]')
+Expected substring: "Generated Codex gpt-parent-observed high（記録）"
+Received string:    "○GeneratedGenerated▸3Generated Codex gpt-parent-observed"
+Timeout: 5000ms
+
+Call log:
+  - Expect "toContainText" locator('[data-agent-pane="p"]') with timeout 5000ms
+  - waiting for locator('[data-agent-pane="p"]')
+    14 × locator resolved to <div tabindex="-1" data-v-6dec5f19="" class="sidebar-row" data-agent-pane="p" title="Generated Codex gpt-parent-observed · サブエージェント 所属 3 件">…</div>
+       - unexpected value "○GeneratedGenerated▸3Generated Codex gpt-parent-observed"
+
+    at captureRawStack (/workspaces/sodashitsu-sidebar-agent-information/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js:8588:17)
+    at callMatcherAsStep (/workspaces/sodashitsu-sidebar-agent-information/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13310:57)
+    at Object.toContainText (/workspaces/sodashitsu-sidebar-agent-information/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13302:23)
+    at /workspaces/sodashitsu-sidebar-agent-information/.aidev/works/20261107-sidebar-info-effort/browser.mjs:19:141 {
+  matcherResult: {
+    name: 'toContainText',
+    expected: 'Generated Codex gpt-parent-observed high（記録）',
+    message: 'expect(locator).toContainText(expected) failed\n' +
+      '\n' +
+      `Locator: locator('[data-agent-pane="p"]')\n` +
+      'Expected substring: "Generated Codex gpt-parent-observed high（記録）"\n' +
+      'Received string:    "○GeneratedGenerated▸3Generated Codex gpt-parent-observed"\n' +
+      'Timeout: 5000ms\n' +
+      '\n' +
+      'Call log:\n' +
+      `  - Expect "toContainText" locator('[data-agent-pane="p"]') with timeout 5000ms\n` +
+      `  - waiting for locator('[data-agent-pane="p"]')\n` +
+      '    14 × locator resolved to <div tabindex="-1" data-v-6dec5f19="" class="sidebar-row" data-agent-pane="p" title="Generated Codex gpt-parent-observed · サブエージェント 所属 3 件">…</div>\n' +
+      '       - unexpected value "○GeneratedGenerated▸3Generated Codex gpt-parent-observed"\n',
+    pass: false,
+    actual: '○GeneratedGenerated▸3Generated Codex gpt-parent-observed',
+    log: [
+      `  - Expect "toContainText" locator('[data-agent-pane="p"]') with timeout 5000ms`,
+      `  - waiting for locator('[data-agent-pane="p"]')`,
+      '    14 × locator resolved to <div tabindex="-1" data-v-6dec5f19="" class="sidebar-row" data-agent-pane="p" title="Generated Codex gpt-parent-observed · サブエージェント 所属 3 件">…</div>',
+      '       - unexpected value "○GeneratedGenerated▸3Generated Codex gpt-parent-observed"'
+    ],
+    timeout: 5000,
+    ariaSnapshot: '- img "待機中": ○\n' +
+      '- text: Generated Generated\n' +
+      '- button "サブエージェント 所属 3 件を展開"\n' +
+      '- text: Generated Codex gpt-parent-observed'
+  }
+}
+
+Node.js v24.15.0

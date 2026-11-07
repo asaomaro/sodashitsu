@@ -1,0 +1,236 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-agent-information/packages/web
+
+ ❯ src/dashboard/PaneInfoView.test.ts (16 tests | 6 failed) 180ms
+   ❯ PaneInfoView (10)
+     × 入口: ダッシュボードは窓を閉じ、サブエージェントは同じ窓へ埋め込む 11ms
+   × labels codex native membership counts with inline children 6ms
+   × labels muse native membership counts with inline children 7ms
+   × labels copilot native membership counts with inline children 6ms
+   × labels agy native membership counts with inline children 6ms
+   × bounds inline child rows at 64 without opening a separate list 10ms
+ ❯ src/components/Sidebar.defaultLayout.test.ts (2 tests | 1 failed) 137ms
+   ❯ Sidebar — 既定の並びは変更前の描画と同じ（AC10） (2)
+     × 展開したサイドバー 109ms
+ ❯ src/components/Sidebar.test.ts (205 tests | 4 failed) 1807ms
+   ❯ Sidebar — サブエージェントの件数のボタン (20)
+     × 2 行目の中に移し、行の数を増やさない 11ms
+     × 別のマシンを選んでいるときは、そのマシンの対象として開く（machineId は選んでいるマシンの ID） 11ms
+     × keeps observed effort independent of footer visibility, with info first and expansion second 7ms
+     × keeps both controls on a custom single row 28ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/Sidebar.defaultLayout.test.ts > Sidebar — 既定の並びは変更前の描画と同じ（AC10） > 展開したサイドバー
+Error: Snapshot `Sidebar — 既定の並びは変更前の描画と同じ（AC10） > 展開したサイドバー 1` mismatched
+
+- Expected
++ Received
+
+@@ -6,9 +6,9 @@
+  <div class="sidebar-row sidebar-row-current sidebar-row-indent" data-workspace-row-key="clean" data-drop-workspace-id="clean" aria-current="true"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span><span class="sidebar-label">clean</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="ahead" data-drop-workspace-id="ahead"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span><span class="sidebar-label">Ahead &lt;b&gt;&amp;amp;&lt;/b&gt;</span></div><div class="sidebar-row-line2"><span>main</span><span class="sidebar-git-counts">↑2 ↓1</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="detached" data-drop-workspace-id="detached"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="unknown" data-symbols="on" role="img" aria-label="状態不明" title="状態不明">·</span><span class="sidebar-label">detached</span></div><div class="sidebar-row-line2"><span></span><span class="sidebar-git-counts">↑0 ↓3</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="repo" data-drop-workspace-id="repo"><div class="sidebar-row-line1"><button data-assistant-feature="" type="button" class="sidebar-group-toggle" aria-label="worktree グループを折りたたむ" aria-expanded="true">▾</button><span class="sidebar-kind-icon" data-kind="worktreeGroup" title="worktree グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="4.5" cy="3.5" r="1.5"></circle><circle cx="4.5" cy="12.5" r="1.5"></circle><circle cx="11.5" cy="5.5" r="1.5"></circle><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"></path></svg><span class="sidebar-kind-text">worktree グループ</span></span><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-label">repo</span><span class="sidebar-wt-branch" title="main">main</span></div><div class="sidebar-row-line2"><span>main</span><span class="sidebar-git-counts">↑1 ↓0</span></div></div>
+  <div class="sidebar-row sidebar-row-depth-2 sidebar-row-indent sidebar-row-tree sidebar-row-tree-last" data-workspace-row-key="repo-wt" data-drop-workspace-id="repo-wt"><div class="sidebar-row-line1"><span class="sidebar-kind-icon" data-kind="worktreeGroup" title="worktree グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="4.5" cy="3.5" r="1.5"></circle><circle cx="4.5" cy="12.5" r="1.5"></circle><circle cx="11.5" cy="5.5" r="1.5"></circle><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"></path></svg><span class="sidebar-kind-text">worktree グループ</span></span><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-label">repo-wt</span><span class="sidebar-wt-branch" title="feat">feat</span></div></div>
+- <div class="sidebar-row" title="Claude Code · サブエージェントの状況は未取得" tabindex="-1" data-agent-pane="p-plain"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="working" data-symbols="on" role="img" aria-label="作業中" title="作業中">◐</span><span class="sidebar-label">plain</span><span class="sidebar-label">tab-plain</span><button data-assistant-feature="" data-pane-action="info" type="button" class="sidebar-agent-info" aria-label="Claude Codeの利用状況（情報）" title="利用状況（情報）" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3"></circle><path d="M8 7.2v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path><circle cx="8" cy="5" r="0.9" fill="currentColor"></circle></svg></button></div><div class="sidebar-row-line2"><span>Claude Code</span></div></div>
+- <div class="sidebar-row" title="reviewer · サブエージェントの状況は未取得" tabindex="-1" data-agent-pane="p-clean"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span><span class="sidebar-label">clean</span><span class="sidebar-label">tab-clean</span><button data-assistant-feature="" data-pane-action="info" type="button" class="sidebar-agent-info" aria-label="reviewerの利用状況（情報）" title="利用状況（情報）" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3"></circle><path d="M8 7.2v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path><circle cx="8" cy="5" r="0.9" fill="currentColor"></circle></svg></button></div><div class="sidebar-row-line2"><span class="sidebar-agent-name">reviewer</span><span>Claude Code</span></div></div>
+- <div class="sidebar-row" title="Codex · サブエージェントの状況は未取得" tabindex="-1" data-agent-pane="p-ahead"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span><span class="sidebar-label">Ahead &lt;b&gt;&amp;amp;&lt;/b&gt;</span><span class="sidebar-label">tab-ahead</span><button data-assistant-feature="" data-pane-action="info" type="button" class="sidebar-agent-info" aria-label="Codexの利用状況（情報）" title="利用状況（情報）" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3"></circle><path d="M8 7.2v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path><circle cx="8" cy="5" r="0.9" fill="currentColor"></circle></svg></button></div><div class="sidebar-row-line2"><span>Codex</span><span class="sidebar-unverified">未検証</span></div></div>
+- <div class="sidebar-row" title="n2 · サブエージェントの状況は未取得" tabindex="-1" data-agent-pane="p-detached"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="unknown" data-symbols="on" role="img" aria-label="状態不明" title="状態不明">·</span><span class="sidebar-label">detached</span><span class="sidebar-label">tab-detached</span><button data-assistant-feature="" data-pane-action="info" type="button" class="sidebar-agent-info" aria-label="n2の利用状況（情報）" title="利用状況（情報）" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3"></circle><path d="M8 7.2v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path><circle cx="8" cy="5" r="0.9" fill="currentColor"></circle></svg></button></div><div class="sidebar-row-line2"><span class="sidebar-agent-name">n2</span><span>Pi</span><span class="sidebar-unverified">未検証</span></div></div>
++ <div class="sidebar-row" title="Claude Code · サブエージェントの状況は未取得" tabindex="-1" data-agent-pane="p-plain"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="working" data-symbols="on" role="img" aria-label="作業中" title="作業中">◐</span><span class="sidebar-label">plain</span><span class="sidebar-label">tab-plain</span></div><div class="sidebar-row-line2"><span>Claude Code</span></div></div>
++ <div class="sidebar-row" title="reviewer · サブエージェントの状況は未取得" tabindex="-1" data-agent-pane="p-clean"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span><span class="sidebar-label">clean</span><span class="sidebar-label">tab-clean</span></div><div class="sidebar-row-line2"><span class="sidebar-agent-name">reviewer</span><span>Claude Code</span></div></div>
++ <div class="sidebar-row" title="Codex · サブエージェントの状況は未取得" tabindex="-1" data-agent-pane="p-ahead"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span><span class="sidebar-label">Ahead &lt;b&gt;&amp;amp;&lt;/b&gt;</span><span class="sidebar-label">tab-ahead</span></div><div class="sidebar-row-line2"><span>Codex</span><span class="sidebar-unverified">未検証</span></div></div>
++ <div class="sidebar-row" title="n2 · サブエージェントの状況は未取得" tabindex="-1" data-agent-pane="p-detached"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="unknown" data-symbols="on" role="img" aria-label="状態不明" title="状態不明">·</span><span class="sidebar-label">detached</span><span class="sidebar-label">tab-detached</span></div><div class="sidebar-row-line2"><span class="sidebar-agent-name">n2</span><span>Pi</span><span class="sidebar-unverified">未検証</span></div></div>
+
+ ❯ src/components/Sidebar.defaultLayout.test.ts:105:5
+    103|     populate();
+    104|     const wrapper = mountSidebar();
+    105|     await expect(rowsHtml(wrapper)).toMatchFileSnapshot("./__golden__/…
+       |     ^
+    106|   });
+    107|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > 2 行目の中に移し、行の数を増やさない
+AssertionError: expected null not to be null
+ ❯ src/components/Sidebar.test.ts:640:62
+    638|     setup(makeAgent({ subagents: subs(2) }));
+    639|     const w = mountSidebar(makeConnection());
+    640|     expect(btn(w).element.closest(".sidebar-row-line2")).not.toBeNull(…
+       |                                                              ^
+    641|     const rows = w.findAll(".sidebar-agents .sidebar-row");
+    642|     expect(rows).toHaveLength(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > 別のマシンを選んでいるときは、そのマシンの対象として開く（machineId は選んでいるマシンの ID）
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/Sidebar.test.ts:680:58
+    678|     await btn(w).trigger("click");
+    679|     expect(btn(w).attributes("aria-expanded")).toBe("true");
+    680|     expect(w.find(".sidebar-subagent-details").exists()).toBe(false);
+       |                                                          ^
+    681|     await w.get(".sidebar-agent-info").trigger("click");
+    682|     expect(useViewStore(pinia).paneInfoPaneId).toBe("p1");expect(useVi…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > keeps observed effort independent of footer visibility, with info first and expansion second
+AssertionError: expected '◐w1t1▸1Claude Code parent-model' to contain 'parent-model high（報告）'
+
+Expected: "parent-model high（報告）"
+Received: "◐w1t1▸1Claude Code parent-model"
+
+ ❯ src/components/Sidebar.test.ts:758:105
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > keeps both controls on a custom single row
+Error: Unable to get .sidebar-agent-info within: <nav data-v-6dec5f19="" class="sidebar" style="width: 240px;">
+  <!--v-if-->
+  <!--v-if-->
+  <!-- 画面の切り替え（基本画面・グラフ。20261008-graph-first）。session の下・workspace の一覧の上 -->
+  <div data-v-f028b951="" data-v-6dec5f19="" class="screen-switcher" role="group" aria-label="画面の切り替え"><button data-v-f028b951="" type="button" class="screen-switcher-btn screen-switcher-btn-active" data-screen-id="base" aria-pressed="true" title="端末"><span data-v-f028b951="" class="screen-switcher-label">端末</span></button><button data-v-f028b951="" type="button" class="screen-switcher-btn" data-screen-id="graph" aria-pressed="false" title="グラフ"><span data-v-f028b951="" class="screen-switcher-label">グラフ</span></button><button data-v-f028b951="" type="button" class="screen-switcher-btn" data-screen-id="dashboard" aria-pressed="false" aria-label="状況（ダッシュボード）" title="状況（ダッシュボード）"><span data-v-f028b951="" class="screen-switcher-label">状況</span></button><button data-v-f028b951="" data-assistant-feature="" class="screen-switcher-btn" data-screen-more="" aria-haspopup="true" aria-expanded="false" title="その他の画面"><span data-v-f028b951="" class="screen-switcher-label">その他 ▾<!--v-if--></span></button>
+    <!--teleport start-->
+    <!--teleport end-->
+  </div>
+  <div data-v-6dec5f19="" class="sidebar-sections sidebar-sections-split">
+    <section data-v-6dec5f19="" class="sidebar-spaces" aria-label="spaces">
+      <div data-v-6dec5f19="" class="sidebar-section-header"><button data-v-6dec5f19="" data-assistant-feature="" type="button" class="sidebar-btn sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-spaces-body"><span data-v-6dec5f19="" class="sidebar-section-mark" aria-hidden="true">▾</span><span data-v-6dec5f19="" class="sidebar-section-title">spaces</span>
+          <!--v-if-->
+        </button><button data-v-6dec5f19="" data-assistant-feature="" type="button" class="sidebar-btn sidebar-sort-btn" aria-label="並び順: 開いた順（押すと切り替え）">開いた順</button></div>
+      <div data-v-6dec5f19="" id="sidebar-spaces-body" class="sidebar-section-body">
+        <!--v-if-->
+        <div data-v-6dec5f19="" class="sidebar-row" data-workspace-row-key="w1" data-drop-workspace-id="w1">
+          <!-- 畳んだサイドバーとグループの見出し行は今までどおりの 1 行（行の並びの設定は展開した workspace 行だけ。herdr と同じ。
+                   20260927-sidebar-row-tokens）。 -->
+          <div data-v-6dec5f19="" class="sidebar-row-line1">
+            <!-- pointerdown/pointerup を `.stop` で止める（タスク点検の指摘）——止めないと行の
+                     onRowPointerDown/onRowPointerUp にも伝播し、`onToggleCollapse` が二重に呼ばれる
+                     （グループの頭）か、意図せず focusWorkspace が呼ばれる（worktree グループの
+                     頭）。`@click.stop` だけでは pointerup 側の伝播は止まらない。 -->
+            <!--v-if-->
+            <!-- 見出しの状態のまとめ（常に出す。広げていても畳んでいても。まとめ方は workspace の行と同じ）。 -->
+            <!--v-if-->
+            <!-- 種類の印（グループの見出し・worktree グループの先頭の行と子）。「グループなし」には付けない。畳んだサイドバーではアイコンだけ。 -->
+            <!--v-if-->
+            <!--v-if-->
+            <!-- 値はテキストの差し込み（{{ }}）だけで描く（外から報告された独自トークンを HTML にしない）。style は検証済みの色と固定の値だけ。 --><span data-v-e93665c8="" data-v-6dec5f19="" class="state-icon sidebar-state-icon" data-state="working" data-symbols="on" role="img" aria-label="作業中" title="作業中">◐</span><span data-v-6dec5f19="" class="sidebar-label">w1</span><!-- 畳んだ worktree グループの、隠れている worktree の数。worktree グループの行のブランチ名は 1 行目の右（設定の 1 行目に git の項目があれば出さない）。 -->
+            <!--v-if-->
+            <!--v-if-->
+          </div>
+        </div>
+      </div>
+    </section>
+    <div data-v-6dec5f19="" class="sidebar-section-divider resize-handle resize-handle-y" role="separator" aria-orientation="horizontal" aria-label="spaces と agents の境目" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100" tabindex="0"></div>
+    <section data-v-6dec5f19="" class="sidebar-agents" aria-label="agents">
+      <div data-v-6dec5f19="" class="sidebar-section-header"><button data-v-6dec5f19="" data-assistant-feature="" type="button" class="sidebar-btn sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-agents-body"><span data-v-6dec5f19="" class="sidebar-section-mark" aria-hidden="true">▾</span><span data-v-6dec5f19="" class="sidebar-section-title">agents</span>
+          <!--v-if-->
+        </button><button data-v-6dec5f19="" data-assistant-feature="" type="button" class="sidebar-btn sidebar-sort-btn" aria-label="並び順: グループ順（押すと切り替え）">グループ順</button></div>
+      <div data-v-6dec5f19="" id="sidebar-agents-body" class="sidebar-section-body">
+        <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
+        <div data-v-6dec5f19="" class="sidebar-row" title="Claude Code · サブエージェント 1 件" tabindex="-1" data-agent-pane="p1">
+          <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
+          <!--v-if-->
+          <div data-v-6dec5f19="" class="sidebar-row-line1"><span data-v-6dec5f19="" class="sidebar-label">Claude Code</span><!-- 親の右端の開閉。件数は閉じたときだけ。親への移動やドラッグを発火しない。 --><button data-v-6dec5f19="" data-assistant-feature="" type="button" class="sidebar-subagent-btn" data-subagent-pane="p1" aria-label="サブエージェント 1 件を展開" aria-expanded="false" aria-controls="sidebar-subagents-p1"><span data-v-6dec5f19="" class="sidebar-subagent-icon" aria-hidden="true">▸</span><span data-v-6dec5f19="" class="sidebar-subagent-count" aria-hidden="true">1</span></button></div>
+        </div>
+        <!--v-if-->
+      </div>
+    </section>
+  </div>
+  <div data-v-6dec5f19="" class="sidebar-footer sidebar-footer-modern">
+    <!-- モダンの配置（20261008-ui-style AC14・AC15）: 「新規」と「メニュー」を、通知のベルと並べて最下部に置く（spaces の区画の中の同じボタンは出さない）。畳んだサイドバーでは縦に並ぶ（印だけ。読み上げの名前は保つ）。 --><button data-v-6dec5f19="" data-assistant-feature="" type="button" class="sidebar-btn sidebar-footer-new" data-sidebar-act="new" aria-label="新規" title="新規" aria-haspopup="menu" aria-expanded="false">＋ 新規</button><button data-v-6dec5f19="" data-assistant-feature="" type="button" class="sidebar-btn sidebar-footer-menu" data-sidebar-act="menu" aria-label="メニュー" title="メニュー" aria-haspopup="menu" aria-expanded="false">メニュー</button><!-- 通知のベル（20261005-notify-bell）。畳んでも見える帯なので、先送りした件数のバッヂがいつでも見える。 --><button data-v-7690296c="" data-v-6dec5f19="" type="button" data-assistant-feature="" data-theme-mode-toggle="" data-theme-mode="dark" class="theme-mode-toggle" aria-label="表示モード：ダークモード。クリックでシステムに合わせる" title="表示モード：ダークモード。クリックでシステムに合わせる"><svg data-v-7690296c="" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path data-v-7690296c="" d="M20.5 14a9 9 0 0 1-10.5-10.5A9 9 0 1 0 20.5 14Z"></path>
+      </svg></button><button data-v-8c1554dd="" data-v-6dec5f19="" type="button" class="notify-bell notify-bell-sidebar" data-notification-bell="" aria-label="通知の一覧" title="通知の一覧" aria-haspopup="dialog"><svg data-v-8c1554dd="" class="notify-bell-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+        <path data-v-8c1554dd="" d="M8 1.5a4 4 0 0 0-4 4v2.2c0 .5-.2 1-.5 1.4L2.3 10.5a.6.6 0 0 0 .5 1h10.4a.6.6 0 0 0 .5-1l-1.2-1.4a2.2 2.2 0 0 1-.5-1.4V5.5a4 4 0 0 0-4-4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"></path>
+        <path data-v-8c1554dd="" d="M6.3 13a1.8 1.8 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path>
+      </svg>
+      <!--v-if-->
+    </button>
+  </div><!-- モダンの配置（AC13）: たたむ・広げるの印を、サイドバーと主な領域の境の線の、縦の中央に置く（小さな丸＋矢印。押せる当たりは 24px）。幅のつまみ（下）の上にあり、この上では幅のドラッグは始まらない。 --><button data-v-6dec5f19="" data-assistant-feature="" type="button" class="sidebar-edge-toggle" aria-expanded="true" aria-label="サイドバーを畳む" title="サイドバーを畳む"><span data-v-6dec5f19="" class="sidebar-edge-toggle-mark" aria-hidden="true">‹</span></button>
+  <div data-v-6dec5f19="" class="sidebar-divider resize-handle resize-handle-x" role="separator" aria-orientation="vertical" aria-label="サイドバーの幅" aria-valuenow="240" aria-valuemin="160" aria-valuemax="360" tabindex="0"></div>
+</nav>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/components/Sidebar.test.ts:764:14
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  src/dashboard/PaneInfoView.test.ts > PaneInfoView > 入口: ダッシュボードは窓を閉じ、サブエージェントは同じ窓へ埋め込む
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/dashboard/PaneInfoView.test.ts:178:70
+    176|     const { wrapper, view, emitted } = setup(pane("p1", agent({ name: …
+    177|     expect(wrapper.get("[data-pane-info-subagents]").text()).toContain…
+    178|     expect(wrapper.find("[data-pane-info-open-subagents]").exists()).t…
+       |                                                                      ^
+    179|     expect(wrapper.find(".subagent-list").exists()).toBe(true);expect(…
+    180|     await wrapper.get("[data-pane-info-open-dashboard]").trigger("clic…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels codex native membership counts with inline children
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels muse native membership counts with inline children
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels copilot native membership counts with inline children
+ FAIL  src/dashboard/PaneInfoView.test.ts > labels agy native membership counts with inline children
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/dashboard/PaneInfoView.test.ts:213:50
+    211|  const {wrapper,view}=setup(pane("p1",agent({kind,subagents:{count:2,i…
+    212|  expect(wrapper.get('[data-pane-info-subagents]').text()).toContain("所…
+    213|  expect(wrapper.find('.subagent-list').exists()).toBe(true);expect(vie…
+       |                                                  ^
+    214| });
+    215|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  src/dashboard/PaneInfoView.test.ts > bounds inline child rows at 64 without opening a separate list
+AssertionError: expected [] to have a length of 64 but got +0
+
+- Expected
++ Received
+
+- 64
++ 0
+
+ ❯ src/dashboard/PaneInfoView.test.ts:218:49
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+
+  Snapshots  1 failed
+ Test Files  3 failed | 1 passed (4)
+      Tests  11 failed | 220 passed (231)
+   Start at  17:47:15
+   Duration  5.86s (transform 69%, tests 15%, import 11%, environment 5%)
+
+  Transform  transforming modules took 10.60s · 69% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-sidebar-agent-information/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/Sidebar.test.ts src/dashboard/PaneInfoView.test.ts src/components/PaneActions.test.ts src/components/Sidebar.defaultLayout.test.ts

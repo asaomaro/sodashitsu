@@ -1,0 +1,37 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-agent-information/packages/tui
+
+ ❯ src/app/TuiApp.subagents.test.ts (22 tests | 2 failed) 1923ms
+   ❯ 端末版のサブエージェントの表示 (22)
+     × puts info on the first row and opens inline child information without another dialog 59ms
+     × keeps a single-row fallback and watches usage independently from disabled footer 56ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > puts info on the first row and opens inline child information without another dialog
+TypeError: Cannot read properties of undefined (reading 'y')
+ ❯ src/app/TuiApp.subagents.test.ts:366:31
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > keeps a single-row fallback and watches usage independently from disabled footer
+TypeError: Cannot read properties of undefined (reading 'y')
+ ❯ src/app/TuiApp.subagents.test.ts:369:268
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 30 passed (32)
+   Start at  17:47:21
+   Duration  3.99s (transform 51%, tests 38%, import 11%)
+
+  Transform  transforming modules took 2.62s · 51% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-sidebar-agent-information/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/app/TuiApp.subagents.test.ts src/modes/UsageView.test.ts

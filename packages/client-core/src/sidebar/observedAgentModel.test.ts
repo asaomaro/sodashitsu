@@ -16,7 +16,7 @@ it('retains a legacy observed effort with explicit unknown timing',()=>{
 it('shows resolved child effort at creation without calling it current',()=>{
  const child={id:'c',type:'child-model',startedAt:1,reasoningEffort:'low',reasoningEffortBasis:'creation' as const};expect(subagentModelLabel(child)).toBe('child-model low（開始時）');expect(subagentEffortLabel(child)?.title).toContain('開始時のeffort');
 });
-it('omits child effort with missing basis, invalid value, or missing model',()=>{
+it('omits invalid child observations and labels effort without a model explicitly',()=>{
  expect(subagentModelLabel({id:'c',startedAt:1,type:'child',reasoningEffort:'high'})).toBe('child');expect(subagentEffortLabel({id:'c',startedAt:1,reasoningEffort:'a\nb',reasoningEffortBasis:'turn'})).toBeUndefined();expect(subagentModelLabel({id:'c',startedAt:1,reasoningEffort:'high',reasoningEffortBasis:'turn'})).toBe('effort high（記録）');
 });
 

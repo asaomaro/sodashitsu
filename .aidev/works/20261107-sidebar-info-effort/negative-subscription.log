@@ -1,0 +1,25 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-agent-information/packages/tui
+
+ ❯ src/app/TuiApp.subagents.test.ts (22 tests | 1 failed | 21 skipped) 1099ms
+   ❯ 端末版のサブエージェントの表示 (22)
+     × keeps a single-row fallback and watches usage independently from disabled footer 1098ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > keeps a single-row fallback and watches usage independently from disabled footer
+TypeError: Cannot read properties of undefined (reading 'on')
+ ❯ src/app/TuiApp.subagents.test.ts:370:191
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 skipped (22)
+   Start at  17:47:11
+   Duration  3.19s (transform 54%, tests 35%, import 11%)
+
+undefined
+/workspaces/sodashitsu-sidebar-agent-information/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/app/TuiApp.subagents.test.ts -t watches usage independently

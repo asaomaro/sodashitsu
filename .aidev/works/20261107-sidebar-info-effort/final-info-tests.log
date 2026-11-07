@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-agent-information/packages/web
+
+
+ Test Files  1 passed (1)
+      Tests  16 passed (16)
+   Start at  17:51:51
+   Duration  2.30s (transform 69%, import 13%, tests 9%, environment 8%)
+
