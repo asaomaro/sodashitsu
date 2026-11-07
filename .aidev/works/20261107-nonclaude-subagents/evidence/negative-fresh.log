@@ -1,0 +1,79 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-nonclaude-subagents
+
+ ❯ |@sodashitsu/server| src/agent/NativeSubagentService.test.ts (12 tests | 2 failed | 10 skipped) 8ms
+   ❯ native activity publication (12)
+     × does not attribute a preserved old session reference to a new unverified instance 5ms
+     × checks fresh session verification again after a pending read 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/NativeSubagentService.test.ts > native activity publication > does not attribute a preserved old session reference to a new unverified instance
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "instanceId": "new-instance",
+        "kind": "codex",
+        "paneId": "pane",
+        "sessionId": "session",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/agent/NativeSubagentService.test.ts:58:31
+     56|     f.set({ ...f.get(), agent: { ...f.get().agent!, instanceId: "new-i…
+     57|     f.verified.mockReturnValue(false); await f.service.refresh();
+     58|     expect(f.reader.read).not.toHaveBeenCalled(); expect(f.publish).no…
+       |                               ^
+     59|     f.set({ ...f.get(), agentSession: { kind: "codex", sessionId: "fre…
+     60|     f.verified.mockReturnValue(true); await f.service.refresh();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/NativeSubagentService.test.ts > native activity publication > checks fresh session verification again after a pending read
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      "pane",
+      Object {
+        "count": 1,
+        "items": Array [],
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/agent/NativeSubagentService.test.ts:69:27
+     67|     const reading = f.service.refresh(); f.verified.mockReturnValue(fa…
+     68|     resolve({ count: 1, items: [] }); await reading;
+     69|     expect(f.publish).not.toHaveBeenCalled(); f.service.close();
+       |                           ^
+     70|   });
+     71| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 10 skipped (12)
+   Start at  12:46:54
+   Duration  199ms (transform 71%, import 18%, tests 8%, worker 4%)
+

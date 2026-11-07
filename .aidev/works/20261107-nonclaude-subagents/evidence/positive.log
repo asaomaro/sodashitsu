@@ -1,0 +1,25 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-nonclaude-subagents
+
+{"ts":"2026-11-07T03:49:28.912Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-07T03:49:28.914Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-07T03:49:28.916Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-07T03:49:28.916Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-07T03:49:28.920Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-native-subagent-it-YENHZi/state/commands.json","count":0}
+{"ts":"2026-11-07T03:49:30.238Z","level":"info","msg":"agent session attached","paneId":"3f180233-1699-489d-afff-fb7dd24509ae","kind":"codex","session":"01a1b40b","source":"argv"}
+
+ Test Files  4 passed (4)
+      Tests  25 passed (25)
+   Start at  12:49:22
+   Duration  10.42s (transform 46%, tests 44%, import 9%)
+
+  Transform  |@sodashitsu/server| transforming modules took 5.03s · 46% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

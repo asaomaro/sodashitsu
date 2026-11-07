@@ -483,18 +483,18 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 
 ### エージェントが動かしているサブエージェント（`subagents`）
 
-`agent list`・`get`（と、`agent wait`・`start`・`rename` が返す `agent`）の各要素に、エージェントが中で動かしているサブエージェント（Claude Code の Agent ツール）の `subagents` が付く（20261004-subagent-display）。
+`agent list`・`get`（と、`agent wait`・`start`・`rename` が返す `agent`）の各要素に、エージェントが中で動かしているサブエージェント（Claude Codeのフック、またはCodex・Muse Code・Copilot CLIの正式記録）の `subagents` が付く（20261004-subagent-display）。
 サブエージェントは pane を持たないので、`agent` の一覧には出ない。値は 2 通り（項目の有無は揺れない）:
 
-- `null` … **分からない**（フック連携を導入していない・Claude Code 以外・サーバが古い・報告をまだ受けていない）。
+- `null` … **分からない**（Claudeのフック連携を導入していない・AGY/Bobなど未対応の種類・親会話未確認・記録未取得/未知形式・サーバが古い）。
 - `{"count": 2, "items": [{"id": "…", "type": "Explore", "description": "調べる", "background": true, "startedAt": 1700000000000, "parentId": null, "depth": 1}, …]}` … 報告を受けている。0 件なら `{"count": 0, "items": []}`。
-  `items` は起動した順で最大 64 件、`count` は実際の数（64 を超えれば `items` より大きい）。各項目の `type`・`description`・`background` は分からなければ `null`、`startedAt` はサーバが起動（または作業の終わりの報告での突き合わせ）を知った時刻（epoch ms）。
+  `items` は起動した順で最大 64 件、`count` は実際の数（64 を超えれば `items` より大きい）。各項目の `type`・`description`・`background` は分からなければ `null`、`startedAt` はClaudeではサーバが起動（または作業の終わりの報告での突き合わせ）を知った時刻、他の対応CLIでは正式記録の起動時刻（epoch ms）。
   各項目には `parentId`（入れ子のとき、起動した側のサブエージェントの id。メインが起動したもの・分からないものは `null`）と `depth`（メインが起動したもの = 1。分からなければ `null`）も付く（20261008-graph-first PR6）。今までの項目は変わらない。記録のファイルの場所と `hasTranscript` は出さない。
   サブエージェントの記録を読む RPC（`agent.subagent_transcript`。グラフの「記録を読むだけの窓」が使う）には、`sodactl` のコマンドは無い。ログイン済みの接続（`external` を含む）からは、`agent read` と同じ扱いで呼べるが、ログイン不要の受け口（`pane.sock`）には載せていない。仕組みと安全の作りは `docs/agent-graph.md`「サブエージェントの記録を読むだけの窓」。
   `description` はエージェントが書いた短い説明で、そのまま文字として扱う（画面でも HTML としては出さない）。
 
 `agent wait` の `--until` や待ちの判定は、`subagents` の変化では動かない（状態の変化だけで動く）。「作業中」の中身（並行で何件動いているか）を知りたいときに読む。
-仕組み・対象外・制約は `docs/agent-graph.md`「サブエージェントの表示の仕組みと制約」。
+Codex・Museは隔離実CLIで開始/終了の記録を確認。CopilotはSDK schemaと生成fixtureの確認で、実CLI往復は未検証。仕組み・対象外・制約は `docs/agent-graph.md`「サブエージェントの表示の仕組みと制約」と[取得経路](nonclaude-subagents.md)。
 
 ### 名前と `<target>`
 

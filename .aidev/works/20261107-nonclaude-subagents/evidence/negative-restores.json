@@ -1,0 +1,26 @@
+[
+  {
+    "case": "chunk",
+    "exitCode": 1,
+    "byteExact": true,
+    "sha256": "1246d8d95bfbee642fd145458a230a901f4469147adf0ee75f2257b1080cee2f"
+  },
+  {
+    "case": "fresh",
+    "exitCode": 1,
+    "byteExact": true,
+    "sha256": "854d74d1184334a21fd0c853f93e66fb1d321396be6134391b863aee41c507f3"
+  },
+  {
+    "case": "scope",
+    "exitCode": 1,
+    "byteExact": true,
+    "sha256": "854d74d1184334a21fd0c853f93e66fb1d321396be6134391b863aee41c507f3"
+  },
+  {
+    "case": "wiring",
+    "exitCode": 1,
+    "byteExact": true,
+    "sha256": "4215f4104bee1f101c4b0de202099a2c2fee4feafa066d1a8b984d85f900d120"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "probe": "codex",
+    "exitCode": 0,
+    "seconds": 9.66
+  },
+  {
+    "probe": "muse",
+    "exitCode": 0,
+    "seconds": 13.37
+  },
+  {
+    "probe": "copilot",
+    "exitCode": 1,
+    "seconds": 4.55
+  },
+  {
+    "probe": "copilot-gh",
+    "exitCode": 1,
+    "seconds": 98.96
+  }
+]

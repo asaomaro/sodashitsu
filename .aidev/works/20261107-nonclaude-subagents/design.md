@@ -1,0 +1,9 @@
+# 設計
+
+NativeSubagentRecordsは実fixture/導入SDK schemaにあるlifecycleだけをfoldする。Codexは親thread一致のSubAgentActivity、Museは親session stream一致のsubagent.control、Copilotはexact親記録内のcustom_agent lifecycle。completionをitemsへ残さず、同じrecordの再読込は加算しない。Codex interactedはactive中なら保持、terminal後なら状態未確認へ落とす。
+
+Readerはサーバ側で決めたexact sessionの安全な通常ファイルだけを読む。1回4MiB、1行256KiB、ファイル512MiB。未読のCHUNKや破損/未知状態は未取得。改行前の末尾は次回へ残し、既に読んだcomplete行の状態だけを使う。リンク・別会話・任意path入力を認めない。
+
+Serviceは2秒ごと最大4並列。読み取り前と配信前にhasVerifiedAgentSessionを確認し、snapshotのinstance/kind/sessionと照合。所属失効時は所有する値だけ外す。CLI/モデルを起動しない。サーバ開始後にstartし、終了/起動失敗でclose。
+
+初回から正式記録の最終状態を読み戻す。firstscanや時刻で新旧activeを推測しない。異常終了で終了イベントが保存されない場合の記録上active残存は既存Claudeと同じ制約。

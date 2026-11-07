@@ -1,0 +1,5 @@
+# 独立レビューの差戻し
+
+rootおよび別担当が実装コンテキスト外から読み取り点検。途中で指摘されたinteracted後の0件誤断定、CHUNK直後の未読完了、同instanceのscope失効、新instanceへ残った永続refのfresh確認を修正し、対応する正負fixtureを追加した。
+
+rootは安定版Records/Reader/Service/compose配線を再読し、追加must/should無しと報告。最終のcommit/source SHA・positive/typecheck/buildとdocsを引き渡し、統合時の最終確認はrootが行う。authorは自分のレビューを独立レビューとして数えない。

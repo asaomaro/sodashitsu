@@ -1,0 +1,10 @@
+{
+  "packages/server/src/agent/NativeSubagentService.test.ts": "b4bf2da4a0f092803e9b36ac559d8f12d4afda3c9ab6846f2412f9fdef438c21",
+  "packages/server/src/agent/NativeSubagentReader.test.ts": "63de64df648cb9dfa3df0afbc63a1db3a716a6c09b132ae0a3ad8a0946e9911b",
+  "packages/server/src/agent/NativeSubagentRecords.test.ts": "b3abdcd25e3a0622ba3d71e1110a0521751e3bba1e578c51281682f302334a26",
+  "packages/server/src/agent/NativeSubagentService.ts": "854d74d1184334a21fd0c853f93e66fb1d321396be6134391b863aee41c507f3",
+  "packages/server/src/agent/NativeSubagentReader.ts": "1246d8d95bfbee642fd145458a230a901f4469147adf0ee75f2257b1080cee2f",
+  "packages/server/src/agent/NativeSubagentRecords.ts": "ee64d706977cdfbed65d104de2aaed9a894b2a1095ff25f713825515572ab1cd",
+  "packages/server/src/composeServer.ts": "4215f4104bee1f101c4b0de202099a2c2fee4feafa066d1a8b984d85f900d120",
+  "packages/server/src/composeServer.nativeSubagents.integration.test.ts": "6cb3af9c3b692d02cadf131c7a6fc65c00b374cc5553b5eb9fad341372202b50"
+}

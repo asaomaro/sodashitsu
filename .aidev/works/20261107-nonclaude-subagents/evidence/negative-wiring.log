@@ -1,0 +1,45 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-nonclaude-subagents
+
+{"ts":"2026-11-07T03:46:59.607Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-07T03:46:59.608Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-07T03:46:59.609Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-07T03:46:59.610Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-07T03:46:59.612Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-native-subagent-it-3vrPoh/state/commands.json","count":0}
+{"ts":"2026-11-07T03:47:00.162Z","level":"info","msg":"agent session attached","paneId":"b56b4e44-d7c9-4dcd-9063-9707f5bbe051","kind":"codex","session":"01a1b40b","source":"argv"}
+ ❯ |@sodashitsu/server| src/composeServer.nativeSubagents.integration.test.ts (1 test | 1 failed) 8618ms
+   × publishes real native lifecycle file fixtures through composeServer snapshot and events 8617ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/composeServer.nativeSubagents.integration.test.ts > publishes real native lifecycle file fixtures through composeServer snapshot and events
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ vi.waitFor.timeout src/composeServer.nativeSubagents.integration.test.ts:47:121
+     45|     live.terminals.get(paneId)!.write(`codex resume ${id}\r`);
+     46|     await vi.waitFor(() => expect(live.session.getPane(paneId)?.agentS…
+     47|     await vi.waitFor(() => expect(events.some(event => event.paneId ==…
+       |                                                                                                                         ^
+     48|     const snapshot = (await hello()).result.snapshot;
+     49|     expect(snapshot.panes.find((pane: any) => pane.id === paneId).agen…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:46:55
+   Duration  12.23s (tests 71%, transform 25%, import 4%)
+
