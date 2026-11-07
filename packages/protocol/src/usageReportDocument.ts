@@ -1,7 +1,9 @@
+import {UsageAssessment,usageAssessmentSummary} from "./usageAssessment.js";
 import { z } from "zod";
 const short = z.string().max(160),
   body = z.string().max(2400);
 export const UsageReportDocument = z.object({
+  assessment: z.preprocess(value=>{const parsed=UsageAssessment.safeParse(value);return parsed.success?parsed.data:undefined;},UsageAssessment.optional()),
   summary: z.string().max(2400),
   work: z
     .array(
@@ -48,6 +50,10 @@ export function usageReportText(d: UsageReportDocument): string {
   const priority = { high: "優先度 高", medium: "優先度 中", low: "優先度 低" };
   return [
     d.summary,
+    "エージェントの使い方（観測範囲の自動評価）",
+    (()=>{const a=usageAssessmentSummary(d.assessment);return a.score===null?`未評価（評価可能 ${a.assessed}/${a.total}項目、総合は3項目以上が必要）`:`${a.score}/100点 · ${a.grade}評価（評価可能 ${a.assessed}/${a.total}項目）`;})(),
+    ...usageAssessmentSummary(d.assessment).criteria.flatMap(c=>[`${c.label}: ${c.score===null?"未評価":c.score+"/4"}`,c.reason,...(c.evidenceQuote?["根拠: "+c.evidenceQuote]:[]),...(c.improvement?["改善: "+c.improvement]:[])]),
+    "提供した現在の作業記録の範囲の評価です。期間別数値そのものは採点せず、作業成果を独立検証した評価ではありません。欠測は0点として扱いません。",
     "現在の取り組み",
     ...d.work.flatMap((w) => [
       `${w.agent}${w.workspace ? " / " + w.workspace : ""}${w.status ? "（" + w.status + "）" : ""}`,

@@ -104,3 +104,5 @@ export * from "./usageInsights.js";
 
 export * from "./usageReportDocument.js";
 export * from "./desktopUi.js";
+
+export * from "./usageAssessment.js";
