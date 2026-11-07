@@ -87,3 +87,14 @@ it.each(["machine","kind","close"])("does not send old-host fallback after %s sc
  if(change==="machine")useMachinesStore(pinia).selectedId="generated-other-machine";else if(change==="kind")await w.get('[aria-label="要約エージェントの種類"]').setValue("claude");else await w.setProps({active:false});await flushPromises();
  reject({code:"invalid_params"});await flushPromises();expect(request.mock.calls.every(c=>(c[1] as {refresh?:boolean}).refresh===true)).toBe(true);expect(request).toHaveBeenCalledTimes(change==="close"?1:2);
 });
+
+it("keeps saved effort unconfirmed when reference models have no effort metadata, including refresh and kind round trips",async()=>{
+ const {w,settings}=fixture(vi.fn(async()=>({models:[{id:"model-high",label:"Reference model",efforts:[]}],source:"reference",message:"Reference"})) as never);
+ settings.setSummarySettings({...settings.summarySettings,kind:"copilot"});const save=vi.spyOn(settings,"setSummarySettings");await flushPromises();
+ expect(settings.summarySettings.effort).toBe("high");expect(w.get('[aria-label="要約エージェントのeffort"]').element).toHaveProperty("value","high");expect(w.text()).toContain("保存済み・未確認：high");expect(save).not.toHaveBeenCalled();
+ await w.findAll("button").find(b=>b.text()==="モデル候補を再取得")!.trigger("click");await flushPromises();expect(save).not.toHaveBeenCalled();
+ await w.get('[aria-label="要約エージェントの種類"]').setValue("claude");await flushPromises();await w.get('[aria-label="要約エージェントの種類"]').setValue("copilot");await flushPromises();expect(settings.summarySettings).toMatchObject({kind:"copilot",model:"model-high",effort:"high"});
+});
+it.each([{source:"reference",efforts:["low"]},{source:"cli",efforts:[]}])("clears saved effort for an explicit $source subset rather than treating it as unconfirmed",async({source,efforts})=>{
+ const {settings}=fixture(vi.fn(async()=>({models:[{id:"model-high",label:"Known model",efforts}],source,message:"Known"})) as never);await flushPromises();expect(settings.summarySettings.effort).toBe("");
+});

@@ -1,0 +1,5 @@
+Scope: 2 of 9 workspace projects
+packages/web typecheck$ vue-tsc --noEmit -p tsconfig.typecheck.json
+packages/desktop-assistant typecheck$ tsc --noEmit -p tsconfig.typecheck.json
+packages/desktop-assistant typecheck: Done
+packages/web typecheck: Done

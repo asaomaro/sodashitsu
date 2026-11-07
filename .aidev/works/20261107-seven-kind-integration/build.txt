@@ -1,0 +1,44 @@
+
+> sodashitsu-workspace@0.1.0 build /workspaces/sodashitsu-assistant-agent-integration
+> node scripts/run-quiet.mjs "pnpm -r --filter=./packages/* run build"
+
+Scope: 8 of 9 workspace projects
+packages/protocol build$ tsc -b
+packages/protocol build: Done
+packages/client-core build$ tsc -b
+packages/client-core build: Done
+packages/desktop-assistant build$ tsc -b
+packages/tui build$ tsc -b
+packages/web build$ vue-tsc --noEmit -p tsconfig.typecheck.json && vite build
+packages/desktop-assistant build: Done
+packages/tui build: Done
+packages/web build: vite v8.3.0 building client environment for production...
+packages/web build: transforming...
+packages/web build: ✓ 863 modules transformed.
+packages/web build: rendering chunks...
+packages/web build: computing gzip size...
+packages/web build: dist/index.html                                1.14 kB │ gzip:   0.59 kB
+packages/web build: dist/assets/microphoneWorklet-VenRQAVr.js      1.33 kB
+packages/web build: dist/assets/navigation-C-MNCnjE.css            2.46 kB │ gzip:   0.89 kB
+packages/web build: dist/assets/DashboardView-D0Ek5Dqc.css         5.79 kB │ gzip:   1.52 kB
+packages/web build: dist/assets/UsageAnalytics-CDxrvdwI.css       17.58 kB │ gzip:   3.45 kB
+packages/web build: dist/assets/index-O0-7Bt0R.css               200.02 kB │ gzip:  31.44 kB
+packages/web build: dist/assets/dist-BPFQWtsp.js                   0.17 kB │ gzip:   0.14 kB
+packages/web build: dist/assets/DashboardView-BrTh-WQd.js         12.07 kB │ gzip:   4.61 kB
+packages/web build: dist/assets/UsageAnalytics-4M60Dt5H.js        43.99 kB │ gzip:  15.30 kB
+packages/web build: dist/assets/navigation-DvkHM6C2.js            54.98 kB │ gzip:  18.34 kB
+packages/web build: dist/assets/dashboardModel-iuJ4r9mt.js       185.17 kB │ gzip:  66.58 kB
+packages/web build: dist/assets/dist-CiGsvb0s.js                 215.03 kB │ gzip:  64.98 kB
+packages/web build: dist/assets/index-keQJ2Mik.js              1,702.91 kB │ gzip: 504.76 kB
+packages/web build: ✓ built in 1.88s
+packages/web build: [plugin builtin:vite-reporter] 
+packages/web build: (!) Some chunks are larger than 500 kB after minification. Consider:
+packages/web build: - Using dynamic import() to code-split the application
+packages/web build: - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+packages/web build: - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+packages/web build: Done
+packages/server build$ tsc -b && node ../desktop-assistant/scripts/build-host.mjs && node scripts/prune-retired-features.mjs
+packages/server build: assistant_internal_resources_built_no_execution
+packages/server build: Done
+packages/cli build$ tsc -b
+packages/cli build: Done

@@ -132,7 +132,7 @@
  const sessionStatus = document.getElementById("session-status");
  const models=document.getElementById("agent-model"),efforts=document.getElementById("agent-effort");
  const choiceStatus=document.getElementById("captain-choice-status"),catalogStatus=document.getElementById("model-options-status");
- let choiceLoading=false,choiceSaving=false,choiceValid=true,catalogEpoch=0,modelRows=[],selectedKind="";
+ let choiceLoading=false,choiceSaving=false,choiceValid=true,catalogEpoch=0,modelRows=[],selectedKind="",modelCatalogSource;
  const catalogs=new Map();
  const fill=(select,rows,value)=>{select.replaceChildren();for(const row of rows){const option=document.createElement("option");option.value=row.id;option.textContent=row.label;select.append(option);}select.value=value;};
  const setChoiceDisabled=()=>{
@@ -143,7 +143,8 @@
  const fillEfforts=(wanted="",retainSaved=false)=>{
   const row=modelRows.find(m=>m.id===models.value),tiers=row?.efforts??[];
   const rows=[{id:"",label:"エージェントの既定値"},...tiers.map(id=>({id,label:id}))];
-  if(retainSaved&&!row&&wanted&&!tiers.includes(wanted))rows.push({id:wanted,label:`保存済み：${wanted}`});
+  const unconfirmed=modelCatalogSource==="reference"&&row?.efforts.length===0;
+  if(retainSaved&&(!row||unconfirmed)&&wanted&&!tiers.includes(wanted))rows.push({id:wanted,label:`保存済み${unconfirmed?"・未確認":""}：${wanted}`});
   fill(efforts,rows,rows.some(r=>r.id===wanted)?wanted:"");
  };
  const loadSelection=async(force=true)=>{
@@ -151,7 +152,7 @@
   catalogStatus.textContent="モデル候補を読み込んでいます。";if(force)catalogs.delete(kind);
   let catalog;try{if(!catalogs.has(kind))catalogs.set(kind,window.assistant.agentModels({kind,refresh:force}));catalog=await catalogs.get(kind);}catch{catalogs.delete(kind);catalog={models:[],message:"モデル候補を取得できません。既定値と保存済みの指定を表示します。"};}
   if(epoch!==catalogEpoch)return false;
-  modelRows=catalog.models??[];const profile=preferences.agentProfiles?.[kind]??{model:"",effort:""};
+  modelRows=catalog.models??[];modelCatalogSource=catalog.source;const profile=preferences.agentProfiles?.[kind]??{model:"",effort:""};
   const rows=[{id:"",label:"エージェントの既定値"},...modelRows];
   if(profile.model&&!rows.some(r=>r.id===profile.model))rows.push({id:profile.model,label:`保存済み：${profile.model}`});
   fill(models,rows,profile.model);fillEfforts(profile.effort,true);

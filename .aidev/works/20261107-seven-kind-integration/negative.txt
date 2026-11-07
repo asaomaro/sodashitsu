@@ -1,0 +1,33 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-assistant-agent-integration
+
+ ❯ |@sodashitsu/web| src/components/AgentToolsSettings.test.ts (18 tests | 1 failed) 228ms
+   × keeps saved effort unconfirmed when reference models have no effort metadata, including refresh and kind round trips 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/components/AgentToolsSettings.test.ts > keeps saved effort unconfirmed when reference models have no effort metadata, including refresh and kind round trips
+AssertionError: expected '' to be 'high' // Object.is equality
+
+- Expected
++ Received
+
+- high
+
+ ❯ src/components/AgentToolsSettings.test.ts:94:42
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+   Start at  20:10:57
+   Duration  1.98s (transform 63%, import 15%, tests 12%, environment 9%)
+

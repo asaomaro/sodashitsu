@@ -1,0 +1,41 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-assistant-agent-integration
+
+{"ts":"2026-11-07T11:08:30.017Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:30.018Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:30.019Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:30.019Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-07T11:08:30.022Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-stop-compose-BSRW6p/commands.json","count":0}
+{"ts":"2026-11-07T11:08:30.473Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:30.473Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:30.474Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:30.474Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-07T11:08:30.475Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-stop-compose-uJwVnT/commands.json","count":0}
+{"ts":"2026-11-07T11:08:30.884Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:30.885Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:30.886Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:30.886Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-07T11:08:30.887Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-stop-compose-8zEJ45/commands.json","count":0}
+{"ts":"2026-11-07T11:08:31.291Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:31.291Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:31.292Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-07T11:08:31.292Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-07T11:08:31.293Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-stop-compose-TJ5SoY/commands.json","count":0}
+{"ts":"2026-11-07T11:08:31.663Z","level":"info","msg":"handoff: requested; running preflight"}
+{"ts":"2026-11-07T11:08:32.158Z","level":"warn","msg":"handoff: preflight failed; keeping the current server","message":"held by the test"}
+
+ Test Files  2 passed (2)
+      Tests  22 passed (22)
+   Start at  20:08:25
+   Duration  6.60s (tests 60%, transform 33%, import 6%)
+
+  Transform  |@sodashitsu/server| transforming modules took 4.28s · 33% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

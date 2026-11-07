@@ -1,0 +1,1 @@
+{"sevenKinds":true,"referenceSavedEffortPreserved":true,"referenceOpenNoAutosave":true,"explicitSubsetClears":true,"cursorIndependentEffortOmitted":true,"copilotReferenceLabel":true,"modelSpecificEffort":true,"selectionSaved":true,"reloadRestored":true,"noAutoSend":true,"pageErrors":[]}

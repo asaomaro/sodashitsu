@@ -1,0 +1,12 @@
+{
+  "packages/web/src/components/AgentToolsSettings.vue": {
+    "expected": "c93615e5dc049b2921627b3d20c65104b2537df6c6156e284e111a3ecbc63d61",
+    "restored": "c93615e5dc049b2921627b3d20c65104b2537df6c6156e284e111a3ecbc63d61",
+    "exact": true
+  },
+  "packages/desktop-assistant/assets/bubble.js": {
+    "expected": "e4ed2035f21893777c03a35c3b47805a6af8b7c7de2c4121b091e64346d8cec0",
+    "restored": "e4ed2035f21893777c03a35c3b47805a6af8b7c7de2c4121b091e64346d8cec0",
+    "exact": true
+  }
+}

@@ -15,6 +15,7 @@ const settings=useSettingsStore(),machines=useMachinesStore(),conn=inject(Connec
 const loading=ref(false),catalogMessage=ref(""),rows=ref<AssistantModelCatalog["models"]>([]);
 const catalogs=new Map<string,AssistantModelCatalog>(),profiles=new Map<string,{model:string;effort:string}>();
 let epoch=0;
+const catalogSource=ref<AssistantModelCatalog["source"]>(undefined);
 const profileKey=(kind:string)=>JSON.stringify([machines.selectedId,kind]);
 function visibility(action: AgentHeaderAction,event: Event){settings.setAgentActionSettings({...settings.agentActionSettings,[action]:(event.target as HTMLSelectElement).value as "display"|"menu"|"hidden"});}
 function save(patch:Record<string,unknown>){
@@ -30,14 +31,15 @@ const modelOptions=computed(()=>{
 const effortOptions=computed(()=>{
  const config=settings.summarySettings,model=rows.value.find(row=>row.id===config.model),tiers=model?.efforts??[];
  const options=[{id:"",label:"エージェントの既定値"},...tiers.filter(Boolean).map(id=>({id,label:id}))];
- if(!model&&config.effort&&!options.some(row=>row.id===config.effort))options.push({id:config.effort,label:`保存済み：${config.effort}`});
+ const unconfirmed=catalogSource.value==="reference"&&model?.efforts.length===0;
+ if((!model||unconfirmed)&&config.effort&&!options.some(row=>row.id===config.effort))options.push({id:config.effort,label:`保存済み${unconfirmed?"・未確認":""}：${config.effort}`});
  return options;
 });
 async function loadModels(force=true){
  if(!props.active){++epoch;loading.value=false;catalogs.clear();return;}
  if(!settings.summaryConfigured){++epoch;loading.value=false;rows.value=[];catalogMessage.value="未設定の場合は従来のシンプルな通知を使います。";return;}
  const own=++epoch,kind=settings.summarySettings.kind,machine=machines.selectedId,key=JSON.stringify([machine,kind]);
- loading.value=true;rows.value=[];catalogMessage.value="モデル候補を読み込んでいます。";
+ loading.value=true;rows.value=[];catalogSource.value=undefined;catalogMessage.value="モデル候補を読み込んでいます。";
  if(force)catalogs.delete(key);
  let catalog:AssistantModelCatalog;
  try{
@@ -50,9 +52,9 @@ async function loadModels(force=true){
   if(catalog.models.length)catalogs.set(key,catalog);
  }catch{catalog={models:[],message:"モデル候補を取得できません。既定値または保存済みの指定を選べます。"};}
  if(own!==epoch||kind!==settings.summarySettings.kind||machine!==machines.selectedId)return;
- rows.value=catalog.models;catalogMessage.value=[catalog.message,catalog.source?`取得元：${({cli:"CLIの候補", "local-cache":"CLIのローカルキャッシュ",reference:"参考候補（利用可否は未確認）",unavailable:"未取得"})[catalog.source]}`:"",catalog.fetchedAt!==undefined?`照会日時：${new Date(catalog.fetchedAt).toLocaleString("ja-JP")}（モデル一覧の更新日時ではありません）`:"",catalog.cached?"保存された照会結果を表示しています。":""].filter(Boolean).join(" ");loading.value=false;
+ rows.value=catalog.models;catalogSource.value=catalog.source;catalogMessage.value=[catalog.message,catalog.source?`取得元：${({cli:"CLIの候補", "local-cache":"CLIのローカルキャッシュ",reference:"参考候補（利用可否は未確認）",unavailable:"未取得"})[catalog.source]}`:"",catalog.fetchedAt!==undefined?`照会日時：${new Date(catalog.fetchedAt).toLocaleString("ja-JP")}（モデル一覧の更新日時ではありません）`:"",catalog.cached?"保存された照会結果を表示しています。":""].filter(Boolean).join(" ");loading.value=false;
  const config=settings.summarySettings,model=rows.value.find(row=>row.id===config.model);
- if(model&&config.effort&&!model.efforts.includes(config.effort))save({effort:""});
+ if(model&&config.effort&&!model.efforts.includes(config.effort)&&!(catalog.source==="reference"&&model.efforts.length===0))save({effort:""});
 }
 function changeKind(event:Event){
  const old=settings.summarySettings;if(settings.summaryConfigured)profiles.set(profileKey(old.kind),{model:old.model,effort:old.effort??""});

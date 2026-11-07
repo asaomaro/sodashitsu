@@ -1,0 +1,61 @@
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/composeServer.stop.integration.test.ts > composeServer: 止める指示（T2） > Ctrl+C の経路（close() を直接呼ぶ）の途中に届いた止める指示は alreadyStopping で、停止の入口を呼ばない
+AssertionError: expected { ok: true, pid: 4184903, …(1) } to deeply equal { ok: true, pid: 4184903, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "alreadyStopping": true,
++   "alreadyStopping": false,
+    "ok": true,
+    "pid": 4184903,
+  }
+
+ ❯ src/composeServer.stop.integration.test.ts:102:26
+    100|     const answer = ask(sock, "stop"); // close() より先に繋ぎ始める（上と同じ理由）
+    101|     const closing = server.close();
+    102|     expect(await answer).toEqual({
+       |                          ^
+    103|       ok: true,
+    104|       pid: process.pid,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/usage/UsageInsights.test.ts > recovers from page-capacity exhaustion and continues the file without a permanent RPC failure
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/usage/UsageInsights.test.ts:86:1
+     84|  expect((await f.reader.read(range)).sessions[0]).toMatchObject({role:…
+     85| });
+     86| it('recovers from page-capacity exhaustion and continues the file with…
+       | ^
+     87|  const f=await fixture({maxPages:32,maxBytesPerKind:4096}),file=join(f…
+     88|  await writeFile(file,json(...Array.from({length:500},(_,i)=>usage('re…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 1014 passed | 1 skipped (1017)
+      Tests  2 failed | 14437 passed | 1 skipped (14440)
+   Start at  20:03:48
+   Duration  214.86s (tests 61%, transform 17%, import 16%, environment 6%)
+
+  Transform  |@sodashitsu/desktop-assistant| transforming modules took 17.62s · 42% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+  Transform  |@sodashitsu/cli| transforming modules took 138.54s · 41% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+  Transform  |@sodashitsu/protocol| transforming modules took 12.62s · 52% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+  Transform  |@sodashitsu/tui| transforming modules took 47.41s · 35% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+ ELIFECYCLE  Test failed. See above for more details.
