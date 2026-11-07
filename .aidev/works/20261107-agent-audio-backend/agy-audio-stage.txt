@@ -1,0 +1,7 @@
+/tmp/soda-agy-audio-probe-WbvHOU/fixture/generated-valid.wav
+
+[2m   No matches[m[K
+
+  [1m↑/↓[m Navigate · [1menter[m Select · [1mtab[m Complete
+esc to cancel[77X[77Cplan[2m · Gemini 3.8 Flash · high
+[m[5A[62C[?25h[?25l/tmp/soda-agy-audio-probe-WbvHOU/fixture/generated.mp3[?25h

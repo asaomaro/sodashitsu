@@ -1,0 +1,28 @@
+[K  ▸ 📎 1 media attached (file, 68 B, image/png)  (ctrl+o to expand)[?7h[68G
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> Plan mode: research & plan only (shift+tab to cycle)[K
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+? for shortcuts[75X[75Cplan[2m · Gemini 3.8 Flash · high
+[m[2A[2C[?25h[?25l[?7l
+[2A[K  ▸ 📎 1 media attached (file, 68 B, image/png)  (ctrl+o to expand)[?7h[68G
+
+[65D/tmp/soda-agy-audio-probe-WbvHOU/fixture/generated.wav
+
+[2m   No matches[m[K
+
+  [1m↑/↓[m Navigate · [1menter[m Select · [1mtab[m Complete
+esc to cancel[77X[77Cplan[2m · Gemini 3.8 Flash · high
+[m[5A[56C[?25h[?25l[?7l
+[2A[K  ▸ 📎 1 media attached (file, 68 B, image/png)  (ctrl+o to expand)[?7h[68G
+
+[2Z@/tmp/soda-agy-audio-probe-WbvHOU/fixture/generated.wav[?25h[?25l[?7l
+[2A[K  ▸ 📎 1 media attached (file, 68 B, image/png)  (ctrl+o to expand)[?7h[68G
+
+[44C"/tmp/so
+  da-agy-audio-probe-WbvHOU/fixture/generated.wav"[K
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[2m   No matches[m
+[K
+  [1m↑/↓[m Navigate · [1menter[m Select · [1mtab[m Complete[K
+esc to cancel[77X[77Cplan[2m · Gemini 3.8 Flash · high
+[m[5A[50C[?25h

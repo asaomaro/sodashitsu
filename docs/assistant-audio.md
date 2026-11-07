@@ -9,7 +9,7 @@
 | Codex | 既存専用threadへのapp-server proxy。送信時の検証が必要 | ローカル文字起こし |
 | Claude Code | 既存専用会話への直接送信は未実装・未検証 | ローカル文字起こし |
 | Muse Code | MSP安定・実験schemaに音声入力なし。voice transcribeは別の文字起こし経路 | ローカル文字起こし |
-| Antigravity CLI | upstreamは音声添付対応。操舵室から既存会話への添付経路は調査中 | ローカル文字起こし |
+| Antigravity CLI | upstreamは音声添付対応。導入済み1.4.12のPTYへWAV/MP3を貼っても添付にならず、既存会話への直接経路は未検証 | ローカル文字起こし |
 | GitHub Copilot CLI | SDKの汎用file/blob添付だけでは音声入力対応を保証できず、既存専用会話への直接送信は未実装・未検証 | ローカル文字起こし |
 
 対応しない直接経路を、モデル提供元が一律に音声非対応という意味で扱わない。
@@ -25,3 +25,11 @@
 - [GitHub Copilot SDK](https://github.com/github/copilot-sdk/blob/main/nodejs/README.md): 添付型と画像の対応範囲。
 
 2026-11-07時点。CLI側の対応と操舵室の検証済み連携を分けて記録する。
+
+## Antigravityで確認した添付の境界
+
+1.4.12を既存の利用者paneと別の隔離HOME・新規fixtureフォルダで起動し、無音WAV（Python wave生成、16kHz/mono/16bit/1秒）と生成MP3を調べた。モデルへの送信や利用者会話の再開は行っていない。PNGは同じbracketed pasteで `media attached` と `image/png` が表示される。WAV/MP3は本文にパスが残り、音声の添付表示は出ない。WAVの `@path` と引用付きパスでも同様だった。
+
+この確認は音声モデルへ送信した実証ではない。CLI全体のnative音声機能が存在しないとも断定しない。必要な未確認契約は、既存の専用TUI/instanceへ音声MIMEの添付を作成する入力形式と、その受理確認である。文字として届いたパスをnative音声入力の成功に置き換えない。固定待ち時間後のEnterだけではこの契約を満たさないため、自動送信アダプターは有効にしていない。
+
+[添付段階の検証記録](../.aidev/works/20261107-agent-audio-backend/verification.md)に、開始時の認証表示を除いた入力後の端末出力を保存した。
