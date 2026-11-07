@@ -1,3 +1,4 @@
+import {useNormalSessionStore} from "./normalSession.js";
 import { ViewHistory } from "@sodashitsu/client-core";
 import { useSessionStore } from "./session.js";
 import {
@@ -669,14 +670,14 @@ export const useViewStore = defineStore("view", () => {
     return h;
   };
   function rememberCurrent() {
-    history().remember(workspaceId.value, tabId.value, focusedPaneId.value, useSessionStore());
+    history().remember(workspaceId.value, tabId.value, focusedPaneId.value, useNormalSessionStore());
   }
   function preferredPane(id: string) {
-    return history().pane(id, useSessionStore());
+    return history().pane(id, useNormalSessionStore());
   }
   function selectWorkspace(id: string) {
     rememberCurrent();
-    const target = history().tab(id, useSessionStore());
+    const target = history().tab(id, useNormalSessionStore());
     if (!target) return;
     setView(id, target);
     focusPane(preferredPane(target));
@@ -685,7 +686,9 @@ export const useViewStore = defineStore("view", () => {
   function onWorkSelected(listener: (workspaceId: string) => void): () => void {
     workSelectionListeners.add(listener); return () => { workSelectionListeners.delete(listener); };
   }
+  function clearNormalView():void {workspaceId.value=null;tabId.value=null;focusedPaneId.value=null;}
   function setView(newWorkspaceId: string, newTabId: string): void {
+    if (useSessionStore().tabs.has(newTabId) && !useNormalSessionStore().tabs.has(newTabId)) return;
     for (const listener of workSelectionListeners) listener(newWorkspaceId);
     rememberCurrent();
     workspaceId.value = newWorkspaceId;
@@ -694,6 +697,7 @@ export const useViewStore = defineStore("view", () => {
   }
 
   function focusPane(paneId: string | null): void {
+    if (paneId && useSessionStore().panes.has(paneId) && !useNormalSessionStore().panes.has(paneId)) return;
     // `paneId === null`（pane が無くなった）のときは更新しない——「直前」の意味が無くなる遷移なので、
     // 次に `focusPane(x)` が呼ばれるまで直前の値を保持する（herdr の「1スロットトグル」に近い。design）。
     if (paneId !== null && focusedPaneId.value !== null && focusedPaneId.value !== paneId) {
@@ -1109,6 +1113,7 @@ export const useViewStore = defineStore("view", () => {
     setMachineScope,
     rememberView,
     forgetStoredView,
+    clearNormalView,
     resetForMachineSwitch,
     setView,
     onWorkSelected,

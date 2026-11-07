@@ -15,15 +15,15 @@ import {
   sameNodeMachine,
 } from "@sodashitsu/client-core";
 import { useGraphStore } from "../../store/graph.js";
-import { summaryPaneName, useMachinesStore } from "../../store/machines.js";
-import { useSessionStore } from "../../store/session.js";
+import { summaryPaneName, useNormalMachinesStore } from "../../store/normalMachines.js";
+import { useNormalSessionStore } from "../../store/normalSession.js";
 
 const props = defineProps<{ nodeKey: NodeKey }>();
 const emit = defineEmits<{ pick: [newKey: NodeKey]; close: [] }>();
 
 const graph = useGraphStore();
-const session = useSessionStore();
-const machines = useMachinesStore();
+const session = useNormalSessionStore();
+const machines = useNormalMachinesStore();
 const rootEl = ref<HTMLElement | null>(null);
 const chosen = ref<NodeKey | null>(null);
 

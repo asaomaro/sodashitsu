@@ -1,3 +1,4 @@
+import {useNormalSessionStore} from "./normalSession.js";
 import type { AgentInfo, AgentIntegrationStatusResult, AgentUsageChangedEvent, AskClosedEvent, AskOpenedEvent, DisplayMessageEvent, DisplayRemovedEvent, DisplayUpdatedEvent, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "@sodashitsu/client-core";
@@ -94,9 +95,10 @@ export class StoreAdapter implements StorePort {
     // `client.hello` のたび（初回・再接続のたび）に表示を復元する（design「フォーカスと表示」）。
     // `view.restoreView`（T16）はここまで呼び出し元が無かった——T26 で結線した。
     useViewStore(this.opts.pinia).restoreView((workspaceId, tabId) => {
-      const tab = session.tabs.get(tabId);
+      const tab = session.normal.tabs.get(tabId);
       return tab && tab.workspaceId === workspaceId ? tab.focusedPaneId : null;
-    }, session.focus);
+    }, useNormalSessionStore(this.opts.pinia).focus);
+    this.applyViewRepair();
   }
 
   applyEvent(e: ServerEvent): void {
@@ -118,8 +120,10 @@ export class StoreAdapter implements StorePort {
     // グラフ画面（20260927-agent-graph）もダイアログと同じく、開いている間は「閉じたときに戻す先」を差し替える。
     const dialogOpen = view.modalOpen;
     const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.preGraphFocusPaneId ?? view.preAskFocusPaneId ?? view.preExtensionApprovalFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;
-    const next = repairView({ workspaceId: view.workspaceId, tabId: view.tabId, focusedPaneId: focused }, session, successorHint);
+    if(session.normal.hiddenPaneIds.size && !session.normal.tabs.size) {view.clearNormalView();return;}
+    const next = repairView({ workspaceId: view.workspaceId, tabId: view.tabId, focusedPaneId: focused }, useNormalSessionStore(this.opts.pinia), successorHint);
     if (!next) return;
+    if (!next.workspaceId || !next.tabId) {view.clearNormalView();return;}
     if (next.workspaceId && next.tabId && (next.workspaceId !== view.workspaceId || next.tabId !== view.tabId)) view.setView(next.workspaceId, next.tabId);
     if (next.focusedPaneId === focused) return;
     if (dialogOpen) {

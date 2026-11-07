@@ -1,5 +1,5 @@
 import type { AgentInfo, HostInfo, Pane, SessionFocus, SessionLimits, SessionSnapshot, SidebarLayout, Tab, Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
-import { layoutFromLegacy } from "@sodashitsu/client-core";
+import { normalSession, layoutFromLegacy } from "@sodashitsu/client-core";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
@@ -28,6 +28,7 @@ export const useSessionStore = defineStore("session", () => {
    * `layout` の有無は「サーバが新しいか」の判定にも使う（`hasServerLayout`）。
    */
   const effectiveLayout = computed<SidebarLayout>(() => layout.value ?? layoutFromLegacy([...workspaces.value.values()], [...groups.value.values()]));
+  const normal = computed(() => normalSession({workspaces:workspaces.value,tabs:tabs.value,panes:panes.value}));
   const hasServerLayout = computed(() => layout.value !== null);
   const focus = ref<SessionFocus | null>(null);
   const limits = ref<SessionLimits>({ scrollbackLines: 5000 });
@@ -156,6 +157,7 @@ export const useSessionStore = defineStore("session", () => {
   }
 
   return {
+    normal,
     protocolVersion,
     serverVersion,
     host,

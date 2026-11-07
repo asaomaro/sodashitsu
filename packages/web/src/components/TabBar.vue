@@ -5,7 +5,7 @@ import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onUnmounted, ref, watch } from "vue";
 import { edgeScrollDelta, reorderSteps, slotAt, TAB_DRAG_THRESHOLD_PX } from "../layout/tabReorder.js";
 import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../injection.js";
-import { useSessionStore } from "../store/session.js";
+import { useNormalSessionStore } from "../store/normalSession.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import { watchDragInterrupt } from "../store/dragInterrupt.js";
@@ -26,7 +26,7 @@ import { useUiStyle } from "../composables/useUiStyle.js";
  * 側の「空なら空」という素直な読み込みは変えない）。
  */
 const props = defineProps<{ viewActions?: boolean }>();
-const session = useSessionStore();
+const session = useNormalSessionStore();
 const viewers = useViewerTabsStore();
 const view = useViewStore();
 const settings = useSettingsStore();

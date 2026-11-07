@@ -51,7 +51,7 @@ import {
 } from "../../store/graph.js";
 import { useGraphSpacesStore, type GraphRevealTarget } from "../../store/graphSpaces.js";
 import { useMachinesStore } from "../../store/machines.js";
-import { useSessionStore } from "../../store/session.js";
+import { useNormalSessionStore } from "../../store/normalSession.js";
 import { useSettingsStore } from "../../store/settings.js";
 import { useViewStore } from "../../store/view.js";
 import GraphAddForm, { type AddFormKind, type AddFormSubmit } from "./GraphAddForm.vue";
@@ -100,7 +100,7 @@ const props = defineProps<{
 const view = useViewStore();
 const graph = useGraphStore();
 const spaces = useGraphSpacesStore();
-const session = useSessionStore();
+const session = useNormalSessionStore();
 const machines = useMachinesStore();
 const settings = useSettingsStore();
 const registry = inject(TerminalRegistryKey, null);

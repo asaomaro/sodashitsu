@@ -11,14 +11,14 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import type { NodeKey } from "@sodashitsu/protocol";
 import { isLocalNodeKey, LOCAL_MACHINE_ID, nodeKey, paneNameOf } from "@sodashitsu/client-core";
 import { useGraphStore } from "../../store/graph.js";
-import { summaryPaneName, useMachinesStore } from "../../store/machines.js";
-import { useSessionStore } from "../../store/session.js";
+import { summaryPaneName, useNormalMachinesStore } from "../../store/normalMachines.js";
+import { useNormalSessionStore } from "../../store/normalSession.js";
 
 const emit = defineEmits<{ apply: [change: { add: NodeKey[]; remove: NodeKey[] }]; close: [] }>();
 
 const graph = useGraphStore();
-const session = useSessionStore();
-const machines = useMachinesStore();
+const session = useNormalSessionStore();
+const machines = useNormalMachinesStore();
 const rootEl = ref<HTMLElement | null>(null);
 
 interface Row {

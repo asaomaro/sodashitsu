@@ -2,7 +2,7 @@
 import { useViewerTabsStore } from "../store/viewerTabs.js";
 import { computed, inject, onMounted, ref } from "vue";
 import { ConnectionKey } from "../injection.js";
-import { useSessionStore } from "../store/session.js";
+import { useNormalSessionStore } from "../store/normalSession.js";
 import { aggregate, displayStateFor, useSeenStore, type STATE_PRIORITY } from "../store/seen.js";
 import StateIcon from "../components/StateIcon.vue";
 import { useViewStore } from "../store/view.js";
@@ -22,7 +22,7 @@ import { useViewStore } from "../store/view.js";
  */
 const emit = defineEmits<{ close: [] }>();
 
-const session = useSessionStore();
+const session = useNormalSessionStore();
 const seen = useSeenStore();
 const view = useViewStore();
 const conn = inject(ConnectionKey);

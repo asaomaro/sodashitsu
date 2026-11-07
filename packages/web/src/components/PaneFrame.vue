@@ -25,7 +25,7 @@ import type { Side as PaneSide2 } from "../display/paneDisplayLayout.js";
 import { paneNameOf, depthFirstPaneIds } from "@sodashitsu/client-core";
 import { getCellSize } from "../term/measure.js";
 import { useDisplayStore } from "../store/display.js";
-import { useSessionStore } from "../store/session.js";
+import { useNormalSessionStore } from "../store/normalSession.js";
 import DisplayDropZones from "./DisplayDropZones.vue";
 import DisplayFloat from "./DisplayFloat.vue";
 import PaneActions from "./PaneActions.vue";
@@ -82,7 +82,7 @@ const actions = inject(ActionDispatcherKey, undefined);
 const connection = inject(ConnectionKey, null);
 const conversationWindow = props.enabled ? useConversationWindowStore() : null;
 const registry = inject(TerminalRegistryKey, undefined);
-const session = props.enabled ? useSessionStore() : null;
+const session = props.enabled ? useNormalSessionStore() : null;
 const shortcutNumber = computed(() => {
   const tab = view?.tabId ? session?.tabs.get(view.tabId) : undefined;
   if (!tab || props.presentationOnly) return undefined;

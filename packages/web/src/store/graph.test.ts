@@ -566,3 +566,12 @@ describe("store/graph（囲い。20261008-graph-first）", () => {
     expect(g.hiddenLocalPaneCount).toBe(1);
   });
 });
+
+it("hides captain nodes/connected lines from presentation while retaining saved graph controls",async()=>{
+ const session=useSessionStore(),machines=useMachinesStore();
+ session.workspaceUpserted({id:'w',tabIds:['t'],activeTabId:'t',assistant:{paneId:'captain'}} as import('@sodashitsu/protocol').Workspace);
+ session.tabUpserted({id:'t',workspaceId:'w',focusedPaneId:'captain',zoomedPaneId:null,layout:{type:'pane',paneId:'captain'}} as import('@sodashitsu/protocol').Tab);
+ session.paneUpserted(paneOf('captain','t'));
+ const store=useGraphStore(),g=graphOf({nodes:[{key:'local:captain',x:0,y:0},{key:'local:ordinary',x:100,y:0}],links:[triggerLink('link','local:captain','local:ordinary')]});
+ const {port}=fakeGraphPort({'graph.get':()=>g});store.bind(port);await store.load();expect(store.nodes.map(n=>n.key)).toEqual(['local:ordinary']);expect(store.links).toEqual([]);expect(store.graph!.nodes).toHaveLength(2);expect(store.graph!.links).toHaveLength(1);expect(session.panes.has('captain')).toBe(true);
+});

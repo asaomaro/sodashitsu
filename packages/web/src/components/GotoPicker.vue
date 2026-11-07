@@ -2,7 +2,7 @@
 import type { DisplayState } from "@sodashitsu/protocol";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import { ConnectionKey } from "../injection.js";
-import { useSessionStore } from "../store/session.js";
+import { useNormalSessionStore } from "../store/normalSession.js";
 import { aggregate, displayStateFor, useSeenStore } from "../store/seen.js";
 import { paneNameOf } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
@@ -37,7 +37,7 @@ function targetKey(t: GotoTarget): string {
   return t.kind === "workspace" ? `workspace:${t.workspaceId}` : t.kind === "tab" ? `tab:${t.tabId}` : `pane:${t.paneId}`;
 }
 
-const session = useSessionStore();
+const session = useNormalSessionStore();
 const seen = useSeenStore();
 const view = useViewStore();
 const conn = inject(ConnectionKey);

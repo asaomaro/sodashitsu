@@ -2,7 +2,7 @@
 import type { DisplayState } from "@sodashitsu/protocol";
 import { computed, inject } from "vue";
 import { MachineSwitcherKey } from "../injection.js";
-import { useMachinesStore } from "../store/machines.js";
+import { useNormalMachinesStore } from "../store/normalMachines.js";
 import { aggregate, displayStateFor, useSeenStore } from "../store/seen.js";
 import { stateLabel } from "@sodashitsu/client-core";
 import StateIcon from "./StateIcon.vue";
@@ -13,7 +13,7 @@ import StateIcon from "./StateIcon.vue";
  * `disabled`。今までの workspace の行の D&D・右クリックのメニューには繋がない（別の要素）。
  */
 const props = defineProps<{ machineId: string; compact: boolean }>();
-const machines = useMachinesStore();
+const machines = useNormalMachinesStore();
 const seen = useSeenStore();
 const switcher = inject(MachineSwitcherKey, undefined);
 

@@ -3,7 +3,7 @@ import type { MachineState } from "@sodashitsu/protocol";
 import { computed, inject } from "vue";
 import { MachineSwitcherKey } from "../injection.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
-import { useMachinesStore } from "../store/machines.js";
+import { useNormalMachinesStore } from "../store/normalMachines.js";
 import {desktopWindowUrl} from "../desktop/monitorWindow.js";
 import { useViewStore } from "../store/view.js";
 
@@ -13,7 +13,7 @@ import { useViewStore } from "../store/view.js";
  * （押すとそのマシンへ切り替える＝herdr と同じ。切れていれば `disabled`）。Enter/Space はネイティブの click に任せ、`main.ts` の keydown へ二重に渡さない。
  */
 const props = defineProps<{ machineId: string; label: string; compact: boolean }>();
-const machines = useMachinesStore();
+const machines = useNormalMachinesStore();
 const view = useViewStore();
 const switcher = inject(MachineSwitcherKey, undefined);
 

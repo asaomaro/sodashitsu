@@ -1,3 +1,5 @@
+import {summaryAssistantPane} from "./normalMachines.js";
+import {useNormalSessionStore} from "./normalSession.js";
 import type {
   AgentInfo,
   DisplayState,
@@ -296,7 +298,7 @@ export const useGraphStore = defineStore("graph", () => {
    */
   function layoutStructure(remoteKeys: readonly string[]): LayoutStructure | null {
     if (useMachinesStore().selectedId !== LOCAL_MACHINE_ID) return null;
-    const session = useSessionStore();
+    const session = useNormalSessionStore();
     return graphStructureFrom(
       {
         workspaces: [...session.workspaces.values()],
@@ -352,16 +354,23 @@ export const useGraphStore = defineStore("graph", () => {
     return result;
   }
 
+  function hiddenCaptainNode(key:NodeKey):boolean {
+    const parsed=parseNodeKey(key);if(!parsed)return false;
+    const machines=useMachinesStore(),session=useSessionStore();
+    if(parsed.machine===machines.selectedId)return session.normal.hiddenPaneIds.has(parsed.paneId);
+    const summary=machines.summaries[parsed.machine];return !!summary&&summaryAssistantPane(summary,parsed.paneId);
+  }
+
   /** 表示に使うノード（ドラッグ中・送信中の位置を重ねたもの）。 */
   const nodes = computed<GraphNode[]>(() => {
     const g = graph.value;
     if (!g) return [];
-    return g.nodes.map((n) => {
+    return g.nodes.filter(n=>!hiddenCaptainNode(n.key)).map((n) => {
       const p = dragPositions.value.get(n.key) ?? pendingPositions.value.get(n.key);
       return p ? { ...n, x: p.x, y: p.y } : n;
     });
   });
-  const links = computed<GraphLink[]>(() => graph.value?.links ?? []);
+  const links = computed<GraphLink[]>(() => (graph.value?.links ?? []).filter(l=>!hiddenCaptainNode(l.from)&&!hiddenCaptainNode(l.to)));
 
   /**
    * 手元の pane のうち、上限（手元のノード 512。2 つ目以降は予備を残して手前まで）のためにノードが付かず、グラフに出ていない pane の数
@@ -373,7 +382,7 @@ export const useGraphStore = defineStore("graph", () => {
     const local = new Set(g.nodes.filter((n) => isLocalNodeKey(n.key)).map((n) => n.key));
     if (local.size < GRAPH_LOCAL_NODES_MAX - GRAPH_FIRST_NODE_RESERVE) return 0;
     let hidden = 0;
-    for (const id of useSessionStore().panes.keys()) if (!local.has(`local:${id}`)) hidden++;
+    for (const id of useNormalSessionStore().panes.keys()) if (!local.has(`local:${id}`)) hidden++;
     return hidden;
   });
 

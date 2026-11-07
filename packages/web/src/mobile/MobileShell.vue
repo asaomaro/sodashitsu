@@ -20,7 +20,7 @@ import PluginView from "../components/PluginView.vue";
 import TabViews from "../components/TabViews.vue";
 import TerminalPane from "../components/TerminalPane.vue";
 import { ConnectionKey, TerminalRegistryKey, ViewSyncKey } from "../injection.js";
-import { useSessionStore } from "../store/session.js";
+import { useNormalSessionStore } from "../store/normalSession.js";
 import { useViewStore } from "../store/view.js";
 import ThemeModeToggle from "../components/ThemeModeToggle.vue";
 import NotificationBell from "../components/NotificationBell.vue";
@@ -49,7 +49,7 @@ import { useVisualViewportHeight } from "./useVisualViewport.js";
  * 表示領域の変化（回転・窓の幅・ソフトキーボード・追加キーの列）で `commitView` し直す（`usePaneArea`）。`followResize`
  * （葉を見る。デスクトップ用）は付けない（D107）。
  */
-const session = useSessionStore();
+const session = useNormalSessionStore();
 const machines=useMachinesStore();
 const view = useViewStore();
 const viewers = useViewerTabsStore();

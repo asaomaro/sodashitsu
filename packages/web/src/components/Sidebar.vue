@@ -5,7 +5,7 @@ import type { AgentInfo, ItemTarget, SubagentInfo, Workspace } from "@sodashitsu
 import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../injection.js";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { type SectionBox, clampRatio, ratioFromOffset, ratioPercent, stepRatio } from "../sidebar/sectionSizing.js";
-import { useSessionStore } from "../store/session.js";
+import { useNormalSessionStore } from "../store/normalSession.js";
 import { useUsageStore } from "../store/usage.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
 import { observedAgentModel,subagentEffortLabel,subagentModelLabel,subagentStateLabel, subagentCountLabel, subagentsMoreLabel, orderedAgentPaneIds, paneMoveBlock } from "@sodashitsu/client-core";
@@ -24,7 +24,7 @@ import MachineRows from "./MachineRows.vue";
 import ScreenSwitcher from "./ScreenSwitcher.vue";
 import { useGraphSpacesStore } from "../store/graphSpaces.js";
 import { useUiStyle } from "../composables/useUiStyle.js";
-import { useMachinesStore } from "../store/machines.js";
+import { useNormalMachinesStore } from "../store/normalMachines.js";
 import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 
@@ -39,13 +39,13 @@ import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
  * （6px の閾値・`setPointerCapture`・`document.elementFromPoint` によるドロップ先判定・Esc での
  * 取り消し）をそのまま踏襲する。
  */
-const session = useSessionStore();
+const session = useNormalSessionStore();
 const usage = useUsageStore();
 const seen = useSeenStore();
 const view = useViewStore();
 const settings = useSettingsStore();
 const actions = inject(ActionDispatcherKey);
-const machines = useMachinesStore();
+const machines = useNormalMachinesStore();
 const graphSpaces = useGraphSpacesStore();
 /** モダンの配置か（20261008-ui-style PR4）。最下部のボタンの並び・たたむ印の置き場所・spaces の区画の下のボタンの有無が替わる。 */
 const { modernLayout } = useUiStyle();

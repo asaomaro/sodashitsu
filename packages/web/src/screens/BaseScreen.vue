@@ -11,11 +11,11 @@ import TabBar from "../components/TabBar.vue";
 import TabWorkspace from "../components/TabWorkspace.vue";
 import TabViews from "../components/TabViews.vue";
 import { useMachinesStore } from "../store/machines.js";
-import { useSessionStore } from "../store/session.js";
+import { useNormalSessionStore } from "../store/normalSession.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 
-const session = useSessionStore();
+const session = useNormalSessionStore();
 const viewers = useViewerTabsStore();
 const machines = useMachinesStore();
 const view = useViewStore();

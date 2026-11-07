@@ -1,3 +1,4 @@
+import {useSessionStore} from "../store/session.js";
 import { useViewerTabsStore } from "../store/viewerTabs.js";
 import type { AgentForkPreviewResult, AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, PaneMoveBlock, WorkspaceGroup } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
@@ -10,8 +11,8 @@ import type { KeyInputController, ActionPort, FocusPort } from "../keys/KeyInput
 import type { Action, CopyCommand, Dir } from "@sodashitsu/client-core";
 import type { InputHold } from "@sodashitsu/client-core";
 import type { ConnectionPort } from "@sodashitsu/client-core";
-import { useSessionStore } from "../store/session.js";
-import { useMachinesStore } from "../store/machines.js";
+import { useNormalSessionStore } from "../store/normalSession.js";
+import { useNormalMachinesStore } from "../store/normalMachines.js";
 import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, paneMoveBlock, paneMoveBlockMessage, isRepresentative, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useAgentForkStore } from "../store/agentFork.js";
@@ -74,14 +75,15 @@ export interface ActionDispatcherOptions {
  */
 export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private readonly conn: ConnectionPort;
-  private readonly session: ReturnType<typeof useSessionStore>;
+  private readonly rawSession:ReturnType<typeof useSessionStore>;
+  private readonly session: ReturnType<typeof useNormalSessionStore>;
   private readonly agentIntegrations: ReturnType<typeof useAgentIntegrationsStore>;
   private readonly seen: ReturnType<typeof useSeenStore>;
   private readonly view: ReturnType<typeof useViewStore>;
   private readonly displays: ReturnType<typeof useDisplayStore>;
   /** 保存した SSH のマシン（20260927-multi-host-machines）。ローカル以外を選んでいる間は session の一覧を使わない。 */
   private readonly viewerTabs: ReturnType<typeof useViewerTabsStore>;
-  private readonly machines: ReturnType<typeof useMachinesStore>;
+  private readonly machines: ReturnType<typeof useNormalMachinesStore>;
   private readonly settings: ReturnType<typeof useSettingsStore>;
   private readonly commands: ReturnType<typeof useCommandsStore>;
   private readonly agentFork: ReturnType<typeof useAgentForkStore>;
@@ -98,12 +100,13 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.notifications = opts.notifications;
     this.imagePaste = opts.imagePaste;
     this.extensionReload = opts.extensionReload;
-    this.session = useSessionStore(opts.pinia);
+    this.rawSession = useSessionStore(opts.pinia);
+    this.session = useNormalSessionStore(opts.pinia);
     this.agentIntegrations = useAgentIntegrationsStore(opts.pinia);
     this.seen = useSeenStore(opts.pinia);
     this.view = useViewStore(opts.pinia);
     this.displays = useDisplayStore(opts.pinia);
-    this.machines = useMachinesStore(opts.pinia);
+    this.machines = useNormalMachinesStore(opts.pinia);
     this.viewerTabs = useViewerTabsStore(opts.pinia);
     this.settings = useSettingsStore(opts.pinia);
     this.commands = useCommandsStore(opts.pinia);
@@ -516,7 +519,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * 確認の文言でそれが伝わる（AC4）。
    */
   removeWorktree(sourceWorkspaceId: string, path: string): void {
-    const openWorkspace = [...this.session.workspaces.values()].find((w) => w.cwd === path);
+    const openWorkspace = [...this.rawSession.workspaces.values()].find((w) => w.cwd === path);
     this.view.openDialogWithContext({
       kind: "confirmWorktreeRemove",
       sourceWorkspaceId,
@@ -1300,7 +1303,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   /** T22 から任意の tab を対象に呼ぶ（表示中の tab とは限らない）。 */
   closeTabById(tabId: string): void {
     if (this.viewerTabs.tabs.some(t => t.id === tabId)) { void this.viewerTabs.remove(tabId).catch(() => this.view.toast("閲覧タブを閉じられません")); return; }
-    const panesInTab = [...this.session.panes.values()].filter((p) => p.tabId === tabId);
+    const panesInTab = [...this.rawSession.panes.values()].filter((p) => p.tabId === tabId);
     if (panesInTab.some((p) => p.busy)) {
       this.view.openDialogWithContext({ kind: "confirmClose", targets: [{ type: "tab", id: tabId }] });
       return;

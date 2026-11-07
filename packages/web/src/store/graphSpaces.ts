@@ -17,7 +17,7 @@ import {
 } from "@sodashitsu/client-core";
 import { useGraphStore } from "./graph.js";
 import { useMachinesStore } from "./machines.js";
-import { useSessionStore } from "./session.js";
+import { useNormalSessionStore } from "./normalSession.js";
 import { useViewStore } from "./view.js";
 
 /**
@@ -75,7 +75,7 @@ export type GraphCommandName = "pause" | "history" | "checklist" | "addPane" | "
 
 export const useGraphSpacesStore = defineStore("graphSpaces", () => {
   const graph = useGraphStore();
-  const session = useSessionStore();
+  const session = useNormalSessionStore();
   const machines = useMachinesStore();
   const view = useViewStore();
 

@@ -2749,3 +2749,11 @@ describe("Sidebar — B3 の見た目（グループの見出し・「グルー�
     });
   });
 });
+
+it("hides the exact captain row/empty workspace but retains its raw dedicated pane",async()=>{
+ const session=useSessionStore(pinia);const ws=makeWorkspace('captain-work',{assistant:{paneId:'captain'} as NonNullable<Workspace['assistant']>});
+ session.workspaceUpserted(ws);session.tabUpserted(makeTab('t1',ws.id,'captain'));session.paneUpserted(makePane('captain','t1',makeAgent({name:'captain-hidden'})));
+ const wrapper=mountSidebar(makeConnection());try{await nextTick();expect(wrapper.text()).not.toContain('captain-hidden');expect(wrapper.text()).not.toContain('captain-work');expect(session.panes.has('captain')).toBe(true);
+ session.tabUpserted({...makeTab('t1',ws.id,'work'),layout:{type:'split',id:'split',dir:'right',ratio:.5,a:{type:'pane',paneId:'captain'},b:{type:'pane',paneId:'work'}}});session.paneUpserted(makePane('work','t1',makeAgent({instanceId:'work-instance',name:'visible-worker'})));await nextTick();expect(wrapper.text()).toContain('visible-worker');expect(wrapper.text()).toContain('captain-work');expect(wrapper.text()).not.toContain('captain-hidden');
+ }finally{wrapper.unmount();}
+});

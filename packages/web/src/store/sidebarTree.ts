@@ -13,7 +13,7 @@ export function currentSidebarTree(
   session: ReturnType<typeof useSessionStore>,
   view: ReturnType<typeof useViewStore>,
 ): TopRow[] {
-  return sidebarTree([...session.workspaces.values()], [...session.groups.values()], session.effectiveLayout, view.workspaceSort, view.ungroupedCollapsed);
+  return sidebarTree([...session.normal.workspaces.values()], [...session.groups.values()], session.effectiveLayout, view.workspaceSort, view.ungroupedCollapsed);
 }
 
 /** サイドバーに見えている workspace の id（上から下へ）。畳んだ入れ物の中は今いる workspace だけ。 */
@@ -39,7 +39,7 @@ export function currentNavigableRows(
 export function itemGroupIdOf(session: ReturnType<typeof useSessionStore>, workspaceId: string): string | null {
   const ws = session.workspaces.get(workspaceId);
   if (!ws) return null;
-  const ref = itemRefOf(ws, [...session.workspaces.values()]);
+  const ref = itemRefOf(ws, [...session.normal.workspaces.values()]);
   for (const [groupId, refs] of Object.entries(session.effectiveLayout.groups)) if (refs.includes(ref)) return groupId;
   return null;
 }
