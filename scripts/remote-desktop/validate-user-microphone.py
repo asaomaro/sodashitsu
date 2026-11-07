@@ -6,10 +6,10 @@ args=parser.parse_args()
 repo=pathlib.Path(__file__).resolve().parent
 csc=str(pathlib.Path(os.environ.get('SystemRoot','C:/Windows'))/'Microsoft.NET/Framework64/v4.0.30319/csc.exe') if os.name=='nt' else '/mnt/c/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 root=pathlib.Path(tempfile.mkdtemp(prefix='soda-user-microphone-',dir=args.windows_temp))
-names=['WindowsDesktopPipeKernel.cs','WindowsDesktopMicrophone.cs','WindowsMicrophoneChecks.cs','WindowsUserMicrophonePolicy.cs','WindowsUserMicrophoneRole.cs']
+names=['WindowsDesktopPipeKernel.cs','WindowsDesktopMicrophone.cs','WindowsMicrophoneChecks.cs','WindowsUserMicrophonePolicy.cs','WindowsUserMicrophoneRole.cs','WindowsMicrophoneTokenChecks.cs']
 original={n:(repo/n).read_bytes() for n in names}
 for n,b in original.items():(root/n).write_bytes(b)
-(root/'Validator.cs').write_text('using System;class Validator{static int Main(){try{SodaDesktopUserMicrophonePolicy.GeneratedChecks();Console.WriteLine(SodaMicrophoneChecks.Run());return 0;}catch(Exception e){Console.WriteLine(e.ToString());return 1;}}}')
+(root/'Validator.cs').write_text('using System;class Validator{static int Main(){try{SodaMicrophoneTokenChecks.Generated();SodaMicrophoneTokenChecks.Native(0);SodaDesktopUserMicrophonePolicy.GeneratedChecks();Console.WriteLine(SodaMicrophoneChecks.Run());return 0;}catch(Exception e){Console.WriteLine(e.ToString());return 1;}}}')
 def win(p):return str(p) if os.name=='nt' else subprocess.check_output(['wslpath','-w',str(p)],text=True).strip()
 def run():
  executable=root/('validator-'+str(len(list(root.glob('validator-*.exe')))+1)+'.exe')
@@ -36,7 +36,7 @@ def host_checks():
 try:
  host_checks()
  code,out=run();assert code==0
- variants=[('WindowsUserMicrophonePolicy.cs','lock','facts.LockState==1','facts.LockState>=0','Microphone survived lock'),('WindowsUserMicrophonePolicy.cs','system','!facts.System&&','true&&','SYSTEM audio actor admitted'),('WindowsUserMicrophonePolicy.cs','elevation','!facts.Elevated&&','true&&','Elevated audio actor admitted'),('WindowsUserMicrophonePolicy.cs','logon','facts.Logon==logon&&','true&&','Other logon microphone admitted'),('WindowsUserMicrophonePolicy.cs','startup','now-started<2500','now-started<250000','Microphone startup extended'),('WindowsUserMicrophonePolicy.cs','heartbeat','now-heartbeat<2000','now-heartbeat<2000000','Microphone heartbeat expired'),('WindowsDesktopMicrophone.cs','peer','||peerGuard!=null&&!peerGuard((int)pid)','', 'Unverified peer activated microphone endpoint')]
+ variants=[('WindowsUserMicrophoneRole.cs','native-logon','facts.Logon=LogonSid(identity.Token);','foreach(IdentityReference group in identity.Groups){string sid=group.Value;if(sid.StartsWith("S-1-5-5-",StringComparison.Ordinal)){if(facts.Logon!=null)throw new InvalidOperationException("Ambiguous microphone logon");facts.Logon=sid;}}','Role facts lost native logon'),('WindowsUserMicrophonePolicy.cs','lock','facts.LockState==1','facts.LockState>=0','Microphone survived lock'),('WindowsUserMicrophonePolicy.cs','system','!facts.System&&','true&&','SYSTEM audio actor admitted'),('WindowsUserMicrophonePolicy.cs','elevation','!facts.Elevated&&','true&&','Elevated audio actor admitted'),('WindowsUserMicrophonePolicy.cs','logon','facts.Logon==logon&&','true&&','Other logon microphone admitted'),('WindowsUserMicrophonePolicy.cs','startup','now-started<2500','now-started<250000','Microphone startup extended'),('WindowsUserMicrophonePolicy.cs','heartbeat','now-heartbeat<2000','now-heartbeat<2000000','Microphone heartbeat expired'),('WindowsDesktopMicrophone.cs','peer','||peerGuard!=null&&!peerGuard((int)pid)','', 'Unverified peer activated microphone endpoint')]
  for name,label,before,after,assertion in (variants if args.negative_controls else []):
   s=original[name].decode();assert s.count(before)==1
   try:
@@ -45,5 +45,5 @@ try:
    (root/name).write_bytes(original[name]);assert (root/name).read_bytes()==original[name]
  code,out=run();assert code==0
  for n,b in original.items():assert (repo/n).read_bytes()==b
- print('user_microphone_7_source_negative_controls_and_byte_exact_restore_passed' if args.negative_controls else 'user_microphone_generated_checks_passed')
+ print('user_microphone_8_source_negative_controls_and_byte_exact_restore_passed' if args.negative_controls else 'user_microphone_generated_checks_passed')
 finally:shutil.rmtree(root)

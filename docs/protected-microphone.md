@@ -10,7 +10,7 @@ Windowsの管理者アプリ画面とUAC画面を単独で共有している間�
 
 ## 実装の境界
 
-独立した`allowProtectedMicrophone`許可と、接続の`protectedMicrophone` feature bitを使います。PCMは通常ユーザーの固定`user-microphone` actorだけへ送り、SYSTEMの保護workerには送りません。actorはnonce・stream ID・私有pipeの実client PIDと同SID/logon/session・非昇格を確認してから、固定endpointを開きます。WTSのロック状態を検査し、一度失効したscopeを復活させません。
+独立した`allowProtectedMicrophone`許可と、接続の`protectedMicrophone` feature bitを使います。PCMは通常ユーザーの固定`user-microphone` actorだけへ送り、SYSTEMの保護workerには送りません。actorはnonce・stream ID・私有pipeの実client PIDと同SID/logon/session・非昇格を確認してから、固定endpointを開きます。logon SIDは.NET Frameworkで一部のgroupが省略される`WindowsIdentity.Groups`ではなく、ネイティブ`GetTokenInformation(TokenGroups)`の`SE_GROUP_LOGON_ID`から取得します。buffer長・table/pointer範囲・SID構造・flagsと厳密1件を検査し、欠落・複数・壊れた情報は拒否します。WTSのロック状態を検査し、一度失効したscopeを復活させません。
 
 通常画面と管理者画面のマイクは、Windowsのsession-local kernel mutexを共用します。同じ利用者SID・Windowsセッション内では、endpointや操舵室のworkerが変わっても、以前のdevice threadがsinkの終了を完了するまで新しいsinkを開きません。mutexはpipeのPID/peer確認後に待ち時間なしで取得し、sink.Disposeの正常完了後に同じthreadで解放します。競合した開始は利用不可となり、自動的には再取得しません。Global namespaceやACLの追加、管理者権限は使いません。
 
@@ -23,3 +23,5 @@ sinkの終了処理が例外で完了しなかった場合は、mutexを明示�
 生成PCMとin-memory sink、私有pipe、生成したSID/logon/WTS事実による境界検査、通常権限actorへの制御配送、source失効、偽装ready拒否、旧featureとの分離を検証しました。WindowsのC#コンパイルと生成検査も実行しています。
 
 実際の仮想オーディオendpointへのWASAPI再生、UAC/昇格画面中の相手アプリによる受信、実ロック・画面epoch変化時の終了確認は、実機の作業調整後に行う対象です。これらの実機確認が完了したという意味ではありません。
+
+2026-11-07の実機preflightでは、通常user/session1の正規tokenがmanaged Groupsではlogon SID0件、native TokenGroupsでは1件になる誤拒否を確認し修正しました。自作validatorで実token・peerの同logon証明、生成28境界負例、旧managed経路の失敗と完全復元を確認しています。この検証はtoken読取だけであり、ロック解除や実WASAPI/UAC受音の確認ではありません。

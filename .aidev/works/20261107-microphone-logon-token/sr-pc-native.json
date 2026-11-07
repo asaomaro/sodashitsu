@@ -1,0 +1,26 @@
+{
+  "records": [
+    {
+      "case": "checks-final",
+      "exitCode": 0,
+      "stdout": "generated_token_group_boundary_rejections=28\r\nuser_microphone_policy_checks_passed: ordinary SID/logon/session, UAC/Default only, irreversible lock, deadline/heartbeat/stream; fake facts only\r\nnative_logon_proof=true;managed_logon_count=0;peer_same_logon=true\r\nmicrophone_token_checks_passed_no_audio_or_gui",
+      "stderrPresent": false
+    },
+    {
+      "case": "checks-negative",
+      "exitCode": 1,
+      "stdout": "generated_token_group_boundary_rejections=28\r\nuser_microphone_policy_checks_passed: ordinary SID/logon/session, UAC/Default only, irreversible lock, deadline/heartbeat/stream; fake facts only\r\nmicrophone_token_checks_failed:Exception:Role facts lost native logon",
+      "stderrPresent": false
+    },
+    {
+      "case": "checks-restored",
+      "exitCode": 0,
+      "stdout": "generated_token_group_boundary_rejections=28\r\nuser_microphone_policy_checks_passed: ordinary SID/logon/session, UAC/Default only, irreversible lock, deadline/heartbeat/stream; fake facts only\r\nnative_logon_proof=true;managed_logon_count=0;peer_same_logon=true\r\nmicrophone_token_checks_passed_no_audio_or_gui",
+      "stderrPresent": false
+    }
+  ],
+  "fixedSourceSha256": "66bc4b79e5e9c5cc7b2711c33882ed48d13995888df995d5f001886c572a3d7d",
+  "byteExactRestored": true,
+  "physicalMicrophoneUsed": false,
+  "guiOpened": false
+}

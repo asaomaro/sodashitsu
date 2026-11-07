@@ -22,15 +22,54 @@ public static class SodaDesktopUserMicrophoneRole {
     [DllImport("Wtsapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool WTSQuerySessionInformation(IntPtr server,uint session,int kind,out IntPtr data,out uint length);
     [DllImport("Wtsapi32.dll")]static extern void WTSFreeMemory(IntPtr data);
     [DllImport("advapi32.dll",SetLastError=true)]static extern bool GetTokenInformation(IntPtr token,int kind,out int value,int size,out int needed);
+    [DllImport("advapi32.dll",EntryPoint="GetTokenInformation",SetLastError=true)]static extern bool GetTokenGroups(IntPtr token,int kind,IntPtr data,int size,out int needed);
     [DllImport("advapi32.dll",SetLastError=true)]static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
     [DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr handle);
     static readonly Stopwatch Clock=Stopwatch.StartNew();static long heartbeat,started;static int stopping;
     static SodaDesktopMicrophone microphone;static SodaDesktopUserMicrophonePolicy policy;
     static Process peer;static long peerStarted;
+    [StructLayout(LayoutKind.Sequential)]struct SidAttributes {public IntPtr sid;public uint attributes;}
+    [StructLayout(LayoutKind.Sequential)]struct GroupsHeader {public uint count;public SidAttributes first;}
+    const int MaxGroupsBytes=1024*1024;
+    static InvalidOperationException InvalidLogon(){return new InvalidOperationException("Unambiguous native microphone logon required");}
+    internal static string LogonSid(IntPtr token){
+        int needed;bool probe=GetTokenGroups(token,2,IntPtr.Zero,0,out needed);
+        if(probe||Marshal.GetLastWin32Error()!=122||needed<=0||needed>MaxGroupsBytes)throw InvalidLogon();
+        for(int attempt=0;attempt<3;attempt++){
+            int capacity=needed;IntPtr buffer=Marshal.AllocHGlobal(capacity);
+            try{
+                bool ok=GetTokenGroups(token,2,buffer,capacity,out needed);int error=Marshal.GetLastWin32Error();
+                if(ok){if(needed<=0||needed>capacity)throw InvalidLogon();return LogonGroups(buffer,needed);}
+                if(error!=122||needed<=capacity||needed>MaxGroupsBytes)throw InvalidLogon();
+            }finally{Marshal.FreeHGlobal(buffer);}
+        }
+        throw InvalidLogon();
+    }
+    // TOKEN_GROUPS owns both its SID_AND_ATTRIBUTES table and all pointed-to SID bytes.
+    // WindowsIdentity.Groups filters logon groups on .NET Framework; never use it as this proof.
+    internal static string LogonGroups(IntPtr buffer,int length){
+        int offset=Marshal.OffsetOf(typeof(GroupsHeader),"first").ToInt32(),stride=Marshal.SizeOf(typeof(SidAttributes));
+        if(buffer==IntPtr.Zero||length<offset||length>MaxGroupsBytes)throw InvalidLogon();
+        int count=Marshal.ReadInt32(buffer);if(count<1||count>4096||count>(length-offset)/stride)throw InvalidLogon();
+        ulong begin=unchecked((ulong)buffer.ToInt64()),end=begin+(uint)length,tableEnd=begin+(uint)(offset+count*stride);
+        if(end<begin)throw InvalidLogon();string found=null;
+        for(int index=0;index<count;index++){
+            IntPtr entry=IntPtr.Add(buffer,offset+index*stride),sid=Marshal.ReadIntPtr(entry);
+            uint flags=unchecked((uint)Marshal.ReadInt32(entry,IntPtr.Size));ulong address=unchecked((ulong)sid.ToInt64());
+            if((flags&~0xe000007fu)!=0||address<tableEnd||(address&3u)!=0||address>end-8)throw InvalidLogon();
+            int sub=Marshal.ReadByte(sid,1),bytes=8+4*sub;
+            if(Marshal.ReadByte(sid)!=1||sub>15||address>end-(uint)bytes)throw InvalidLogon();
+            string value;try{value=new SecurityIdentifier(sid).Value;}catch{throw InvalidLogon();}
+            bool logon=(flags&0xc0000000u)==0xc0000000u,named=Regex.IsMatch(value,@"\AS-1-5-5-[0-9]+-[0-9]+\z");
+            if((flags&0xc0000000u)!=0&&!logon||logon!=named)throw InvalidLogon();
+            if(logon){if((flags&4u)==0||(flags&~0xc0000007u)!=0||found!=null)throw InvalidLogon();found=value;}
+        }
+        if(found==null)throw InvalidLogon();return found;
+    }
     static SodaDesktopUserMicrophonePolicy.Facts Read(Process process,WindowsIdentity identity){
         var facts=new SodaDesktopUserMicrophonePolicy.Facts{System=identity.IsSystem,Owner=identity.User==null?null:identity.User.Value,Session=process.SessionId,ActiveSession=checked((int)WTSGetActiveConsoleSessionId()),LockState=-1};
         int elevated,needed;if(!GetTokenInformation(identity.Token,20,out elevated,4,out needed)||needed!=4)throw new InvalidOperationException("Ordinary microphone token required");facts.Elevated=elevated!=0;
-        foreach(IdentityReference group in identity.Groups){string sid=group.Value;if(sid.StartsWith("S-1-5-5-",StringComparison.Ordinal)){if(facts.Logon!=null)throw new InvalidOperationException("Ambiguous microphone logon");facts.Logon=sid;}}
+        facts.Logon=LogonSid(identity.Token);
         IntPtr data;uint size;
         if(facts.Session>0&&facts.Session==facts.ActiveSession&&WTSQuerySessionInformation(IntPtr.Zero,(uint)facts.Session,25,out data,out size)){
             try{if(size>=Marshal.SizeOf(typeof(InfoEx))){var info=(InfoEx)Marshal.PtrToStructure(data,typeof(InfoEx));if(info.level==1&&info.data.session==(uint)facts.Session&&info.data.state==0)facts.LockState=info.data.flags;}}
