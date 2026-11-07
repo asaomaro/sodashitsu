@@ -1,0 +1,9 @@
+# 7kind候補統合
+
+base77581f19（root取込a398/7be/f08/93ff込み）へ自commit ef3c→293b→a421→2b809→23512→a26f→004c→359bを順にpick（重複93ffはskip）。Claude限定effort fixfabfcbも追加（c10cae27）。最後にこのcommitで3adaptersをrouterへ配線。
+
+Codex/Claude/Copilot typedadapterの返却を共通catalogschemaで検査し照会時刻を付加。失敗を固定モデルへ置換しない。新Codexadapterの厳密metadata境界に合わせ生成cachefixtureは全行label/levelsあり・最大512へ更新。以前の600切捨てではなく過大入力を拒否するadapter契約へ従う。
+
+39モデル関連/desktop138/Web12 tests成功。desktop/Web型0、対象モデルモジュールscoped型build0。旧dispatcherのみのnegative4件失敗→byteexact復元4件成功。実browser再取得/metadata/saved選択成功。全体CIは担当2の会話契約実装後rootへ委任。
+
+実compiled7kind read-only一覧照会の匿名receipt同梱: ClaudeCLI5/CodexCLI8/MuseCLI3/AGYCLI6/GrokCLI1/CursorCLI270、Copilot参考8。候補数/取得元/時刻印/経過時間のみ記録し実会話/アカウント/モデルturnを作成しない。モデル別effortはCLI実値があるものだけ、CursorとCopilotは未取得維持。

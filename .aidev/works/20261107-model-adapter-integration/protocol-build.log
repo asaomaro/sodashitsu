@@ -1,0 +1,4 @@
+
+> @sodashitsu/protocol@0.1.0 build /workspaces/sodashitsu-model-catalog-integration/packages/protocol
+> tsc -b
+

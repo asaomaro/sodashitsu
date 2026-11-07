@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-model-catalog-integration/packages/server
+
+
+ Test Files  4 passed (4)
+      Tests  39 passed (39)
+   Start at  17:19:55
+   Duration  1.35s (transform 66%, import 22%, tests 11%)
+
+  Transform  transforming modules took 2.75s · 66% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

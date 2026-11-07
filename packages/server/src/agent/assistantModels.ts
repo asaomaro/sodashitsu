@@ -1,10 +1,12 @@
+import {readCodexModelOptions} from './assistantModelProviders/codex.js';
+import {readClaudeModelOptions} from './assistantModelProviders/claude.js';
+import {readCopilotModelOptions} from './assistantModelProviders/copilot.js';
 import {spawn} from 'node:child_process';
-import {openVerified,readRange} from './safeFile.js';
 import {windowsAgentExecutable} from './windowsAgentLaunch.js';
 import {StringDecoder} from 'node:string_decoder';
-import {homedir,tmpdir} from 'node:os';
+import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {ASSISTANT_MODEL_MAX_OPTIONS,ASSISTANT_EFFORTS,type AssistantModelCatalog,type AssistantAgentKind} from '@sodashitsu/protocol';
+import {ASSISTANT_MODEL_MAX_OPTIONS,ASSISTANT_EFFORTS,AssistantModelCatalog} from '@sodashitsu/protocol';
 type Kind=keyof typeof ASSISTANT_EFFORTS;
 type Effort=AssistantModelCatalog["models"][number]["efforts"][number];
 const validId=/^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,199}$/;
@@ -42,11 +44,9 @@ export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatal
  const rows:AssistantModelCatalog['models']=[];let source:NonNullable<AssistantModelCatalog['source']>='cli';
  const add=(id:unknown,label:unknown,tiers:unknown)=>{if(typeof id==='string'&&validId.test(id)&&!rows.some(r=>r.id===id)&&rows.length<ASSISTANT_MODEL_MAX_OPTIONS)rows.push({id,label:typeof label==='string'?label.slice(0,200):id,efforts:efforts(kind,tiers)});};
  try{
-  if(kind==='codex'){
-   source='local-cache';
-   const opened=await openVerified(join(process.env.CODEX_HOME||join(homedir(),'.codex'),'models_cache.json'));if(!opened)throw Error('cache file');let raw='';
-   try{if(opened.st.size>2*1024*1024)throw Error('cache limit');const bytes=await readRange(opened.fd,0,2*1024*1024+1);if(bytes.length>2*1024*1024)throw Error('cache limit');raw=bytes.toString('utf8');}finally{await opened.fd.close();}
-   const data=JSON.parse(raw);for(const m of (Array.isArray(data.models)?data.models:[])){if(m.visibility==='hide')continue;add(m.slug,m.display_name,m.supported_reasoning_levels?.map((e:any)=>e.effort));}
+  if(kind==='codex'||kind==='claude'||kind==='copilot'){
+   const read=kind==='codex'?readCodexModelOptions:kind==='claude'?readClaudeModelOptions:readCopilotModelOptions;
+   return AssistantModelCatalog.parse({...await read(),fetchedAt:Date.now(),cached:false});
   }else if(kind==='muse'){
    const data=await query('muse',['serve','--disable-shell','--disable-write'],true) as any;for(const m of Array.isArray(data?.models)?data.models:[])add(m.modelId,m.displayLabel,m.variants);
   }else if(kind==='cursor'){
@@ -58,12 +58,6 @@ export async function readAssistantModels(kind:Kind):Promise<AssistantModelCatal
    for(const m of Array.isArray(data?.result?.availableModels)?data.result.availableModels:[])add(m.modelId,m.name,m._meta?.supportsReasoningEffort===true&&Array.isArray(m._meta.reasoningEfforts)?m._meta.reasoningEfforts.map((e:any)=>typeof e==='string'?e:e?.value):[]);
   }else if(kind==='agy'){
    const raw=await query('agy',['models']) as string;for(const line of raw.split('\n')){const [id,label]=line.split('\t');if(!label)continue;const effort=id?.match(/-(low|medium|high)$/)?.[1];add(id,label,effort?[effort]:[]);}
-  }else if(kind==='claude'){
-   source='reference';
-   add('opus','Opus（CLIの別名）',['low','medium','high','max']);add('sonnet','Sonnet（CLIの別名）',['low','medium','high']);add('haiku','Haiku（CLIの別名）',[]);
-  }else{
-   source='reference';
-   add('auto','Auto',[]);add('gpt-5.4','GPT-5.4',['low','medium','high','xhigh']);
   }
   return {models:rows,source:rows.length?source:'unavailable',fetchedAt:Date.now(),cached:false,message:rows.length?(kind==='cursor'?'Cursor CLIから取得したモデル候補です。effort等のvariantはモデルIDで選び、独立effortは未取得です。最大5分キャッシュします。再取得で照会し直せます。':kind==='grok'?'Grok CLIから取得したモデル・effort候補です。最大5分キャッシュします。再取得で照会し直せます。':['claude','copilot'].includes(kind)?'代表的なモデル候補です。利用可否は契約とCLIの版に従います。':''):'候補を取得できません。既定値または保存済みモデルを使用できます。'};
  }catch{return {models:[],source:'unavailable',fetchedAt:Date.now(),cached:false,message:'モデル候補を取得できません。既定値または保存済みモデルを使用できます。'};}

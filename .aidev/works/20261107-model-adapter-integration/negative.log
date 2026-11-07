@@ -1,0 +1,283 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-model-catalog-integration/packages/server
+
+ ❯ src/agent/assistantModels.providers.test.ts (4 tests | 4 failed) 21ms
+   × routes codex to its typed read-only adapter and stamps observation time 15ms
+   × routes claude to its typed read-only adapter and stamps observation time 2ms
+   × routes copilot to its typed read-only adapter and stamps observation time 1ms
+   × does not substitute representative models when the live adapter fails 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/assistantModels.providers.test.ts > routes codex to its typed read-only adapter and stamps observation time
+AssertionError: expected { models: [ { …(3) }, …(7) ], …(4) } to match object { …(4) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "cached": false,
+    "fetchedAt": 1794039705802,
+    "models": [
+      {
+-       "id": "codex-generated",
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "xhigh",
++         "max",
++         "ultra",
++       ],
++       "id": "gpt-6.1-sol",
++       "label": "GPT-6.1-Sol",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "xhigh",
++         "max",
++         "ultra",
++       ],
++       "id": "gpt-6-astra",
++       "label": "GPT-6-Astra",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "xhigh",
++         "max",
++         "ultra",
++       ],
++       "id": "gpt-6.1-terra",
++       "label": "GPT-6.1 Terra",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "xhigh",
++         "max",
++         "ultra",
++       ],
++       "id": "gpt-6-sol",
++       "label": "GPT-6-Sol",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "xhigh",
++         "max",
++       ],
++       "id": "gpt-6-luna",
++       "label": "GPT-6-Luna",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "xhigh",
++         "max",
++         "ultra",
++       ],
++       "id": "gpt-5.6-sol",
++       "label": "GPT-5.6-Sol",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "xhigh",
++         "max",
++         "ultra",
++       ],
++       "id": "gpt-5.6-terra",
++       "label": "GPT-5.6-Terra",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "xhigh",
++         "max",
++       ],
++       "id": "gpt-5.6-luna",
++       "label": "GPT-5.6-Luna",
+      },
+    ],
+-   "source": "cli",
++   "source": "local-cache",
+  }
+
+ ❯ src/agent/assistantModels.providers.test.ts:8:62
+      6| import {readClaudeModelOptions} from './assistantModelProviders/claude…
+      7| it.each(['codex','claude','copilot'] as const)('routes %s to its typed…
+      8|  const result=await readAssistantModels(kind);expect(result).toMatchOb…
+       |                                                              ^
+      9| });
+     10| it('does not substitute representative models when the live adapter fa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/agent/assistantModels.providers.test.ts > routes claude to its typed read-only adapter and stamps observation time
+AssertionError: expected { models: [ …(3) ], …(4) } to match object { …(4) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "cached": false,
+    "fetchedAt": 1794039705811,
+    "models": [
+      {
+-       "id": "claude-generated",
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "max",
++       ],
++       "id": "opus",
++       "label": "Opus（CLIの別名）",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++       ],
++       "id": "sonnet",
++       "label": "Sonnet（CLIの別名）",
++     },
++     {
++       "efforts": [],
++       "id": "haiku",
++       "label": "Haiku（CLIの別名）",
+      },
+    ],
+-   "source": "cli",
++   "source": "reference",
+  }
+
+ ❯ src/agent/assistantModels.providers.test.ts:8:62
+      6| import {readClaudeModelOptions} from './assistantModelProviders/claude…
+      7| it.each(['codex','claude','copilot'] as const)('routes %s to its typed…
+      8|  const result=await readAssistantModels(kind);expect(result).toMatchOb…
+       |                                                              ^
+      9| });
+     10| it('does not substitute representative models when the live adapter fa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/agent/assistantModels.providers.test.ts > routes copilot to its typed read-only adapter and stamps observation time
+AssertionError: expected { models: [ …(2) ], …(4) } to match object { …(4) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "cached": false,
+    "fetchedAt": 1794039705813,
+    "models": [
+      {
+-       "id": "copilot-generated",
++       "efforts": [],
++       "id": "auto",
++       "label": "Auto",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "xhigh",
++       ],
++       "id": "gpt-5.4",
++       "label": "GPT-5.4",
+      },
+    ],
+    "source": "reference",
+  }
+
+ ❯ src/agent/assistantModels.providers.test.ts:8:62
+      6| import {readClaudeModelOptions} from './assistantModelProviders/claude…
+      7| it.each(['codex','claude','copilot'] as const)('routes %s to its typed…
+      8|  const result=await readAssistantModels(kind);expect(result).toMatchOb…
+       |                                                              ^
+      9| });
+     10| it('does not substitute representative models when the live adapter fa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/agent/assistantModels.providers.test.ts > does not substitute representative models when the live adapter fails
+AssertionError: expected { models: [ …(3) ], …(4) } to match object { models: [], …(2) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "cached": false,
+-   "models": [],
+-   "source": "unavailable",
++   "models": [
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++         "max",
++       ],
++       "id": "opus",
++       "label": "Opus（CLIの別名）",
++     },
++     {
++       "efforts": [
++         "low",
++         "medium",
++         "high",
++       ],
++       "id": "sonnet",
++       "label": "Sonnet（CLIの別名）",
++     },
++     {
++       "efforts": [],
++       "id": "haiku",
++       "label": "Haiku（CLIの別名）",
++     },
++   ],
++   "source": "reference",
+  }
+
+ ❯ src/agent/assistantModels.providers.test.ts:12:46
+     10| it('does not substitute representative models when the live adapter fa…
+     11|  vi.mocked(readClaudeModelOptions).mockRejectedValueOnce(Error('genera…
+     12|  expect(await readAssistantModels('claude')).toMatchObject({models:[],…
+       |                                              ^
+     13| });
+     14|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  17:21:44
+   Duration  1.00s (transform 76%, import 21%, tests 2%, worker 1%)
+
+undefined
+/workspaces/sodashitsu-model-catalog-integration/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/assistantModels.providers.test.ts

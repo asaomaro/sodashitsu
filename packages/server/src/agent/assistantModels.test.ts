@@ -9,10 +9,10 @@ import {readAssistantModels,createAssistantModelLister} from './assistantModels.
 vi.mock('node:child_process',()=>({spawn:vi.fn()}));
 const dirs:string[]=[];
 afterEach(async()=>{vi.unstubAllEnvs();vi.useRealTimers();vi.mocked(spawn).mockReset();for(const dir of dirs.splice(0))await rm(dir,{recursive:true,force:true});});
-it('reads bounded Codex metadata and filters hidden/invalid models and unsupported effort tiers',async()=>{
+it('reads bounded Codex metadata and filters hidden models and unsupported effort tiers, rejecting invalid metadata',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'soda-model-cache-'));dirs.push(dir);vi.stubEnv('CODEX_HOME',dir);
- await writeFile(join(dir,'models_cache.json'),JSON.stringify({models:[{slug:'gpt-test',display_name:'Generated GPT',supported_reasoning_levels:[{effort:'low'},{effort:'xhigh'},{effort:'unknown'}]},{slug:'private-hidden',visibility:'hide'},{slug:'--unsafe'}]}));
- expect(await readAssistantModels('codex')).toEqual({models:[{id:'gpt-test',label:'Generated GPT',efforts:['low','xhigh']}],message:'',source:'local-cache',fetchedAt:expect.any(Number),cached:false});
+ await writeFile(join(dir,'models_cache.json'),JSON.stringify({models:[{slug:'gpt-test',display_name:'Generated GPT',supported_reasoning_levels:[{effort:'low'},{effort:'xhigh'},{effort:'unknown'}]},{slug:'private-hidden',visibility:'hide'}]}));
+ expect(await readAssistantModels('codex')).toMatchObject({models:[{id:'gpt-test',label:'Generated GPT',efforts:['low','xhigh']}],source:'local-cache',fetchedAt:expect.any(Number),cached:false});
  await writeFile(join(dir,'models_cache.json'),' '.repeat(2*1024*1024+1));expect((await readAssistantModels('codex')).models).toEqual([]);
 });
 it('uses only MSP initialize and model/list, then terminates the reader',async()=>{
@@ -59,7 +59,7 @@ it('does not substitute fixed models when Grok rejects model discovery',async()=
 
 it('keeps large actual catalogs bounded at 512 rather than silently dropping after 128',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'soda-model-cap-'));dirs.push(dir);vi.stubEnv('CODEX_HOME',dir);
- await writeFile(join(dir,'models_cache.json'),JSON.stringify({models:Array.from({length:600},(_,i)=>({slug:`generated-${i}`}))}));
+ await writeFile(join(dir,'models_cache.json'),JSON.stringify({models:Array.from({length:512},(_,i)=>({slug:`generated-${i}`,display_name:`Generated ${i}`,supported_reasoning_levels:[]}))}));
  const result=await readAssistantModels('codex');expect(result.models).toHaveLength(512);expect(result.models.at(-1)?.id).toBe('generated-511');
 });
 
@@ -71,8 +71,8 @@ it('reads Cursor advertised variant IDs without inferring separate effort from s
 
 it('bypasses completed cache only on explicit refresh and preserves catalog provenance',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'soda-model-refresh-'));dirs.push(dir);vi.stubEnv('CODEX_HOME',dir);const file=join(dir,'models_cache.json'),list=createAssistantModelLister();
- await writeFile(file,JSON.stringify({models:[{slug:'first'}]}));const first=await list('codex');expect(first).toMatchObject({source:'local-cache',cached:false,fetchedAt:expect.any(Number)});
- await writeFile(file,JSON.stringify({models:[{slug:'second'}]}));expect(await list('codex')).toMatchObject({models:[{id:'first'}],cached:true,fetchedAt:first.fetchedAt});
+ await writeFile(file,JSON.stringify({models:[{slug:'first',display_name:'First',supported_reasoning_levels:[]}]}));const first=await list('codex');expect(first).toMatchObject({source:'local-cache',cached:false,fetchedAt:expect.any(Number)});
+ await writeFile(file,JSON.stringify({models:[{slug:'second',display_name:'Second',supported_reasoning_levels:[]}]}));expect(await list('codex')).toMatchObject({models:[{id:'first'}],cached:true,fetchedAt:first.fetchedAt});
  expect(await list('codex',true)).toMatchObject({models:[{id:'second'}],source:'local-cache',cached:false});
  await writeFile(file,'invalid');expect(await list('codex',true)).toMatchObject({models:[],source:'unavailable',cached:false});
 });

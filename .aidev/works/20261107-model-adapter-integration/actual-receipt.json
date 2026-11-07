@@ -1,0 +1,69 @@
+{
+  "modelTurnCreated": false,
+  "rawAccountOrConversationRecorded": false,
+  "rows": [
+    {
+      "kind": "claude",
+      "source": "cli",
+      "count": 5,
+      "modelsWithEffort": 5,
+      "elapsedMs": 338,
+      "fetchedAtPresent": true,
+      "cached": false
+    },
+    {
+      "kind": "codex",
+      "source": "cli",
+      "count": 8,
+      "modelsWithEffort": 8,
+      "elapsedMs": 23,
+      "fetchedAtPresent": true,
+      "cached": false
+    },
+    {
+      "kind": "copilot",
+      "source": "reference",
+      "count": 8,
+      "modelsWithEffort": 0,
+      "elapsedMs": 0,
+      "fetchedAtPresent": true,
+      "cached": false
+    },
+    {
+      "kind": "muse",
+      "source": "cli",
+      "count": 3,
+      "modelsWithEffort": 3,
+      "elapsedMs": 761,
+      "fetchedAtPresent": true,
+      "cached": false
+    },
+    {
+      "kind": "agy",
+      "source": "cli",
+      "count": 6,
+      "modelsWithEffort": 4,
+      "elapsedMs": 3548,
+      "fetchedAtPresent": true,
+      "cached": false
+    },
+    {
+      "kind": "grok",
+      "source": "cli",
+      "count": 1,
+      "modelsWithEffort": 1,
+      "elapsedMs": 407,
+      "fetchedAtPresent": true,
+      "cached": false
+    },
+    {
+      "kind": "cursor",
+      "source": "cli",
+      "count": 270,
+      "modelsWithEffort": 0,
+      "elapsedMs": 1832,
+      "fetchedAtPresent": true,
+      "cached": false
+    }
+  ]
+}
