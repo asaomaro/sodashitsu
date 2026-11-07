@@ -1,4 +1,5 @@
 import { readCodexControlStatus, type CodexControlTarget, type CodexObservedState } from "./CodexControlStatus.js";
+import { readCodexChildObservations } from "./CodexChildObservations.js";
 import { CodexSubagentStream } from "./CodexSubagentStream.js";
 import { readAntigravitySubagents } from "./AntigravitySubagentReader.js";
 import { realpath, lstat } from "node:fs/promises";
@@ -126,6 +127,8 @@ export class NativeSubagentReader {
         const home = await realpath(this.roots.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex"));
         const statuses = await this.codexStatus({ home, parentId: source.sessionId, childIds: members.items.map(item => item.id), signal: state.abort.signal, current }).catch(() => new Map<string, CodexObservedState>());
         if (!current()) return undefined;
+        const observations = await readCodexChildObservations(home, source.sessionId, members.items, current);
+        if (!current()) return undefined;
         // A new completion/interaction, replacement or truncation invalidates the old membership proof.
         const after = await fd.stat({ bigint: true }), reopened = await this.open(source);
         try {
@@ -137,7 +140,11 @@ export class NativeSubagentReader {
           }
         } finally { await reopened?.fd.close(); }
         if (!current()) return undefined;
-        return { ...members, countBasis: "alive", items: members.items.map(item => ({ ...item, state: statuses.get(item.id) ?? "unknown" })) };
+        return { ...members, countBasis: "alive", items: members.items.map(item => {
+          // Creation metadata is never presented as current/last-turn observations.
+          const {reasoningEffort: _effort, reasoningEffortBasis: _basis, model: _model, modelBasis: _modelBasis, hasTranscript: _transcript, ...base} = item;
+          return {...base,...observations.get(item.id),state:statuses.get(item.id)??"unknown"};
+        }) };
       }
       const scanning = state.offset + bytes.length < st.size;
       const end = bytes.lastIndexOf(10);

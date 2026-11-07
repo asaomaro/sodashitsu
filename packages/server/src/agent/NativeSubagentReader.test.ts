@@ -211,3 +211,19 @@ it("clears a pending hint when refresh rejects after actual progress",async()=>{
  internal.refresh=async(source,state)=>{await original(source,state);throw Error("generated failure after read/parse/close");};
  expect(await reader.read(f.source)).toBeUndefined();expect(reader.progress(f.source)).toMatchObject({offset:4*1024*1024,pending:false});reader.close();
 });
+
+
+it("publishes verified Codex child transcript and latest-turn metadata without creation fallback",async()=>{
+ const f=await setup(),start=f.rows[0],child=start.payload.item.agent_thread_id;
+ await writeFile(f.file,JSON.stringify(start)+"\n");
+ const file=join(f.home,"sessions","2026","11","07",`rollout-child-${child}.jsonl`);
+ const meta=JSON.stringify({type:"session_meta",payload:{id:child,source:{subagent:{thread_spawn:{parent_thread_id:f.source.sessionId}}}}})+"\n";
+ const context=(model:string,effort?:string)=>JSON.stringify({type:"turn_context",timestamp:new Date(Date.parse(start.timestamp)+1000).toISOString(),payload:{model,effort}})+"\n";
+ await writeFile(file,meta+context("changed-model","high"));
+ const reader=new NativeSubagentReader({codexHome:f.home},async()=>new Map());
+ try{
+  expect((await reader.read(f.source))?.items?.[0]).toMatchObject({hasTranscript:true,model:"changed-model",modelBasis:"turn",reasoningEffort:"high",reasoningEffortBasis:"turn"});
+  await appendFile(file,context("newer-model"));
+  const item=(await reader.read(f.source))?.items?.[0];expect(item?.model).toBe("newer-model");expect(item).not.toHaveProperty("reasoningEffort");
+ }finally{reader.close();}
+});
