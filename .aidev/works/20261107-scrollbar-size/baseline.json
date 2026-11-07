@@ -1,0 +1,425 @@
+{
+  "rows": [
+    {
+      "theme": "sodashitsu-assistant",
+      "style": "classic",
+      "normal": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(229, 220, 198)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "settings": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(229, 220, 198)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "menu": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(229, 220, 198)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "rgb(201, 166, 79) rgb(229, 220, 198)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgb(201, 166, 79)"
+      }
+    },
+    {
+      "theme": "sodashitsu-assistant-dark",
+      "style": "classic",
+      "normal": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(35, 54, 77)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "settings": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(35, 54, 77)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "menu": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(35, 54, 77)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "rgb(201, 166, 79) rgb(35, 54, 77)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgb(201, 166, 79)"
+      }
+    },
+    {
+      "theme": "dracula",
+      "style": "classic",
+      "normal": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "settings": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "menu": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgba(255, 255, 255, 0.2)"
+      }
+    },
+    {
+      "theme": "one-light",
+      "style": "classic",
+      "normal": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "settings": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "menu": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgba(255, 255, 255, 0.2)"
+      }
+    },
+    {
+      "theme": "nord",
+      "style": "classic",
+      "normal": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "settings": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "menu": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgba(255, 255, 255, 0.2)"
+      }
+    },
+    {
+      "theme": "sodashitsu-assistant",
+      "style": "modern",
+      "normal": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(229, 220, 198)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "settings": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(229, 220, 198)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "menu": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(229, 220, 198)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "rgb(201, 166, 79) rgb(229, 220, 198)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgb(201, 166, 79)"
+      }
+    },
+    {
+      "theme": "sodashitsu-assistant-dark",
+      "style": "modern",
+      "normal": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(35, 54, 77)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "settings": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(35, 54, 77)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "menu": {
+        "vertical": 10,
+        "horizontal": 10,
+        "width": "thin",
+        "color": "rgb(201, 166, 79) rgb(35, 54, 77)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "rgb(201, 166, 79) rgb(35, 54, 77)",
+        "webkitWidth": "8px",
+        "webkitHeight": "8px"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgb(201, 166, 79)"
+      }
+    },
+    {
+      "theme": "dracula",
+      "style": "modern",
+      "normal": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "settings": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "menu": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgba(255, 255, 255, 0.2)"
+      }
+    },
+    {
+      "theme": "one-light",
+      "style": "modern",
+      "normal": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "settings": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "menu": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgba(255, 255, 255, 0.2)"
+      }
+    },
+    {
+      "theme": "nord",
+      "style": "modern",
+      "normal": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "settings": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "menu": {
+        "vertical": 15,
+        "horizontal": 15,
+        "width": "auto",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "hidden": {
+        "vertical": 0,
+        "horizontal": 0,
+        "width": "none",
+        "color": "auto",
+        "webkitWidth": "auto",
+        "webkitHeight": "auto"
+      },
+      "pickerWidth": "auto",
+      "xterm": {
+        "sliderWidth": 8,
+        "trackWidth": 14,
+        "color": "rgba(255, 255, 255, 0.2)"
+      }
+    }
+  ],
+  "errors": []
+}

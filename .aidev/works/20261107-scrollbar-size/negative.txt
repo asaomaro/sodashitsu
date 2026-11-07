@@ -1,0 +1,18 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+15 !== 10
+
+    at file:///workspaces/sodashitsu-scrollbar-size/.aidev/works/20261107-scrollbar-size/browser.mjs:10:716 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 15,
+  expected: 10,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.15.0

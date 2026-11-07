@@ -1,0 +1,10 @@
+{
+  "packages/web/src/styles/assistantTheme.css": {
+    "sha256": "51ca3b488ec4a742f68716fa02932300b87de593772b81526aa31d8f8394b6b7",
+    "exact": true
+  },
+  "packages/web/src/styles/terminalAppearance.css": {
+    "sha256": "e8c9c72292f1d2834ccc07be54edd15846f723f0758a0a2843721cf27a593daa",
+    "exact": true
+  }
+}

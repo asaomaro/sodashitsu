@@ -1,6 +1,6 @@
 /* Match thin native scrollbars. Preserve xterm's track/hit area and scroll calculations. */
 .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
-  width: 8px !important;
+  width: var(--soda-scrollbar-size, 8px) !important;
   left: auto !important;
   right: 0;
   border-radius: 8px;
