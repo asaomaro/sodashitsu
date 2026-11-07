@@ -65,6 +65,7 @@ function graph(id: (typeof STATUSLINE_GRAPHS)[number]["id"], event: Event, patte
       ><button data-assistant-feature type="button" aria-label="閉じる" @click="view.closeDialog()">×</button>
     </header>
     <p>変更はすべてのstatuslineへ反映され、Web版・端末版で共有されます。</p>
+    <p>effort・承認モードは取得できた記録・報告の値を表示します。現在の設定と異なる場合があり、未取得の項目は表示しません。</p>
     <label
       ><input
         type="checkbox"

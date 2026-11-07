@@ -1,0 +1,9 @@
+{
+  "settingsIndependentOptins": true,
+  "observedEffortAndApprovalRendered": true,
+  "sourceBasisTimeTooltip": true,
+  "explicitFalseHonored": true,
+  "sandboxIsNotApproval": true,
+  "mismatchHidden": true,
+  "pageErrors": []
+}

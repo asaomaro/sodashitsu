@@ -31,3 +31,11 @@ it("toggles fields and graph visibility, chooses patterns and preserves unrelate
   appearance.pick(0);
   expect(loadStatuslineSettings(prefs.shared.statuslineSettings).colorMode).toBe("mono");
 });
+
+it("offers independent effort/approval toggles while preserving shared order and unrelated fields",()=>{
+ const prefs=new PrefsModel();prefs.apply({statuslineSettings:loadStatuslineSettings({order:["model","pane"],rows:2,fields:{state:false}})},1);
+ const write={setShared:vi.fn(patch=>prefs.apply({...prefs.shared,...patch},prefs.rev+1))} as unknown as SettingsWriter;
+ const sections=statuslineSettingsSections(prefs,write),before=loadStatuslineSettings(prefs.shared.statuslineSettings);
+ for(const name of ["effort（推論の強さ）","承認モード"]){const item=sections[0]!.items().find(i=>i.label===name)!;expect(item.value).toBe("非表示");item.activate!();}
+ const next=loadStatuslineSettings(prefs.shared.statuslineSettings);expect(next.fields).toMatchObject({effort:true,approval:true,state:false});expect(next.rows).toBe(2);expect(next.order).toEqual(before.order);
+});

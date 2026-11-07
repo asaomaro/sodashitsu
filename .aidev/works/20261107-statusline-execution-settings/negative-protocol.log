@@ -1,0 +1,41 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-statusline-effort-approval/packages/protocol
+
+ ❯ src/statusline.test.ts (18 tests | 1 failed) 19ms
+   × formats observed effort and distinct approval/permission values with source and scope, never sandbox 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/statusline.test.ts > formats observed effort and distinct approval/permission values with source and scope, never sandbox
+AssertionError: expected [] to deeply equal [ 'effort high（記録）', …(3) ]
+
+- Expected
++ Received
+
+- [
+-   "effort high（記録）",
+-   "承認policy on-request（記録）",
+-   "承認mode promptUnmatched",
+-   "権限mode plan（報告）",
+- ]
++ []
+
+ ❯ src/statusline.test.ts:235:84
+    233|  const settings=loadStatuslineSettings({fields:{effort:true,approval:t…
+    234|  const result=statuslineSegments(pane,usage,[],settings);
+    235|  expect(result.filter(s=>s.field==="effort"||s.field==="approval").map…
+       |                                                                                    ^
+    236|  expect(result[0]!.title).toContain("ターンの記録 / rollout / 1970-01-01T00:…
+    237|  expect(result.some(s=>s.text.includes("workspace-write")||s.text.incl…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+   Start at  15:35:50
+   Duration  201ms (transform 64%, tests 19%, import 14%, worker 3%)
+
+undefined
+/workspaces/sodashitsu-statusline-effort-approval/packages/protocol:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/statusline.test.ts

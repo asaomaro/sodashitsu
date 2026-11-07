@@ -230,3 +230,29 @@ it("shows supplied subagent membership by default while respecting explicit hidd
  expect(statuslineSegments(pane,undefined,[],loadStatuslineSettings({fields:{subagents:false}})).some(s=>s.field==="subagents")).toBe(false);
  expect(statuslineSegments({...pane,agent:{...pane.agent!,subagents:undefined}},undefined,[],loadStatuslineSettings({})).some(s=>s.field==="subagents")).toBe(false);
 });
+
+it("adds optional effort and approval settings without changing saved field order or visibility",()=>{
+ const s=loadStatuslineSettings({order:["model","pane"],fields:{state:false},rows:2});
+ expect(s.order.slice(0,2)).toEqual(["model","pane"]);expect(s.order.slice(-2)).toEqual(["effort","approval"]);
+ expect(s.fields).toMatchObject({state:false,effort:false,approval:false});expect(s.rows).toBe(2);
+ expect(loadStatuslineSettings({...s,fields:{...s.fields,effort:true,approval:false}}).fields).toMatchObject({effort:true,approval:false});
+});
+it("formats observed effort and distinct approval/permission values with source and scope, never sandbox",()=>{
+ const pane={agent:{kind:"codex",label:"Codex",state:"idle"}} as unknown as import("./model.js").Pane;
+ const usage={paneId:"p",kind:"codex",model:null,tokens:{basis:"context"},source:"rollout",updatedAt:123,reasoningEffort:"stale",
+ executionSettings:{reasoningEffort:{value:"high",source:"rollout",basis:"turn",observedAt:1000},approvalPolicy:{value:"on-request",source:"rollout",basis:"turn"},approvalMode:{value:"promptUnmatched",source:"muse-events",basis:"session"},permissionMode:{value:"plan",source:"hook",basis:"hook"},sandboxMode:{value:"workspace-write",source:"rollout",basis:"turn"}}} as import("./usage.js").AgentUsage;
+ const settings=loadStatuslineSettings({fields:{effort:true,approval:true},order:["effort","approval"]});
+ const result=statuslineSegments(pane,usage,[],settings);
+ expect(result.filter(s=>s.field==="effort"||s.field==="approval").map(s=>s.text)).toEqual(["effort high（記録）","承認policy on-request（記録）","承認mode promptUnmatched","権限mode plan（報告）"]);
+ expect(result[0]!.title).toContain("ターンの記録 / rollout / 1970-01-01T00:00:01.000Z");expect(result[0]!.title).toContain("現在のCLI設定とは異なる");
+ expect(result.some(s=>s.text.includes("workspace-write")||s.text.includes("stale"))).toBe(false);
+ expect(statuslineSegments(pane,{...usage,kind:"claude"},[],settings).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
+ expect(statuslineSegments(pane,{...usage,reasoningEffort:undefined,executionSettings:{sandboxMode:usage.executionSettings!.sandboxMode}},[],settings).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
+ expect(statuslineSegments(pane,undefined,[],settings).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
+ expect(statuslineSegments(pane,usage,[],loadStatuslineSettings({fields:{effort:false,approval:false}})).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
+ const legacy=statuslineSegments(pane,{...usage,executionSettings:undefined,reasoningEffort:"medium"},[],settings).find(s=>s.field==="effort")!;
+ expect(legacy.text).toBe("effort medium（報告）");expect(legacy.title).toContain("範囲・時点は未取得");
+ for(const value of ["", "\u001b[31mhigh", "x".repeat(129)])expect(statuslineSegments(pane,{...usage,executionSettings:{reasoningEffort:{value,source:"rollout",basis:"turn"}}},[],settings).some(s=>s.field==="effort")).toBe(false);
+ const session=statuslineSegments(pane,{...usage,executionSettings:{reasoningEffort:{value:"low",source:"muse-events",basis:"session",observedAt:1e30}}},[],settings).find(s=>s.field==="effort")!;
+ expect(session.text).toBe("effort low");expect(session.title).toContain("セッション設定の記録（ターンの一時指定は未反映の場合があります） / muse-events");
+});

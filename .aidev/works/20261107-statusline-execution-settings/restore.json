@@ -1,0 +1,5 @@
+{
+  "byteExact": true,
+  "sha256": "042e58080cce1765e2caecd2326db399c26e44db24ec2b39cb28a8495060ed92",
+  "negative": "only observation formatter removed (prior behavior); labels/types remain; protocol rebuilt before browser negative and after restoration"
+}

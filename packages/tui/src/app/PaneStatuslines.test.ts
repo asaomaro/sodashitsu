@@ -27,10 +27,11 @@ function harness(rows = 1) {
   const prefs = new PrefsModel();
   prefs.apply({ statuslineSettings: loadStatuslineSettings({ rows }) }, 1);
   const setShared = vi.fn();
+  const usage = { data: { panes: {}, accounts: [] } } as unknown as UsageModel;
   const controller = new PaneStatuslines(
     model,
     prefs,
-    { data: { panes: {}, accounts: [] } } as unknown as UsageModel,
+    usage,
     new UiState(model),
     { setShared } as unknown as SettingsWriter,
     vi.fn(),
@@ -54,7 +55,7 @@ function harness(rows = 1) {
       y,
       mods: { ctrl: false, alt: false, shift: false, meta: false },
     });
-  return { model, prefs, setShared, controller, layout, mouse };
+  return { model, prefs, setShared, controller, layout, mouse, usage };
 }
 it("reserves the requested bottom rows, previews vertical resizing, caps it to content and keeps a terminal row", () => {
   const h = harness(3),
@@ -146,4 +147,13 @@ it.each([undefined,false,true])("renders native membership in the terminal foote
  const layout=h.layout();h.controller.adjust(layout);const grid=new Grid(120,30);h.controller.render(grid,new ThemeColors("dracula"));
  const box=layout.panes[0]!.content,row=grid.rowText(box.y+box.h);
  expect(row.includes("Subagents 所属 3")).toBe(enabled!==false);
+});
+
+it("renders observed effort/approval in terminal cells and respects independent hidden settings",()=>{
+ const h=harness();h.model.panes.get("p1")!.label="Codex";
+ h.usage.data.panes.p1={paneId:"p1",kind:"codex",model:null,tokens:{basis:"context"},source:"rollout",updatedAt:1,executionSettings:{reasoningEffort:{value:"high",source:"rollout",basis:"turn"},approvalPolicy:{value:"on-request",source:"rollout",basis:"turn"}}};
+ const render=(effort:boolean,approval:boolean)=>{h.prefs.apply({statuslineSettings:loadStatuslineSettings({order:["effort","approval"],fields:{effort,approval}})},h.prefs.rev+1);const layout=h.layout();h.controller.adjust(layout);const grid=new Grid(120,30);h.controller.render(grid,new ThemeColors("dracula"));const box=layout.panes[0]!.content;return grid.rowText(box.y+box.h);};
+ const both=render(true,true);expect(both).toContain("effort high（記録）");expect(both).toContain("承認policy on-request（記録）");
+ expect(render(false,true)).not.toContain("effort high");expect(render(true,false)).not.toContain("承認policy");
+ h.usage.data.panes.p1={...h.usage.data.panes.p1!,executionSettings:{approvalMode:{value:"onRequest",source:"muse-events",basis:"session"}}};expect(render(false,true)).toContain("承認mode onRequest");
 });

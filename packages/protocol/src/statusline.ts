@@ -1,5 +1,5 @@
 import type { Pane } from "./model.js";
-import { formatUsageCredits, type AgentUsage, type AccountUsage } from "./usage.js";
+import { formatUsageCredits, type AgentUsage, type AccountUsage, type AgentSettingObservation } from "./usage.js";
 export const STATUSLINE_FIELDS = [
   { id: "pane", label: "ペイン名" },
   { id: "agent", label: "エージェント種類" },
@@ -25,6 +25,8 @@ export const STATUSLINE_FIELDS = [
   { id: "fiveHourReset", label: "5時間制限の解除日時" },
   { id: "otherLimitsReset", label: "その他の利用枠の解除日時" },
   { id: "weeklyReset", label: "週制限の解除日時" },
+  { id: "effort", label: "effort（推論の強さ）" },
+  { id: "approval", label: "承認モード" },
 ] as const;
 export type StatuslineField = (typeof STATUSLINE_FIELDS)[number]["id"];
 export const STATUSLINE_GRAPH_PATTERNS = [
@@ -174,6 +176,20 @@ export function statuslineSegments(
   add("agent", pane.agent.kind, "name");
   add("state", pane.agent.state, pane.agent.state === "working" ? "active" : "good");
   add("model", u?.model, "model");
+  // Only reported provider observations, never desired launch/captain profiles.
+  const observation = (field: "effort" | "approval", label: string, value: AgentSettingObservation | undefined, legacy = false) => {
+    if (!value || typeof value.value !== "string" || !/^[^\x00-\x1f\x7f-\x9f]{1,128}$/.test(value.value) || !value.value.trim() || !["turn","session","statusline","hook"].includes(value.basis)) return;
+    const basis = legacy ? "利用状況の報告（設定の範囲・時点は未取得）" : value.basis === "session" ? "セッション設定の記録（ターンの一時指定は未反映の場合があります）" : value.basis === "turn" ? "ターンの記録" : value.basis === "hook" ? "フックの報告" : "ステータスの報告";
+    const marker = value.basis === "session" ? "" : value.basis === "turn" ? "（記録）" : "（報告）";
+    add(field, `${label} ${value.value}${marker}`, "model");
+    const segment = values.get(field)?.at(-1);
+    if (segment) segment.title = `${basis} / ${value.source}${finite(value.observedAt) && Math.abs(value.observedAt) <= 8.64e15 ? ` / ${new Date(value.observedAt).toISOString()}` : ""}。現在のCLI設定とは異なる場合があります。`;
+  };
+  const execution = u?.executionSettings;
+  observation("effort", "effort", execution?.reasoningEffort ?? (u?.reasoningEffort ? {value:u.reasoningEffort,source:u.source,basis:"statusline"} : undefined), !execution?.reasoningEffort);
+  observation("approval", "承認policy", execution?.approvalPolicy);
+  observation("approval", "承認mode", execution?.approvalMode);
+  observation("approval", "権限mode", execution?.permissionMode);
   if (finite(u?.contextUsedPct))
     add(
       "context",

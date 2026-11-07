@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-statusline-effort-approval/packages/web
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  15:36:02
+   Duration  2.36s (transform 70%, import 15%, environment 10%, tests 4%)
+

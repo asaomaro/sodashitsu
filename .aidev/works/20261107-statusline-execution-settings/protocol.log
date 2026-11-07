@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-statusline-effort-approval/packages/protocol
+
+
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+   Start at  15:36:01
+   Duration  219ms (transform 64%, tests 17%, import 15%, worker 3%)
+

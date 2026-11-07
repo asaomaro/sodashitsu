@@ -1,0 +1,4 @@
+
+> @sodashitsu/protocol@0.1.0 build /workspaces/sodashitsu-statusline-effort-approval/packages/protocol
+> tsc -b
+

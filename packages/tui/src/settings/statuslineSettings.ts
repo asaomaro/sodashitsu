@@ -30,7 +30,7 @@ export function statuslineSettingsSections(
             label: f.label,
             toggle: true,
             value: read().fields[f.id] ? "表示" : "非表示",
-            note: "すべてのstatuslineに反映し、Web版・端末版で共有します。",
+            note: f.id === "effort" || f.id === "approval" ? "取得できた記録・報告だけを表示します。現在の設定と異なる場合があり、未取得は表示しません。" : "すべてのstatuslineに反映し、Web版・端末版で共有します。",
             activate: () =>
               update((s) => {
                 s.fields[f.id] = !s.fields[f.id];
