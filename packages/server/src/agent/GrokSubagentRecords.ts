@@ -1,5 +1,6 @@
 import type { SubagentInfo } from "@sodashitsu/protocol";
 import type { Subagents } from "./SubagentTracker.js";
+import { createHash } from "node:crypto";
 
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const obj = (v: unknown): Record<string, any> | undefined => v !== null && typeof v === "object" && !Array.isArray(v) ? v as Record<string, any> : undefined;
@@ -27,8 +28,11 @@ export class GrokSubagentRecords {
     if (params?.sessionId !== this.parentId || !eventId || !Number.isSafeInteger(at) || at < 0 ||
       typeof id !== "string" || !UUID.test(id) || id === this.parentId || subId !== id || attempt === undefined ||
       !["subagent_spawned", "subagent_progress", "subagent_finished"].includes(kind)) { this.invalid = true; return; }
-    // Keep only lifecycle fields: finished output may contain arbitrarily large prose.
-    const proof = JSON.stringify([kind, id, attempt, at, update.parent_session_id, update.model, update.subagent_type, update.description, update.status]);
+    // Keep only a fixed digest of fields meaningful to this lifecycle kind.
+    // Progress/finished prose or arbitrary extra objects never live in the map.
+    const fields = kind === "subagent_spawned" ? [update.parent_session_id, update.model, update.subagent_type, update.description]
+      : kind === "subagent_progress" ? [update.parent_session_id] : [update.status];
+    const proof = createHash("sha256").update(JSON.stringify([kind, id, attempt, at, ...fields])).digest("hex");
     const previous = this.events.get(eventId);
     if (previous !== undefined) { if (previous !== proof) this.invalid = true; return; }
     if (this.events.size >= 20000) { this.invalid = true; return; }

@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-cursor-native-children/packages/server
+
+ ❯ src/agent/GrokSubagentRecords.test.ts (13 tests | 1 failed) 21ms
+   × retains fixed-size dedup proofs, never unrelated progress/finish prose or objects 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/GrokSubagentRecords.test.ts > retains fixed-size dedup proofs, never unrelated progress/finish prose or objects
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/agent/GrokSubagentRecords.test.ts:65:85
+     63|   expect(records.snapshot()?.count).toBe(0);
+     64|   const proofs=[...(records as unknown as {events:Map<string,string>})…
+     65|   expect(proofs).toHaveLength(10);expect(proofs.every(p=>/^[a-f0-9]{64…
+       |                                                                                     ^
+     66|   expect(proofs.reduce((n,p)=>n+p.length,0)).toBe(640);
+     67| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed (13)
+   Start at  00:03:05
+   Duration  159ms (transform 52%, tests 28%, import 16%, worker 4%)
+
+undefined
+/workspaces/sodashitsu-grok-cursor-native-children/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/GrokSubagentRecords.test.ts

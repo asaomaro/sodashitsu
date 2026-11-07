@@ -55,3 +55,13 @@ it("bounds distinct child bindings and event IDs without silently evicting proof
   }
   expect(records.snapshot()).toBeUndefined();
 });
+it("retains fixed-size dedup proofs, never unrelated progress/finish prose or objects", () => {
+  const records = new GrokSubagentRecords(parent); records.consume(spawn());
+  const large = { unused: "x".repeat(200000) };
+  for (let i=2;i<10;i++) records.consume(row("subagent_progress",i,{parent_session_id:parent,description:large,model:large,status:large}));
+  records.consume(finish(10,{description:large,model:large,output:large}));
+  expect(records.snapshot()?.count).toBe(0);
+  const proofs=[...(records as unknown as {events:Map<string,string>}).events.values()];
+  expect(proofs).toHaveLength(10);expect(proofs.every(p=>/^[a-f0-9]{64}$/.test(p))).toBe(true);
+  expect(proofs.reduce((n,p)=>n+p.length,0)).toBe(640);
+});
