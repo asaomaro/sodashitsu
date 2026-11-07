@@ -35,6 +35,8 @@ export interface AgentUsageBreakdown {
 /** どこから得た値か。 */
 export type UsageSource =
   | "statusline"
+  /** Provider hook metadata (no numeric usage is inferred from it). */
+  | "hook"
   | "transcript"
   | "cost-state"
   | "rollout"
