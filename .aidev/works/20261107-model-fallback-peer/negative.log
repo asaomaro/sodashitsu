@@ -1,0 +1,35 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-model-refresh-peer-fallback/packages/web
+
+ ❯ src/components/AgentToolsSettings.test.ts (15 tests | 3 failed) 185ms
+   × does not send old-host fallback after machine scope retirement 10ms
+   × does not send old-host fallback after kind scope retirement 6ms
+   × does not send old-host fallback after close scope retirement 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/AgentToolsSettings.test.ts > does not send old-host fallback after machine scope retirement
+ FAIL  src/components/AgentToolsSettings.test.ts > does not send old-host fallback after kind scope retirement
+ FAIL  src/components/AgentToolsSettings.test.ts > does not send old-host fallback after close scope retirement
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/components/AgentToolsSettings.test.ts:88:137
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 12 passed (15)
+   Start at  17:44:22
+   Duration  1.73s (transform 65%, import 15%, tests 11%, environment 9%)
+
+undefined
+/workspaces/sodashitsu-model-refresh-peer-fallback/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/AgentToolsSettings.test.ts

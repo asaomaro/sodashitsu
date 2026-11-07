@@ -43,6 +43,7 @@ async function loadModels(force=true){
  try{
   try{catalog=catalogs.get(key)??await conn!.request("agent.model_options",{kind,refresh:force});}
   catch(error){if(!force||!error||typeof error!=="object"||!("code" in error)||error.code!=="invalid_params")throw error;
+   if(own!==epoch||!props.active||kind!==settings.summarySettings.kind||machine!==machines.selectedId)return;
    const old=await conn!.request("agent.model_options",{kind});catalog={...old,message:`${old.message} この接続先は強制更新に未対応です。通常の候補を表示しています。`};
   }
   if(own!==epoch||kind!==settings.summarySettings.kind||machine!==machines.selectedId)return;

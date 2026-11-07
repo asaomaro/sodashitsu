@@ -81,3 +81,9 @@ it("refreshes on each dialog open and retires a pending result when closed",asyn
  const {w}=fixture(request as never);await w.setProps({active:false});complete({models:[{id:"stale-model",label:"Stale",efforts:[]}],message:"stale"});await flushPromises();expect(w.text()).not.toContain("stale-model");
  await w.setProps({active:true});await flushPromises();expect(request).toHaveBeenCalledTimes(2);expect(request.mock.calls[1]).toEqual(["agent.model_options",{kind:"codex",refresh:true}]);expect(w.text()).toContain("Fresh reopen");
 });
+
+it.each(["machine","kind","close"])("does not send old-host fallback after %s scope retirement",async change=>{
+ let reject!:(error:unknown)=>void;const request=vi.fn().mockImplementationOnce(()=>new Promise((_resolve,fail)=>reject=fail)).mockResolvedValue({models:[],message:"New scope"});const {w,pinia}=fixture(request as never);
+ if(change==="machine")useMachinesStore(pinia).selectedId="generated-other-machine";else if(change==="kind")await w.get('[aria-label="要約エージェントの種類"]').setValue("claude");else await w.setProps({active:false});await flushPromises();
+ reject({code:"invalid_params"});await flushPromises();expect(request.mock.calls.every(c=>(c[1] as {refresh?:boolean}).refresh===true)).toBe(true);expect(request).toHaveBeenCalledTimes(change==="close"?1:2);
+});
