@@ -1425,7 +1425,10 @@ export class TuiApp {
       });
     if (ctx.kind === "accountCost") return new WindowOverlay(new AccountCostDialog(ctx.accountKey, this.ui, this.usage), { w: 100, h: 30 });
     if (ctx.kind === "usageAccounts") return new UsageDialog(null, this.model, this.ui, this.usage);
-    if (ctx.kind === "usage") return new UsageDialog(ctx.paneId, this.model, this.ui, this.usage);
+    if (ctx.kind === "usage") return new UsageDialog(ctx.paneId, this.model, this.ui, this.usage, {
+      conn:this.rpc,redraw:()=>this.scheduleRender(),
+      scope:()=>this.ended||this.connectionState!=="open"||this.ui.dialogContext!==ctx?null:JSON.stringify([this.machines.selectedId,this.model.clientId]),
+    });
     if (ctx.kind === "notifications") return new NotificationList(this.ui, this.notify);
     if (ctx.kind === "graphTerminal")
       return (this.graphTerminal = new GraphTerminal(ctx.paneId, {

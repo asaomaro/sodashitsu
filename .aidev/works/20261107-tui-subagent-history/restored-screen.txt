@@ -1,0 +1,1 @@
+{"themes":4,"sameDialog":true,"readonly":true,"transcriptRPCs":4,"mutationRPCs":0,"escRestoresInfo":true}

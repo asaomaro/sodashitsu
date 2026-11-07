@@ -6,6 +6,8 @@ import { formatUsageCredits, shortId, type AgentUsage, type AccountCostResult } 
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
 import type { UsageModel } from "../model/UsageModel.js";
+import { SubagentTranscript } from "./SubagentTranscript.js";
+import type { RequestPort } from "../term/PaneRegistry.js";
 import { plainText } from "./SubagentList.js";
 import {
   dialogColors,
@@ -124,16 +126,52 @@ export class UsageDialog implements Overlay {
   }
   private accountHits: { y: number; key: string }[] = [];
   private selectedAccount = 0;
+  private selectedChild: string | null = null;
+  private revealChild=false;
+  private childHits: {y:number;id:string}[] = [];
+  private transcript: SubagentTranscript | null = null;
+  private infoScroll = 0;
   private scroll = 0;
   constructor(
     private readonly paneId: string | null,
     private readonly model: SessionModel,
     private readonly ui: UiState,
     private readonly usage: UsageModel,
+    private readonly history?: {conn:RequestPort;scope:()=>string|null;redraw:()=>void},
   ) {}
+  private readableChildren() {
+    return this.history && this.history.scope() !== null && this.paneId
+      ? this.model.panes.get(this.paneId)?.agent?.subagents?.items.slice(0,64).filter(child=>child.hasTranscript)??[] : [];
+  }
+  private childScope(id:string):string|null {
+    const outer=this.history?.scope(),pane=this.paneId?this.model.panes.get(this.paneId):null;
+    if(outer==null||!pane?.agent||!pane.agent.subagents?.items.slice(0,64).some(child=>child.id===id&&child.hasTranscript))return null;
+    return JSON.stringify([outer,pane.id,pane.agent.instanceId,pane.agent.kind,pane.agentSession?.kind,pane.agentSession?.sessionId]);
+  }
+  private openChild(id:string):void {
+    const scope=this.childScope(id),child=this.readableChildren().find(c=>c.id===id);
+    if(!this.history||!this.paneId||scope===null||!child)return;
+    this.transcript?.dispose();this.infoScroll=this.scroll;this.scroll=0;this.selectedChild=id;
+    this.transcript=new SubagentTranscript(id,child.description||child.type||"サブエージェント",this.paneId,this.history.conn,()=>this.childScope(id),scope,this.history.redraw);
+  }
+  private closeChild():void { this.transcript?.dispose();this.transcript=null;this.scroll=this.infoScroll; }
+  dispose():void { this.transcript?.dispose();this.transcript=null; }
+
   handleKey(k: KeyInput): void {
     this.scrollbar.cancel();
-    if (!this.paneId && isEnter(k)) {
+    if (this.transcript) {
+      if(isEsc(k))this.closeChild();
+      else if(isDown(k))this.scroll++;
+      else if(isUp(k))this.scroll=Math.max(0,this.scroll-1);
+      return;
+    }
+    if(this.paneId&&k.key==="Tab") {
+      const children=this.readableChildren(),index=children.findIndex(c=>c.id===this.selectedChild);
+      this.selectedChild=children[(index+1)%Math.max(1,children.length)]?.id??null;this.revealChild=true;
+    } else if(this.paneId&&isEnter(k)) {
+      const child=this.readableChildren().find(c=>c.id===this.selectedChild)??this.readableChildren()[0];
+      if(child)this.openChild(child.id);
+    } else if (!this.paneId && isEnter(k)) {
       const a = this.usage.data.accounts[this.selectedAccount];
       if (a) this.ui.openDialogWithContext({ kind: "accountCost", accountKey: a.accountKey });
     } else if (!this.paneId && k.key === "Tab") {
@@ -146,6 +184,9 @@ export class UsageDialog implements Overlay {
   handleMouse(ev: OverlayMouse): boolean {
     if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
+    if(this.paneId&&!this.transcript&&ev.action==="down"&&ev.button===0){
+      const hit=this.childHits.find(hit=>hit.y===ev.y);if(hit)this.openChild(hit.id);
+    }
     if (!this.paneId && ev.action === "down" && ev.button === 0) {
       const hit = this.accountHits.find((h) => h.y === ev.y);
       if (hit) this.ui.openDialogWithContext({ kind: "accountCost", accountKey: hit.key });
@@ -154,6 +195,7 @@ export class UsageDialog implements Overlay {
     return true;
   }
   cancel(): void {
+    this.dispose();
     this.ui.closeDialog();
   }
   render({ grid, theme }: OverlayRenderContext) {
@@ -167,8 +209,19 @@ export class UsageDialog implements Overlay {
       );
     area.w = Math.max(0, area.w - 1);
     const pane = this.paneId ? this.model.panes.get(this.paneId) : null;
-    this.accountHits = [];
-    const lines = [
+    this.accountHits = [];this.childHits=[];
+    const childLines:string[]=[],childOffsets:{offset:number;id:string}[]=[];
+    const readable=new Set(this.readableChildren().map(child=>child.id));
+    if(pane?.agent?.subagents){
+      childLines.push(subagentCountLabel(pane.agent.subagents));
+      for(const child of pane.agent.subagents.items.slice(0,64)){
+        const label=subagentModelLabel(child),name=child.description?.trim()||child.type?.trim()||"サブエージェント";
+        if(readable.has(child.id))childOffsets.push({offset:childLines.length,id:child.id});
+        childLines.push(`${this.selectedChild===child.id?"▶ ":""}${subagentStateLabel(child)} · ${name}${readable.has(child.id)?" [会話]":""}`,...(label?[`  ${label}`]:[]));
+      }
+      const more=subagentsMoreLabel({...pane.agent.subagents,items:pane.agent.subagents.items.slice(0,64)});if(more)childLines.push(more);
+    }
+    const lines = this.transcript ? this.transcript.lines(area.w) : [
       ...(pane
         ? [
             `ペイン ${paneNameOf(pane)} · ${pane.agent?.kind ?? "—"} · ${pane.agent?.state ?? "—"}`,
@@ -188,17 +241,19 @@ export class UsageDialog implements Overlay {
                   `${w.label}: ${usageGauge(w.usedPct)} · リセット ${w.resetsAt ? new Date(w.resetsAt).toLocaleString("ja-JP") : "—"}${w.stale ? "（古い値）" : ""}`,
               ),
             ])),
-      ...(pane?.agent?.subagents ? [
-        subagentCountLabel(pane.agent.subagents),
-        ...pane.agent.subagents.items.slice(0,64).flatMap(child=>{
-          const model=subagentModelLabel(child),session=child.description?.trim()||child.type?.trim()||"サブエージェント";
-          return [`${subagentStateLabel(child)} · ${session}`,...(model?[`  ${model}`]:[])];
-        }),
-        ...(subagentsMoreLabel({...pane.agent.subagents,items:pane.agent.subagents.items.slice(0,64)})?[subagentsMoreLabel({...pane.agent.subagents,items:pane.agent.subagents.items.slice(0,64)})!]:[]),
-      ]:[]),
-      "↑↓ スクロール · Tab:アカウント選択 / Enter:コスト · Esc 閉じる",
+      ...childLines,
+      this.paneId ? (readable.size ? "↑↓ スクロール · Tab:子を選択 / Enter:会話 · Esc 閉じる" : "↑↓ スクロール · Esc 閉じる") : "↑↓ スクロール · Tab:アカウント選択 / Enter:コスト · Esc 閉じる",
     ];
+    if(!this.transcript&&this.revealChild){
+      const hit=childOffsets.find(hit=>hit.id===this.selectedChild);
+      if(hit){const line=lines.length-childLines.length-1+hit.offset;this.scroll=Math.max(Math.min(this.scroll,line),line-area.h+1);}
+      this.revealChild=false;
+    }
     this.scroll = Math.min(this.scroll, Math.max(0, lines.length - area.h));
+    if(!this.transcript&&this.paneId){
+      const start=lines.length-childLines.length-1;
+      for(const hit of childOffsets){const y=area.y+start+hit.offset-this.scroll;if(y>=area.y&&y<area.y+area.h)this.childHits.push({y,id:hit.id});}
+    }
     if (!this.paneId) {
       let offset = 0;
       for (const a of this.usage.data.accounts) {

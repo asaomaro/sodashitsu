@@ -1,0 +1,4 @@
+
+> @sodashitsu/tui@0.1.0 build /workspaces/sodashitsu-tui-subagent-history/packages/tui
+> tsc -b
+

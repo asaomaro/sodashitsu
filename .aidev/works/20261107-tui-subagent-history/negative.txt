@@ -1,0 +1,106 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-tui-subagent-history
+
+ ❯ |@sodashitsu/tui| src/modes/SubagentTranscript.test.ts (5 tests | 1 failed) 16ms
+   × discards a late read after scope change 4ms
+ ❯ |@sodashitsu/tui| src/modes/UsageView.test.ts (16 tests | 6 failed) 51ms
+   × stops same-dialog child history on instance change before a late response 6ms
+   × stops same-dialog child history on refkind change before a late response 1ms
+   × stops same-dialog child history on session change before a late response 1ms
+   × stops same-dialog child history on proof change before a late response 1ms
+   × stops same-dialog child history on connection change before a late response 1ms
+   × stops same-dialog child history on close change before a late response 1ms
+ ❯ |@sodashitsu/tui| src/app/TuiApp.subagents.test.ts (24 tests | 1 failed) 2123ms
+   ❯ 端末版のサブエージェントの表示 (24)
+     × reads a proven child inside information, returns on Esc and never sends child input 68ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/tui| src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > reads a proven child inside information, returns on Esc and never sends child input
+AssertionError: expected ' 端末 グラフ 状況 他 ▾   │ t1   ＋            …' to contain '[会話]'
+
+- Expected
++ Received
+
+- [会話]
++  端末 グラフ 状況 他 ▾   │ t1   ＋                                   [ ＋作業ビュー ] session: work
++  ▾ Spaces     開いた順   │┌─ pane p1 ───────[⋮][+][│][─][□][×]┐┌─ pane p2 ───────[⋮][+][│][─][□][×]┐
++      w1                  ││                                   ││                                   │
++    ◐ w2                  ││                                   ││                                   │
++                          ││                                   ││                                   │
++ ─ ▾ Agents ───グループ順─││                                   ││                                   │
++  ◐ w2 t2              ▸2 ││                                   ││                                   │
++    Cl┌─ 利用状況 · p3 ────────────────────────────────────────────────────────────────────────┐    │
++      │ ペイン worker · codex · working                                                        │    │
++      │ 作業フォルダ /                                                                         │    │
++      │ 会話 —                                                                                 │    │
++      │ 利用状況を取得できません（記録・会話ID・対応状況を確認してください）                   │    │
++      │ サブエージェント 2件                                                                   │    │
++      │ 実行中 · Generated child task                                                          │    │
++      │ 実行中 · Unproved child                                                                │    │
++      │ ↑↓ スクロール · Tab:アカウント選択 / Enter:コスト · Esc 閉じる                         │    │
++      │                                                                                        │    │
++      │                                                                                        │    │
++      │                                                                                        │    │
++      │                                                                                        │    │
++      │                                                                                        │    │
++      │                                                                                        │    │
++      └────────────────────────────────────────────────────────────────────────────────────────┘    │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++                          ││                                   ││                                   │
++  ＋新規 ⋯        暗 🔔0  ││                                   ││                                   │
++                        « │└───────────────────────────────────⋯└───────────────────────────────────⋯
+
+ ❯ src/app/TuiApp.subagents.test.ts:370:120
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  |@sodashitsu/tui| src/modes/SubagentTranscript.test.ts > discards a late read after scope change
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ src/modes/SubagentTranscript.test.ts:23:90
+     21|  const request=vi.fn(()=>new Promise<AgentSubagentTranscriptResult>(r=…
+     22|  if(reason==="close")view.dispose();else scope=null;
+     23|  resolve(result());await flush();await vi.advanceTimersByTimeAsync(450…
+       |                                                                                          ^
+     24| });
+     25| it("bounds retained rows/text, sanitizes terminal controls, and replac…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  |@sodashitsu/tui| src/modes/UsageView.test.ts > stops same-dialog child history on instance change before a late response
+ FAIL  |@sodashitsu/tui| src/modes/UsageView.test.ts > stops same-dialog child history on refkind change before a late response
+ FAIL  |@sodashitsu/tui| src/modes/UsageView.test.ts > stops same-dialog child history on session change before a late response
+ FAIL  |@sodashitsu/tui| src/modes/UsageView.test.ts > stops same-dialog child history on proof change before a late response
+ FAIL  |@sodashitsu/tui| src/modes/UsageView.test.ts > stops same-dialog child history on connection change before a late response
+ FAIL  |@sodashitsu/tui| src/modes/UsageView.test.ts > stops same-dialog child history on close change before a late response
+TypeError: dialog?.dispose is not a function
+ ❯ src/modes/UsageView.test.ts:259:21
+    257|   await vi.advanceTimersByTimeAsync(4500);dialog.render({grid,theme});
+    258|   expect(request).toHaveBeenCalledTimes(1);expect(Array.from({length:g…
+    259|  } finally {dialog?.dispose();vi.useRealTimers();}
+       |                     ^
+    260| });
+    261|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  8 failed | 37 passed (45)
+   Start at  23:32:54
+   Duration  4.57s (transform 58%, tests 29%, import 13%)
+
+  Transform  |@sodashitsu/tui| transforming modules took 4.37s · 58% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

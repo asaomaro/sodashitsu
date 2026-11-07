@@ -1,0 +1,27 @@
+{
+  "files": [
+    {
+      "file": "packages/tui/src/app/TuiApp.ts",
+      "fixedSha256": "3142ec60a65f8b59a7fcbc9025524a307c419c354b2fd0f6f0980c4773c13e00",
+      "restoredSha256": "3142ec60a65f8b59a7fcbc9025524a307c419c354b2fd0f6f0980c4773c13e00",
+      "byteExact": true
+    },
+    {
+      "file": "packages/tui/src/modes/UsageView.ts",
+      "fixedSha256": "1d1e95afefdc1be2267d90f886ed2f0ed695c726c723ef9627cb42283d2db99d",
+      "restoredSha256": "1d1e95afefdc1be2267d90f886ed2f0ed695c726c723ef9627cb42283d2db99d",
+      "byteExact": true
+    },
+    {
+      "file": "packages/tui/src/modes/SubagentTranscript.ts",
+      "fixedSha256": "213251e08b67927e1e49483c6707872ee84d8a9ab1d877c4912ca7a3269ff54e",
+      "restoredSha256": "213251e08b67927e1e49483c6707872ee84d8a9ab1d877c4912ca7a3269ff54e",
+      "byteExact": true
+    }
+  ],
+  "negativeExitCodes": {
+    "negative": 1,
+    "negative-build": 0,
+    "negative-screen": 1
+  }
+}
