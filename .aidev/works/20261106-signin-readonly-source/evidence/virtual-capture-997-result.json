@@ -1,0 +1,16 @@
+{
+  "capture": {
+    "ok": true,
+    "virtualCaptureOnly": true,
+    "physicalMicrophoneUsed": false,
+    "frequencyHz": 997,
+    "chunks": 998,
+    "baselineChunks": 99,
+    "baselinePeakTone": 0,
+    "toneChunks": 24,
+    "peakRms": 5665,
+    "peakToneMagnitude": 8022,
+    "rawAudioStored": false
+  },
+  "processesAfter": []
+}

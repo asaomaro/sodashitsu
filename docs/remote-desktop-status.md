@@ -49,8 +49,8 @@
 | ID | 作業 | 現状・完了条件 |
 | --- | --- | --- |
 | R1 | sr-pcの更新 | 更新済み（2026-11-07、8542306d）。Windows全体build/handoffに成功し、再起動後に復帰した既存2paneのIDを保持。専用signin package17a1も標準更新済み |
-| R2 | sr-pcとの通常接続・再接続・放置後の安定性確認 | 一部確認済み（2026-11-04、1701bfb4）。通常画面の閲覧・マウス操作、実ロック画面からPIN解除、通常画面への自動再接続・操作を確認。cold leaseとWindows proxy終了コード取得の不具合を修正。2026-11-07にはOS再起動後・未ログインの専用暗号化経路から実画面/PIN認証と通常desktop復帰を確認。高速入力の拒否、認証画面遷移時の再接続、長時間・反復の安定性確認は残る |
-| R3 | Windows拡張機能の実機確認 | 一部確認済み（caaddccd）。実解像度変更/復元、H.264と音声buffer、text/PNG/HTMLのclipboard往復、ファイル送受信、同一monitorの2窓と操作排他、保護Default/UACの実画像、保護DefaultのH.264/ファイル転送を確認。仮想IDDの署名済み配布、物理複数monitor、仮想audio cable/マイク、実Explorer drop、昇格アプリ/UAC入力、専用signinの次回起動時の自動復帰・実サインアウト/反復操作は残る |
+| R2 | sr-pcとの通常接続・再接続・放置後の安定性確認 | 一部確認済み（2026-11-04、1701bfb4）。通常画面の閲覧・マウス操作、実ロック画面からPIN解除、通常画面への自動再接続・操作を確認。cold leaseとWindows proxy終了コード取得の不具合を修正。2026-11-07にはOS再起動後・未ログインの専用暗号化経路から実画面/PIN認証と通常desktop復帰を確認。通常headlessは12分/17回の観測とreleaseを確認。高速入力の拒否、認証画面遷移時の再接続、より長時間・反復の安定性確認は残る |
+| R3 | Windows拡張機能の実機確認 | 一部確認済み（caaddccd）。実解像度変更/復元、H.264と音声buffer、text/PNG/HTMLのclipboard往復、ファイル送受信、同一monitorの2窓と操作排他、保護Default/UACの実画像、保護DefaultのH.264/ファイル転送を確認。仮想IDDの署名済み配布、物理複数monitor、仮想micの継続転送/実通話（997Hz約0.48秒の仮想capture受音は確認）、実Explorer drop、昇格アプリ/UAC入力、専用signinの次回起動時の自動復帰・実サインアウト/反復操作は残る |
 | R4 | Linux/macOS nativeの実機確認 | 未完了。対象デスクトップが現在利用できない。OSの許可/終了、monitor選択、Linux VIRTUAL、macOS mode復元、動画/音声/仮想出力へのマイク/clipboardを対応範囲で確認する。WSLや生成fixtureを実機の代わりにしない |
 | R5 | デスクトップアシスタントの実機確認 | 一部確認済み。2026-11-07のWindows nativeでは作業完了の吹き出しを音声off/system音声onの両設定で確認（別ポート・自前fixture）。別PC固有の設定と原因は未確定。実GUIの配置/DPI・返答・会話/フォーム・画像/録音/モデル・無効化/スリープ等の組合せ確認は残る。詳細は[アシスタント](desktop-assistant.md) |
 
@@ -96,7 +96,7 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 | 残る項目 | 必要なもの・現在の準備 |
 | --- | --- |
 | 一時仮想画面 | Sodashitsu専用IDDの署名済み配布物。リポジトリ/CIのunsigned artifactを導入可能な配布物とは扱わない |
-| マイク転送 | VB-Audio公式Pack45の署名済みx64 driverを導入済み（2026-11-05、installer exit0）。導入で変わった既定出力は元へ戻し、全6roleの一致を確認。OS再起動・明示した仮想render IDへの実マイク転送検証は未完了 |
+| マイク転送 | VB-Audio公式Pack45の署名済みx64 driverを導入済み（2026-11-05、installer exit0）。導入で変わった既定出力は元へ戻し、全6roleの一致を確認。OS再起動後のdevice正常と固定仮想renderへの生成音転送・capture受音（約0.48秒）を確認。途中でsink unavailableとなったため継続転送/実通話は未完了 |
 | サインアウト後の専用接続 | 元要求と鍵を保持した実再起動後のrecover、2viewer照合、enroll、標準更新と通常起動、ログイン前の暗号化接続/実画面/PINサインインを確認（2026-11-07、package17a1）。事前stop complete後のBoot自動start/実ロック画像まで確認。同bootでPIN認証/通常復帰まで確認。継続/反復と通信拒否原因は未解決。下記の最新追記を参照 |
 | 複数monitor / Explorer drop | 2台以上の実monitor・混在DPIの確認、Windowsブラウザと実Explorer間のOLE drop。1画面の2窓共有と補助プログラム準備成功だけでは完了にしない |
 
@@ -136,3 +136,14 @@ Windows通常サーバーも8542306dから全体build/handoffを実施し、2pan
 設定変更や追加の再起動なしで通信が復帰し、同じbootの未ログイン画面からPIN認証と通常desktopへの移行、通常操舵室・既存2paneの自動復帰を確認しました。RootへのTCPとGitHub DNSも成功し、Windows側のソースを22647015へ更新しました。先の通信拒否の根本原因や再発防止を確定したものではありません。
 
 通常Windowsのheadless接続では、自前GUIに対するUI情報での値設定・ボタン実行・画像fallbackが成功し、130秒後も同一接続で観測・releaseできました。仮想マイクでは、再起動後の実VB-Audio deviceへ固定して生成音を300frame転送し、running/停止と249件のACKを確認。物理マイクは使わず、設定は復元しました。ACKは全frameの受音を保証しないため、仮想capture側の測定と実通話は残ります。
+
+
+### 仮想マイクの受音側検証（2026-11-07）
+
+固定したCABLE Outputで、無音baseline後に997Hzの生成音を24チャンク（約0.48秒）検出しました。ACKだけでなく仮想captureへの到達を確認しましたが、同じ試行の転送側は途中で「Virtual sink unavailable」となっています。6秒の連続転送や実通話の成功とは扱いません。同じ仮想renderの単独検証は300frameを例外なく処理できたため、製品経路の途中停止を引き続き切り分けます。物理マイクは使わず、音声を保存せず、設定は元の値と省略状態へ復元しました。
+
+
+通常headless接続の追加検証では、12分間の同一leaseで45秒間隔・17回の画像取得と最後のreleaseが成功しました。OS入力・画像保存は行っていません。今回は通信拒否を再現しませんでしたが、映像の全時間連続性や、ログイン前後を含む反復安定性、過去のEACCES原因の解消は証明していません。
+
+
+実ブラウザUIでも、物理マイクの代わりに生成音を使ったPC間転送が途中停止しました。受音測定あり・なしの両方で再現し、ACK待ちが残りました。sr-pc内loopbackの転送は300frameで完走しています。仮想デバイスの常時故障とは断定せず、PC間の転送/ACK処理と中継負荷の切り分けを継続します。設定は試行ごとに復元済みです。

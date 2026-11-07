@@ -1,0 +1,7 @@
+{"event":"microphone_ticket"}
+{"event":"ready","microphone":true}
+{"event":"stats"}
+{"event":"microphone_ready"}
+{"event":"stats"}
+{"event":"stats"}
+{"realRemote":true,"generatedToneHz":997,"sentFrames":94,"acknowledgedFrames":76,"screenFrames":3,"status":["starting","running","unavailable"],"errors":["Virtual sink unavailable"],"physicalMicrophoneUsed":false,"passed":false}

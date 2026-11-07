@@ -1,0 +1,5 @@
+{
+  "sha256": "13ea0e27ea14e61ca7086c678acb7077c434be05ff7a362e103fe0fd87f98c5f",
+  "repoEqualsTestedSource": true,
+  "negativeTestCondition": "allowed()=>false; old reports ok:true, fixed reports ok:false"
+}

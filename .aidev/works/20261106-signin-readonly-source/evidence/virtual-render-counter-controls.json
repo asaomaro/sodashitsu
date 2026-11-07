@@ -1,0 +1,18 @@
+[
+  {
+    "label": "old-revoked",
+    "receipt": {
+      "exitCode": 0,
+      "stdout": "{\"ok\":true,\"frames\":300,\"elapsedMs\":6018,\"generatedOnly\":true}\r\n",
+      "stderr": ""
+    }
+  },
+  {
+    "label": "fixed-revoked",
+    "receipt": {
+      "exitCode": 0,
+      "stdout": "{\"ok\":false,\"errorKind\":\"InvalidOperationException\",\"hresult\":-2146233079,\"renderStalled\":false}\r\n",
+      "stderr": ""
+    }
+  }
+]

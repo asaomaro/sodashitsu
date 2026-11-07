@@ -112,3 +112,10 @@ SCM pinに署名検証があるとの誤記も、固定System32パス/SYSTEM/ses
 review_resource_monitorが同bootサインイン/通常復帰、UIA継続130秒、仮想音声ACKと受音の区別、
 Mic2fieldsの値/省略状態の復元を独立点検。status表の旧未確認状態とtasks実施中を実結果へ是正。
 新規evidenceに秘密・画像本体を含めないことを確認。通信拒否原因の解消とは主張しない。
+
+
+## 仮想受音と長時間headlessの追加点検
+
+review_resource_monitorがcapture/long headlessの安全と測定範囲を独立点検。固定仮想device・PCM非保存・20秒上限・headless入力なしとfinally閉鎖を確認。
+直接render補助の失効時counter誤加算の指摘を修正。boolで実書込完了時だけ加算、旧コードの失効条件で誤成功/修正版で拒否する対照と実機300frame再測定、実測定sourceとrepoのbyte一致を保存。修正の再レビュー追加指摘なし。
+受音24チャンク（約0.48秒）、sender途中失敗、12分45秒間隔の観測と全時間連続映像を区別する。

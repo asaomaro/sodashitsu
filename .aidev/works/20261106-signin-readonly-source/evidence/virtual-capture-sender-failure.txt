@@ -1,0 +1,13 @@
+{"event":"microphone_ticket"}
+{"event":"ready","microphone":true}
+{"event":"stats"}
+{"event":"microphone_ready"}
+{"event":"stats"}
+file:///tmp/soda-live-microphone-wire-997.mjs:13
+ for(let seq=1;seq<=300;seq++){const pcm=Buffer.alloc(1920);for(let i=0;i<960;i++)pcm.writeInt16LE(Math.round(Math.sin(((seq-1)*960+i)*Math.PI*2*997/48000)*8000),i*2);send(pipe,{type:'microphone_frame',id,seq,data:pcm.toString('base64')});pcm.fill(0);await sleep(20);if(errors.length)throw Error(errors.join(';'));}
+                                                                                                                                                                                                                                                                                                  ^
+
+Error: Virtual sink unavailable
+    at file:///tmp/soda-live-microphone-wire-997.mjs:13:291
+
+Node.js v24.22.2

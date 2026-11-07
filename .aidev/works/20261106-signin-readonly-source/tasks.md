@@ -280,3 +280,41 @@ https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-powersetr
 
 busy時は中間frameを最新frameへ置き換え、期限切れframeにもACKを返すため、ACK数は300frame全ての再生/受音を証明しない。
 CABLE Outputからの受音測定・実通話は残件。通常Windowsサーバーのheadless130秒とsignin workerの120秒境界を混同しない。
+
+
+## 仮想capture側の受音測定（2026-11-07）
+
+- [x] 既知のCABLE Output capture endpointだけを開く、20秒上限のWinExeを新規作成。所有者/host/session/非ロックを確認し、物理マイク・既定deviceへのfallbackなし。生PCMはRAMだけで零化。
+- [x] 無音・997Hz正例・2000Hz負例、周波数を誤ったdetectorでの拒否を生成音で検査。初回compile後にロード済みnegative DLLの削除が失敗したため、fresh processで検証し直した。デバイス検査成功とは区別。
+- [x] 初回実行はPCがロック中のためpreflightで停止。headlessもunauthorizedで拒否し、成功扱いにしない。通常経路でロック/PIN画面を実確認し、低速入力で解除、通常画面へ復帰。
+- [x] 固定仮想renderへ997Hzを送信し、captureでbaseline99 chunks/peak0、信号24 chunks/peak magnitude8022を検出。20ms×24=約0.48秒の受音を確認。
+- [ ] 同試行のsenderは途中でVirtual sink unavailableとなり終了。6秒の連続転送の成功ではなく、停止原因と再試行は残件。
+- [x] 同じ既存Wasapi renderの単独経路に生成音300frameを送り、例外なし/約7.1秒で終了（修正したcounterで再測定）。仮想デバイス単独の成功だけで製品wireの途中停止を解消済みにしない。
+- [x] 仮想mic2fieldsは元の値と省略状態へ復元。物理マイク・default device・VPN/Firewall設定は変更しない。
+
+測定補助ソースはoperational/VirtualCable{Capture,Render}.cs。実ユーザー/host/session/endpoint固定の単発検証用で、製品へ導入する常駐プログラムではない。実通話・全frameの受音は未確認。
+
+
+直接render補助の初版counterは、失効してWriteが送らずにreturnした場合もcountする不備が独立レビューで検出された。boolでReleaseBuffer(copied=true)の完了だけを返す形に修正し、300frame/7125msを再測定。これはWASAPI bufferへの書込であり、全frameのcapture受音の証明ではない。
+
+
+## 通常headlessの12分継続（2026-11-07）
+
+- [x] expiresAt=0の同一leaseを12分維持。45秒間隔で17回の実画像取得に成功、frameSeqは1→3505、最後にrelease成功。OS入力と画像保存なし。
+- [x] この間に通信拒否/切断は再現せず。画像は各観測時点の鮮度条件で取得するが、全時間の映像連続性を測ったものではない。
+- [ ] 長時間/反復/再起動前後全体の安定性と、過去のEACCES原因は未解決。通常headless12分の成功を専用signin120秒scopeの拡張と解釈しない。
+
+
+製品wireの再試行もsent94/ACK76/starting→running→unavailableで停止した。captureはbaseline99/peak0、信号73chunks（約1.46秒）/peak magnitude8024。物理マイクなし、設定復元成功。初回だけの偶発として扱わず、製品経路の継続転送を未解決として残す。
+
+
+## 実ブラウザUIでの仮想マイク再現
+
+- [x] 生wireスクリプトはブラウザ実装と違いpending上限12/ACK期限を省略していたため、その途中停止だけでUIの不具合とは判定しない。
+- [x] 通常ブラウザUIを実行し、Chromiumのfake media device/fileに997Hz生成WAVを固定。物理マイクは開かず、DOMの「マイク転送中」とブラウザ自身の送受信frameで判定した。
+- [ ] 受音測定ありではsent68/ACK56/maxPending11で6秒時点のDOMが転送中ではなくなった。captureは57chunks（約1.14秒）の997Hzを検出。測定なしでもsent66/ACK54/maxPending12で同様に停止したため、capture負荷だけの現象とは扱わない。
+- [x] sr-pc内loopbackの製品wireは300frame/ACK298/starting→running→stopped、errorなしで完走した。loopback初回は検証側のstart.machineId省略で接続不成立、修正後に測定。ネットワークを通るUI経路の成功とは区別。
+- [x] 各試行後にmic設定を復元し、captureの所有process終了/専用root除去、ブラウザ終了を確認。
+- [x] 中継元サーバーは5秒間に396 CPU ticks使用。15秒のCPU profileではnativeファイルIOとLinuxProcessInspectorの/proc走査などが観測された。音声停止の原因と断定しない。profileの生データはprivate一時領域だけ、repoは集計だけ。計測後にinspectorのlistenがなくなったことを確認。
+
+実ブラウザの未解決停止を優先し、中継経路・ACK待ち・サーバー負荷を切り分ける。500ms等の既存期限を原因未確定のまま緩めない。

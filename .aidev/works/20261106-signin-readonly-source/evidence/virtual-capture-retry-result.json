@@ -1,0 +1,1 @@
+{"exitCode": 0, "stdout": "{\"ok\":true,\"virtualCaptureOnly\":true,\"physicalMicrophoneUsed\":false,\"frequencyHz\":997,\"chunks\":996,\"baselineChunks\":99,\"baselinePeakTone\":0,\"toneChunks\":73,\"peakRms\":5665,\"peakToneMagnitude\":8024,\"rawAudioStored\":false}\r\n", "stderr": ""}
