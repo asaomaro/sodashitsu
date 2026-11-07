@@ -332,3 +332,11 @@ it.skipIf(process.platform === "win32")("passes the selected effort to Codex and
  f.read.mockClear();const changed=await f.service.generate("p",{...settings,effort:"low"});expect(changed.effort).toBe("low");expect(f.read.mock.calls[0]?.[2]).toBe(0);
  launch=JSON.parse(await readFile(f.log,"utf8"));expect(launch.args).toContain('model_reasoning_effort="low"');
 });
+
+it.skipIf(process.platform === "win32")("adds rubric to the same report run and rejects invented assessment evidence",async()=>{
+ const base={summary:"生成評価",work:[],patterns:[],recommendations:[],limitations:[],assessment:{criteria:["direction","scope","verification"].map(id=>({id,score:4,reason:"生成した根拠",evidenceRef:"work.items.0.messages.0",evidenceQuote:"生成した目的と検証の指示",improvement:"結果を確認する",priority:"high"}))}};
+ const f=await fixture(JSON.stringify(base));const result=await f.service.usageReport({kind:"codex",model:""},{work:{items:[{available:true,messages:[{role:"user",text:"生成した目的と検証の指示"}]}]}});
+ expect(result.text).toContain("100/100点 · A評価");expect(result.text).toContain("評価可能 3/5項目");expect(f.read).not.toHaveBeenCalled();
+ const g=await fixture(JSON.stringify(base));const unavailable=await g.service.usageReport({kind:"codex",model:""},{groups:[{tokens:999999}]});expect(unavailable.text).toContain("未評価");expect(unavailable.document?.assessment?.criteria.every(c=>c.score===null)).toBe(true);
+ const prompt=await readFile(join(f.dir,"prompt.txt"),"utf8");expect(prompt).toContain("scoreは0〜4");expect(prompt).toContain("数値のみ・ラベルのみでは採点せずnull");
+});
