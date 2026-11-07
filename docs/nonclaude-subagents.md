@@ -1,6 +1,6 @@
 # Claude以外のサブエージェント取得
 
-サイドバー・グラフ・Statusline・CLIの`subagents`は、実行中の子の件数と一覧を共有します。子は独立したpaneではありません。トークン利用状況の主/子内訳とは別の情報です。
+サイドバー・グラフ・Statusline・CLIの`subagents`は、子の件数と一覧を共有します。従来のClaude・Codex・Muse・Copilotは実行中件数、Antigravityは存続する子の所属数です。`countBasis`省略または`working`は従来の実行中、`alive`は所属を表します。各子の`state`省略は従来の実行中で、明示値は`working`・`idle`・`unknown`です。子は独立したpaneではありません。トークン利用状況の主/子内訳とは別の情報です。
 
 | 親CLI | 取得する正式記録 | 確認範囲 |
 | --- | --- | --- |
@@ -8,18 +8,31 @@
 | Codex | 親rolloutの`SubAgentActivity`のstarted/completed/interrupted | 0.166.0で隔離実CLIの子起動・終了を確認 |
 | Muse Code | 親session streamの`subagent.control.*`の開始・状態・result_ready | 1.4.14-R7309.1で隔離実CLIの子起動・終了を確認 |
 | GitHub Copilot CLI | 親`events.jsonl`のcustom_agent.started/completed/failed | 導入0.0.362のSDK schema・生成fixtureで確認。実CLI往復は未検証 |
-| Antigravity CLI、Bob Shell、その他 | 未対応 | 親子IDと終了を結ぶ正式記録の取得が未確認。件数を推測しない |
+| Antigravity CLI | 親の正式な`invoke_subagent`起動結果と、直属の子descriptorのUUID・`spawnStepIndex` | 1.4.12の隔離実CLIで子起動・応答・native list・killを確認。ALIVEは所属数、作業状態は不明 |
+| Bob Shell、その他 | 未対応 | 正式な親子取得契約が未確認。件数を推測しない |
 
-Codex・Muse・Copilotは約2秒ごとに、現在の親paneへ改めて結び付けられた会話の記録だけを読みます。保存済みの会話IDだけでは取得せず、現在のinstanceについてサーバが確認した証拠が必要です。読み終わるまでにinstanceや会話が変われば結果を捨てます。読み取りによるCLI・モデルの起動や、子への入力は行いません。
+Codex・Muse・Copilot・Antigravityは約2秒ごとに、現在の親paneへ改めて結び付けられた会話の記録だけを読みます。保存済みの会話IDだけでは取得せず、現在のinstanceについてサーバが確認した証拠が必要です。読み終わるまでにinstanceや会話が変われば結果を捨てます。読み取りによるCLI・モデルの起動や、子への入力は行いません。
 
-開始済みの子を一覧に載せ、終了・失敗・割込の記録で外します。履歴や同じイベントを読み直しても件数を足しません。Codexのinteractedは入力の配達なので、それだけで終了済みの子が再び実行中とは断定せず未取得に戻します。実行中の子への配達は実行中を維持します。未知の状態、読めない記録、未確認の親は`undefined`（CLIでは`null`）です。0件は取得済みの終了状態を意味します。サーバ再起動時も所属を再確認して正式記録の最終状態を読み戻します。
+Codex・Muse・Copilotは開始済みの子を一覧に載せ、終了・失敗・割込の記録で外します。履歴や同じイベントを読み直しても件数を足しません。Codexのinteractedは入力の配達なので、それだけで終了済みの子が再び実行中とは断定せず未取得に戻します。実行中の子への配達は実行中を維持します。未知の状態、読めない記録、未確認の親は`undefined`（CLIでは`null`）です。従来の実行中件数の0件は取得済みの終了状態を意味します。Antigravityの所属数0件は、確認した直属フォルダにALIVEの子が無い状態です。サーバ再起動時も所属を再確認して正式記録の最終状態を読み戻します。
 
 Codexの種類欄は記録にあるモデル名、説明は子の論理的なtask path末尾です。Museは記録にあるroleとobjective、CopilotはagentNameとagentDescriptionです。分からない値は補いません。子の記録閲覧の`hasTranscript`は従来のClaude経路だけに付き、この件数取得で他CLIの記録閲覧が有効になるわけではありません。
 
-上限は1回の読み取り4MiB、1行256KiB、1ファイル512MiB、保持する子の材料256件・イベントID2万件です。途中までしか読めない履歴や、破損・上限超過は未取得として扱います。一覧は64件まで。ファイルが入れ替わる・縮むと読み直します。改行のない末尾は書きかけとして次回へ残し、改行まで読み終えた状態だけを反映します。シンボリックリンク、複数ハードリンク、通常ファイル以外は読みません。
+Codex・Muse・Copilotの上限は1回の読み取り4MiB、1行256KiB、1ファイル512MiB、保持する子の材料256件・イベントID2万件です。途中までしか読めない履歴や、破損・上限超過は未取得として扱います。一覧は64件まで。ファイルが入れ替わる・縮むと読み直します。改行のない末尾は書きかけとして次回へ残し、改行まで読み終えた状態だけを反映します。シンボリックリンク、複数ハードリンク、通常ファイル以外は読みません。
 
 CLIが強制終了され、終了イベント自体が保存されなかった場合は、記録上の実行中が親の失効まで残る可能性があります。OSのプロセス数や時刻から勝手に終了扱いにはしません。記録形式はCLIの版で変わるため、未知の状態を正常な0件と扱いません。
 
-Copilotの隔離実probeは、最初は隔離HOMEに認証が無いため停止しました。手元の認証を使う別probeはAPIへ届きましたが、導入CLIの候補モデルをAPIが`model_not_supported`で拒否したため打ち切りました。これはサブエージェント機能の不在を示しません。AGYの最近の記録・導入helpに、親子IDと終了を結ぶ取得契約を確認できていません。Bobの実行ファイルはこの環境にありません。
+Copilotの隔離実probeは、最初は隔離HOMEに認証が無いため停止しました。手元の認証を使う別probeはAPIへ届きましたが、導入CLIの候補モデルをAPIが`model_not_supported`で拒否したため打ち切りました。これはサブエージェント機能の不在を示しません。Antigravityについては、その後の隔離実起動で以下の所属記録を確認しました。Bobの実行ファイルはこの環境にありません。
+
+## Antigravityの所属と作業状態の区別
+
+`agy 1.4.12`を、新しい空の一時PJとprivate HOMEで3回実行しました。最初にネイティブ`invoke_subagent`で子を1件起動し、子の`send_message`による応答を確認しました。2回目はその自作会話だけを再開して`manage_subagents list`、3回目は同じ子だけをnative killしてlistを確認しました。3回とも終了コード0、各回のprint上限120秒・外側上限150秒内で終了しています。外部CLIやシェルで子を模倣していません。
+
+親の `.system_generated/subagents/<子UUID>.json` の`conversationId`・`spawnStepIndex`を、同じ親の正式transcriptに記録された`invoke_subagent`と直後のprovider生成起動結果の子UUIDに照合します。起動時刻は正式起動結果の`created_at`です。クライアントからのパスや記録内のURIを辿りません。
+
+実記録ではnative listの作業状態が`running`から`idle`になってもdescriptorは`SUBAGENT_STATE_ALIVE`のままでした。明示的なnative kill後に`SUBAGENT_STATE_KILLED`となり、listも0件でした。従ってALIVEは`countBasis: alive`の所属数・`state: unknown`として配信し、実行中とは表示しません。KILLEDは除外します。モデルの完了報告文、子からのメッセージ、古いlistの`running`を現在の作業状態と見なすことはありません。
+
+親transcriptは4MiB・2万行・1行256KiB、直属の子フォルダは256項目・1秒、各descriptorは32KiBが上限です。配信する一覧は64件まで、件数は確認できたALIVE全件です。親会話/instanceの再照合、正確な親子UUID、親フォルダの実体、nofollow・通常ファイル・単一ハードリンク、読み取り前後の置換を検証します。未知のdescriptor状態、missing、未証明の起動、途中書き込み、上限超過は取得不明に戻ります。入れ子の子、現在の実行中/idle判定、子の本文閲覧には対応しません。旧kindのworking semanticsは変更しません。
+
+[Antigravity実起動記録](../.aidev/works/20261107-antigravity-subagents/probe.md)とsanitizeした親子fixtureを保存しています。利用者の会話・paneは使用せず、private HOMEの認証コピー・raw記録は採取後に削除しました。
 
 実CLIのfixtureは新しい空の一時PJと隔離HOMEだけで採取し、利用者paneや通常会話を操作していません。認証ファイル・account情報・利用者のプロンプト本文をリポジトリへ保存していません。production配線は一時サーバ・偽の親CLI・実記録形式から既存WebSocket event/snapshotまで確認します。[検証記録](../.aidev/works/20261107-nonclaude-subagents/)を参照してください。
