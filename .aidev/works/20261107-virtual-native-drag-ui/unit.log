@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-virtual-native-drag-ui/packages/web
+
+
+ Test Files  4 passed (4)
+      Tests  22 passed (22)
+   Start at  15:09:29
+   Duration  1.92s (transform 67%, import 15%, environment 11%, tests 7%)
+
+  Transform  transforming modules took 4.47s · 67% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
