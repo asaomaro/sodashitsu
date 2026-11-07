@@ -1,0 +1,246 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-state-ui/packages/cli
+
+ ❯ src/agentStatus.test.ts (38 tests | 1 failed | 37 skipped) 10ms
+   × keeps explicit membership and child states in agent get/list JSON without changing omitted shape 8ms
+ ❯ src/commands/agentRename.test.ts (23 tests | 4 failed | 19 skipped) 16ms
+   × preserves native codex state/basis through get and list JSON 10ms
+   × preserves native muse state/basis through get and list JSON 2ms
+   × preserves native copilot state/basis through get and list JSON 2ms
+   × preserves native agy state/basis through get and list JSON 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agentStatus.test.ts > keeps explicit membership and child states in agent get/list JSON without changing omitted shape
+AssertionError: expected { count: 3, items: [ { …(7) }, …(2) ] } to match object { count: 3, countBasis: 'alive', …(1) }
+(18 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "count": 3,
+-   "countBasis": "alive",
+    "items": [
+      {
+        "id": "u",
+-       "state": "unknown",
+      },
+      {
+        "id": "i",
+-       "state": "idle",
+      },
+      {
+        "id": "w",
+-       "state": "working",
+      },
+    ],
+  }
+
+ ❯ src/agentStatus.test.ts:271:44
+    269| it("keeps explicit membership and child states in agent get/list JSON …
+    270|  const value=subagentsViewOf({count:3,countBasis:"alive",items:[{id:"u…
+    271|  expect(JSON.parse(JSON.stringify(value))).toMatchObject({count:3,coun…
+       |                                            ^
+    272|  const legacy=subagentsViewOf({count:1,items:[{id:"legacy",startedAt:0…
+    273| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/commands/agentRename.test.ts > preserves native codex state/basis through get and list JSON
+AssertionError: expected last "vi.fn()" call to have been called with [ { agent: ObjectContaining{…} } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "agent": {
++       "completionSeq": 0,
++       "instanceId": "a1",
++       "kind": "codex",
++       "label": "Claude Code",
++       "name": null,
++       "paneId": "p1",
++       "serverSeenSeq": 0,
++       "since": 1000,
++       "state": "idle",
++       "status": "idle",
+        "subagents": {
+-         "countBasis": "alive",
++         "count": 1,
+          "items": [
+            {
+-             "state": "unknown",
++             "background": null,
++             "depth": null,
++             "description": null,
++             "id": "unknown-child",
++             "parentId": null,
++             "startedAt": 0,
++             "type": null,
+            },
+          ],
+        },
++       "tabId": "t1",
++       "verified": true,
++       "workspaceId": "w1",
+      },
+    },
+  ]
+
+ ❯ src/commands/agentRename.test.ts:405:26
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/commands/agentRename.test.ts > preserves native muse state/basis through get and list JSON
+AssertionError: expected last "vi.fn()" call to have been called with [ { agent: ObjectContaining{…} } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "agent": {
++       "completionSeq": 0,
++       "instanceId": "a1",
++       "kind": "muse",
++       "label": "Claude Code",
++       "name": null,
++       "paneId": "p1",
++       "serverSeenSeq": 0,
++       "since": 1000,
++       "state": "idle",
++       "status": "idle",
+        "subagents": {
+-         "countBasis": "alive",
++         "count": 1,
+          "items": [
+            {
+-             "state": "unknown",
++             "background": null,
++             "depth": null,
++             "description": null,
++             "id": "unknown-child",
++             "parentId": null,
++             "startedAt": 0,
++             "type": null,
+            },
+          ],
+        },
++       "tabId": "t1",
++       "verified": true,
++       "workspaceId": "w1",
+      },
+    },
+  ]
+
+ ❯ src/commands/agentRename.test.ts:405:26
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/commands/agentRename.test.ts > preserves native copilot state/basis through get and list JSON
+AssertionError: expected last "vi.fn()" call to have been called with [ { agent: ObjectContaining{…} } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "agent": {
++       "completionSeq": 0,
++       "instanceId": "a1",
++       "kind": "copilot",
++       "label": "Claude Code",
++       "name": null,
++       "paneId": "p1",
++       "serverSeenSeq": 0,
++       "since": 1000,
++       "state": "idle",
++       "status": "idle",
+        "subagents": {
+-         "countBasis": "alive",
++         "count": 1,
+          "items": [
+            {
+-             "state": "unknown",
++             "background": null,
++             "depth": null,
++             "description": null,
++             "id": "unknown-child",
++             "parentId": null,
++             "startedAt": 0,
++             "type": null,
+            },
+          ],
+        },
++       "tabId": "t1",
++       "verified": true,
++       "workspaceId": "w1",
+      },
+    },
+  ]
+
+ ❯ src/commands/agentRename.test.ts:405:26
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/commands/agentRename.test.ts > preserves native agy state/basis through get and list JSON
+AssertionError: expected last "vi.fn()" call to have been called with [ { agent: ObjectContaining{…} } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "agent": {
++       "completionSeq": 0,
++       "instanceId": "a1",
++       "kind": "agy",
++       "label": "Claude Code",
++       "name": null,
++       "paneId": "p1",
++       "serverSeenSeq": 0,
++       "since": 1000,
++       "state": "idle",
++       "status": "idle",
+        "subagents": {
+-         "countBasis": "alive",
++         "count": 1,
+          "items": [
+            {
+-             "state": "unknown",
++             "background": null,
++             "depth": null,
++             "description": null,
++             "id": "unknown-child",
++             "parentId": null,
++             "startedAt": 0,
++             "type": null,
+            },
+          ],
+        },
++       "tabId": "t1",
++       "verified": true,
++       "workspaceId": "w1",
+      },
+    },
+  ]
+
+ ❯ src/commands/agentRename.test.ts:405:26
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed | 56 skipped (61)
+   Start at  13:32:32
+   Duration  884ms (transform 76%, import 21%, tests 3%, worker 1%)
+
+undefined
+/workspaces/sodashitsu-subagent-state-ui/packages/cli:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agentStatus.test.ts src/commands/agentRename.test.ts -t explicit membership|preserves native

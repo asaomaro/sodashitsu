@@ -4,6 +4,7 @@ import type { SessionStore } from "../session.js";
 import { RpcFailure, type SodaClient } from "../wsClient.js";
 import {
   runAgentGet,
+  runAgentList,
   runAgentPrompt,
   runAgentRead,
   runAgentRename,
@@ -395,4 +396,13 @@ describe("自分の pane の歯止め（20260926-agent-skill-file。AC11・AC14�
       expect.objectContaining({ paneId: "p2" }),
     );
   });
+});
+
+it.each(["codex","muse","copilot","agy"])("preserves native %s state/basis through get and list JSON",async kind=>{
+ const h=harness(),reply=await h.client.hello();reply.snapshot.panes[0]!.agent=agent({kind,subagents:{count:1,countBasis:"alive",items:[{id:"unknown-child",startedAt:0,state:"unknown"}]}});
+ vi.mocked(h.client.hello).mockResolvedValue(reply);
+ await runAgentGet({kind:"agent-get",opts:OPTS,paneId:"p1"},store);
+ expect(mockedPrintJson).toHaveBeenLastCalledWith({agent:expect.objectContaining({subagents:expect.objectContaining({countBasis:"alive",items:[expect.objectContaining({state:"unknown"})]})})});
+ await runAgentList({kind:"agent-list",opts:OPTS},store);
+ expect(mockedPrintJson).toHaveBeenLastCalledWith({agents:expect.arrayContaining([expect.objectContaining({kind,subagents:expect.objectContaining({countBasis:"alive",items:[expect.objectContaining({state:"unknown"})]})})])});
 });

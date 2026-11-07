@@ -265,3 +265,9 @@ describe("subagents", () => {
     expect(JSON.parse(JSON.stringify(toAgentView(loc, agent()))).subagents).toBeNull();
   });
 });
+
+it("keeps explicit membership and child states in agent get/list JSON without changing omitted shape",()=>{
+ const value=subagentsViewOf({count:3,countBasis:"alive",items:[{id:"u",startedAt:1,state:"unknown"},{id:"i",startedAt:2,state:"idle"},{id:"w",startedAt:3,state:"working"}]});
+ expect(JSON.parse(JSON.stringify(value))).toMatchObject({count:3,countBasis:"alive",items:[{id:"u",state:"unknown"},{id:"i",state:"idle"},{id:"w",state:"working"}]});
+ const legacy=subagentsViewOf({count:1,items:[{id:"legacy",startedAt:0}]});expect(legacy).not.toHaveProperty("countBasis");expect(legacy!.items[0]).not.toHaveProperty("state");
+});

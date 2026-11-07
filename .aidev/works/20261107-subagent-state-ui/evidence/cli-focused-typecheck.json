@@ -1,0 +1,19 @@
+{
+  "command": [
+    "pnpm",
+    "exec",
+    "tsc",
+    "-p",
+    "/tmp/soda-cli-subagent-state-tsconfig.json"
+  ],
+  "exitCode": 0,
+  "config": {
+    "extends": "/workspaces/sodashitsu-subagent-state-ui/packages/cli/tsconfig.typecheck.json",
+    "include": [],
+    "files": [
+      "/workspaces/sodashitsu-subagent-state-ui/packages/cli/src/agentStatus.ts",
+      "/workspaces/sodashitsu-subagent-state-ui/packages/cli/src/agentStatus.test.ts",
+      "/workspaces/sodashitsu-subagent-state-ui/packages/cli/src/commands/agentRename.test.ts"
+    ]
+  }
+}

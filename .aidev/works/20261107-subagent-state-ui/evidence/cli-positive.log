@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-state-ui/packages/cli
+
+
+ Test Files  2 passed (2)
+      Tests  61 passed (61)
+   Start at  13:32:34
+   Duration  1.12s (transform 73%, import 19%, tests 8%, worker 1%)
+

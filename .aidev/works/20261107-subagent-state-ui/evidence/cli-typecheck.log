@@ -1,0 +1,42 @@
+
+> @sodashitsu/cli@0.1.0 typecheck /workspaces/sodashitsu-subagent-state-ui/packages/cli
+> tsc --noEmit -p tsconfig.typecheck.json
+
+src/agent.integration.test.ts(5,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/agent.integration.test.ts(93,35): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/agentPrompt.integration.test.ts(4,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/agentStart.integration.test.ts(5,86): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/agentStart.integration.test.ts(109,15): error TS7006: Parameter 'input' implicitly has an 'any' type.
+src/agentStart.integration.test.ts(300,62): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/agentStart.integration.test.ts(301,57): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/agentStart.integration.test.ts(328,25): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/agentStart.integration.test.ts(331,25): error TS7006: Parameter 'l' implicitly has an 'any' type.
+src/attach.integration.test.ts(5,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/display.integration.test.ts(6,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/exec.integration.test.ts(5,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/graph.integration.test.ts(12,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/graph.integration.test.ts(112,57): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/graph.integration.test.ts(303,45): error TS7006: Parameter 'l' implicitly has an 'any' type.
+src/graph.integration.test.ts(319,42): error TS7006: Parameter 'l' implicitly has an 'any' type.
+src/graph.integration.test.ts(338,37): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/graph.integration.test.ts(429,34): error TS7006: Parameter 'l' implicitly has an 'any' type.
+src/main.integration.test.ts(5,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/paneCurrent.integration.test.ts(6,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/paneEnv.integration.test.ts(6,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/paneSocket.integration.test.ts(8,64): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/paneSocket.integration.test.ts(43,17): error TS7006: Parameter 'ctx' implicitly has an 'any' type.
+src/paneSocket.integration.test.ts(43,22): error TS7006: Parameter 'params' implicitly has an 'any' type.
+src/paneSocket.integration.test.ts(57,17): error TS7006: Parameter 'ctx' implicitly has an 'any' type.
+src/paneSocket.integration.test.ts(64,20): error TS7006: Parameter 'paneId' implicitly has an 'any' type.
+src/sessionStream.integration.test.ts(5,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/smoke.ts(23,68): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/smoke.ts(102,15): error TS7006: Parameter 'd' implicitly has an 'any' type.
+src/smoke.ts(106,15): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/work.integration.test.ts(5,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/workAgent.integration.test.ts(7,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+src/workAgent.integration.test.ts(33,40): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/workAgent.integration.test.ts(33,45): error TS7006: Parameter 'socket' implicitly has an 'any' type.
+src/wsClient.test.ts(5,62): error TS2307: Cannot find module '@sodashitsu/server' or its corresponding type declarations.
+/workspaces/sodashitsu-subagent-state-ui/packages/cli:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/cli@0.1.0 typecheck: `tsc --noEmit -p tsconfig.typecheck.json`
+Exit status 2

@@ -1,4 +1,4 @@
-import type { AgentInfo, AgentState } from "@sodashitsu/protocol";
+import type { AgentInfo, AgentState, SubagentInfo } from "@sodashitsu/protocol";
 import { stripAnsi } from "./ansiStrip.js";
 
 /**
@@ -49,6 +49,8 @@ export interface SubagentView {
   parentId: string | null;
   /** 深さ（メインが起動したもの = 1）。分からなければ null。 */
   depth: number | null;
+  /** Omission preserves the previous working-only JSON shape. */
+  state?: SubagentInfo["state"];
 }
 
 export interface AgentView {
@@ -67,10 +69,10 @@ export interface AgentView {
   since: number;
   verified: boolean;
   /**
-   * 動かしているサブエージェント（20261004-subagent-display）。フックの報告を受けていない（古いサーバ・導入していない・Claude Code 以外）なら null＝分からない。
-   * 報告を受けていれば `{count, items}`（0 件なら `count: 0`）。`items` は起動した順で最大 64 件、`count` は実際の数。
+   * サブエージェント（フックまたは対応する正式記録）。未取得なら null＝分からない。
+   * 取得できれば `{count, items}`（0 件なら `count: 0`）。明示されたcountBasis/stateは保持し、省略時は従来のworkingの意味とJSON shapeを保つ。`items` は起動した順で最大 64 件、`count` は実際の数。
    */
-  subagents: { count: number; items: SubagentView[] } | null;
+  subagents: { count: number; countBasis?: NonNullable<AgentInfo["subagents"]>["countBasis"]; items: SubagentView[] } | null;
 }
 
 /** `AgentInfo.subagents` を出力の形に写す。無ければ null。項目の有無を揺らさず、分からないものは null で埋める。 */
@@ -78,6 +80,7 @@ export function subagentsViewOf(subagents: AgentInfo["subagents"]): AgentView["s
   if (!subagents) return null;
   return {
     count: subagents.count,
+    ...(subagents.countBasis===undefined?{}:{countBasis:subagents.countBasis}),
     items: subagents.items.map((s) => ({
       id: s.id,
       type: s.type ?? null,
@@ -86,6 +89,7 @@ export function subagentsViewOf(subagents: AgentInfo["subagents"]): AgentView["s
       startedAt: s.startedAt,
       parentId: s.parentId ?? null,
       depth: s.depth ?? null,
+      ...(s.state===undefined?{}:{state:s.state}),
     })),
   };
 }
