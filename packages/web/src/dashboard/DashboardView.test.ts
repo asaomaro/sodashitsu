@@ -288,5 +288,5 @@ it("opens an account cost window from its card and displays total, model and eff
 
 it("shows membership as membership rather than a working count",()=>{
  const {wrapper}=setup([pane("p1",agent({kind:"agy",subagents:{count:3,items:[],countBasis:"alive"}}))]);
- expect(wrapper.get('[data-dash-row="p1"] .dash-c-sub').text()).toContain('所属 3');wrapper.unmount();
+ expect(wrapper.get('[data-dash-row="p1"] .dash-c-sub').text()).toContain('3件');wrapper.unmount();
 });

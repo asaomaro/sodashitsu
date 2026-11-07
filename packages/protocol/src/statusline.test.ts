@@ -65,8 +65,8 @@ it("formats enabled fields in shared order, omits unknown values, and compactly 
   const result = statuslineSegments(pane, usage, [], s);
   expect(result.slice(0, 3).map((v) => v.text)).toEqual([
     "Context tokens 1k",
-    "出力トークン 0",
-    "入力トークン 10k",
+    "出力 0",
+    "入力 10k",
   ]);
   expect(result.some((v) => ["context", "cost", "model"].includes(v.field))).toBe(false);
   expect(result.find((v) => v.field === "session")?.text).toBe("s");
@@ -215,9 +215,9 @@ it("shows known context token counts for Bob and agy without requiring a reporte
 it.each(["claude","codex","muse","copilot","agy"])("shows native subagents in %s footer without usage or kind gates",kind=>{
  const pane={agent:{kind,label:kind,state:"idle",subagents:{count:2,items:[]}}} as unknown as import("./model.js").Pane;
  const settings=loadStatuslineSettings({fields:{subagents:true}});
- expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")).toMatchObject({text:"Subagents 2"});
+ expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")).toMatchObject({text:"Subagents 2件"});
  pane.agent!.subagents!.countBasis="alive";
- expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")).toMatchObject({text:"Subagents 所属 2",title:expect.stringContaining("作業中の件数ではありません")});
+ expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")).toMatchObject({text:"Subagents 2件",title:expect.stringContaining("作業中の件数ではありません")});
 });
 
 
@@ -225,7 +225,7 @@ it("shows supplied subagent membership by default while respecting explicit hidd
  const pane={agent:{kind:"codex",label:"Codex",state:"idle",subagents:{count:3,countBasis:"alive",items:[]}}} as unknown as import("./model.js").Pane;
  for(const raw of [undefined,{}, {fields:{subagents:true}}]){
   const settings=loadStatuslineSettings(raw);expect(settings.fields.subagents).toBe(true);
-  expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")?.text).toBe("Subagents 所属 3");
+  expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field==="subagents")?.text).toBe("Subagents 3件");
  }
  expect(statuslineSegments(pane,undefined,[],loadStatuslineSettings({fields:{subagents:false}})).some(s=>s.field==="subagents")).toBe(false);
  const unknownAgent={...pane.agent!};delete unknownAgent.subagents;
@@ -244,7 +244,7 @@ it("formats observed effort and distinct approval/permission values with source 
  executionSettings:{reasoningEffort:{value:"high",source:"rollout",basis:"turn",observedAt:1000},approvalPolicy:{value:"on-request",source:"rollout",basis:"turn"},approvalMode:{value:"promptUnmatched",source:"muse-events",basis:"session"},permissionMode:{value:"plan",source:"hook",basis:"hook"},sandboxMode:{value:"workspace-write",source:"rollout",basis:"turn"}}} as import("./usage.js").AgentUsage;
  const settings=loadStatuslineSettings({fields:{effort:true,approval:true},order:["effort","approval"]});
  const result=statuslineSegments(pane,usage,[],settings);
- expect(result.filter(s=>s.field==="effort"||s.field==="approval").map(s=>s.text)).toEqual(["effort high（記録）","承認policy on-request（記録）","承認mode promptUnmatched","権限mode plan（報告）"]);
+ expect(result.filter(s=>s.field==="effort"||s.field==="approval").map(s=>s.text)).toEqual(["effort high","承認policy on-request","承認mode promptUnmatched","権限mode plan"]);
  expect(result[0]!.title).toContain("ターンの記録 / rollout / 1970-01-01T00:00:01.000Z");expect(result[0]!.title).toContain("現在のCLI設定とは異なる");
  expect(result.some(s=>s.text.includes("workspace-write")||s.text.includes("stale"))).toBe(false);
  expect(statuslineSegments(pane,{...usage,kind:"claude"},[],settings).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
@@ -254,7 +254,7 @@ it("formats observed effort and distinct approval/permission values with source 
  expect(statuslineSegments(pane,usage,[],loadStatuslineSettings({fields:{effort:false,approval:false}})).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
  const legacyUsage={...usage,reasoningEffort:"medium"};delete legacyUsage.executionSettings;
  const legacy=statuslineSegments(pane,legacyUsage,[],settings).find(s=>s.field==="effort")!;
- expect(legacy.text).toBe("effort medium（報告）");expect(legacy.title).toContain("範囲・時点は未取得");
+ expect(legacy.text).toBe("effort medium");expect(legacy.title).toContain("範囲・時点は未取得");
  for(const value of ["", "\u001b[31mhigh", "x".repeat(129)])expect(statuslineSegments(pane,{...usage,executionSettings:{reasoningEffort:{value,source:"rollout",basis:"turn"}}},[],settings).some(s=>s.field==="effort")).toBe(false);
  const session=statuslineSegments(pane,{...usage,executionSettings:{reasoningEffort:{value:"low",source:"muse-events",basis:"session",observedAt:1e30}}},[],settings).find(s=>s.field==="effort")!;
  expect(session.text).toBe("effort low");expect(session.title).toContain("セッション設定の記録（ターンの一時指定は未反映の場合があります） / muse-events");

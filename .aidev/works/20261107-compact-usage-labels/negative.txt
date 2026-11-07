@@ -1,0 +1,196 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-compact-usage-labels
+
+ ❯ |@sodashitsu/client-core| src/agent/subagents.test.ts (6 tests | 1 failed) 8ms
+   × distinguishes membership, work and unknown while preserving omitted defaults 4ms
+ ❯ |@sodashitsu/protocol| src/statusline.test.ts (19 tests | 8 failed) 27ms
+   × formats enabled fields in shared order, omits unknown values, and compactly formats all token counts 6ms
+   × shows native subagents in claude footer without usage or kind gates 2ms
+   × shows native subagents in codex footer without usage or kind gates 1ms
+   × shows native subagents in muse footer without usage or kind gates 1ms
+   × shows native subagents in copilot footer without usage or kind gates 1ms
+   × shows native subagents in agy footer without usage or kind gates 1ms
+   × shows supplied subagent membership by default while respecting explicit hidden and unknown 1ms
+   × formats observed effort and distinct approval/permission values with source and scope, never sandbox 1ms
+ ❯ |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts (16 tests | 6 failed) 183ms
+   ❯ PaneInfoView (10)
+     × 入口: ダッシュボードは窓を閉じ、サブエージェントは同じ窓へ埋め込む 10ms
+     × サブエージェントが 0 件・分からない: 一覧への入口を出さない（分からないは「—」） 6ms
+   × labels codex native membership counts with inline children 6ms
+   × labels muse native membership counts with inline children 4ms
+   × labels copilot native membership counts with inline children 5ms
+   × labels agy native membership counts with inline children 4ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/protocol| src/statusline.test.ts > formats enabled fields in shared order, omits unknown values, and compactly formats all token counts
+AssertionError: expected [ 'Context tokens 1k', …(2) ] to deeply equal [ 'Context tokens 1k', '出力 0', …(1) ]
+
+- Expected
++ Received
+
+  [
+    "Context tokens 1k",
+-   "出力 0",
+-   "入力 10k",
++   "出力トークン 0",
++   "入力トークン 10k",
+  ]
+
+ ❯ src/statusline.test.ts:66:49
+     64|   });
+     65|   const result = statuslineSegments(pane, usage, [], s);
+     66|   expect(result.slice(0, 3).map((v) => v.text)).toEqual([
+       |                                                 ^
+     67|     "Context tokens 1k",
+     68|     "出力 0",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  |@sodashitsu/protocol| src/statusline.test.ts > shows native subagents in claude footer without usage or kind gates
+ FAIL  |@sodashitsu/protocol| src/statusline.test.ts > shows native subagents in codex footer without usage or kind gates
+ FAIL  |@sodashitsu/protocol| src/statusline.test.ts > shows native subagents in muse footer without usage or kind gates
+ FAIL  |@sodashitsu/protocol| src/statusline.test.ts > shows native subagents in copilot footer without usage or kind gates
+ FAIL  |@sodashitsu/protocol| src/statusline.test.ts > shows native subagents in agy footer without usage or kind gates
+AssertionError: expected { field: 'subagents', …(2) } to match object { text: 'Subagents 2件' }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "text": "Subagents 2件",
++   "text": "Subagents 2",
+  }
+
+ ❯ src/statusline.test.ts:218:88
+    216|  const pane={agent:{kind,label:kind,state:"idle",subagents:{count:2,it…
+    217|  const settings=loadStatuslineSettings({fields:{subagents:true}});
+    218|  expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field…
+       |                                                                                        ^
+    219|  pane.agent!.subagents!.countBasis="alive";
+    220|  expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.field…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  |@sodashitsu/protocol| src/statusline.test.ts > shows supplied subagent membership by default while respecting explicit hidden and unknown
+AssertionError: expected 'Subagents 所属 3' to be 'Subagents 3件' // Object.is equality
+
+Expected: "Subagents 3件"
+Received: "Subagents 所属 3"
+
+ ❯ src/statusline.test.ts:228:95
+    226|  for(const raw of [undefined,{}, {fields:{subagents:true}}]){
+    227|   const settings=loadStatuslineSettings(raw);expect(settings.fields.su…
+    228|   expect(statuslineSegments(pane,undefined,[],settings).find(s=>s.fiel…
+       |                                                                                               ^
+    229|  }
+    230|  expect(statuslineSegments(pane,undefined,[],loadStatuslineSettings({f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  |@sodashitsu/protocol| src/statusline.test.ts > formats observed effort and distinct approval/permission values with source and scope, never sandbox
+AssertionError: expected [ 'effort high（記録）', …(3) ] to deeply equal [ 'effort high', …(3) ]
+
+- Expected
++ Received
+
+  [
+-   "effort high",
+-   "承認policy on-request",
++   "effort high（記録）",
++   "承認policy on-request（記録）",
+    "承認mode promptUnmatched",
+-   "権限mode plan",
++   "権限mode plan（報告）",
+  ]
+
+ ❯ src/statusline.test.ts:247:84
+    245|  const settings=loadStatuslineSettings({fields:{effort:true,approval:t…
+    246|  const result=statuslineSegments(pane,usage,[],settings);
+    247|  expect(result.filter(s=>s.field==="effort"||s.field==="approval").map…
+       |                                                                                    ^
+    248|  expect(result[0]!.title).toContain("ターンの記録 / rollout / 1970-01-01T00:…
+    249|  expect(result.some(s=>s.text.includes("workspace-write")||s.text.incl…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > PaneInfoView > 入口: ダッシュボードは窓を閉じ、サブエージェントは同じ窓へ埋め込む
+AssertionError: expected '2 件' to contain '2件'
+
+Expected: "2件"
+Received: "2 件"
+
+ ❯ src/dashboard/PaneInfoView.test.ts:177:62
+    175|   it("入口: ダッシュボードは窓を閉じ、サブエージェントは同じ窓へ埋め込む", async () => {
+    176|     const { wrapper, view, emitted } = setup(pane("p1", agent({ name: …
+    177|     expect(wrapper.get("[data-pane-info-subagents]").text()).toContain…
+       |                                                              ^
+    178|     expect(wrapper.find("[data-pane-info-open-subagents]").exists()).t…
+    179|     expect(wrapper.find(".subagent-list").exists()).toBe(true);expect(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > PaneInfoView > サブエージェントが 0 件・分からない: 一覧への入口を出さない（分からないは「—」）
+AssertionError: expected '0 件' to contain '0件'
+
+Expected: "0件"
+Received: "0 件"
+
+ ❯ src/dashboard/PaneInfoView.test.ts:189:64
+    187|     const a = setup(pane("p1", agent({ name: "alpha", subagents: { cou…
+    188|     expect(a.wrapper.find("[data-pane-info-open-subagents]").exists())…
+    189|     expect(a.wrapper.get("[data-pane-info-subagents]").text()).toConta…
+       |                                                                ^
+    190|     a.wrapper.unmount();
+    191|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > labels codex native membership counts with inline children
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > labels muse native membership counts with inline children
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > labels copilot native membership counts with inline children
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > labels agy native membership counts with inline children
+AssertionError: expected '所属 2 件' to be '2件' // Object.is equality
+
+Expected: "2件"
+Received: "所属 2 件"
+
+ ❯ src/dashboard/PaneInfoView.test.ts:212:59
+    210| it.each(["codex","muse","copilot","agy"])("labels %s native membership…
+    211|  const {wrapper,view}=setup(pane("p1",agent({kind,subagents:{count:2,i…
+    212|  expect(wrapper.get('[data-pane-info-subagents]').text()).toBe("2件");
+       |                                                           ^
+    213|  expect(wrapper.get(".subagent-list").text()).not.toContain("作業中の件数ではあ…
+    214|  expect(wrapper.find('.subagent-list').exists()).toBe(true);expect(vie…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  |@sodashitsu/client-core| src/agent/subagents.test.ts > distinguishes membership, work and unknown while preserving omitted defaults
+AssertionError: expected 'サブエージェント 2 件' to be 'サブエージェント 2件' // Object.is equality
+
+Expected: "サブエージェント 2件"
+Received: "サブエージェント 2 件"
+
+ ❯ src/agent/subagents.test.ts:38:49
+     36|  expect(subagentStateLabel({})).toBe("実行中");expect(subagentStateLabel(…
+     37|  expect(subagentStateLabel({state:"idle"})).toBe("待機中");expect(subagen…
+     38|  expect(subagentCountLabel({count:2,items:[]})).toBe("サブエージェント 2件");
+       |                                                 ^
+     39|  expect(subagentCountLabel({count:2,items:[],countBasis:"alive"})).toB…
+     40|  expect(subagentEmptyLabel(undefined)).toContain("未取得");expect(subagen…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  15 failed | 26 passed (41)
+   Start at  19:01:17
+   Duration  2.49s (transform 70%, import 14%, tests 9%, environment 7%)
+

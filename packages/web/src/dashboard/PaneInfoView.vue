@@ -217,7 +217,7 @@ function openDashboard(): void {
         <dd data-pane-info-branch>{{ branch ?? NONE }}</dd>
         <dt>サブエージェント</dt>
         <dd data-pane-info-subagents :title="subagentCountLabel(agent?.subagents)">
-          {{ subagentCount === null ? NONE : `${agent?.subagents?.countBasis==='alive'?'所属 ':''}${subagentCount} 件` }}
+          {{ subagentCount === null ? NONE : `${subagentCount}件` }}
         </dd>
       </dl>
 

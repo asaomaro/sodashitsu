@@ -44,7 +44,7 @@ export function subagentStateLabel(item: Pick<SubagentInfo,"state">):string {
   return item.state===undefined||item.state==="working"?"実行中":item.state==="idle"?"待機中":"状態不明";
 }
 export function subagentCountLabel(subagents:AgentInfo["subagents"]):string {
-  return subagents?`サブエージェント ${subagents.countBasis==="alive"?"所属 ":""}${subagents.count} 件`:"サブエージェントの状況は未取得";
+  return subagents?`サブエージェント ${subagents.count}件`:"サブエージェントの状況は未取得";
 }
 export function subagentEmptyLabel(subagents:AgentInfo["subagents"]):string {
   return !subagents?"サブエージェントの状況は未取得です":subagents.count>0?"サブエージェントの個別情報は未取得です":subagents.countBasis==="alive"?"所属するサブエージェントはありません":"実行中のサブエージェントはありません";

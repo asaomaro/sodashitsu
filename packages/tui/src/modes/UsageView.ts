@@ -189,7 +189,7 @@ export class UsageDialog implements Overlay {
               ),
             ])),
       ...(pane?.agent?.subagents ? [
-        `サブエージェント · ${subagentCountLabel(pane.agent.subagents)}`,
+        subagentCountLabel(pane.agent.subagents),
         ...pane.agent.subagents.items.slice(0,64).flatMap(child=>{
           const model=subagentModelLabel(child),session=child.description?.trim()||model||"サブエージェント";
           return [`${subagentStateLabel(child)} · ${session}`,...(child.description?.trim()&&model?[`  ${model}`]:[])];

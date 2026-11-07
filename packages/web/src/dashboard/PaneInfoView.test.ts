@@ -174,7 +174,7 @@ describe("PaneInfoView", () => {
 
   it("入口: ダッシュボードは窓を閉じ、サブエージェントは同じ窓へ埋め込む", async () => {
     const { wrapper, view, emitted } = setup(pane("p1", agent({ name: "alpha", subagents: { count: 2, items: [] } })));
-    expect(wrapper.get("[data-pane-info-subagents]").text()).toContain("2 件");
+    expect(wrapper.get("[data-pane-info-subagents]").text()).toContain("2件");
     expect(wrapper.find("[data-pane-info-open-subagents]").exists()).toBe(false);
     expect(wrapper.find(".subagent-list").exists()).toBe(true);expect(emitted).toEqual([]);expect(view.dialogContext).toBeNull();
     await wrapper.get("[data-pane-info-open-dashboard]").trigger("click");
@@ -186,7 +186,7 @@ describe("PaneInfoView", () => {
   it("サブエージェントが 0 件・分からない: 一覧への入口を出さない（分からないは「—」）", () => {
     const a = setup(pane("p1", agent({ name: "alpha", subagents: { count: 0, items: [] } })));
     expect(a.wrapper.find("[data-pane-info-open-subagents]").exists()).toBe(false);
-    expect(a.wrapper.get("[data-pane-info-subagents]").text()).toContain("0 件");
+    expect(a.wrapper.get("[data-pane-info-subagents]").text()).toContain("0件");
     a.wrapper.unmount();
   });
 
@@ -209,7 +209,8 @@ it("renders effort, remaining context and explicitly estimated/partial costs",as
 
 it.each(["codex","muse","copilot","agy"])("labels %s native membership counts with inline children",async kind=>{
  const {wrapper,view}=setup(pane("p1",agent({kind,subagents:{count:2,items:[],countBasis:"alive"}})));
- expect(wrapper.get('[data-pane-info-subagents]').text()).toContain("所属 2 件");
+ expect(wrapper.get('[data-pane-info-subagents]').text()).toBe("2件");
+ expect(wrapper.get(".subagent-list").text()).not.toContain("作業中の件数ではありません");
  expect(wrapper.find('.subagent-list').exists()).toBe(true);expect(view.dialogContext).toBeNull();wrapper.unmount();
 });
 

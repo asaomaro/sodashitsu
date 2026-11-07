@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import type { AgentInfo } from "@sodashitsu/protocol";
-import { subagentModelLabel,subagentEffortLabel,subagentStateLabel, subagentCountLabel, subagentEmptyLabel, formatSubagentElapsed, subagentsMoreLabel } from "@sodashitsu/client-core";
+import { subagentModelLabel,subagentEffortLabel,subagentStateLabel, subagentEmptyLabel, formatSubagentElapsed, subagentsMoreLabel } from "@sodashitsu/client-core";
 
 /**
  * サブエージェントの一覧の中身（20261004-subagent-display）。サイドバーからの一覧のダイアログ（`SubagentListDialog`）と、連携のグラフの中のパネル
@@ -30,7 +30,6 @@ defineExpose({ focus: () => listEl.value?.focus() });
     role="list"
     aria-label="サブエージェントの一覧"
   >
-    <p v-if="subagents?.countBasis==='alive'" class="subagent-list-more">{{ subagentCountLabel(subagents) }}（作業中の件数ではありません）</p>
     <p v-if="items.length === 0" class="subagent-list-empty">
       {{ subagentEmptyLabel(subagents) }}
     </p>

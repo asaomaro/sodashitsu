@@ -31,7 +31,7 @@ it("shows observed execution settings and their source in real footer DOM withou
  usage.panes.p={paneId:"p",kind:"codex",model:null,tokens:{basis:"context"},source:"rollout",updatedAt:2,executionSettings:{reasoningEffort:{value:"high",source:"rollout",basis:"turn",observedAt:1000},approvalPolicy:{value:"on-request",source:"rollout",basis:"turn"}}};
  const w=mount(PaneStatusline,{props:{paneId:"p"},global:{plugins:[pinia]}});
  try{
-  expect(w.text()).toContain("effort high（記録）");expect(w.text()).toContain("承認policy on-request（記録）");
+  expect(w.text()).toContain("effort high");expect(w.text()).toContain("承認policy on-request");
   expect(w.findAll("span[title]").some(x=>x.attributes("title")?.includes("ターンの記録 / rollout"))).toBe(true);
   settings.statuslineSettings=loadStatuslineSettings({fields:{effort:false,approval:true}});await w.vm.$nextTick();expect(w.text()).not.toContain("effort high");expect(w.text()).toContain("承認policy");
   usage.panes.p={...usage.panes.p!,executionSettings:{approvalMode:{value:"onRequest",source:"muse-events",basis:"session"}}};await w.vm.$nextTick();expect(w.text()).toContain("承認mode onRequest");

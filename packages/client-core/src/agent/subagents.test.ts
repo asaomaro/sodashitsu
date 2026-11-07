@@ -35,8 +35,8 @@ describe("ほか n 件", () => {
 it("distinguishes membership, work and unknown while preserving omitted defaults",()=>{
  expect(subagentStateLabel({})).toBe("実行中");expect(subagentStateLabel({state:"working"})).toBe("実行中");
  expect(subagentStateLabel({state:"idle"})).toBe("待機中");expect(subagentStateLabel({state:"unknown"})).toBe("状態不明");
- expect(subagentCountLabel({count:2,items:[]})).toBe("サブエージェント 2 件");
- expect(subagentCountLabel({count:2,items:[],countBasis:"alive"})).toBe("サブエージェント 所属 2 件");
+ expect(subagentCountLabel({count:2,items:[]})).toBe("サブエージェント 2件");
+ expect(subagentCountLabel({count:2,items:[],countBasis:"alive"})).toBe("サブエージェント 2件");
  expect(subagentEmptyLabel(undefined)).toContain("未取得");expect(subagentEmptyLabel({count:0,items:[],countBasis:"alive"})).toContain("所属");
  expect(subagentEmptyLabel({count:0,items:[]})).toBe("実行中のサブエージェントはありません");
 });

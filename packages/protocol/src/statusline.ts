@@ -11,11 +11,11 @@ export const STATUSLINE_FIELDS = [
   { id: "fiveHour", label: "5時間制限" },
   { id: "weekly", label: "週制限" },
   { id: "otherLimits", label: "その他の利用枠" },
-  { id: "input", label: "入力トークン" },
-  { id: "output", label: "出力トークン" },
-  { id: "cacheRead", label: "キャッシュ読取トークン" },
-  { id: "cacheWrite", label: "キャッシュ書込トークン" },
-  { id: "reasoning", label: "推論トークン" },
+  { id: "input", label: "入力" },
+  { id: "output", label: "出力" },
+  { id: "cacheRead", label: "キャッシュ読取" },
+  { id: "cacheWrite", label: "キャッシュ書込" },
+  { id: "reasoning", label: "推論" },
   { id: "contextTokens", label: "コンテキスト量・上限" },
   { id: "premiumRequests", label: "プレミアムリクエスト数" },
   { id: "session", label: "セッションID" },
@@ -180,8 +180,7 @@ export function statuslineSegments(
   const observation = (field: "effort" | "approval", label: string, value: AgentSettingObservation | undefined, legacy = false) => {
     if (!value || typeof value.value !== "string" || !/^[^\x00-\x1f\x7f-\x9f]{1,128}$/.test(value.value) || !value.value.trim() || !["turn","session","statusline","hook"].includes(value.basis)) return;
     const basis = legacy ? "利用状況の報告（設定の範囲・時点は未取得）" : value.basis === "session" ? "セッション設定の記録（ターンの一時指定は未反映の場合があります）" : value.basis === "turn" ? "ターンの記録" : value.basis === "hook" ? "フックの報告" : "ステータスの報告";
-    const marker = value.basis === "session" ? "" : value.basis === "turn" ? "（記録）" : "（報告）";
-    add(field, `${label} ${value.value}${marker}`, "model");
+    add(field, `${label} ${value.value}`, "model");
     const segment = values.get(field)?.at(-1);
     if (segment) segment.title = `${basis} / ${value.source}${finite(value.observedAt) && Math.abs(value.observedAt) <= 8.64e15 ? ` / ${new Date(value.observedAt).toISOString()}` : ""}。現在のCLI設定とは異なる場合があります。`;
   };
@@ -218,7 +217,7 @@ export function statuslineSegments(
   );
   add("cwd", pane.cwd);
   if (pane.agent.subagents) {
-    add("subagents", `Subagents ${pane.agent.subagents.countBasis==="alive"?"所属 ":""}${pane.agent.subagents.count}`);
+    add("subagents", `Subagents ${pane.agent.subagents.count}件`);
     const segment=values.get("subagents")?.[0];
     if(segment&&pane.agent.subagents.countBasis==="alive")segment.title="所属するサブエージェントの数。作業中の件数ではありません。";
   }

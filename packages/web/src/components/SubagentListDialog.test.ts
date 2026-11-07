@@ -100,7 +100,7 @@ describe("SubagentListDialog — 表示", () => {
   it.each(["codex","muse","copilot","agy"])("opens %s native data without a Claude gate and preserves unknown state",async kind=>{
     const {wrapper,session}=await setup({count:1,countBasis:"alive",items:[sub("unknown",{state:"unknown"})]});
     session.paneUpserted(paneOf(agentOf({count:1,countBasis:"alive",items:[sub("unknown",{state:"unknown"})]},{kind,label:kind})));await wrapper.vm.$nextTick();
-    expect(dialogOf(wrapper).open).toBe(true);expect(wrapper.text()).toContain("所属 1 件");expect(wrapper.get('.subagent-list-state').text()).toBe("状態不明");expect(wrapper.text()).not.toContain("実行中");wrapper.unmount();
+    expect(dialogOf(wrapper).open).toBe(true);expect(wrapper.find(".subagent-list-more").exists()).toBe(false);expect(wrapper.get('.subagent-list-state').text()).toBe("状態不明");expect(wrapper.text()).not.toContain("実行中");wrapper.unmount();
   });
   it("開くと題（pane の呼び名）と、各行の種類・説明・経過時間・バックグラウンドの印を出す。先頭の一覧の領域にフォーカスが移る", async () => {
     const { wrapper } = await setup({

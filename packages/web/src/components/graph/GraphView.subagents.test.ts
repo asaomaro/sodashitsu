@@ -104,15 +104,15 @@ describe("グラフのノードの件数のボタン", () => {
   it.each(["codex","muse","copilot","agy"])("labels %s membership in graph count and opens the shared list",async kind=>{
     const {wrapper,session}=await open({p1:{count:1,countBasis:"alive",items:[{id:"unknown",startedAt:Date.now(),state:"unknown"}]}});
     const pane=session.panes.get("p1")!;session.panes.set("p1",{...pane,agent:{...pane.agent!,kind}});await flush();
-    expect(btn(wrapper,"local:p1").attributes("aria-label")).toContain("所属 1 件");
-    await btn(wrapper,"local:p1").trigger("click");await flush();expect(wrapper.get('.subagent-list').text()).toContain("所属 1 件");expect(wrapper.get('.subagent-list-state').text()).toBe("状態不明");wrapper.unmount();
+    expect(btn(wrapper,"local:p1").attributes("aria-label")).toContain("1件");
+    await btn(wrapper,"local:p1").trigger("click");await flush();expect(wrapper.get('.subagent-list').find(".subagent-list-more").exists()).toBe(false);expect(wrapper.get('.subagent-list-state').text()).toBe("状態不明");wrapper.unmount();
   });
   it("1 件以上のときだけ出る（数・読み上げの名前つき）。ノードの大きさは変えない。tabindex は -1", async () => {
     const { wrapper } = await open({ p1: subs(3), p2: subs(0) });
     const b = btn(wrapper, "local:p1");
     expect(b.exists()).toBe(true);
     expect(b.text()).toBe("3");
-    expect(b.attributes("aria-label")).toBe("impl のサブエージェント 3 件を表示");
+    expect(b.attributes("aria-label")).toBe("impl のサブエージェント 3件を表示");
     expect(b.attributes("tabindex")).toBe("-1");
     expect(btn(wrapper, "local:p2").exists()).toBe(false); // 0 件
     const styles = ["local:p1", "local:p2"].map(
@@ -123,7 +123,7 @@ describe("グラフのノードの件数のボタン", () => {
       expect(s).toContain(`height: ${GRAPH_NODE_HEIGHT}px`);
     }
     expect(wrapper.get('[data-node-key="local:p1"]').attributes("aria-label")).toContain(
-      "サブエージェント 3 件",
+      "サブエージェント 3件",
     );
     wrapper.unmount();
   });
@@ -414,7 +414,7 @@ describe("別のマシンのノード・モバイル・古いサーバ", () => {
     const stripButton = (h: string) =>
       h
         .replace(/<button[^>]*data-subagents-button[\s\S]*?<\/button>/, "")
-        .replace("・サブエージェント 3 件", "");
+        .replace("・サブエージェント 3件", "");
     // Vue の注釈（`<!--v-if-->`・テンプレートの注釈）は描かれ方に効かないので除く。
     const norm = (h: string) => h.replace(/<!--[\s\S]*?-->/g, "").replace(/>\s+</g, "><");
     expect(norm(stripButton(newHtml))).toBe(norm(oldHtml));

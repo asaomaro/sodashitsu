@@ -1,0 +1,37 @@
+{
+  "packages/client-core/src/agent/subagents.ts": {
+    "expected": "0ee2318292385f8acaecc959cca65538fa81e623f452e5990df3f13362cfe036",
+    "restored": "0ee2318292385f8acaecc959cca65538fa81e623f452e5990df3f13362cfe036",
+    "exact": true
+  },
+  "packages/protocol/src/statusline.ts": {
+    "expected": "e2d58291a9e297a7a97f045c26c8310864f215dd833c4340c27dae7ce0492e79",
+    "restored": "e2d58291a9e297a7a97f045c26c8310864f215dd833c4340c27dae7ce0492e79",
+    "exact": true
+  },
+  "packages/tui/src/modes/UsageView.ts": {
+    "expected": "7d9439eddf02d7644f7bc62e1c029ad27a1ba572fca6962e589b6d5e1ffd3bf0",
+    "restored": "7d9439eddf02d7644f7bc62e1c029ad27a1ba572fca6962e589b6d5e1ffd3bf0",
+    "exact": true
+  },
+  "packages/tui/src/render/chrome/sidebar.ts": {
+    "expected": "e2b0378558353e35fdcf1880361e94864749986a5550eb8c791c1ca3b156c8b2",
+    "restored": "e2b0378558353e35fdcf1880361e94864749986a5550eb8c791c1ca3b156c8b2",
+    "exact": true
+  },
+  "packages/web/src/components/SubagentList.vue": {
+    "expected": "b34eed952fe9632acbd2ea87a85b87a1f32b13821bcd2ac8b127507928f4ebf1",
+    "restored": "b34eed952fe9632acbd2ea87a85b87a1f32b13821bcd2ac8b127507928f4ebf1",
+    "exact": true
+  },
+  "packages/web/src/dashboard/DashboardView.vue": {
+    "expected": "89eb1104b252b53e27093acbcc6e9f78cd3c4c698fda0ef6b07cb7a551eb9026",
+    "restored": "89eb1104b252b53e27093acbcc6e9f78cd3c4c698fda0ef6b07cb7a551eb9026",
+    "exact": true
+  },
+  "packages/web/src/dashboard/PaneInfoView.vue": {
+    "expected": "7aa1a657bbdaed1205efbf65d68ddab45116611870834eee7580d22fd83446e8",
+    "restored": "7aa1a657bbdaed1205efbf65d68ddab45116611870834eee7580d22fd83446e8",
+    "exact": true
+  }
+}

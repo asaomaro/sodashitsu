@@ -5,7 +5,7 @@ const pane={id:'p',label:'Generated',agent:{kind:'codex',state:'idle',label:'Cod
 const usage:AgentUsage={paneId:'p',kind:'codex',model:'gpt-observed',source:'rollout',tokens:{basis:'context'},updatedAt:1};
 it('appends same-kind observed effort and keeps its basis/source tooltip',()=>{
  const value=observedAgentModel(pane,{...usage,executionSettings:{reasoningEffort:{value:'high',basis:'turn',source:'rollout',observedAt:1}}});
- expect(value?.text).toBe('gpt-observed high（記録）');expect(value?.title).toContain('ターンの記録 / rollout');
+ expect(value?.text).toBe('gpt-observed high');expect(value?.title).toContain('ターンの記録 / rollout');
 });
 it('keeps model only when effort is absent and rejects wrong-kind observations',()=>{
  expect(observedAgentModel(pane,usage)?.text).toBe('gpt-observed');expect(observedAgentModel(pane,{...usage,kind:'claude'})).toBeUndefined();
@@ -21,5 +21,5 @@ it('omits invalid child observations and labels effort without a model explicitl
 });
 
 it('shows effort alone without manufacturing a model, while rejecting another pane',()=>{
- expect(observedAgentModel(pane,{...usage,model:null,reasoningEffort:'high'})?.text).toBe('effort high（報告）');expect(observedAgentModel(pane,{...usage,paneId:'foreign'})).toBeUndefined();
+ expect(observedAgentModel(pane,{...usage,model:null,reasoningEffort:'high'})?.text).toBe('effort high');expect(observedAgentModel(pane,{...usage,paneId:'foreign'})).toBeUndefined();
 });

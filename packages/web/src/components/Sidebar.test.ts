@@ -631,7 +631,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     const b = btn(mountSidebar(makeConnection()));
     expect(b.exists()).toBe(true);
     expect(b.find(".sidebar-subagent-count").text()).toBe("3");
-    expect(b.attributes("aria-label")).toBe("サブエージェント 3 件を展開");
+    expect(b.attributes("aria-label")).toBe("サブエージェント 3件を展開");
   });
 
   it("2 行目の中に移し、行の数を増やさない", () => {
@@ -737,7 +737,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
   });
   it.each(["claude","codex","muse","copilot","agy"])("shows %s children using their state and membership basis",async kind=>{
     setup(makeAgent({kind,subagents:{count:3,countBasis:"alive",items:[{id:"u",startedAt:0,state:"unknown"},{id:"i",startedAt:0,state:"idle"},{id:"w",startedAt:0}]}}));const w=mountSidebar(makeConnection());
-    expect(btn(w).attributes("aria-label")).toContain("所属 3 件");await btn(w).trigger("click");
+    expect(btn(w).attributes("aria-label")).toContain("3件");await btn(w).trigger("click");
     expect(w.get('[data-subagent-id="u"] .state-icon').attributes("aria-label")).toBe("状態不明");expect(w.get('[data-subagent-id="u"] .state-icon').text()).toBe("?");expect(w.get('[data-subagent-id="u"]').text()).not.toContain("状態不明");
     expect(w.get('[data-subagent-id="i"] .state-icon').attributes("data-state")).toBe("idle");expect(w.get('[data-subagent-id="w"] .state-icon').attributes("data-state")).toBe("working");
     expect(w.text()).not.toContain("所属する子（作業中の件数ではありません）");
@@ -755,7 +755,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     setup(makeAgent({kind:"codex",subagents:{count:1,items:[{id:"child",startedAt:0,type:"child-model",description:"child-session",reasoningEffort:"low",reasoningEffortBasis:"creation"}]}}));
     useSettingsStore(pinia).statuslineSettings.enabled=false;
     const store=useUsageStore(pinia);store.panes.p1={paneId:"p1",kind:"codex",model:"parent-model",reasoningEffort:"high",tokens:{basis:"context"},source:"rollout",updatedAt:1};
-    const w=mountSidebar(makeConnection()),parent=w.get('[data-agent-pane="p1"]');expect(parent.text()).toContain("parent-model high（報告）");expect(parent.find('.sidebar-row-line1 .sidebar-agent-info').exists()).toBe(true);expect(parent.find('.sidebar-row-line2 .sidebar-subagent-btn').exists()).toBe(true);
+    const w=mountSidebar(makeConnection()),parent=w.get('[data-agent-pane="p1"]');expect(parent.text()).toContain("parent-model high");expect(parent.find('.sidebar-row-line1 .sidebar-agent-info').exists()).toBe(true);expect(parent.find('.sidebar-row-line2 .sidebar-subagent-btn').exists()).toBe(true);
     await btn(w).trigger('click');expect(w.get('[data-subagent-id="child"] .sidebar-row-line2').text()).toBe('child-model low（開始時）');expect(w.get('[data-subagent-id="child"]').attributes('title')).toContain('開始時のeffort');expect(w.find('.sidebar-subagent-details').exists()).toBe(false);
     await parent.get('.sidebar-agent-info').trigger('click');expect(useViewStore(pinia).paneInfoPaneId).toBe('p1');await parent.get('.sidebar-agent-info').trigger('click');expect(useViewStore(pinia).paneInfoPaneId).toBeNull();
   });
@@ -779,7 +779,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
   });
   it("未取得と0件を区別し、展開は別machineに漏れない",async()=>{
     const session=setup(makeAgent());const w=mountSidebar(makeConnection());expect(w.get("[data-agent-pane]").attributes("title")).toContain("未取得");
-    session.paneUpserted(makePane("p1","t1",makeAgent({subagents:subs(0)})));await nextTick();expect(w.get("[data-agent-pane]").attributes("title")).toContain("0 件");
+    session.paneUpserted(makePane("p1","t1",makeAgent({subagents:subs(0)})));await nextTick();expect(w.get("[data-agent-pane]").attributes("title")).toContain("0件");
     session.paneUpserted(makePane("p1","t1",makeAgent({subagents:subs(1)})));await nextTick();await btn(w).trigger("click");
     useMachinesStore(pinia).select("other");await nextTick();expect(btn(w).attributes("aria-expanded")).toBe("false");
   });

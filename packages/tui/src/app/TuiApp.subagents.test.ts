@@ -369,7 +369,7 @@ describe("端末版のサブエージェントの表示", () => {
     const h=await start({subagents:subs(1)});h.app.prefs.apply({statuslineSettings:loadStatuslineSettings({enabled:false}),sidebarRows:{spaces:null,agents:[[{token:"agent"}]]}},10000);h.app.renderNow();const info=h.hits().find(x=>x.kind==="info")!,badge=h.badge()!;expect(badge.y).toBe(info.y);
     h.app.prefs.setLocal({...h.app.prefs.localState,sidebarCollapsed:true});h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(false));
     h.app.prefs.setLocal({...h.app.prefs.localState,sidebarCollapsed:false,sidebarCols:60});h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(true));
-    await vi.waitFor(()=>expect(h.app.usage.status).toBe("ready"));h.ws.event("agent.usage_changed",{panes:{p3:{paneId:"p3",kind:"claude",model:"observed-model",reasoningEffort:"high",tokens:{basis:"context"},source:"statusline",updatedAt:Date.now()}}});h.app.renderNow();expect(await h.screen()).toContain("observed-model high（報告）");
+    await vi.waitFor(()=>expect(h.app.usage.status).toBe("ready"));h.ws.event("agent.usage_changed",{panes:{p3:{paneId:"p3",kind:"claude",model:"observed-model",reasoningEffort:"high",tokens:{basis:"context"},source:"statusline",updatedAt:Date.now()}}});h.app.renderNow();expect(await h.screen()).toContain("observed-model high");
     h.app.prefs.setLocal({...h.app.prefs.localState,sidebarSectionsCollapsed:{agents:true}});h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(false));
   });
 
