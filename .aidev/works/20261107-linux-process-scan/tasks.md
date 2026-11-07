@@ -36,3 +36,5 @@ LinuxProcessInspectorの同一instance内で、実行中のPromiseだけを共�
 
 
 反映後、実ブラウザのPCMは291frame/ACK288/maxPending4で6秒の転送と停止に成功。Opusはencoder configure3/encode69/close3、66frameで停止し、圧縮器の局所回復が尽きる現象へ絞れた。CPU重複走査の修正を音声停止の解決とは扱わず、別途圧縮器の時刻照合を修正する。
+
+音声の別修正は[Opus時刻照合](../20261107-microphone-opus-timeline/tasks.md)で実施し、修正後10秒/15秒の実UI転送で再発せず解決扱いになった。CPU改善だけで解決したという意味ではない。

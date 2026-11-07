@@ -1,0 +1,42 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/web
+> vitest run src/desktop/microphoneClient.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/web
+
+ ❯ src/desktop/microphoneClient.test.ts (14 tests | 1 failed) 75ms
+   × keeps sending continuous codec output after dropping frames before encode 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/microphoneClient.test.ts > keeps sending continuous codec output after dropping frames before encode
+AssertionError: expected [ 1 ] to deeply equal [ 1, 2 ]
+
+- Expected
++ Received
+
+  [
+    1,
+-   2,
+  ]
+
+ ❯ src/desktop/microphoneClient.test.ts:42:89
+     40|   // The real Opus encoder emits consecutive packet times even when in…
+     41|   f.output(encoder,20000);f.output(encoder,40000);
+     42|   expect(f.send.mock.calls.filter(([m])=>m.type==="microphone_opus").m…
+       |                                                                                         ^
+     43|   f.client.receive({type:"microphone_ack",id,seq:2});await vi.advanceT…
+     44|   expect(f.encoders).toHaveLength(1);expect(f.track.stop).not.toHaveBe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  10:49:59
+   Duration  971ms (transform 58%, import 17%, environment 16%, tests 8%)
+
+/workspaces/sodashitsu-main-live-assistant-agents/packages/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/web@0.1.0 test: `vitest run src/desktop/microphoneClient.test.ts`
+Exit status 1

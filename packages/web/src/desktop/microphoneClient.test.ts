@@ -32,6 +32,33 @@ function opusSetup(){
  const client=new DesktopMicrophoneClient(f.send,f.state,{opus:true});
  return {...f,client,encoders,configure:(fn:()=>void)=>{configure=fn;},frame:()=>f.nodes[0].port.onmessage({data:{pcm:new ArrayBuffer(1920),at:1}}),output:(encoder:any,timestamp:number)=>{encoder.encodeQueueSize=0;encoder.init.output({timestamp,duration:20000,byteLength:2,copyTo:(bytes:Uint8Array)=>bytes.set([1,2])});},running:async()=>{const starting=client.start();await vi.advanceTimersByTimeAsync(0);f.finish();await starting;const id=f.send.mock.calls[0]![0].id;client.receive({type:"microphone_status",id,state:"running"});return id;}};
 }
+it("keeps sending continuous codec output after dropping frames before encode",async()=>{
+ vi.useFakeTimers();const f=opusSetup();try{
+  const id=await f.running();f.frame();const encoder=f.encoders[0];
+  encoder.encodeQueueSize=2;for(let i=0;i<5;i++)f.frame();
+  encoder.encodeQueueSize=0;f.frame();
+  // The real Opus encoder emits consecutive packet times even when input times have holes.
+  f.output(encoder,20000);f.output(encoder,40000);
+  expect(f.send.mock.calls.filter(([m])=>m.type==="microphone_opus").map(([m])=>m.seq)).toEqual([1,2]);
+  f.client.receive({type:"microphone_ack",id,seq:2});await vi.advanceTimersByTimeAsync(250);
+  expect(f.encoders).toHaveLength(1);expect(f.track.stop).not.toHaveBeenCalled();
+ }finally{f.client.stop();vi.useRealTimers();}
+});
+it.each([-1,1])("matches fresh Opus output rounded by %i microseconds without restarting",async rounding=>{
+ vi.useFakeTimers();const f=opusSetup();try{
+  const id=await f.running();f.frame();f.output(f.encoders[0],20000+rounding);
+  expect(f.send).toHaveBeenCalledWith(expect.objectContaining({type:"microphone_opus",seq:1}));
+  f.client.receive({type:"microphone_ack",id,seq:1});await vi.advanceTimersByTimeAsync(250);
+  expect(f.encoders).toHaveLength(1);expect(f.track.stop).not.toHaveBeenCalled();
+ }finally{f.client.stop();vi.useRealTimers();}
+});
+it.each([-2,2,10000,NaN,Infinity])("does not match unrelated Opus output offset %s",async offset=>{
+ vi.useFakeTimers();const f=opusSetup();try{
+  await f.running();f.frame();f.output(f.encoders[0],20000+offset);
+  expect(f.send.mock.calls.filter(([m])=>m.type==="microphone_opus")).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(201);expect(f.encoders).toHaveLength(2);
+ }finally{f.client.stop();vi.useRealTimers();}
+});
 it("drops stalled Opus frames and recovers twice without reacquiring the device or replaying the handshake",async()=>{
  vi.useFakeTimers();const f=opusSetup();try{
   await f.running();for(let cycle=0;cycle<3;cycle++){
@@ -69,6 +96,6 @@ it("checks ACK expiry after replacement configuration even without another callb
  try{await f.running();const born=performance.now();f.frame();f.output(f.encoders[0],20000);f.frame();f.configure(()=>{clock=vi.spyOn(performance,"now").mockReturnValue(born+500);});await vi.advanceTimersByTimeAsync(200);expect(f.encoders).toHaveLength(2);expect(f.encoders[1].close).toHaveBeenCalledOnce();expect(f.track.stop).toHaveBeenCalledOnce();expect(f.state).toHaveBeenLastCalledWith("unavailable");}
  finally{clock?.mockRestore();f.client.stop();vi.useRealTimers();}
 });
-it("still drops Opus output older than100ms without replay or terminating a healthy codec",async()=>{
- vi.useFakeTimers();const f=opusSetup();try{await f.running();f.frame();await vi.advanceTimersByTimeAsync(101);f.output(f.encoders[0],20000);expect(f.send.mock.calls.filter(([m])=>m.type==="microphone_opus")).toHaveLength(0);expect(f.track.stop).not.toHaveBeenCalled();f.frame();f.output(f.encoders[0],40000);expect(f.send).toHaveBeenCalledWith(expect.objectContaining({type:"microphone_opus",seq:2}));}finally{f.client.stop();vi.useRealTimers();}
+it.each([-1,0,1])("still drops stale Opus output rounded by %i without replay or terminating a healthy codec",async rounding=>{
+ vi.useFakeTimers();const f=opusSetup();try{await f.running();f.frame();await vi.advanceTimersByTimeAsync(101);f.output(f.encoders[0],20000+rounding);expect(f.send.mock.calls.filter(([m])=>m.type==="microphone_opus")).toHaveLength(0);expect(f.track.stop).not.toHaveBeenCalled();f.frame();f.output(f.encoders[0],40000);expect(f.send).toHaveBeenCalledWith(expect.objectContaining({type:"microphone_opus",seq:2}));}finally{f.client.stop();vi.useRealTimers();}
 });

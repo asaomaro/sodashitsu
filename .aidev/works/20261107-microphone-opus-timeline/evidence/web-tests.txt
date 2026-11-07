@@ -1,0 +1,8 @@
+ Test Files  249 passed (249)
+      Tests  3927 passed (3927)
+   Start at  10:58:12
+   Duration  87.18s (tests 37%, environment 30%, import 25%, transform 7%, worker 1%)
+
+Environment  happy-dom was created 249 times · 45.31s total, 30% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments

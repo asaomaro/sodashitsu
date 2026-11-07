@@ -27,8 +27,12 @@ export class DesktopMicrophoneClient {
       node.port.onmessage=event=>{const bytes=event.data?.pcm;node.port.postMessage("ready");const pcm=bytes instanceof ArrayBuffer?new Uint8Array(bytes):undefined;if(epoch!==this.epoch||!this.running||this.pending.size>=12||typeof event.data?.at!=="number"||context.currentTime-event.data.at>0.1||event.data.at>context.currentTime+0.01){pcm?.fill(0);return;}
         if(this.ackExpired()){pcm?.fill(0);this.fail();return;}
         if(!(bytes instanceof ArrayBuffer)||bytes.byteLength!==DESKTOP_MICROPHONE_BYTES||this.seq>=0xffffffff){this.fail();return;}
-        const seq=++this.seq,encoder=this.encoder;
-        if(encoder){if(encoder.encodeQueueSize>=2||this.encoding.size+this.pending.size>=12){pcm!.fill(0);return;}const timestamp=seq*20000;this.encoding.set(timestamp,{seq,at:performance.now()});this.armDeadline();let audio:AudioData|undefined;try{audio=new AudioData({format:"s16",sampleRate:48000,numberOfFrames:960,numberOfChannels:1,timestamp,data:pcm!});encoder.encode(audio);}catch{this.fail();}finally{audio?.close();pcm!.fill(0);}}
+        const encoder=this.encoder;
+        // Opus emits a continuous packet timeline. A frame dropped before encode
+        // must not leave a timestamp hole that stops matching later output.
+        if(encoder&&(encoder.encodeQueueSize>=2||this.encoding.size+this.pending.size>=12)){pcm!.fill(0);return;}
+        const seq=++this.seq;
+        if(encoder){const timestamp=seq*20000;this.encoding.set(timestamp,{seq,at:performance.now()});this.armDeadline();let audio:AudioData|undefined;try{audio=new AudioData({format:"s16",sampleRate:48000,numberOfFrames:960,numberOfChannels:1,timestamp,data:pcm!});encoder.encode(audio);}catch{this.fail();}finally{audio?.close();pcm!.fill(0);}}
         else{this.transmit(seq,pcm!,"microphone_frame");}
       };
       if(opus){this.encoderConfig=config;this.configureEncoder(epoch);}
@@ -52,7 +56,11 @@ export class DesktopMicrophoneClient {
     encoder=new AudioEncoder({error:()=>{if(epoch===this.epoch&&this.encoder===encoder)this.fail();},output:chunk=>{
       if(epoch!==this.epoch||this.encoder!==encoder)return;
       if(this.ackExpired()){this.fail();return;}
-      const frame=this.encoding.get(chunk.timestamp);this.encoding.delete(chunk.timestamp);this.armDeadline();
+      // Chromium can round an Opus timestamp one microsecond below/above the
+      // input time. Only that rounding is accepted, within this encoder epoch.
+      const timestamp=Math.round(chunk.timestamp/20000)*20000;
+      const frame=Math.abs(chunk.timestamp-timestamp)<=1?this.encoding.get(timestamp):undefined;
+      if(frame)this.encoding.delete(timestamp);this.armDeadline();
       if(!frame||!this.running||performance.now()-frame.at>100)return;
       if(chunk.byteLength<1||chunk.byteLength>1275||chunk.duration!==20000){this.fail();return;}
       const bytes=new Uint8Array(chunk.byteLength);chunk.copyTo(bytes);this.transmit(frame.seq,bytes,"microphone_opus");

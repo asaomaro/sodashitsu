@@ -1,0 +1,2 @@
+{"ready":true,"syntheticFileOnly":true}
+{"passed":true,"durationMs":15000,"encoderStats":{"configure":1,"encode":723,"close":1},"codec":"Opus 32 kbps","opusFrames":723,"pcmFrames":0,"stopAfterLastSendMs":19,"stopAfterLastAckMs":-8,"sentFrames":723,"acknowledgedFrames":716,"maximumPending":8,"states":["starting","running","stopped"],"physicalMicrophoneUsed":false,"syntheticFileOnly":true,"rawAudioStored":false}

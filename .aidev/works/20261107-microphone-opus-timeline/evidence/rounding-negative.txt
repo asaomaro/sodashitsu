@@ -1,0 +1,84 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/web
+> vitest run src/desktop/microphoneClient.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/web
+
+ ❯ src/desktop/microphoneClient.test.ts (23 tests | 2 failed) 84ms
+   × matches fresh Opus output rounded by -1 microseconds without restarting 6ms
+   × matches fresh Opus output rounded by 1 microseconds without restarting 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/microphoneClient.test.ts > matches fresh Opus output rounded by -1 microseconds without restarting
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   ObjectContaining {
+-     "seq": 1,
+-     "type": "microphone_opus",
++   {
++     "codec": "opus",
++     "id": "89be1e7d-f937-432f-8e2d-d5c892dac91e",
++     "type": "microphone_start",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/desktop/microphoneClient.test.ts:50:18
+     48|  vi.useFakeTimers();const f=opusSetup();try{
+     49|   const id=await f.running();f.frame();f.output(f.encoders[0],20000+ro…
+     50|   expect(f.send).toHaveBeenCalledWith(expect.objectContaining({type:"m…
+       |                  ^
+     51|   f.client.receive({type:"microphone_ack",id,seq:1});await vi.advanceT…
+     52|   expect(f.encoders).toHaveLength(1);expect(f.track.stop).not.toHaveBe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/desktop/microphoneClient.test.ts > matches fresh Opus output rounded by 1 microseconds without restarting
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   ObjectContaining {
+-     "seq": 1,
+-     "type": "microphone_opus",
++   {
++     "codec": "opus",
++     "id": "d05cac37-693d-49c8-acf2-d4102793969d",
++     "type": "microphone_start",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/desktop/microphoneClient.test.ts:50:18
+     48|  vi.useFakeTimers();const f=opusSetup();try{
+     49|   const id=await f.running();f.frame();f.output(f.encoders[0],20000+ro…
+     50|   expect(f.send).toHaveBeenCalledWith(expect.objectContaining({type:"m…
+       |                  ^
+     51|   f.client.receive({type:"microphone_ack",id,seq:1});await vi.advanceT…
+     52|   expect(f.encoders).toHaveLength(1);expect(f.track.stop).not.toHaveBe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 21 passed (23)
+   Start at  10:54:52
+   Duration  997ms (transform 59%, environment 17%, import 15%, tests 9%)
+
+/workspaces/sodashitsu-main-live-assistant-agents/packages/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/web@0.1.0 test: `vitest run src/desktop/microphoneClient.test.ts`
+Exit status 1
