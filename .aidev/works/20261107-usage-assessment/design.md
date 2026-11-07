@@ -1,0 +1,11 @@
+# Observed-use assessment
+
+Root accepted rubric and placement before implementation. Existing SummaryService.usageReport already receives numerical history plus a bounded current-work context (up to12 live panes; limited user/assistant excerpts, open todos and cached summaries). Add optional structured criterion data to that same output; do not launch another model. Numerical index/historical files remain unchanged.
+
+Five fixed criteria: purpose/acceptance; scope/delegation fit; verification/feedback; adaptation to observed blockers; resource-selection rationale. The evaluating agent assigns0–4 only when the provided current-work record supports a judgment, otherwise null. Tool/subagent count, cache rate, low spend or no observed errors are not standalone positive proxies. An unobserved blocker does not imply poor adaptation. Model judgments remain automatic observations, not independently verified outcome quality.
+
+Server accepts scored criteria only when evidenceRef points to an existing available work message/todo or a nonstale summary and evidenceQuote is an exact literal substring of that specific bounded input. Unknown/invented refs, unmatched/empty quotes, stale summaries and numeric-only requests become unassessed. References are array paths, not user-supplied file paths; no additional transcript lookup or persistence of new source text is introduced.
+
+Shared protocol computes known count, normalized observed-range score, and grade. At least3/5 known required; fewer means score/grade null. Known0 remains0, not missing. Score=round(sum known values / (known count*4) *100), A>=80/B>=60/C>=40/D>=20/E<20. Model-provided aggregate/grade fields are ignored. Fixed labels/rules/thresholds are shared by text, Web and standalone HTML.
+
+One assessment card in the existing graphical generated report, before current metrics/content. Details expand criteria, evidence, per-criterion improvement and priority. Old/text-only/unavailable reports show unassessed and do not silently synthesize scores. Same card rendered into inert CSP-protected saved HTML. Existing dashboard report-generation action remains explicit; no automatic extra cost. The scope is current work excerpts, not grading numerical history or independently verifying deliverables.

@@ -1,0 +1,60 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-usage-assessment
+
+ ❯ |@sodashitsu/web| src/dashboard/AgentUsageReport.test.ts (5 tests | 1 failed | 4 skipped) 69ms
+   × shows a shared score/grade and unknown coverage in the report and standalone HTML 67ms
+ ❯ |@sodashitsu/server| src/conversation/SummaryService.test.ts (15 tests | 1 failed | 14 skipped) 653ms
+   × adds rubric to the same report run and rejects invented assessment evidence 650ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/AgentUsageReport.test.ts > shows a shared score/grade and unknown coverage in the report and standalone HTML
+AssertionError: expected '<!doctype html><html lang="ja"><head>…' to contain 'B · 75 / 100点'
+
+- Expected
++ Received
+
+- B · 75 / 100点
++ <!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>エージェント利用分析レポート</title><style>
++ :root{color-scheme:light dark;--bg:#f1f5fa;--panel:#fff;--fg:#19283c;--muted:#53657d;--line:#d3dfeb;--accent:#167d75;--soft:#e2f3ef}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.8 system-ui,sans-serif;overflow-wrap:anywhere}main{max-width:1120px;margin:auto;padding:36px 24px}header{padding:30px;border-radius:22px;background:var(--panel);border:1px solid var(--line);border-top:5px solid var(--accent)}h1{font-size:30px;line-height:1.3;margin:8px 0 14px}h2{font-size:20px;margin-top:0}h3{font-size:16px}.meta,small{color:var(--muted)}.eyebrow{letter-spacing:2px;color:var(--accent);font-size:12px}.metrics,.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;margin:22px 0}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metric,.card{padding:24px;border:1px solid var(--line);border-radius:17px;background:var(--panel);min-width:0}.metric strong{display:block;font-size:28px}.wide{grid-column:1/-1}.item{border-top:1px solid var(--line);padding:16px 0}.item:first-of-type{border-top:0}.badge{display:inline-block;max-width:100%;background:var(--soft);color:var(--accent);padding:3px 10px;border-radius:20px;font-size:12px}.copy{white-space:pre-wrap;overflow-wrap:anywhere}.evidence{padding:12px;background:var(--soft);border-radius:10px;color:var(--muted)}footer{font-size:12px;color:var(--muted);margin-top:24px}@media(prefers-color-scheme:dark){:root{--bg:#101827;--panel:#1b283d;--fg:#e8eef8;--muted:#b2c1d5;--line:#3b4e65;--accent:#8bdfce;--soft:#243e44}}@media(max-width:600px){.grid{grid-template-columns:minmax(0,1fr)}main{padding:16px}header,.card{padding:19px}h1{font-size:25px}}@media print{body{background:white;color:black}.card,header{break-inside:avoid}}
++ </style></head><body><main><header><span class="eyebrow">SODASHITSU / AGENT ANALYSIS</span><h1>エージェント利用分析レポート</h1><p class="meta">codex · 既定モデル · 2026/11/2 9:00:00</p><p class="meta">生成PC</p><p class="copy">作業と利用の要点</p></header><div class="metrics"><div class="metric"><small>取得トークン</small><strong>0</strong></div><div class="metric"><small>ツール呼び出し</small><strong>42</strong></div><div class="metric"><small>サブエージェント比率</small><strong>60.0%</strong></div></div><div class="grid"><section class="card wide"><h2>現在の取り組み</h2><article class="item"><span class="badge">進行中</span><h3>実装担当 / 操舵室</h3><p class="copy">新しい分析画面を整備</p><p class="evidence copy">直近の作業指示</p></article></section><section class="card "><h2>使われ方</h2><article class="item"><h3>ツール利用</h3><p class="copy">MCPを利用</p></article></section><section class="card "><h2>改善案</h2><article class="item"><span class="badge">優先度 高</span><h3>取得範囲を確認</h3><p class="copy">欠損を点検する</p></article></section><section class="card wide"><h2>取得範囲と限界</h2><ul><li class="copy">部分取得</li></ul></section></div><details><summary>テキスト版を表示</summary><pre class="copy">fallback</pre></details><footer>生成時点の分析です。改善案はエージェントによる提案であり、現在の集計が変わっても自動更新されません。取得USDは請求額ではありません。</footer></main></body></html>
+
+ ❯ src/dashboard/AgentUsageReport.test.ts:86:36
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/conversation/SummaryService.test.ts > adds rubric to the same report run and rejects invented assessment evidence
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/conversation/SummaryService.test.ts:340:262
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 18 skipped (20)
+   Start at  23:17:08
+   Duration  4.36s (transform 70%, import 14%, tests 9%, environment 8%)
+
+  Transform  |@sodashitsu/web| transforming modules took 2.76s · 68% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+  Transform  |@sodashitsu/server| transforming modules took 2.96s · 71% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

@@ -1,0 +1,9 @@
+{
+  "packages/protocol/src/index.ts": "f63c2d3ad6117f8df71dd1a891e9807869c7b2c8bbdcd7a0e472bfb797d8b529",
+  "packages/protocol/src/usageReportDocument.ts": "dd5cf9b4022a5e24110b8acb45d2ab26e8dd5299cd26de857fb151a648d07fc1",
+  "packages/server/src/conversation/SummaryService.ts": "0a04a1a95e119da57e8df524370ffb451c1fcc18aec9a8dbbc5ed6a401a2ee26",
+  "packages/web/src/dashboard/AgentUsageReport.vue": "351929ce964dc1df1894794acb55a2c3fc3b2dcaf446194e48f81356a952b8ca",
+  "packages/web/src/dashboard/reportHtml.ts": "9bc259c96eb56b627ff3f38aa755a9ac70f48794ed89b174d03360ed34f3c1b4",
+  "packages/protocol/src/usageAssessment.ts": "d9e45bb2e4386f2266f4991e6eae3222b895e74e0c237d74b243cc9716df4283",
+  "packages/server/src/conversation/UsageAssessment.ts": "c6d08e047a20d793e8662703700239e21c46ce97617ac41d37c6180e691787b3"
+}

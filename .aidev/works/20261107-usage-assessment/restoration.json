@@ -1,0 +1,18 @@
+{
+  "negativeExitCode": 1,
+  "browserNegativeExitCode": 1,
+  "restoration": {
+    "packages/server/src/conversation/SummaryService.ts": {
+      "sha256": "0a04a1a95e119da57e8df524370ffb451c1fcc18aec9a8dbbc5ed6a401a2ee26",
+      "exact": true
+    },
+    "packages/web/src/dashboard/AgentUsageReport.vue": {
+      "sha256": "351929ce964dc1df1894794acb55a2c3fc3b2dcaf446194e48f81356a952b8ca",
+      "exact": true
+    },
+    "packages/web/src/dashboard/reportHtml.ts": {
+      "sha256": "9bc259c96eb56b627ff3f38aa755a9ac70f48794ed89b174d03360ed34f3c1b4",
+      "exact": true
+    }
+  }
+}
