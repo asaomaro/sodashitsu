@@ -4,6 +4,8 @@ export function conversationResumeArgs(kind: ConversationKind, id: string, cwd: 
   switch (kind) {
     case "claude":
     case "copilot":
+    case "grok":
+    case "cursor":
       return ["--resume", id];
     case "codex":
       return ["resume", id, "--cd", cwd];

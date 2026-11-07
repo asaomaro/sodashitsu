@@ -7,16 +7,16 @@ import { openVerified, readRange } from "../agent/safeFile.js";
 
 const WINDOW = 1024 * 1024;
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-type Kind = "copilot" | "agy" | "muse";
+type Kind = "copilot" | "agy" | "muse" | "grok" | "cursor";
 export {extraRecord as assistantRecord} from "../conversation/ExtraAgentRecords.js";
 import {extraRecord as assistantRecord, locateExtra} from "../conversation/ExtraAgentRecords.js";
 
 /** Fixed record paths only; no agent/SDK process, newest-session guessing, watch, or background scan. */
 export async function readAssistantConversation(
   kind: Kind, sessionId: string,
-  options: { home?: string; copilotHome?: string; dataHome?: string } = {},
+  options: { home?: string; copilotHome?: string; dataHome?: string; grokHome?: string; cursorDataHome?: string } = {},
 ): Promise<AssistantConversationPage> {
-  if (!["copilot", "agy", "muse"].includes(kind) || !UUID.test(sessionId))
+  if (!["copilot", "agy", "muse", "grok", "cursor"].includes(kind) || !UUID.test(sessionId))
     throw new RpcError("invalid_params", "会話の指定が正しくありません");
   let opened: Awaited<ReturnType<typeof openVerified>> = null;
   try {

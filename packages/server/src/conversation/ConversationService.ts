@@ -100,7 +100,7 @@ export class ConversationService {
   source(paneId: string): { kind: ConversationKind; sessionId: string; pane: Pane } {
     const pane = this.pane(paneId),
       ref = pane?.agentSession;
-    if (!pane || !ref || !["claude", "codex", "muse", "agy", "copilot"].includes(ref.kind) || pane.agent?.kind !== ref.kind)
+    if (!pane || !ref || !["claude", "codex", "muse", "agy", "copilot", "grok", "cursor"].includes(ref.kind) || pane.agent?.kind !== ref.kind)
       throw new RpcError("not_found", "このペインの会話記録は取得できません");
     return { kind: ref.kind as ConversationKind, sessionId: ref.sessionId, pane };
   }
@@ -260,7 +260,7 @@ export class ConversationService {
         if (id && st?.isFile() && !st.isSymbolicLink() && st.nlink === 1)
           files.push({ kind: "codex", id, file, mtime: st.mtimeMs });
       }
-      for(const kind of ["muse","agy","copilot"] as const){
+      for(const kind of ["muse","agy","copilot","grok","cursor"] as const){
         const found=await discoverExtra(kind,this.opts.extraRoots,300);partial||=found.limited;
         for(const f of found.files)if(!f.parent)files.push({kind,id:f.id,file:f.file,mtime:f.mtime});
       }

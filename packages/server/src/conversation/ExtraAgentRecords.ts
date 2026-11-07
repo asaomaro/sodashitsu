@@ -1,17 +1,22 @@
+import { grokHome, locateGrokSession, openGrokSessionRecord } from "../agent/grokSession.js";
 import { openVerified } from "../agent/safeFile.js";
 import { lstat, realpath, opendir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, dirname, relative } from "node:path";
 import type { ConversationMessage } from "@sodashitsu/protocol";
-export type ExtraKind = "muse" | "agy" | "copilot";
+export type ExtraKind = "muse" | "agy" | "copilot" | "grok" | "cursor";
 export interface ExtraRoots {
   home?: string;
   copilotHome?: string;
   dataHome?: string;
+  grokHome?: string;
+  cursorDataHome?: string;
 }
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 export function extraRoot(kind: ExtraKind, opts: ExtraRoots = {}): string {
   const home = opts.home ?? homedir();
+  if (kind === "grok") return join(grokHome(opts), "sessions");
+  if (kind === "cursor") return join(opts.cursorDataHome || process.env.CURSOR_DATA_DIR || join(home, ".cursor"), "projects");
   return kind === "muse"
     ? join(
         opts.dataHome ?? process.env.XDG_DATA_HOME ?? join(home, ".local", "share"),
@@ -32,8 +37,34 @@ export async function locateExtra(
   opts: ExtraRoots = {},
 ): Promise<string | null> {
   if (!UUID.test(id)) return null;
+  if (kind === "grok") {
+    const location = await locateGrokSession(id, opts);
+    const file = location && join(location.dir, "chat_history.jsonl");
+    return file && await verifiedExtra(file, dirname(file)) ? file : null;
+  }
   const root = await realpath(extraRoot(kind, opts)).catch(() => null);
   if (!root) return null;
+  if (kind === "cursor") {
+    // Only documented project groups and exact UUID leaves. Never guess newest chat.
+    const handle = await opendir(root).catch(() => null);
+    if (!handle) return null;
+    let found: string | null = null, entries = 0;
+    const deadline = performance.now() + 1000;
+    for await (const entry of handle) {
+      if (++entries > 1000 || performance.now() > deadline) return null;
+      if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+      const group = join(root, entry.name);
+      if (await realpath(group).catch(() => null) !== group) continue;
+      const base = join(group, "agent-transcripts");
+      for (const file of [join(base, id, `${id}.jsonl`), join(base, `${id}.jsonl`)]) {
+        if (!await verifiedExtra(file, root)) continue;
+        if (found) return null; // UUID copied across workspace groups.
+        found = file;
+        break; // The documented current path takes precedence over its legacy path.
+      }
+    }
+    return found;
+  }
   let candidates: string[][] =
     kind === "copilot"
       ? [[id, "events.jsonl"]]
@@ -57,6 +88,7 @@ async function verifiedExtra(file: string, root: string): Promise<boolean> {
   const rel = relative(root, file);
   if (rel.startsWith("..") || rel.startsWith("/")) return false;
   if ((await realpath(dirname(file)).catch(() => null)) !== dirname(file)) return false;
+  if (await realpath(file).catch(() => null) !== file) return false;
   const st = await lstat(file).catch(() => null);
   return !!st && st.isFile() && !st.isSymbolicLink() && st.nlink === 1;
 }
@@ -98,6 +130,12 @@ export async function discoverExtra(
         let id: string | undefined,
           parent: string | null = null;
         if (kind === "copilot" && rel.length === 2 && entry.name === "events.jsonl") id = rel[0];
+        if (kind === "grok" && rel.length === 3 && entry.name === "chat_history.jsonl") id = rel[1];
+        if (kind === "cursor" && rel[1] === "agent-transcripts") {
+          if (rel.length === 3 && entry.name.endsWith(".jsonl")) id = entry.name.slice(0, -6);
+          if (rel.length === 4 && entry.name === `${rel[2]}.jsonl`) id = rel[2];
+          // Child transcript directories are deliberately not parent conversations.
+        }
         if (
           kind === "agy" &&
           rel.length === 4 &&
@@ -129,7 +167,7 @@ export async function discoverExtra(
       }
     }
   };
-  await walk(root, kind === "muse" ? 6 : kind === "agy" ? 3 : 1);
+  await walk(root, kind === "muse" ? 6 : kind === "agy" || kind === "cursor" ? 3 : kind === "grok" ? 2 : 1);
   return { files: files.sort((a, b) => b.mtime - a.mtime), limited };
 }
 /** Only persisted human/model text. Tool output, reasoning and subagent messages are not chat. */
@@ -183,6 +221,16 @@ export function extraRecord(
       return null;
     role = row.type === "user.message" ? "user" : "assistant";
     text = row.data?.content;
+  } else if (kind === "grok") {
+    if (row.type === "user" && (row.synthetic_reason == null || row.synthetic_reason === "human")) {
+      role = "user";
+      text = Array.isArray(row.content) ? row.content.slice(0, 64).filter((b: any) => b?.type === "text" && typeof b.text === "string").map((b: any) => b.text).join("\n") : null;
+    } else if (row.type === "assistant") { role = "assistant"; text = row.content; }
+    else return null;
+  } else if (kind === "cursor") {
+    if (!["user", "assistant"].includes(row.role)) return null;
+    role = row.role;
+    text = Array.isArray(row.message?.content) ? row.message.content.slice(0, 64).filter((b: any) => b?.type === "text" && typeof b.text === "string").map((b: any) => b.text).join("\n") : null;
   } else {
     if (!["USER_INPUT", "PLANNER_RESPONSE"].includes(row.type)) return null;
     role = row.type === "USER_INPUT" ? "user" : "assistant";
@@ -206,6 +254,7 @@ export function extraRecord(
 }
 
 export async function openExtra(kind: ExtraKind, id: string, opts: ExtraRoots = {}) {
+  if (kind === "grok") return openGrokSessionRecord(id, "chat_history.jsonl", opts);
   const file = await locateExtra(kind, id, opts);
   if (!file) return null;
   const opened = await openVerified(file);
