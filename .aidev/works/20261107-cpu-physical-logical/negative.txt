@@ -1,0 +1,239 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cpu-cores
+
+ ❯ |@sodashitsu/protocol| src/systemFooter.test.ts (8 tests | 3 failed) 22ms
+   × renders selected values and omits unsupported information 11ms
+   × uses statusline patterns independently for percentage metrics and preserves old settings 2ms
+   × shares the five-character half-step gauge for all footer percentages 1ms
+ ❯ |@sodashitsu/server| src/surface/methods/CpuTopology.test.ts (9 tests | 2 failed) 130ms
+   ❯ explicit CPU topology (8)
+     × counts SMT, no-SMT and hybrid cores without a fixed thread ratio 10ms
+     × invalidates old pending results when the logical count changes 1ms
+ ❯ |@sodashitsu/server| src/surface/methods/SystemResources.test.ts (3 tests | 2 failed) 32ms
+   × shares the cached sample without creating background timers 13ms
+   × exposes resources through the authenticated RPC surface 12ms
+ ❯ |@sodashitsu/web| src/components/SystemFooter.test.ts (4 tests | 2 failed) 100ms
+   × renders physical/logical cores in the Web footer 28ms
+   × renders physical/logical cores in the Web footer 9ms
+ ❯ |@sodashitsu/tui| src/app/TuiApp.systemFooter.test.ts (1 test | 1 failed) 1114ms
+   × reserves one bottom row across screens and releases it when disabled 1112ms
+
+ Test Files  5 failed (5)
+      Tests  10 failed | 15 passed (25)
+   Start at  19:04:49
+   Duration  5.32s (transform 72%, import 12%, tests 12%, environment 3%)
+
+  Transform  |@sodashitsu/web| transforming modules took 2.33s · 72% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+  Transform  |@sodashitsu/server| transforming modules took 2.49s · 81% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+  Transform  |@sodashitsu/tui| transforming modules took 3.42s · 67% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/protocol| src/systemFooter.test.ts > renders selected values and omits unsupported information
+AssertionError: expected [ 'メモリ 6.0GiB/8.0GiB 75%', …(4) ] to deeply equal [ 'メモリ 6.0GiB/8.0GiB 75%', …(4) ]
+
+- Expected
++ Received
+
+  [
+    "メモリ 6.0GiB/8.0GiB 75%",
+-   "CPU 25% (2/4 コア)",
++   "CPU 25% (4核)",
+    "Soda 512MiB 6%",
+    "稼働 1日 1h 0m",
+    "host",
+  ]
+
+ ❯ src/systemFooter.test.ts:36:5
+     34|   expect(
+     35|     systemFooterSegments(data, ["memory", "cpu", "load", "serverMemory…
+     36|   ).toEqual([
+       |     ^
+     37|     "メモリ 6.0GiB/8.0GiB 75%",
+     38|     "CPU 25% (2/4 コア)",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  |@sodashitsu/protocol| src/systemFooter.test.ts > uses statusline patterns independently for percentage metrics and preserves old settings
+AssertionError: expected [ 'CPU #####----- 50% (2核)', …(2) ] to deeply equal [ 'CPU #####----- 50% (—/2 コア)', …(2) ]
+
+- Expected
++ Received
+
+  [
+-   "CPU #####----- 50% (—/2 コア)",
++   "CPU #####----- 50% (2核)",
+    "メモリ 512MiB/1.0GiB ●●●●●○○○○○ 50%",
+    "Soda 256MiB 25%",
+  ]
+
+ ❯ src/systemFooter.test.ts:73:90
+     71|     serverRssBytes: 256 * 1024 ** 2,
+     72|   } as SystemResources;
+     73|   expect(systemFooterSegments(data, ["cpu", "memory", "serverMemory"],…
+       |                                                                                          ^
+     74|     "CPU #####----- 50% (—/2 コア)",
+     75|     "メモリ 512MiB/1.0GiB ●●●●●○○○○○ 50%",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  |@sodashitsu/protocol| src/systemFooter.test.ts > shares the five-character half-step gauge for all footer percentages
+AssertionError: expected [ 'CPU ██▒░░ 50% (4核)', …(2) ] to deeply equal [ 'CPU ██▒░░ 50% (2/4 コア)', …(2) ]
+
+- Expected
++ Received
+
+  [
+-   "CPU ██▒░░ 50% (2/4 コア)",
++   "CPU ██▒░░ 50% (4核)",
+    "メモリ 512MiB/1.0GiB ██▒░░ 50%",
+    "Soda 256MiB █▒░░░ 25%",
+  ]
+
+ ❯ src/systemFooter.test.ts:120:90
+    118|     serverRssBytes: 256 * 1024 ** 2,
+    119|   } as SystemResources;
+    120|   expect(systemFooterSegments(data, ["cpu", "memory", "serverMemory"],…
+       |                                                                                          ^
+    121|     "CPU ██▒░░ 50% (2/4 コア)",
+    122|     "メモリ 512MiB/1.0GiB ██▒░░ 50%",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  |@sodashitsu/web| src/components/SystemFooter.test.ts > renders physical/logical cores in the Web footer
+AssertionError: expected '⋮ CPU 25% (24核)' to contain '12/24 コア'
+
+Expected: "12/24 コア"
+Received: "⋮ CPU 25% (24核)"
+
+ ❯ src/components/SystemFooter.test.ts:66:49
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  |@sodashitsu/web| src/components/SystemFooter.test.ts > renders physical/logical cores in the Web footer
+AssertionError: expected '⋮ CPU 25% (24核)' to contain '—/24 コア'
+
+Expected: "—/24 コア"
+Received: "⋮ CPU 25% (24核)"
+
+ ❯ src/components/SystemFooter.test.ts:66:49
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  |@sodashitsu/tui| src/app/TuiApp.systemFooter.test.ts > reserves one bottom row across screens and releases it when disabled
+AssertionError: expected '⋮ CPU 25% (4核) · メモリ 6.0GiB/8.0GiB 75%' to contain 'CPU 25% (2/4 コア)'
+
+Expected: "CPU 25% (2/4 コア)"
+Received: "⋮ CPU 25% (4核) · メモリ 6.0GiB/8.0GiB 75%"
+
+ ❯ src/app/TuiApp.systemFooter.test.ts:26:77
+     24|     h.app.prefs.apply({ systemFooterSettings: { enabled: true, fields:…
+     25|     h.app.renderNow();
+     26|     await vi.waitFor(async () => expect((await h.screen()).split("\n")…
+       |                                                                             ^
+     27|     for (const screen of ["graph", "dashboard", "schedule"] as const) {
+     28|       h.app.ui.setScreen(screen);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  |@sodashitsu/server| src/surface/methods/CpuTopology.test.ts > explicit CPU topology > counts SMT, no-SMT and hybrid cores without a fixed thread ratio
+AssertionError: expected 6 to be 4 // Object.is equality
+
+- Expected
++ Received
+
+- 4
++ 6
+
+ ❯ src/surface/methods/CpuTopology.test.ts:19:82
+     17|  });
+     18|  it('counts SMT, no-SMT and hybrid cores without a fixed thread ratio'…
+     19|   expect(await linuxPhysicalCores(6,pathValue(topology([[0,1],[2,3],[4…
+       |                                                                                  ^
+     20|   expect(await linuxPhysicalCores(3,pathValue(topology([[0],[1],[2]]))…
+     21|   expect(await linuxPhysicalCores(4,pathValue(topology([[0,1],[2,3]]))…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  |@sodashitsu/server| src/surface/methods/CpuTopology.test.ts > explicit CPU topology > invalidates old pending results when the logical count changes
+AssertionError: expected 4 to be null
+
+- Expected:
+null
+
++ Received:
+4
+
+ ❯ src/surface/methods/CpuTopology.test.ts:53:157
+     51|  it('invalidates old pending results when the logical count changes',a…
+     52|   let done:(n:number)=>void=()=>{};const detect=vi.fn(()=>new Promise<…
+     53|   cache.get(8);expect(cache.get(4)).toBeNull();expect(cache.get(8)).to…
+       |                                                                                                                                                             ^
+     54|  });
+     55| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  |@sodashitsu/server| src/surface/methods/SystemResources.test.ts > shares the cached sample without creating background timers
+AssertionError: expected { sampledAt: 1794045892571, …(8) } to have property "physicalCpuCount" with value null
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ src/surface/methods/SystemResources.test.ts:21:16
+     19|   expect(sampler.get()).toBe(data);
+     20|   expect(data.cpuPercent).toBeNull();
+     21|   expect(data).toHaveProperty("physicalCpuCount", null);
+       |                ^
+     22|   expect(data.memoryTotalBytes).toBeGreaterThan(0);
+     23|   expect(data.memoryAvailableBytes).toBeLessThanOrEqual(data.memoryTot…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  |@sodashitsu/server| src/surface/methods/SystemResources.test.ts > exposes resources through the authenticated RPC surface
+AssertionError: expected { ok: true, result: { …(10) } } to match object { ok: true, result: { …(3) } }
+(8 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -9,8 +9,7 @@
+          "working": 1,
+        },
+        "total": 2,
+      },
+      "cpuPercent": null,
+-     "physicalCpuCount": null,
+    },
+  }
+
+ ❯ src/surface/methods/SystemResources.test.ts:37:20
+     35|     {},
+     36|   );
+     37|   expect(response).toMatchObject({ ok: true, result: { cpuPercent: nul…
+       |                    ^
+     38|   counts = { total: 1, states: { working: 0, idle: 0, blocked: 1, unkn…
+     39|   const next = await surface.invoke(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+

@@ -1,0 +1,26 @@
+{
+  "sourceHead": "795f0ae9f688b130d23511682946be0151f4f5a8",
+  "node": "24.22.2",
+  "buildExit": 0,
+  "typecheckExit": 0,
+  "packageTypechecks": [
+    "protocol",
+    "web",
+    "tui",
+    "server"
+  ],
+  "relatedFiles": 5,
+  "relatedTests": 25,
+  "negativeFailures": 10,
+  "actualLinux": {
+    "physical": 12,
+    "logical": 24
+  },
+  "actualWindows": false,
+  "independentReview": "root+agent_audio_ui no must/should",
+  "hashes": {
+    "packages/protocol/src/systemFooter.ts": "87ad5a870235a13a4d2df31e83747d2a5267a84d026313b47d1977f3f65e8329",
+    "packages/server/src/surface/methods/CpuTopology.ts": "0e8b71b68d57149f762fb8c6b854c15d738700f5725e02c14aa850dd96163e33",
+    "packages/server/src/surface/methods/SystemResources.ts": "928da3cab69bf19a35a2f845249f1180463feebb9237dd2f9e5e294e4b679bb1"
+  }
+}

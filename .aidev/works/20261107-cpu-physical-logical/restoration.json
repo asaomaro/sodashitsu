@@ -1,0 +1,14 @@
+{
+  "packages/protocol/src/systemFooter.ts": {
+    "sha256": "87ad5a870235a13a4d2df31e83747d2a5267a84d026313b47d1977f3f65e8329",
+    "byteExact": true
+  },
+  "packages/server/src/surface/methods/CpuTopology.ts": {
+    "sha256": "0e8b71b68d57149f762fb8c6b854c15d738700f5725e02c14aa850dd96163e33",
+    "byteExact": true
+  },
+  "packages/server/src/surface/methods/SystemResources.ts": {
+    "sha256": "928da3cab69bf19a35a2f845249f1180463feebb9237dd2f9e5e294e4b679bb1",
+    "byteExact": true
+  }
+}
