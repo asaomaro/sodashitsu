@@ -151,7 +151,7 @@ function agentPidOf(kind) {
     } catch {
       return undefined;
     }
-    if ([comm, argv[0], argv[1]].some((n) => n !== undefined && (nameOf(n) === want || kind === "muse" && /^muse-bin-\d[\w.-]*$/.test(nameOf(n))))) return pid;
+    if ([comm, argv[0], argv[1]].some((n) => n !== undefined && (nameOf(n) === want || kind === "cursor" && nameOf(n) === "cursor-agent" || kind === "muse" && /^muse-bin-\d[\w.-]*$/.test(nameOf(n))))) return pid;
     if (!Number.isFinite(ppid) || ppid <= 1) return undefined;
     pid = ppid;
   }
