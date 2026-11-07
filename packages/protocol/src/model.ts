@@ -183,7 +183,7 @@ export interface SubagentInfo {
   /** Provider-resolved effort, never a requested launch flag or model-name inference. */
   reasoningEffort?: string;
   /** creation is the resolved value at start, not a claim about the current turn. */
-  reasoningEffortBasis?: "creation" | "turn";
+  reasoningEffortBasis?: "creation" | "turn" | "session";
   /** バックグラウンドの実行か。分からなければ項目なし。 */
   background?: boolean;
   /** サーバが起動（または突き合わせ）の報告を受けた時刻（epoch ms）。 */
