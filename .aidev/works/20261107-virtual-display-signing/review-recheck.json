@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-07",
+  "reviewedSigningCommit": "6a182bb5",
+  "artifactSource": "9841e0ab54c61d5e2bcafcdc68efaeb59275d8b5",
+  "mainCompared": "5abc68d17e070cb17540c26aad71e1531c7c62ee",
+  "cabSha256": "b420aefafd7c55cb9069929142874ca900f569e7710399a408e1c1ed841fc1bc",
+  "zipMembersEachUniqueAndHashMatched": true,
+  "githubReleases": [],
+  "knownLocalArtifactDirectories": [
+    "virtual-driver-signing-20261107"
+  ],
+  "newWindowsOperations": false,
+  "newCredentialSearch": false,
+  "sourceFiles": [
+    {
+      "file": "scripts/remote-desktop/virtual-display-driver/Driver.cpp",
+      "equal": true,
+      "sha256": "c867b96634b1f7ac432b3dcd5b9a161622e0fcfda6b5851d7de67fe74cc3a625"
+    },
+    {
+      "file": "scripts/remote-desktop/virtual-display-driver/Driver.h",
+      "equal": true,
+      "sha256": "1e9a431342cb57e3cc14e9d9f671c4def164eeaaa0b99dc33f00de1e37487c0c"
+    },
+    {
+      "file": "scripts/remote-desktop/virtual-display-driver/Trace.h",
+      "equal": true,
+      "sha256": "344c9ddcc0047f8ef562eb88fb14caf04ac3edbda340e8f8db151382c5b7c6ea"
+    },
+    {
+      "file": "scripts/remote-desktop/virtual-display-driver/SodaVirtualDisplay.rc",
+      "equal": true,
+      "sha256": "0b9a530a003ee85e3d947ba1140ed3ffecbfff3ab15c9b176d56fd36a1eb4405"
+    },
+    {
+      "file": "scripts/remote-desktop/virtual-display-driver/SodaVirtualDisplay.inf",
+      "equal": true,
+      "sha256": "3edfeb0e83d830915350c635319be2e22d24521b3545f0c58f63bcbbd72b59c3"
+    },
+    {
+      "file": "scripts/remote-desktop/virtual-display-driver/SodaVirtualDisplay.vcxproj",
+      "equal": true,
+      "sha256": "84b675844739c63a6d5e1477dbe6e17a9c5490a123eaa7d17f73e3de217c254f"
+    },
+    {
+      "file": "scripts/remote-desktop/virtual-display-driver/Directory.Build.props",
+      "equal": true,
+      "sha256": "4934055499f368272032b1a63da75b7017d8053f5d0ea5615a5b7e598b57370a"
+    },
+    {
+      "file": "scripts/remote-desktop/virtual-display-driver/packages.config",
+      "equal": true,
+      "sha256": "9c612808e8609bc6124a1604de610b66092b0d886ba26c30aab932baac1ee979"
+    },
+    {
+      "file": "scripts/remote-desktop/virtual-display-driver/build.ps1",
+      "equal": true,
+      "sha256": "9d2e629d0630a469298cd2a3e71bd3b88394fa256d44ba53edf0c8886da71388"
+    }
+  ]
+}

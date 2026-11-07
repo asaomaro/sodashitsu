@@ -6,7 +6,7 @@
 - [x] 実提出用CAB作成・展開・4file hash照合（no install）
 - [x] 提出用stage生成と配布用署名/membership/manifest検証ツール
 - [x] 新規ツールの拒否ケース/既存mode callback検査、実unsigned拒否
-- [ ] package/署名境界を含む独立レビュー（taskcheck兼用、親agentへ依頼）
+- [x] package/署名境界を含む独立レビュー（2026-11-07、別実装コンテキストで確認。正式署名・導入の合格とは別）
 - [ ] 正式署名/配布物取得（外部の署名サービス/登録certが必要）
 - [ ] 通常保護下のDriverStore導入と所有仮想画面実capture/解放
 
