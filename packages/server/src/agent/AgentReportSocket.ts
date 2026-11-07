@@ -1,3 +1,4 @@
+import { cursorTurnFields, type CursorTurnFields } from "../usage/cursorHookUsage.js";
 import type { AgentExecutionSettings } from "@sodashitsu/protocol";
 import { reportedSettings } from "../usage/executionSettings.js";
 import { createServer, type Server } from "node:net";
@@ -34,6 +35,7 @@ export type AgentReport = AgentReportBody & {
 };
 type AgentReportBody =
   | { type: "session"; paneId: string; kind: string; sessionId: string }
+  | ({ type: "cursor_turn_usage"; paneId: string; kind: string; sessionId: string } & CursorTurnFields)
   | { type: "subagent_pending"; paneId: string; kind: string; sessionId: string; description?: string; agentType?: string; background?: boolean; parentAgentId?: string; transcriptPath?: string }
   | { type: "subagent_start"; paneId: string; kind: string; sessionId: string; agentId: string; agentType?: string; transcriptPath?: string }
   | { type: "subagent_stop"; paneId: string; kind: string; sessionId: string; agentId: string }
@@ -267,6 +269,11 @@ function parseReport(v: unknown): AgentReport | undefined {
     }
     case "session_end":
       return { type: "session_end", ...base };
+    case "cursor_turn_usage": {
+      if(o.kind!=="cursor"||!UUID_RE.test(o.sessionId))return undefined;
+      const fields=cursorTurnFields(o);
+      return fields?{type:"cursor_turn_usage",paneId:o.paneId,kind:"cursor",sessionId:o.sessionId,...(agentPid!==undefined?{agentPid}:{}),...fields}:undefined;
+    }
     case "usage": {
       // 会話の id は UUID の形だけ（Claude Code）。ほかの項目は、範囲・長さを掛けて、通るものだけ。
       if (!UUID_RE.test(o.sessionId)) return undefined;

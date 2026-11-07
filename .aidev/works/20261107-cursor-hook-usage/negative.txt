@@ -1,0 +1,103 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-hook-usage
+
+ ❯ |@sodashitsu/server| src/agent/AgentIntegrationInstaller.test.ts (68 tests | 1 failed) 849ms
+   × Cursor adds afterAgentResponse while preserving user hooks and marks old installs for update 16ms
+ ❯ |@sodashitsu/server| src/agent/agentHookExecution.test.ts (2 tests | 1 failed) 160ms
+   × Cursor generated after-response fixture sends only scoped numeric/model/explicit effort metadata 34ms
+ ❯ |@sodashitsu/server| src/agent/AgentReportSocket.test.ts (20 tests | 1 failed) 92ms
+   × Cursor turn usage socket whitelists metadata and rejects other kinds or malformed counts 7ms
+{"ts":"2026-11-07T08:55:04.684Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-07T08:55:04.685Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-07T08:55:04.686Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-07T08:55:04.686Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-07T08:55:04.689Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-cursor-usage-it-Ovq65m/state/commands.json","count":0}
+{"ts":"2026-11-07T08:55:05.283Z","level":"info","msg":"agent session attached","paneId":"6b99950e-3d2b-45f7-b251-984c52329000","kind":"cursor","session":"93400255","source":"hook"}
+ ❯ |@sodashitsu/server| src/composeServer.cursorUsage.integration.test.ts (1 test | 1 failed) 5702ms
+   × routes generated Cursor hook usage to the current verified parent and deduplicates generations 5701ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/composeServer.cursorUsage.integration.test.ts > routes generated Cursor hook usage to the current verified parent and deduplicates generations
+AssertionError: expected null to match object { kind: 'cursor', …(5) }
+
+- Expected:
+{
+  "kind": "cursor",
+  "model": "fixture-model",
+  "partial": true,
+  "reasoningEffort": "low",
+  "source": "hook",
+  "tokens": {
+    "basis": "transcript",
+    "input": 60,
+    "output": 20,
+    "total": 120,
+  },
+}
+
++ Received:
+null
+
+ ❯ vi.waitFor.timeout src/composeServer.cursorUsage.integration.test.ts:30:90
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AgentIntegrationInstaller.test.ts > Cursor adds afterAgentResponse while preserving user hooks and marks old installs for update
+AssertionError: expected [ { command: 'user-response' } ] to have a length of 2 but got 1
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ src/agent/AgentIntegrationInstaller.test.ts:1279:143
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AgentReportSocket.test.ts > Cursor turn usage socket whitelists metadata and rejects other kinds or malformed counts
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/agent/AgentReportSocket.test.ts:254:57
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/agentHookExecution.test.ts > Cursor generated after-response fixture sends only scoped numeric/model/explicit effort metadata
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/agent/agentHookExecution.test.ts:35:33
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  4 failed | 103 passed (107)
+   Start at  17:55:00
+   Duration  9.65s (tests 62%, transform 32%, import 6%)
+
+  Transform  |@sodashitsu/server| transforming modules took 3.48s · 32% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

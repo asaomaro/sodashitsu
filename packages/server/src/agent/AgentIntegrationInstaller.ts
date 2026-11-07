@@ -284,6 +284,7 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     binName: "cursor-agent",
     entriesPath: ["hooks", "sessionStart"], // 小文字始まり（research F4）
     buildEntry: (scriptPath, kind) => ({ type: "command", command: hookCommand(scriptPath, kind) }),
+    extraEntries:[{path:["hooks","afterAgentResponse"],build:(scriptPath,kind)=>({type:"command",command:hookCommand(scriptPath,kind)})}],
     isOurs: isOursField("command"),
   },
   copilot: {

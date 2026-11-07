@@ -1,0 +1,18 @@
+{
+  "packages/server/assets/agent-hook-report.cjs": {
+    "byteExact": true,
+    "sha256": "9fccf7044951d4651305e4a366ba108b3ecf5dfb4ddc3a3918234c7e396ba45d"
+  },
+  "packages/server/src/agent/AgentReportSocket.ts": {
+    "byteExact": true,
+    "sha256": "f40531b8a3b6865fd4cdac19b00410d699be711cb5495d873465d35bb58af7d5"
+  },
+  "packages/server/src/agent/AgentIntegrationInstaller.ts": {
+    "byteExact": true,
+    "sha256": "f4c82243b2a4502fbdabe1d78a6f6d89d86251b94f1b822fc4b8df8d54209dda"
+  },
+  "packages/server/src/composeServer.ts": {
+    "byteExact": true,
+    "sha256": "b11656b3795369eae7267a52183d429c6eff6190e7249d0c554054173a2882c3"
+  }
+}

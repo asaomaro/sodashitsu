@@ -23,17 +23,18 @@ const net = require("node:net");
 const fs = require("node:fs");
 const path = require("node:path");
 
-function readStdin() {
+function readStdin(maxBytes) {
   return new Promise((resolve) => {
-    let data = "";
+    let data = "", seenBytes = 0, overflow = false;
     process.stdin.setEncoding("utf8");
     process.stdin.on("data", (chunk) => {
-      data += chunk;
+      if(maxBytes!==undefined&&(seenBytes+=Buffer.byteLength(chunk,"utf8"))>maxBytes){overflow=true;data="";}
+      if(!overflow)data += chunk;
     });
-    process.stdin.on("end", () => resolve(data));
+    process.stdin.on("end", () => resolve(overflow?"":data));
     // stdin が閉じられない・そもそも tty で待ち続ける事故を避ける（design「4.」：hook は
     // 起動を遅延させてはいけない。`async: true` 前提だが、二重の安全策として自前でも短く切る）。
-    setTimeout(() => resolve(data), 2000).unref();
+    setTimeout(() => resolve(overflow?"":data), 2000).unref();
   });
 }
 
@@ -187,7 +188,7 @@ async function main() {
   const sock = routing.sock || process.env.SODA_AGENT_REPORT_SOCKET;
   if (!paneId || !sock || !kind) return; // 本製品の pane の外・未対応の呼び出し方 → 無害に終わる
 
-  const raw = await readStdin();
+  const raw = await readStdin(kind === "cursor" ? 2*1024*1024 : undefined);
   let sessionId;
   let extra;
   let executionSettings;
@@ -205,6 +206,23 @@ async function main() {
         // 会話の記録の場所（中身ではない）。利用状況（20261010-agent-usage）が、サーバの側で場所を確かめて、記録を読む材料にする。
         transcriptPath: pathOf(payload.transcript_path),
       });
+    }
+    if (payload && typeof payload === "object" && kind === "cursor" && payload.hook_event_name === "afterAgentResponse") {
+      // A child has its own conversation; never attribute it by the parent's pane env alone.
+      const conversation=payload.conversation_id;
+      if(typeof conversation!=="string"||!conversation||payload.subagent_id||payload.agent_id||
+        payload.parent_conversation_id&&payload.parent_conversation_id!==conversation||
+        payload.session_id&&payload.session_id!==conversation||payload.sessionId&&payload.sessionId!==conversation)return;
+      const generation=payload.generation_id;
+      if(typeof generation!=="string"||!/^[a-zA-Z0-9_.:-]{1,128}$/.test(generation))return;
+      sessionId=conversation;origin={};
+      const params=Array.isArray(payload.model_params)&&payload.model_params.length<=32?payload.model_params.filter(p=>p&&p.id==="effort"):[];
+      const effort=params.length===1&&typeof params[0].value==="string"&&/^[a-zA-Z0-9_.-]{1,64}$/.test(params[0].value)?params[0].value:undefined;
+      const numeric=v=>typeof v==="number"&&Number.isSafeInteger(v)&&v>=0?v:undefined;
+      extra=compact({type:"cursor_turn_usage",generationId:generation,
+        model:cut(payload.model_id||payload.model,200),reasoningEffort:effort,
+        inputTokens:numeric(payload.input_tokens),outputTokens:numeric(payload.output_tokens),
+        cacheReadTokens:numeric(payload.cache_read_tokens),cacheWriteTokens:numeric(payload.cache_write_tokens)});
     }
     if (payload && typeof payload === "object" && kind === "claude") {
       // Only the parent hook scope. Child-agent permission overrides must not be reported as the parent's.

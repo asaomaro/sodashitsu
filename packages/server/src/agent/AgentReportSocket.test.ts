@@ -245,3 +245,14 @@ describe("AgentReportSocket", () => {
     });
   });
 });
+
+it('Cursor turn usage socket whitelists metadata and rejects other kinds or malformed counts',async()=>{
+ const dir=await makeTempDir('soda-cursor-usage-socket-'),path=join(dir,'r.sock'),reports:AgentReport[]=[];
+ const server=await startAgentReportSocket(path,r=>reports.push(r),new MemoryLogger());
+ try{
+  const body={type:'cursor_turn_usage',paneId:'pane',kind:'cursor',sessionId:'11111111-1111-4111-8111-111111111111',generationId:'generation-1',inputTokens:100,outputTokens:20,cacheReadTokens:30,cacheWriteTokens:10,model:'model',reasoningEffort:'high',text:'SECRET',task:'SECRET',transcriptPath:'/SECRET',executionSettings:{permissionMode:{value:'never',source:'hook',basis:'hook'}}};
+  await send(path,JSON.stringify(body));expect(reports).toHaveLength(1);expect(reports[0]).toMatchObject({type:'cursor_turn_usage',generationId:'generation-1',inputTokens:100});expect(JSON.stringify(reports)).not.toContain('SECRET');expect(reports[0]).not.toHaveProperty('executionSettings');
+  for(const patch of [{kind:'claude'},{sessionId:'bad'},{generationId:''},{inputTokens:-1},{inputTokens:39},{cacheWriteTokens:undefined}])await send(path,JSON.stringify({...body,...patch}));
+  expect(reports).toHaveLength(1);
+ }finally{await server.close();await rm(dir,{recursive:true,force:true});}
+});

@@ -1270,3 +1270,15 @@ it('installs Muse schema-v1 hooks without replacing user hooks or managed settin
   await writeFile(config,'{"schema_version":2}');expect(await installer.install('muse')).toMatchObject({ok:false});expect(await readFile(config,'utf8')).toBe('{"schema_version":2}');
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+it('Cursor adds afterAgentResponse while preserving user hooks and marks old installs for update',async()=>{
+ const dir=await makeTempDir('soda-cursor-usage-installer-');
+ try{
+  const file=join(dir,'.cursor','hooks.json'),source=join(dir,'report.cjs');await mkdir(dirname(file),{recursive:true});await writeFile(source,'// generated report');
+  const original={version:1,hooks:{sessionStart:[{command:'user-session'}],afterAgentResponse:[{command:'user-response'}]}};await writeFile(file,JSON.stringify(original));
+  const installer=new FsAgentIntegrationInstaller(source,{PATH:''},dir);expect((await installer.install('cursor')).ok).toBe(true);
+  const saved=JSON.parse(await readFile(file,'utf8'));expect(saved.hooks.sessionStart).toHaveLength(2);expect(saved.hooks.afterAgentResponse).toHaveLength(2);expect(saved.hooks.afterAgentResponse[0].command).toBe('user-response');
+  saved.hooks.afterAgentResponse.pop();await writeFile(file,JSON.stringify(saved));expect((await installer.status('cursor')).needsUpdate).toBe(true);
+  expect((await installer.install('cursor')).ok).toBe(true);expect((await installer.status('cursor')).needsUpdate).toBe(false);
+  expect((await installer.uninstall('cursor')).ok).toBe(true);expect(JSON.parse(await readFile(file,'utf8'))).toEqual(original);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

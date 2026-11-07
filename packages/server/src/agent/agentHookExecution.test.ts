@@ -23,3 +23,18 @@ it("piggybacks only parent permission-mode facts and never hook input/child over
     expect(JSON.stringify(reports)).not.toContain("SECRET");
   } finally { await server.close(); await rm(dir, { recursive: true, force: true }); }
 });
+it('Cursor generated after-response fixture sends only scoped numeric/model/explicit effort metadata',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'soda-cursor-hook-')),path=join(dir,'r.sock'),reports:AgentReport[]=[];
+ const server=await startAgentReportSocket(path,r=>reports.push(r),new MemoryLogger());
+ try{
+  const run=(payload:object)=>new Promise<void>((resolve,reject)=>{
+   const child=spawn(process.execPath,[fileURLToPath(new URL('../../assets/agent-hook-report.cjs',import.meta.url)),'cursor'],{env:{...process.env,SODA_PANE_ID:'fixture-pane',SODA_AGENT_REPORT_SOCKET:path},stdio:['pipe','pipe','pipe']});
+   let stdout='';child.stdout.on('data',b=>{stdout+=b});child.stderr.resume();child.on('error',reject);child.on('close',code=>{try{expect(code).toBe(0);expect(stdout).toBe('');resolve()}catch(e){reject(e)}});
+   child.stdin.end(JSON.stringify({hook_event_name:'afterAgentResponse',conversation_id:'11111111-1111-4111-8111-111111111111',generation_id:'generation-1',model:'model-high',model_id:'explicit-model',model_params:[{id:'effort',value:'low'}],input_tokens:100,output_tokens:20,cache_read_tokens:30,cache_write_tokens:10,text:'SECRET',user_email:'SECRET',transcript_path:'/SECRET',...payload}));
+  });
+  await run({});expect(reports).toHaveLength(1);expect(reports[0]).toMatchObject({type:'cursor_turn_usage',kind:'cursor',generationId:'generation-1',model:'explicit-model',reasoningEffort:'low',inputTokens:100});expect(JSON.stringify(reports)).not.toContain('SECRET');
+  for(const payload of [{subagent_id:'child'},{parent_conversation_id:'other-parent'},{session_id:'other-parent'},{input_tokens:39},{output_tokens:-1},{text:'x'.repeat(2*1024*1024+1)}])await run(payload);
+  expect(reports).toHaveLength(1);
+  await run({model_params:[],reasoningEffort:'max'});expect(reports.at(-1)).not.toHaveProperty('reasoningEffort');expect(reports.at(-1)).toMatchObject({model:'explicit-model'});
+ }finally{await server.close();await rm(dir,{recursive:true,force:true});}
+});
