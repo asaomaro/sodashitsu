@@ -91,6 +91,10 @@ describe("端末版のサブエージェントの表示", () => {
     let screen=await h.screen();expect(screen).toContain("所属");expect(screen).toContain("(?)");expect(screen).not.toContain("状態不明");expect(screen).not.toContain("実行中");
     dispatcherOf(h.app).showSubagentsOf("p3");h.app.renderNow();screen=await h.screen();expect(screen).toContain("（所属）");expect(screen).toContain("状態不明");
   });
+  it("puts the child session first and model second while preserving fallback",async()=>{
+    const h=await start({subagents:{count:1,items:[sub("ordered",{description:"Session First",type:"Model Second",state:"unknown"})]}});const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();let screen=await h.screen();expect(screen.indexOf("Session First")).toBeGreaterThanOrEqual(0);expect(screen.indexOf("Model Second")).toBeGreaterThan(screen.indexOf("Session First"));
+    h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({subagents:{count:1,items:[sub("model-only",{type:"Model Only"})]}})});h.app.renderNow();screen=await h.screen();expect(screen).toContain("Model Only");expect(screen).not.toContain("Session First");
+  });
   it("展開行の上限と残り件数をsidebarスクロールで確認できる",async()=>{
     const h=await start({subagents:{count:70,items:Array.from({length:64},(_,i)=>sub(`s${i}`,{type:`担当${i}`,description:`作業${i}`}))}});
     const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();

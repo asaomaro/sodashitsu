@@ -1,0 +1,45 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-session-first/packages/web
+
+ ❯ src/components/Sidebar.test.ts (203 tests | 2 failed) 3407ms
+   ❯ Sidebar — サブエージェントの件数のボタン (18)
+     × appends only an already observed same-kind parent model and preserves full child titles 20ms
+     × keeps child session/model fallback readable without empty second lines 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > appends only an already observed same-kind parent model and preserves full child titles
+AssertionError: expected 'gpt-child-model' to be '/generated/full/session/path' // Object.is equality
+
+Expected: "/generated/full/session/path"
+Received: "gpt-child-model"
+
+ ❯ src/components/Sidebar.test.ts:749:67
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > keeps child session/model fallback readable without empty second lines
+AssertionError: expected 'サブエージェント' to be 'session-only' // Object.is equality
+
+Expected: "session-only"
+Received: "サブエージェント"
+
+ ❯ src/components/Sidebar.test.ts:755:207
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 201 passed (203)
+   Start at  16:41:54
+   Duration  9.41s (transform 52%, tests 37%, import 8%, environment 3%)
+
+  Transform  transforming modules took 4.87s · 52% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-subagent-session-first/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/Sidebar.test.ts

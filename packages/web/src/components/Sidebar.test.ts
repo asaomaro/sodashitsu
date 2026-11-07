@@ -746,8 +746,13 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     const usage=useUsageStore(pinia);usage.panes.p1={paneId:"p1",kind:"codex",model:"gpt-observed-model",tokens:{basis:"context"},source:"rollout",updatedAt:1};
     const w=mountSidebar(makeConnection());expect(w.get('[data-agent-pane="p1"]').text()).toContain("Codex gpt-observed-model");expect(w.get('[data-agent-pane="p1"]').attributes("title")).toContain("gpt-observed-model");
     await btn(w).trigger("click");const child=w.get('[data-subagent-id="child"]');expect(child.attributes("title")).toContain("gpt-child-model · /generated/full/session/path · 状態不明");expect(child.findAll('[role="img"]')).toHaveLength(1);expect(child.text()).not.toContain("状態不明");
+    expect(child.get(".sidebar-row-line1 .sidebar-label").text()).toBe("/generated/full/session/path");expect(child.get(".sidebar-row-line2").text()).toBe("gpt-child-model");
     usage.panes.p1={...usage.panes.p1!,kind:"claude"};await nextTick();expect(w.get('[data-agent-pane="p1"]').text()).not.toContain("gpt-observed-model");
     delete usage.panes.p1;await nextTick();expect(w.get('[data-agent-pane="p1"]').text()).toContain("Codex");
+  });
+  it("keeps child session/model fallback readable without empty second lines",async()=>{
+    setup(makeAgent({subagents:{count:3,items:[{id:"model",type:"model-only",startedAt:0},{id:"session",description:"session-only",startedAt:0},{id:"empty",startedAt:0}]}}));const w=mountSidebar(makeConnection());await btn(w).trigger("click");
+    for(const [id,text]of [["model","model-only"],["session","session-only"],["empty","サブエージェント"]]){const row=w.get(`[data-subagent-id="${id}"]`);expect(row.get(".sidebar-row-line1 .sidebar-label").text()).toBe(text);expect(row.find(".sidebar-row-line2").exists()).toBe(false);}
   });
   it("展開状態は更新/並び替えで保持、別instanceでは閉じ、上限と残り件数を表示する",async()=>{
     const session=setup(makeAgent({subagents:subs(70)}));const w=mountSidebar(makeConnection());

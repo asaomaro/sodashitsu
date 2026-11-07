@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-session-first/packages/web
+
+
+ Test Files  1 passed (1)
+      Tests  203 passed (203)
+   Start at  16:42:22
+   Duration  15.22s (transform 52%, tests 37%, import 8%, environment 3%)
+
+  Transform  transforming modules took 7.76s · 52% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

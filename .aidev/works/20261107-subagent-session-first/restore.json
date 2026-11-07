@@ -1,0 +1,6 @@
+{
+  "web": 1,
+  "tui": 1,
+  "browser": 1,
+  "exactRestore": true
+}

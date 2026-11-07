@@ -501,6 +501,8 @@ function toggleSubagents(agent:AgentInfo):void {
 }
 function subagentCount(agent:AgentInfo):number {return agent.subagents?.count??0;}
 function subagentStatus(agent:AgentInfo):string {return subagentCountLabel(agent.subagents);}
+function childSession(child:SubagentInfo):string {return child.description?.trim()||child.type?.trim()||"サブエージェント";}
+function childModel(child:SubagentInfo):string|undefined {return child.description?.trim()&&child.type?.trim()?child.type.trim():undefined;}
 function childTitle(child:SubagentInfo):string {return [child.type,child.description,subagentStateLabel(child),"親エージェント内（独立した端末はありません）"].filter(Boolean).join(" · ");}
 
 /** その pane のエージェントのサブエージェントの一覧を開く（ダイアログ。対象は選んでいるマシンの pane）。 */
@@ -1117,8 +1119,8 @@ watchDragInterrupt(view, () => {
       </div>
       <div v-if="!view.sidebarCollapsed && subagentCount(agent)>0 && subagentsExpanded(agent)" :id="`sidebar-subagents-${pane.id}`" class="sidebar-subagents" role="group" :aria-label="`${agent.label} のサブエージェント`">
         <div v-for="child in agent.subagents!.items.slice(0,64)" :key="child.id" class="sidebar-row sidebar-subagent-row" :data-subagent-id="child.id" :title="childTitle(child)">
-          <div class="sidebar-row-line1"><StateIcon class="sidebar-state-icon sidebar-subagent-status" variant="subagent" :state="child.state ?? 'working'" /><span class="sidebar-label">{{ child.type || 'サブエージェント' }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
-          <div v-if="child.description" class="sidebar-row-line2 sidebar-label">{{ child.description }}</div>
+          <div class="sidebar-row-line1"><StateIcon class="sidebar-state-icon sidebar-subagent-status" variant="subagent" :state="child.state ?? 'working'" /><span class="sidebar-label">{{ childSession(child) }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
+          <div v-if="childModel(child)" class="sidebar-row-line2 sidebar-label">{{ childModel(child) }}</div>
         </div>
         <div v-if="subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)})" class="sidebar-subagent-more">{{ subagentsMoreLabel({...agent.subagents!,items:agent.subagents!.items.slice(0,64)}) }}</div>
         <button data-assistant-feature type="button" class="sidebar-btn sidebar-subagent-details" @click="openSubagents(pane.id)" @keydown="onButtonKeydown">詳細・記録…</button>

@@ -1,0 +1,29 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-session-first/packages/tui
+
+ ❯ src/app/TuiApp.subagents.test.ts (20 tests | 1 failed) 2317ms
+   ❯ 端末版のサブエージェントの表示 (20)
+     × puts the child session first and model second while preserving fallback 97ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > puts the child session first and model second while preserving fallback
+AssertionError: expected 791 to be greater than 891
+ ❯ src/app/TuiApp.subagents.test.ts:95:346
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 passed (20)
+   Start at  16:42:04
+   Duration  5.81s (transform 49%, tests 41%, import 11%)
+
+  Transform  transforming modules took 2.76s · 49% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-subagent-session-first/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/app/TuiApp.subagents.test.ts
