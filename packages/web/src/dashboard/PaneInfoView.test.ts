@@ -216,5 +216,5 @@ it.each(["codex","muse","copilot","agy"])("labels %s native membership counts wi
 
 it("bounds inline child rows at 64 without opening a separate list",()=>{
  const {wrapper,view}=setup(pane("p1",agent({subagents:{count:70,items:Array.from({length:70},(_,i)=>({id:`c${i}`,startedAt:0,type:"child-model",description:`child-session-${i}`,reasoningEffort:"low",reasoningEffortBasis:"creation"}))}})));
- expect(wrapper.findAll('.subagent-list-item')).toHaveLength(64);expect(wrapper.text()).toContain('ほか 6 件');expect(wrapper.text()).toContain('low（開始時）');expect(view.dialogContext).toBeNull();wrapper.unmount();
+ expect(wrapper.findAll('.subagent-list-item')).toHaveLength(64);expect(wrapper.text()).toContain('ほか 6 件');expect(wrapper.text()).toContain('low');expect(view.dialogContext).toBeNull();wrapper.unmount();
 });

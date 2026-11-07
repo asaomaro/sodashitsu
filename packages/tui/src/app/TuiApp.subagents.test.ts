@@ -363,7 +363,7 @@ describe("端末版のサブエージェントの表示", () => {
   });
   it("puts expansion on the first row without sidebar info and preserves the pane information action",async()=>{
     const h=await start({subagents:{count:1,items:[sub("c",{type:"child-model",description:"child-session",reasoningEffort:"low",reasoningEffortBasis:"creation"})]}}),badge=h.badge()!;
-    expect(h.hits().some(x=>x.kind==="info")).toBe(false);expect(badge.y).toBe(h.hits().find(x=>x.kind==="agent"&&x.paneId==="p3")!.y);dispatcherOf(h.app).showUsageOf("p3");h.app.renderNow();expect(h.app.ui.dialogContext).toMatchObject({kind:"usage",paneId:"p3"});const screen=await h.screen();expect(screen).toContain("child-session");expect(screen).toContain("child-model low（開始時）");
+    expect(h.hits().some(x=>x.kind==="info")).toBe(false);expect(badge.y).toBe(h.hits().find(x=>x.kind==="agent"&&x.paneId==="p3")!.y);dispatcherOf(h.app).showUsageOf("p3");h.app.renderNow();expect(h.app.ui.dialogContext).toMatchObject({kind:"usage",paneId:"p3"});const screen=await h.screen();expect(screen).toContain("child-session");expect(screen).toContain("child-model low");
   });
   it("keeps a single-row fallback and watches usage independently from disabled footer",async()=>{
     const h=await start({subagents:subs(1)});h.app.prefs.apply({statuslineSettings:loadStatuslineSettings({enabled:false}),sidebarRows:{spaces:null,agents:[[{token:"agent"}]]}},10000);h.app.renderNow();const badge=h.badge()!;expect(h.hits().some(x=>x.kind==="info")).toBe(false);expect(badge.y).toBe(h.hits().find(x=>x.kind==="agent"&&x.paneId==="p3")!.y);

@@ -1,0 +1,43 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-scrollbar-size
+
+ ❯ |@sodashitsu/client-core| src/sidebar/observedAgentModel.test.ts (6 tests | 2 failed) 10ms
+   × shows child effort without a timing suffix while retaining observation validation 4ms
+   × omits invalid child observations and labels effort without a model explicitly 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/client-core| src/sidebar/observedAgentModel.test.ts > shows child effort without a timing suffix while retaining observation validation
+AssertionError: expected 'child-model low（開始時）' to be 'child-model low' // Object.is equality
+
+Expected: "child-model low"
+Received: "child-model low（開始時）"
+
+ ❯ src/sidebar/observedAgentModel.test.ts:17:151
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/client-core| src/sidebar/observedAgentModel.test.ts > omits invalid child observations and labels effort without a model explicitly
+AssertionError: expected 'effort high（記録）' to be 'effort high' // Object.is equality
+
+Expected: "effort high"
+Received: "effort high（記録）"
+
+ ❯ src/sidebar/observedAgentModel.test.ts:20:318
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  23:08:24
+   Duration  897ms (transform 77%, import 21%, tests 1%)
+

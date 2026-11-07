@@ -755,7 +755,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     useSettingsStore(pinia).statuslineSettings.enabled=false;
     const store=useUsageStore(pinia);store.panes.p1={paneId:"p1",kind:"codex",model:"parent-model",reasoningEffort:"high",tokens:{basis:"context"},source:"rollout",updatedAt:1};
     const w=mountSidebar(makeConnection()),parent=w.get('[data-agent-pane="p1"]');expect(parent.text()).toContain("parent-model high");expect(parent.find('.sidebar-agent-info').exists()).toBe(false);expect(parent.find('.sidebar-row-line1 .sidebar-subagent-btn').exists()).toBe(true);
-    await btn(w).trigger('click');expect(w.get('[data-subagent-id="child"] .sidebar-row-line2').text()).toBe('child-model low（開始時）');expect(w.get('[data-subagent-id="child"]').attributes('title')).toContain('開始時のeffort');expect(w.find('.sidebar-subagent-details').exists()).toBe(false);
+    await btn(w).trigger('click');expect(w.get('[data-subagent-id="child"] .sidebar-row-line2').text()).toBe('child-model low');expect(w.get('[data-subagent-id="child"]').attributes('title')).toContain('effort low');expect(w.find('.sidebar-subagent-details').exists()).toBe(false);
     expect(useViewStore(pinia).paneInfoPaneId).toBeNull();
   });
   it("keeps expansion on a custom single row without sidebar info",()=>{
