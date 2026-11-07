@@ -1,0 +1,2 @@
+{"ready":true,"syntheticFileOnly":true}
+{"passed":true,"codec":"PCM","opusFrames":0,"pcmFrames":291,"stopAfterLastSendMs":45,"stopAfterLastAckMs":-8,"sentFrames":291,"acknowledgedFrames":288,"maximumPending":4,"states":["starting","running","stopped"],"physicalMicrophoneUsed":false,"syntheticFileOnly":true,"rawAudioStored":false}

@@ -1,0 +1,154 @@
+<--- Last few GCs --->
+
+[2353858:0x2a4c7000]    23660 ms: Scavenge (interleaved) 4089.0 (4096.6) -> 4088.6 (4101.4) MB, pooled: 0 MB, 16.17 / 0.00 ms  (average mu = 0.276, current mu = 0.246) allocation failure;
+[2353858:0x2a4c7000]    24654 ms: Mark-Compact (reduce) 4092.1 (4101.6) -> 4090.9 (4097.6) MB, pooled: 0 MB, 624.29 / 0.00 ms  (+ 250.8 ms in 50 steps since start of marking, biggest step 5.0 ms, walltime since start of marking 901 ms) (average mu = 0.226
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+
+ 1: 0x942e80  [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+ 2: 0x75f71e node::OOMErrorHandler(char const*, v8::OOMDetails const&) [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+ 3: 0xc9a1e0  [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+ 4: 0xc9a2cf  [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+ 5: 0xf3e5a5  [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+ 6: 0xf3e5d2  [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+ 7: 0xf3e8ca  [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+ 8: 0xf4f5ca  [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+ 9: 0xf53970  [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+10: 0x19f1e81  [/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node]
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/launch/soda.pty.integration.test.ts > soda（引数なし）を本物の端末で（node-pty。dist が無ければ skip：先に pnpm build。Windows は対象外）
+Error: dist is older than src (run pnpm build first): src/platform/LinuxProcessInspector.ts
+ ❯ src/launch/soda.pty.integration.test.ts:133:15
+    131|       const stale = [...staleOutputs(SERVER_PKG), ...staleOutputs(TUI_…
+    132|       if (stale.length > 0)
+    133|         throw new Error(
+       |               ^
+    134|           `dist is older than src (run pnpm build first): ${stale.slic…
+    135|         );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/components/Sidebar.defaultLayout.test.ts > Sidebar — 既定の並びは変更前の描画と同じ（AC10） > 展開したサイドバー
+Error: Snapshot `Sidebar — 既定の並びは変更前の描画と同じ（AC10） > 展開したサイドバー 1` mismatched
+
+- Expected
++ Received
+
+- <div class="sidebar-row sidebar-row-group" data-workspace-row-key="group:g1"><div class="sidebar-row-line1"><button type="button" class="sidebar-group-toggle" aria-label="グループを折りたたむ" aria-expanded="true">▾</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-kind-icon" data-kind="group" title="グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg><span class="sidebar-kind-text">グループ</span></span><span class="sidebar-label sidebar-group-label">backend</span><span class="sidebar-group-rule" aria-hidden="true"></span><span class="sidebar-group-count" aria-label="1 件">1</span></div></div>
++ <div class="sidebar-row sidebar-row-group" data-workspace-row-key="group:g1"><div class="sidebar-row-line1"><button data-assistant-feature="" type="button" class="sidebar-group-toggle" aria-label="グループを折りたたむ" aria-expanded="true">▾</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-kind-icon" data-kind="group" title="グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg><span class="sidebar-kind-text">グループ</span></span><span class="sidebar-label sidebar-group-label">backend</span><span class="sidebar-group-rule" aria-hidden="true"></span><span class="sidebar-group-count" aria-label="1 件">1</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="member1" data-drop-workspace-id="member1"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-label">member1</span></div></div>
+- <div class="sidebar-row sidebar-row-group" data-workspace-row-key="group:g2"><div class="sidebar-row-line1"><button type="button" class="sidebar-group-toggle" aria-label="グループを展開" aria-expanded="false">▸</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-kind-icon" data-kind="group" title="グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg><span class="sidebar-kind-text">グループ</span></span><span class="sidebar-label sidebar-group-label">closed-group</span><span class="sidebar-group-rule" aria-hidden="true"></span><span class="sidebar-group-count" aria-label="1 件">1</span></div></div>
++ <div class="sidebar-row sidebar-row-group" data-workspace-row-key="group:g2"><div class="sidebar-row-line1"><button data-assistant-feature="" type="button" class="sidebar-group-toggle" aria-label="グループを展開" aria-expanded="false">▸</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-kind-icon" data-kind="group" title="グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg><span class="sidebar-kind-text">グループ</span></span><span class="sidebar-label sidebar-group-label">closed-group</span><span class="sidebar-group-rule" aria-hidden="true"></span><span class="sidebar-group-count" aria-label="1 件">1</span></div></div>
+- <div class="sidebar-row sidebar-row-group" data-workspace-row-key="ungrouped:"><div class="sidebar-row-line1"><button type="button" class="sidebar-group-toggle" aria-label="「グループなし」を折りたたむ" aria-expanded="true">▾</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span><span class="sidebar-label sidebar-group-label">グループなし</span><span class="sidebar-group-rule" aria-hidden="true"></span><span class="sidebar-group-count" aria-label="5 件">5</span></div></div>
++ <div class="sidebar-row sidebar-row-group" data-workspace-row-key="ungrouped:"><div class="sidebar-row-line1"><button data-assistant-feature="" type="button" class="sidebar-group-toggle" aria-label="「グループなし」を折りたたむ" aria-expanded="true">▾</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span><span class="sidebar-label sidebar-group-label">グループなし</span><span class="sidebar-group-rule" aria-hidden="true"></span><span class="sidebar-group-count" aria-label="5 件">5</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="plain" data-drop-workspace-id="plain"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="working" data-symbols="on" role="img" aria-label="作業中" title="作業中">◐</span><span class="sidebar-label">plain</span></div></div>
+  <div class="sidebar-row sidebar-row-current sidebar-row-indent" data-workspace-row-key="clean" data-drop-workspace-id="clean" aria-current="true"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span><span class="sidebar-label">clean</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="ahead" data-drop-workspace-id="ahead"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span><span class="sidebar-label">Ahead &lt;b&gt;&amp;amp;&lt;/b&gt;</span></div><div class="sidebar-row-line2"><span>main</span><span class="sidebar-git-counts">↑2 ↓1</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="detached" data-drop-workspace-id="detached"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="unknown" data-symbols="on" role="img" aria-label="状態不明" title="状態不明">·</span><span class="sidebar-label">detached</span></div><div class="sidebar-row-line2"><span></span><span class="sidebar-git-counts">↑0 ↓3</span></div></div>
+- <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="repo" data-drop-workspace-id="repo"><div class="sidebar-row-line1"><button type="button" class="sidebar-group-toggle" aria-label="worktree グループを折りたたむ" aria-expanded="true">▾</button><span class="sidebar-kind-icon" data-kind="worktreeGroup" title="worktree グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="4.5" cy="3.5" r="1.5"></circle><circle cx="4.5" cy="12.5" r="1.5"></circle><circle cx="11.5" cy="5.5" r="1.5"></circle><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"></path></svg><span class="sidebar-kind-text">worktree グループ</span></span><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-label">repo</span><span class="sidebar-wt-branch" title="main">main</span></div><div class="sidebar-row-line2"><span>main</span><span class="sidebar-git-counts">↑1 ↓0</span></div></div>
++ <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="repo" data-drop-workspace-id="repo"><div class="sidebar-row-line1"><button data-assistant-feature="" type="button" class="sidebar-group-toggle" aria-label="worktree グループを折りたたむ" aria-expanded="true">▾</button><span class="sidebar-kind-icon" data-kind="worktreeGroup" title="worktree グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="4.5" cy="3.5" r="1.5"></circle><circle cx="4.5" cy="12.5" r="1.5"></circle><circle cx="11.5" cy="5.5" r="1.5"></circle><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"></path></svg><span class="sidebar-kind-text">worktree グループ</span></span><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-label">repo</span><span class="sidebar-wt-branch" title="main">main</span></div><div class="sidebar-row-line2"><span>main</span><span class="sidebar-git-counts">↑1 ↓0</span></div></div>
+  <div class="sidebar-row sidebar-row-depth-2 sidebar-row-indent sidebar-row-tree sidebar-row-tree-last" data-workspace-row-key="repo-wt" data-drop-workspace-id="repo-wt"><div class="sidebar-row-line1"><span class="sidebar-kind-icon" data-kind="worktreeGroup" title="worktree グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="4.5" cy="3.5" r="1.5"></circle><circle cx="4.5" cy="12.5" r="1.5"></circle><circle cx="11.5" cy="5.5" r="1.5"></circle><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"></path></svg><span class="sidebar-kind-text">worktree グループ</span></span><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-label">repo-wt</span><span class="sidebar-wt-branch" title="feat">feat</span></div></div>
+  <div class="sidebar-row" tabindex="-1" data-agent-pane="p-plain"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="working" data-symbols="on" role="img" aria-label="作業中" title="作業中">◐</span><span class="sidebar-label">plain</span><span class="sidebar-label">tab-plain</span></div><div class="sidebar-row-line2"><span>Claude Code</span></div></div>
+  <div class="sidebar-row" tabindex="-1" data-agent-pane="p-clean"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span><span class="sidebar-label">clean</span><span class="sidebar-label">tab-clean</span></div><div class="sidebar-row-line2"><span class="sidebar-agent-name">reviewer</span><span>Claude Code</span></div></div>
+  <div class="sidebar-row" tabindex="-1" data-agent-pane="p-ahead"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span><span class="sidebar-label">Ahead &lt;b&gt;&amp;amp;&lt;/b&gt;</span><span class="sidebar-label">tab-ahead</span></div><div class="sidebar-row-line2"><span>Codex</span><span class="sidebar-unverified">未検証</span></div></div>
+  <div class="sidebar-row" tabindex="-1" data-agent-pane="p-detached"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="unknown" data-symbols="on" role="img" aria-label="状態不明" title="状態不明">·</span><span class="sidebar-label">detached</span><span class="sidebar-label">tab-detached</span></div><div class="sidebar-row-line2"><span class="sidebar-agent-name">n2</span><span>Pi</span><span class="sidebar-unverified">未検証</span></div></div>
+
+ ❯ src/components/Sidebar.defaultLayout.test.ts:105:5
+    103|     populate();
+    104|     const wrapper = mountSidebar();
+    105|     await expect(rowsHtml(wrapper)).toMatchFileSnapshot("./__golden__/…
+       |     ^
+    106|   });
+    107|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  |@sodashitsu/web| src/components/Sidebar.defaultLayout.test.ts > Sidebar — 既定の並びは変更前の描画と同じ（AC10） > 畳んだサイドバー
+Error: Snapshot `Sidebar — 既定の並びは変更前の描画と同じ（AC10） > 畳んだサイドバー 1` mismatched
+
+- Expected
++ Received
+
+- <div class="sidebar-row sidebar-row-group" data-workspace-row-key="group:g1"><div class="sidebar-row-line1"><button type="button" class="sidebar-group-toggle" aria-label="グループを折りたたむ" aria-expanded="true">▾</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-kind-icon" data-kind="group" role="img" aria-label="グループ" title="グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg></span></div></div>
++ <div class="sidebar-row sidebar-row-group" data-workspace-row-key="group:g1"><div class="sidebar-row-line1"><button data-assistant-feature="" type="button" class="sidebar-group-toggle" aria-label="グループを折りたたむ" aria-expanded="true">▾</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-kind-icon" data-kind="group" role="img" aria-label="グループ" title="グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg></span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="member1" data-drop-workspace-id="member1"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span></div></div>
+- <div class="sidebar-row sidebar-row-group" data-workspace-row-key="group:g2"><div class="sidebar-row-line1"><button type="button" class="sidebar-group-toggle" aria-label="グループを展開" aria-expanded="false">▸</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-kind-icon" data-kind="group" role="img" aria-label="グループ" title="グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg></span></div></div>
++ <div class="sidebar-row sidebar-row-group" data-workspace-row-key="group:g2"><div class="sidebar-row-line1"><button data-assistant-feature="" type="button" class="sidebar-group-toggle" aria-label="グループを展開" aria-expanded="false">▸</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="none" data-symbols="on" aria-hidden="true"></span><span class="sidebar-kind-icon" data-kind="group" role="img" aria-label="グループ" title="グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg></span></div></div>
+- <div class="sidebar-row sidebar-row-group" data-workspace-row-key="ungrouped:"><div class="sidebar-row-line1"><button type="button" class="sidebar-group-toggle" aria-label="「グループなし」を折りたたむ" aria-expanded="true">▾</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span></div></div>
++ <div class="sidebar-row sidebar-row-group" data-workspace-row-key="ungrouped:"><div class="sidebar-row-line1"><button data-assistant-feature="" type="button" class="sidebar-group-toggle" aria-label="「グループなし」を折りたたむ" aria-expanded="true">▾</button><span class="state-icon sidebar-state-icon sidebar-group-state" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="plain" data-drop-workspace-id="plain"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="working" data-symbols="on" role="img" aria-label="作業中" title="作業中">◐</span></div></div>
+  <div class="sidebar-row sidebar-row-current sidebar-row-indent" data-workspace-row-key="clean" data-drop-workspace-id="clean" aria-current="true"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="ahead" data-drop-workspace-id="ahead"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span></div></div>
+  <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="detached" data-drop-workspace-id="detached"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="unknown" data-symbols="on" role="img" aria-label="状態不明" title="状態不明">·</span></div></div>
+- <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="repo" data-drop-workspace-id="repo"><div class="sidebar-row-line1"><button type="button" class="sidebar-group-toggle" aria-label="worktree グループを折りたたむ" aria-expanded="true">▾</button><span class="sidebar-kind-icon" data-kind="worktreeGroup" role="img" aria-label="worktree グループ" title="worktree グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="4.5" cy="3.5" r="1.5"></circle><circle cx="4.5" cy="12.5" r="1.5"></circle><circle cx="11.5" cy="5.5" r="1.5"></circle><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"></path></svg></span><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span></div></div>
++ <div class="sidebar-row sidebar-row-indent" data-workspace-row-key="repo" data-drop-workspace-id="repo"><div class="sidebar-row-line1"><button data-assistant-feature="" type="button" class="sidebar-group-toggle" aria-label="worktree グループを折りたたむ" aria-expanded="true">▾</button><span class="sidebar-kind-icon" data-kind="worktreeGroup" role="img" aria-label="worktree グループ" title="worktree グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="4.5" cy="3.5" r="1.5"></circle><circle cx="4.5" cy="12.5" r="1.5"></circle><circle cx="11.5" cy="5.5" r="1.5"></circle><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"></path></svg></span><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span></div></div>
+  <div class="sidebar-row sidebar-row-depth-2 sidebar-row-indent sidebar-row-tree sidebar-row-tree-last" data-workspace-row-key="repo-wt" data-drop-workspace-id="repo-wt"><div class="sidebar-row-line1"><span class="sidebar-kind-icon" data-kind="worktreeGroup" role="img" aria-label="worktree グループ" title="worktree グループ"><svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="4.5" cy="3.5" r="1.5"></circle><circle cx="4.5" cy="12.5" r="1.5"></circle><circle cx="11.5" cy="5.5" r="1.5"></circle><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"></path></svg></span><span class="state-icon sidebar-state-icon" data-state="none" data-symbols="on" aria-hidden="true"></span></div></div>
+  <div class="sidebar-row" tabindex="-1" data-agent-pane="p-plain"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="working" data-symbols="on" role="img" aria-label="作業中" title="作業中">◐</span></div></div>
+  <div class="sidebar-row" tabindex="-1" data-agent-pane="p-clean"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="blocked" data-symbols="on" role="img" aria-label="入力待ち" title="入力待ち">×</span></div></div>
+  <div class="sidebar-row" tabindex="-1" data-agent-pane="p-ahead"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span></div></div>
+  <div class="sidebar-row" tabindex="-1" data-agent-pane="p-detached"><div class="sidebar-row-line1"><span class="state-icon sidebar-state-icon" data-state="unknown" data-symbols="on" role="img" aria-label="状態不明" title="状態不明">·</span></div></div>
+
+ ❯ src/components/Sidebar.defaultLayout.test.ts:112:5
+    110|     useViewStore(pinia).sidebarCollapsed = true;
+    111|     const wrapper = mountSidebar();
+    112|     await expect(rowsHtml(wrapper)).toMatchFileSnapshot("./__golden__/…
+       |     ^
+    113|   });
+    114| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  |@sodashitsu/server| src/assistant/AssistantHostBundle.test.ts > loads soda's GUI resources without node_modules using a synthetic Electron API only
+Error: Command failed: /home/asaomaro/.nvm/versions/node/v24.22.2/bin/node --no-warnings --experimental-loader file:///tmp/soda-host-bundle-dPzCR8/loader.mjs /tmp/soda-host-bundle-dPzCR8/package/packages/server/assets/assistant-host/dist/main.mjs
+file:///tmp/soda-host-bundle-dPzCR8/package/packages/server/assets/assistant-host/dist/main.mjs:11
+import { BrowserWindow, Menu, Tray, WebContentsView, app, clipboard, desktopCapturer, dialog, ipcMain, nativeImage, nativeTheme, powerMonitor, protocol, screen, session } from "electron";
+                                                                                                                    ^^^^^^^^^^^
+SyntaxError: The requested module 'electron' does not provide an export named 'nativeTheme'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:455:21)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:553:5)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯⎯⎯
+Error: [vitest-pool]: Worker forks emitted error.
+ ❯ EventEmitter.onTaskError node_modules/.pnpm/vitest@5.0.1_@types+node@24.13.5_happy-dom@20.14.5_vite@8.3.0_@types+node@24.13.5_jiti@2.7.0_/node_modules/vitest/dist/chunks/index.DzobfTyw.js:11460:21
+ ❯ EventEmitter.emit node:events:514:28
+ ❯ ChildProcess.emitUnexpectedExit node_modules/.pnpm/vitest@5.0.1_@types+node@24.13.5_happy-dom@20.14.5_vite@8.3.0_@types+node@24.13.5_jiti@2.7.0_/node_modules/vitest/dist/chunks/index.DzobfTyw.js:10937:22
+ ❯ ChildProcess.emit node:events:514:28
+ ❯ Process.ChildProcess._handle.onexit node:internal/child_process:324:12
+
+Caused by: Error: Worker exited unexpectedly with signal SIGABRT during started state while running test file /workspaces/sodashitsu-main-live-assistant-agents/packages/web/src/components/SettingsDialog.test.ts
+ ❯ ChildProcess.emitUnexpectedExit node_modules/.pnpm/vitest@5.0.1_@types+node@24.13.5_happy-dom@20.14.5_vite@8.3.0_@types+node@24.13.5_jiti@2.7.0_/node_modules/vitest/dist/chunks/index.DzobfTyw.js:10935:33
+ ❯ ChildProcess.emit node:events:514:28
+ ❯ Process.ChildProcess._handle.onexit node:internal/child_process:324:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+  Snapshots  2 failed
+ Test Files  3 failed | 976 passed | 1 skipped (981)
+      Tests  3 failed | 13881 passed | 2 skipped (13893)
+     Errors  1 error
+   Start at  10:23:59
+   Duration  737.60s (tests 83%, import 10%, environment 4%, transform 3%)
+
+Environment  |@sodashitsu/web| happy-dom was created 249 times · 45.90s total, 33% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+ ELIFECYCLE  Test failed. See above for more details.

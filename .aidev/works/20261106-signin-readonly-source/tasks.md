@@ -315,6 +315,14 @@ CABLE Outputからの受音測定・実通話は残件。通常Windowsサーバ�
 - [ ] 受音測定ありではsent68/ACK56/maxPending11で6秒時点のDOMが転送中ではなくなった。captureは57chunks（約1.14秒）の997Hzを検出。測定なしでもsent66/ACK54/maxPending12で同様に停止したため、capture負荷だけの現象とは扱わない。
 - [x] sr-pc内loopbackの製品wireは300frame/ACK298/starting→running→stopped、errorなしで完走した。loopback初回は検証側のstart.machineId省略で接続不成立、修正後に測定。ネットワークを通るUI経路の成功とは区別。
 - [x] 各試行後にmic設定を復元し、captureの所有process終了/専用root除去、ブラウザ終了を確認。
-- [x] 中継元サーバーは5秒間に396 CPU ticks使用。15秒のCPU profileではnativeファイルIOとLinuxProcessInspectorの/proc走査などが観測された。音声停止の原因と断定しない。profileの生データはprivate一時領域だけ、repoは集計だけ。計測後にinspectorのlistenがなくなったことを確認。
+- [x] 中継元サーバーは5秒間に396 CPU ticks使用。15秒のCPU profileではnativeファイルIOとLinuxProcessInspectorの/proc走査などが観測された。音声停止の原因と断定しない。profileの生データはprivate一時領域だけ、repoは集計だけ。計測後にlistenは消えたが、後述のとおり診断終了エラーでサーバーも停止していた。正常清掃とは扱わない。
 
 実ブラウザの未解決停止を優先し、中継経路・ACK待ち・サーバー負荷を切り分ける。500ms等の既存期限を原因未確定のまま緩めない。
+
+
+CPU診断終了処理の動的importがERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSINGで未処理拒否となり、中継サーバーを停止させた。保存状態から14pane/5workspaceの同一ID復元とsr-pcの2経路onlineを確認。詳細は[停止と復旧の記録](../20261107-linux-process-scan/incident.md)。
+
+
+## 利用者による完了条件の更新
+
+2026-11-07、原因不明でも再発しなければ解決扱いでよいとの指定を受けた。過去EACCESと今回の通常接続/12分headlessを解決扱いへ更新。根因の確定を待たない。実UIで再現しているmic停止、未検証の他OS/未導入driverは別に残す。

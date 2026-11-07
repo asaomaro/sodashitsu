@@ -1,0 +1,12 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+> vitest run src/platform/LinuxProcessInspector.test.ts src/platform/LinuxProcessInspector.integration.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+
+ Test Files  2 passed (2)
+      Tests  11 passed (11)
+   Start at  10:22:22
+   Duration  1.98s (tests 91%, transform 7%, import 2%)

@@ -8,6 +8,10 @@ import { isBusyFromForeground } from "./ProcessInspector.js";
  * `/proc/<tpgid>/cmdline`・`/proc/<tpgid>/cwd` を読む。
  */
 export class LinuxProcessInspector implements ProcessInspector {
+  // Share only an unfinished scan: concurrent panes need the same /proc walk.
+  // Completed results are never cached, so a later poll sees process changes.
+  private processScan: Promise<ProcessGroupMember[]> | undefined;
+
   async foreground(shellPid: number): Promise<ForegroundProcess | null> {
     const tpgid = await readTpgid(shellPid);
     if (tpgid === null) return null;
@@ -24,7 +28,8 @@ export class LinuxProcessInspector implements ProcessInspector {
   async foregroundJob(shellPid: number): Promise<ForegroundJob | null> {
     const tpgid = await readTpgid(shellPid);
     if (tpgid === null) return null;
-    const members = await scanProcessGroupMembers(tpgid);
+    const scan = this.processScan ??= scanProcessGroupMembers().finally(() => { this.processScan = undefined; });
+    const members = (await scan).filter((member) => member.pgrp === tpgid);
     if (members.length === 0) return null;
     const processes = (await Promise.all(members.map((m) => buildForegroundProcess(m.pid, m.comm, m.ppid)))).sort((a, b) => a.pid - b.pid);
     return { processGroupId: tpgid, processes };
@@ -89,8 +94,10 @@ async function readCommAndPgrp(pid: number): Promise<{ comm: string; pgrp: numbe
   }
 }
 
-/** `/proc` 全体を走査し、`pgrp` が `processGroupId` と一致するプロセスを集める（LinuxProcessInspector 参照）。 */
-async function scanProcessGroupMembers(processGroupId: number): Promise<{ pid: number; comm: string; ppid: number }[]> {
+type ProcessGroupMember = { pid: number; comm: string; ppid: number; pgrp: number };
+
+/** `/proc` 全体のグループを一度に読み、同時に検出するpane間で走査を共有する。 */
+async function scanProcessGroupMembers(): Promise<ProcessGroupMember[]> {
   let entries: string[];
   try {
     entries = await readdir("/proc");
@@ -103,10 +110,10 @@ async function scanProcessGroupMembers(processGroupId: number): Promise<{ pid: n
       .map(async (name) => {
         const pid = Number(name);
         const info = await readCommAndPgrp(pid);
-        return info && info.pgrp === processGroupId ? { pid, comm: info.comm, ppid: info.ppid } : null;
+        return info ? { pid, ...info } : null;
       }),
   );
-  return results.filter((r): r is { pid: number; comm: string; ppid: number } => r !== null);
+  return results.filter((r): r is ProcessGroupMember => r !== null);
 }
 
 async function buildForegroundProcess(pid: number, comm: string, ppid: number): Promise<ForegroundProcess> {

@@ -1,0 +1,7 @@
+# CPU診断終了時の停止と復旧
+
+中継元PID31395へのCPU profile終了後、診断補助のRuntime.evaluateから行った動的importに `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING` が発生し、未処理拒否で製品サーバーを停止させた。プロファイル取得自体と、診断終了の安全性を取り違えた。不適切な診断補助を廃止し、稼働サーバーで再利用しない。
+
+保存済みsessionをprivateな一時backupへ保持し、従来のstate dir/127.0.0.1:7780/公開originで既存buildを再起動した。14pane/5workspaceを同じIDで復元し、missing0、agent9、sr-pc通常/保守alias onlineを確認。実行中プロセスを保持したhandoffではなく、保存状態からの再起動である。利用者へ診断が原因の停止と復旧範囲を説明した。
+
+profile集計は停止前の測定として保持する。元記録の『inspector listenがなくなった』は正常清掃の証明ではなく、実際にはサーバー停止も伴っていた。メモリ不足が原因だとは扱わない。

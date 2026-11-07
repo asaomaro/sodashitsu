@@ -1,6 +1,6 @@
 import { THEME_NAMES, type AgentIntegrationInstallResult, type AgentIntegrationStatusResult } from "@sodashitsu/protocol";
-import { mount } from "@vue/test-utils";
-import { createPinia, type Pinia } from "pinia";
+import { enableAutoUnmount, mount } from "@vue/test-utils";
+import { createPinia, disposePinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionDispatcherKey, DeviceKindKey, NotificationControllerKey } from "../injection.js";
 import type { ActionDispatcher } from "../actions/ActionDispatcher.js";
@@ -15,10 +15,19 @@ import SettingsDialog from "./SettingsDialog.vue";
 
 // 設定のダイアログを丸ごと描く。負荷の下で最大 5.7 秒かかって既定の 5 秒で落ちた。上限はこのファイルにだけ効く（20260926-load-flaky-tests の D5）。
 vi.setConfig({ testTimeout: 15_000 });
+enableAutoUnmount(afterEach);
 
 let pinia: Pinia;
+let removeStorageListeners = () => {};
 
 beforeEach(() => {
+  const registrations = vi.spyOn(window, "addEventListener");
+  removeStorageListeners = () => {
+    for (const [type, listener, options] of registrations.mock.calls) {
+      if (type === "storage") window.removeEventListener(type, listener, options);
+    }
+    registrations.mockRestore();
+  };
   localStorage.clear();
   vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ devices: [], issued: false }) })));
   pinia = createPinia();
@@ -31,6 +40,8 @@ beforeEach(() => {
   };
 });
 afterEach(() => {
+  removeStorageListeners();
+  disposePinia(pinia);
   localStorage.clear();
   document.body.innerHTML = "";
   vi.unstubAllGlobals();

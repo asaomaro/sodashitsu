@@ -1,0 +1,34 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+> vitest run src/platform/LinuxProcessInspector.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+ ❯ src/platform/LinuxProcessInspector.test.ts (3 tests | 1 failed) 62ms
+   ❯ LinuxProcessInspector concurrent scans (3)
+     × walks /proc once for concurrent panes while keeping their groups separate 60ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/platform/LinuxProcessInspector.test.ts > LinuxProcessInspector concurrent scans > walks /proc once for concurrent panes while keeping their groups separate
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ src/platform/LinuxProcessInspector.test.ts:33:24
+     31|     expect(a?.processes.map(p => p.pid)).toEqual([100, 101]);
+     32|     expect(b?.processes.map(p => p.pid)).toEqual([200]);
+     33|     expect(fs.readdir).toHaveBeenCalledTimes(1);
+       |                        ^
+     34|     for (const pid of [100, 101, 200]) {
+     35|       expect(fs.readFile.mock.calls.filter(([path]) => path === `/proc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  10:23:16
+   Duration  188ms (tests 53%, transform 33%, import 11%, worker 3%)
+
+/workspaces/sodashitsu-main-live-assistant-agents/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 test: `vitest run src/platform/LinuxProcessInspector.test.ts`
+Exit status 1

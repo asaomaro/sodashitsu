@@ -1,0 +1,17 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/web
+> vitest run src/components/Sidebar.defaultLayout.test.ts --update
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/web
+
+
+  Snapshots  2 updated
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  10:38:08
+   Duration  5.30s (transform 83%, import 12%, environment 3%, tests 2%)
+
+  Transform  transforming modules took 4.32s · 83% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
