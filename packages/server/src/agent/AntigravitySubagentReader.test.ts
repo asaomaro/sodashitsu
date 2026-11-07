@@ -45,6 +45,25 @@ describe("Antigravity official direct-child snapshots", () => {
     expect(JSON.parse(JSON.stringify(pane)).agent.subagents).toEqual({ count: 0, countBasis: "alive", items: [] });
     service.close();
   });
+  it.each(["all", "partial"])("does not turn %s missing descriptors into zero or a smaller count", async missing => {
+    const f = await fixture();
+    if (missing === "all") {
+      await rm(f.file); expect(await f.reader.read(f.source)).toBeUndefined(); f.reader.close(); return;
+    }
+    const id = "33333333-3333-4333-8333-333333333333";
+    const original = (await readFile(new URL("./fixtures/agy-subagents/parent.jsonl", import.meta.url), "utf8")).split("\n").filter(Boolean).map(l => JSON.parse(l));
+    const call = { ...original.find(r => r.step_index === 1), step_index: 99 };
+    const result = { ...original.find(r => r.step_index === 2), step_index: 100 };
+    result.content = result.content.replaceAll(child, id);
+    await appendFile(join(f.system, "logs/transcript.jsonl"), JSON.stringify(call) + "\n" + JSON.stringify(result) + "\n");
+    expect(await f.reader.read(f.source)).toBeUndefined();
+    const second = join(f.dir, id + ".json");
+    await writeFile(second, JSON.stringify({ ...JSON.parse(f.alive), conversationId: id, spawnStepIndex: 100 }));
+    expect((await f.reader.read(f.source))?.count).toBe(2);
+    await writeFile(second, JSON.stringify({ ...JSON.parse(f.alive), conversationId: id, spawnStepIndex: 100, state: "SUBAGENT_STATE_KILLED" }));
+    expect((await f.reader.read(f.source))?.count).toBe(1);
+    await rm(second); expect(await f.reader.read(f.source)).toBeUndefined(); f.reader.close();
+  });
   it.each(["child-id", "state", "spawn", "unproven-spawn", "truncated", "oversize"])("rejects invalid %s instead of inventing zero", async change => {
     const f = await fixture(); const row = JSON.parse(f.alive);
     if (change === "child-id") row.conversationId = parent;

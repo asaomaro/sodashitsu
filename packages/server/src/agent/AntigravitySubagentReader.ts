@@ -52,6 +52,7 @@ export async function readAntigravitySubagents(sessionId: string, roots: ExtraRo
   const handle = await opendir(dir).catch(() => null);
   if (!handle) return undefined;
   const items: SubagentInfo[] = [];
+  const seenSpawns = new Set<number>();
   let entries = 0;
   const deadline = Date.now() + 1000;
   for await (const entry of handle) {
@@ -71,7 +72,8 @@ export async function readAntigravitySubagents(sessionId: string, roots: ExtraRo
       const row = JSON.parse(bytes.toString("utf8"));
       if (!row || row.conversationId !== id || !Number.isSafeInteger(row.spawnStepIndex) || row.spawnStepIndex < 0) return undefined;
       const proof = proofs.get(row.spawnStepIndex);
-      if (!proof || proof.id !== id) return undefined;
+      if (!proof || proof.id !== id || seenSpawns.has(row.spawnStepIndex)) return undefined;
+      seenSpawns.add(row.spawnStepIndex);
       if (row.state === "SUBAGENT_STATE_KILLED") continue;
       if (row.state !== "SUBAGENT_STATE_ALIVE") return undefined;
       const description = label(row.subagentDescriptor?.role), type = label(row.subagentDescriptor?.typeName);
@@ -79,6 +81,9 @@ export async function readAntigravitySubagents(sessionId: string, roots: ExtraRo
     } catch { return undefined; }
     finally { await opened.fd.close(); }
   }
+  // Missing historical descriptors are not evidence of termination. Require an explicit
+  // provider descriptor for every verified spawn, including KILLED children.
+  if (seenSpawns.size !== proofs.size) return undefined;
   const after = await lstat(dir).catch(() => null);
   if (!after || after.dev !== before.dev || after.ino !== before.ino || after.mtimeMs !== before.mtimeMs || await realpath(dir).catch(() => null) !== dir) return undefined;
   // Revalidate the owned parent after the bounded scan; never return another session's snapshot.

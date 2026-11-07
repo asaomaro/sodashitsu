@@ -1,0 +1,77 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-antigravity-subagents
+
+ ❯ |@sodashitsu/server| src/agent/AntigravitySubagentReader.test.ts (22 tests | 2 failed | 20 skipped) 70ms
+   ❯ Antigravity official direct-child snapshots (22)
+     × does not turn all missing descriptors into zero or a smaller count 48ms
+     × does not turn partial missing descriptors into zero or a smaller count 19ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AntigravitySubagentReader.test.ts > Antigravity official direct-child snapshots > does not turn all missing descriptors into zero or a smaller count
+AssertionError: expected { Object (count, countBasis, ...) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "count": 0,
+  "countBasis": "alive",
+  "items": [],
+}
+
+ ❯ src/agent/AntigravitySubagentReader.test.ts:51:63
+     49|     const f = await fixture();
+     50|     if (missing === "all") {
+     51|       await rm(f.file); expect(await f.reader.read(f.source)).toBeUnde…
+       |                                                               ^
+     52|     }
+     53|     const id = "33333333-3333-4333-8333-333333333333";
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/AntigravitySubagentReader.test.ts > Antigravity official direct-child snapshots > does not turn partial missing descriptors into zero or a smaller count
+AssertionError: expected { count: 1, countBasis: 'alive', …(1) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "count": 1,
+  "countBasis": "alive",
+  "items": [
+    {
+      "depth": 1,
+      "description": "Integration Probe",
+      "id": "22222222-2222-4222-8222-222222222222",
+      "startedAt": 1794024683000,
+      "state": "unknown",
+      "type": "self",
+    },
+  ],
+}
+
+ ❯ src/agent/AntigravitySubagentReader.test.ts:59:43
+     57|     result.content = result.content.replaceAll(child, id);
+     58|     await appendFile(join(f.system, "logs/transcript.jsonl"), JSON.str…
+     59|     expect(await f.reader.read(f.source)).toBeUndefined();
+       |                                           ^
+     60|     const second = join(f.dir, id + ".json");
+     61|     await writeFile(second, JSON.stringify({ ...JSON.parse(f.alive), c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 20 skipped (22)
+   Start at  13:28:24
+   Duration  471ms (transform 61%, tests 23%, import 13%, worker 2%)
+
