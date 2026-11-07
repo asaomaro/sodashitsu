@@ -1,0 +1,85 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-cursor-native-children/packages/server
+
+ ❯ src/agent/GrokSubagentRecords.test.ts (12 tests | 1 failed) 37ms
+   × rejects malformed or foreign binding instead of a false zero 13ms
+ ❯ src/agent/GrokSubagentReader.test.ts (6 tests | 1 failed) 228ms
+   × refuses unverified scope, retired instances, removed files and symlink leaves 21ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/GrokSubagentReader.test.ts > refuses unverified scope, retired instances, removed files and symlink leaves
+AssertionError: expected { count: 1, countBasis: 'alive', …(1) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "count": 1,
+  "countBasis": "alive",
+  "items": [
+    {
+      "depth": 1,
+      "id": "12345678-1234-4234-8234-123456789013",
+      "model": "resolved-child",
+      "modelBasis": "creation",
+      "startedAt": 1000,
+      "state": "unknown",
+    },
+  ],
+}
+
+ ❯ src/agent/GrokSubagentReader.test.ts:42:105
+     40|  const f=await fixture();await writeFile(f.file,start());
+     41|  expect(await f.reader.read(f.source,()=>false)).toBeUndefined();
+     42|  let current=true;const reading=f.reader.read(f.source,()=>current);cu…
+       |                                                                                                         ^
+     43|  expect((await f.reader.read(f.source,()=>true))?.count).toBe(1);
+     44|  const inFlight=f.reader.read(f.source,()=>true);f.reader.forget(f.sou…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/agent/GrokSubagentRecords.test.ts > rejects malformed or foreign binding instead of a false zero
+AssertionError: expected { count: 1, countBasis: 'alive', …(1) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "count": 1,
+  "countBasis": "alive",
+  "items": [
+    {
+      "depth": 1,
+      "description": "Generated child",
+      "id": "12345678-1234-4234-8234-123456789013",
+      "model": "effective-child",
+      "modelBasis": "creation",
+      "startedAt": 1000,
+      "state": "unknown",
+      "type": "Explore",
+    },
+  ],
+}
+
+ ❯ src/agent/GrokSubagentRecords.test.ts:40:123
+     38|   (r: ReturnType<typeof row>) => { Object.assign(r.params.update, { mo…
+     39| ])("rejects malformed or foreign binding instead of a false zero", mut…
+     40|   const records = new GrokSubagentRecords(parent), r = spawn(); mutate…
+       |                                                                                                                           ^
+     41| });
+     42| it("fails closed for unbound/unknown lifecycle, conflicting event IDs …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 16 passed (18)
+   Start at  23:57:26
+   Duration  2.25s (transform 67%, import 20%, tests 12%, worker 1%)
+
+undefined
+/workspaces/sodashitsu-grok-cursor-native-children/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/GrokSubagentRecords.test.ts src/agent/GrokSubagentReader.test.ts

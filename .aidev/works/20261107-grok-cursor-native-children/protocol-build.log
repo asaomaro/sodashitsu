@@ -1,0 +1,4 @@
+
+> @sodashitsu/protocol@0.1.0 build /workspaces/sodashitsu-grok-cursor-native-children/packages/protocol
+> tsc -b
+

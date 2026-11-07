@@ -1,0 +1,46 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-cursor-native-children/packages/cli
+
+ ❯ src/agentStatus.test.ts (40 tests | 1 failed) 17ms
+   × preserves formally observed child model/basis in CLI JSON without filling unknown values 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agentStatus.test.ts > preserves formally observed child model/basis in CLI JSON without filling unknown values
+AssertionError: expected { id: 'child', type: null, …(5) } to match object { model: 'child-model', …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "model": "child-model",
+-   "modelBasis": "turn",
++   "background": null,
++   "depth": null,
++   "description": null,
++   "id": "child",
++   "parentId": null,
++   "startedAt": 0,
++   "type": null,
+  }
+
+ ❯ src/agentStatus.test.ts:283:54
+    281|  for(const basis of ['turn','creation','session'] as const){
+    282|   const value=subagentsViewOf({count:1,items:[{id:'child',startedAt:0,…
+    283|   expect(JSON.parse(JSON.stringify(value)).items[0]).toMatchObject({mo…
+       |                                                      ^
+    284|  }
+    285|  const unknown=subagentsViewOf({count:1,items:[{id:'child',startedAt:0…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 39 passed (40)
+   Start at  23:57:41
+   Duration  164ms (transform 58%, tests 22%, import 16%, worker 4%)
+
+undefined
+/workspaces/sodashitsu-grok-cursor-native-children/packages/cli:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agentStatus.test.ts

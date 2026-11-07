@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-cursor-native-children/packages/server
+
+
+ Test Files  4 passed (4)
+      Tests  32 passed (32)
+   Start at  23:57:30
+   Duration  1.38s (transform 63%, import 22%, tests 14%, worker 1%)
+

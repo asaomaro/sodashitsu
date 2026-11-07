@@ -1,0 +1,28 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-cursor-native-children/packages/client-core
+
+ ❯ src/sidebar/observedAgentModel.test.ts (8 tests | 1 failed) 12ms
+   × shows only explicitly observed creation/session models without reintroducing time captions 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/sidebar/observedAgentModel.test.ts > shows only explicitly observed creation/session models without reintroducing time captions
+AssertionError: expected 'effort low' to be 'effective-child low' // Object.is equality
+
+Expected: "effective-child low"
+Received: "effort low"
+
+ ❯ src/sidebar/observedAgentModel.test.ts:34:208
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  23:57:29
+   Duration  886ms (transform 75%, import 23%, tests 2%, worker 1%)
+
+undefined
+/workspaces/sodashitsu-grok-cursor-native-children/packages/client-core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/sidebar/observedAgentModel.test.ts
