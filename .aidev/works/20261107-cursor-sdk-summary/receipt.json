@@ -1,0 +1,19 @@
+{
+  "sourceHead": "08cb82732c05b0539e72ccb45879eeb7db7bc56c",
+  "node": "24.22.2",
+  "pnpm": "9.15.9",
+  "buildExit": 0,
+  "typecheckExit": 0,
+  "selectedFiles": 5,
+  "selectedTests": 47,
+  "negativeFailures": 3,
+  "realModel": false,
+  "realLogin": false,
+  "windowsRuntimeVerified": false,
+  "hashes": {
+    "packages/server/src/conversation/cursorSdkSummary.ts": "12ec42d8de901b1e08575835503a43bcdbec22a99003621571a6bbd0e233ecae",
+    "packages/server/src/conversation/cursorSdkSummaryRuntime.ts": "bbfe8e1bf01494d48e3c2642fedea1ceec7a87c1886e9a640983b8d52b5ce086",
+    "packages/server/src/conversation/cursorSdkSummaryWorker.ts": "4d539ed1f672db4f6fdedaece2a5ea90f87a18c901b93b8061d3922d093502e5",
+    "packages/server/src/conversation/SummaryService.ts": "0fd54b716d6836ce697c08f64e3b4cc9bb882957d6635fab1b443bbff27baf17"
+  }
+}

@@ -1,0 +1,19 @@
+(node:3928939) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Progress: resolved 1, reused 0, downloaded 0, added 0
+.                                        |  WARN  deprecated eslint@8.57.1
+
+   ╭───────────────────────────────────────────────────────────────────╮
+   │                                                                   │
+   │                Update available! 9.15.9 → 12.18.0.                │
+   │   Changelog: https://github.com/pnpm/pnpm/releases/tag/v12.18.0   │
+   │            Run "corepack use pnpm@12.18.0" to update.             │
+   │                                                                   │
+   ╰───────────────────────────────────────────────────────────────────╯
+
+Progress: resolved 195, reused 0, downloaded 0, added 0
+Progress: resolved 336, reused 0, downloaded 0, added 0
+ WARN  5 deprecated subdependencies found: @humanwhocodes/config-array@0.13.0, @humanwhocodes/object-schema@2.0.3, glob@7.2.3, inflight@1.0.6, rimraf@3.0.2
+Progress: resolved 342, reused 0, downloaded 0, added 0, done
+.                                        | +222 ++++++++++++++++++++++
+Done in 3.7s using pnpm v9.15.9

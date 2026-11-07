@@ -1,0 +1,12 @@
+Scope: all 9 workspace projects
+(node:3933588) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +93
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 93, reused 93, downloaded 0, added 93, done
+ WARN  Failed to create bin at /workspaces/sodashitsu-cursor-sdk-summary/packages/cli/node_modules/.bin/soda. ENOENT: no such file or directory, open '/workspaces/sodashitsu-cursor-sdk-summary/packages/server/dist/main.js'
+ WARN  Failed to create bin at /workspaces/sodashitsu-cursor-sdk-summary/packages/e2e/node_modules/.bin/soda. ENOENT: no such file or directory, open '/workspaces/sodashitsu-cursor-sdk-summary/packages/server/dist/main.js'
+
+Done in 2.9s using pnpm v9.15.9

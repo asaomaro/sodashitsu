@@ -1,0 +1,8 @@
+{
+  "exitCode": 0,
+  "stdout": "{\"code\":\"unsupported_agent_kind\",\"cleanup\":true}\n",
+  "stderrBytes": 0,
+  "realAuth": false,
+  "externalModel": false,
+  "network": "private-user-netns-no-interface"
+}

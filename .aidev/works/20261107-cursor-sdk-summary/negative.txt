@@ -1,0 +1,86 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-sdk-summary
+
+ ❯ |@sodashitsu/server| src/conversation/cursorSdkSummaryRuntime.test.ts (17 tests | 1 failed) 21ms
+   ❯ Cursor SDK summary public runtime (17)
+     × offers zero tools and no ambient configuration, returning text without sends to a working agent 9ms
+ ❯ |@sodashitsu/server| src/conversation/GrokCursorSummary.test.ts (5 tests | 1 failed) 117ms
+   × Cursor CLI fails closed while SummaryService binds only the isolated SDK path 12ms
+ ❯ |@sodashitsu/server| src/conversation/cursorSdkSummary.test.ts (9 tests | 1 failed) 1210ms
+   ❯ Cursor SDK owned worker (9)
+     × rechecks scope after worker exit even between access timer ticks 202ms
+
+ Test Files  3 failed (3)
+      Tests  3 failed | 28 passed (31)
+   Start at  18:47:11
+   Duration  2.09s (tests 44%, transform 43%, import 12%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/conversation/GrokCursorSummary.test.ts > Cursor CLI fails closed while SummaryService binds only the isolated SDK path
+RpcError: Cursor CLIの要約は、組織・プラグインの起動フックを無効化する正式な経路を確認できるまで利用できません
+ ❯ prepareGrokCursorSummary src/conversation/GrokCursorSummary.ts:14:27
+     12| /** Fresh working/config/data roots; copy authentication only, never e…
+     13| export async function prepareGrokCursorSummary(kind:'grok'|'cursor',di…
+     14|  if(kind==='cursor')throw new RpcError('unsupported_agent_kind','Curso…
+       |                           ^
+     15|  const source={...env},home=homedir(),config=join(dir,'config'),data=j…
+     16|  for(const key of Object.keys(env))if(key.startsWith('GROK_')||key.sta…
+ ❯ SummaryService.runPrompt src/conversation/SummaryService.ts:547:30
+ ❯ src/conversation/GrokCursorSummary.test.ts:45:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |@sodashitsu/server| src/conversation/cursorSdkSummary.test.ts > Cursor SDK owned worker > rechecks scope after worker exit even between access timer ticks
+AssertionError: promise resolved "{ text: 'late result', sessionId: null }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "sessionId": null,
++   "text": "late result",
+  }
+
+ ❯ src/conversation/cursorSdkSummary.test.ts:54:26
+     52|     const pending=f.supervisor.run({...f.job,check:()=>{if(!valid)thro…
+     53|     await vi.waitFor(async()=>{const [dir]=await readdir(f.temps);awai…
+     54|     await expect(pending).rejects.toMatchObject({code:'agent_prompt_fa…
+       |                          ^
+     55|   });
+     56|   it("close cancels live work and prevents new jobs", async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |@sodashitsu/server| src/conversation/cursorSdkSummaryRuntime.test.ts > Cursor SDK summary public runtime > offers zero tools and no ambient configuration, returning text without sends to a working agent
+AssertionError: expected { apiKey: 'fixture-key', …(6) } to match object { apiKey: 'fixture-key', …(6) }
+
+- Expected
++ Received
+
+@@ -16,7 +16,9 @@
+    },
+    "mcpServers": {},
+    "model": {
+      "id": "fixture-model",
+    },
+-   "tools": [],
++   "tools": [
++     "read",
++   ],
+  }
+
+ ❯ src/conversation/cursorSdkSummaryRuntime.test.ts:28:26
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+

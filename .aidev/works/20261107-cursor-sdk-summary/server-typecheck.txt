@@ -1,0 +1,4 @@
+
+> @sodashitsu/server@0.1.0 typecheck /workspaces/sodashitsu-cursor-sdk-summary/packages/server
+> tsc --noEmit -p tsconfig.typecheck.json
+
