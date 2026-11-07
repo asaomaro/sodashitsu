@@ -1,0 +1,251 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-native-child-bindings/packages/server
+
+ ❯ src/agent/CursorChildMetadata.test.ts (6 tests | 2 failed) 10ms
+   × rejects wrong parent/root/child, malformed/oversized metadata and unsafe labels 4ms
+   × records completion without attributing common parent model/effort to the child 1ms
+(node:658044) Warning: Closing file descriptor 24 on garbage collection
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:658044) [DEP0137] DeprecationWarning: Closing a FileHandle object on garbage collection is deprecated. Please close FileHandle objects explicitly using FileHandle.prototype.close(). In the future, an error will be thrown if a file descriptor is closed during garbage collection.
+(node:658044) Warning: Closing file descriptor 25 on garbage collection
+(node:658044) Warning: Closing file descriptor 26 on garbage collection
+ ❯ src/agent/CursorChildRecord.test.ts (14 tests | 5 failed) 1235ms
+   × requires direct parent/root/child identity, never attaches a sibling or nested lineage 90ms
+   × rejects parent scope loss/forget/close and invalidates a returned record after source mutation 125ms
+   × never promotes parent-common settings, even when Stop, DB lineage and child completion all match 69ms
+   × does not inherit Node preload hooks or return encryption/provider metadata from its worker 60ms
+   × preserves the installed config-root path instead of trimming significant trailing spaces 35ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/CursorChildMetadata.test.ts > rejects wrong parent/root/child, malformed/oversized metadata and unsafe labels
+AssertionError: expected { …(6) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "createdAt": 1000,
+  "id": "12345678-1234-4234-8234-123456789013",
+  "parentId": "12345678-1234-4234-8234-123456789012",
+  "rootParentId": "12345678-1234-4234-8234-123456789012",
+  "toolCallId": "tool",
+  "type": "Explore",
+}
+
+ ❯ src/agent/CursorChildMetadata.test.ts:11:354
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/agent/CursorChildMetadata.test.ts > records completion without attributing common parent model/effort to the child
+AssertionError: expected { model: 'parent-model', …(3) } to not have property "model"
+
+- Expected:
+undefined
+
++ Received:
+"parent-model"
+
+ ❯ src/agent/CursorChildMetadata.test.ts:15:48
+     13| it("records completion without attributing common parent model/effort …
+     14|  expect(cursorChildStop(stop())).toMatchObject({parentId:parent,childI…
+     15|  expect(cursorChildStop(stop())?.settings).not.toHaveProperty("model")…
+       |                                                ^
+     16| });
+     17| it("accepts only explicit child-self settings and replaces missing fie…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/agent/CursorChildRecord.test.ts > requires direct parent/root/child identity, never attaches a sibling or nested lineage
+AssertionError: expected { fd: FileHandle{ …(4), …(6) }, …(4) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "fd": FileHandle {
+    "_events": {},
+    "_eventsCount": 0,
+    "_maxListeners": undefined,
+    "close": [Function close],
+    Symbol(shapeMode): false,
+    Symbol(kCapture): false,
+    Symbol(kHandle): FileHandle {},
+    Symbol(kFd): 24,
+    Symbol(kRefs): 1,
+    Symbol(kClosePromise): null,
+  },
+  "lineage": {
+    "createdAt": 1000,
+    "id": "12345678-1234-4234-8234-123456789013",
+    "parentId": "12345678-1234-4234-8234-123456789012",
+    "rootParentId": "12345678-1234-4234-8234-123456789012",
+    "toolCallId": "tool",
+    "type": "Explore",
+  },
+  "st": Stats {
+    "atimeMs": 1794065816413.9336,
+    "birthtimeMs": 1794065816413.9336,
+    "blksize": 4096,
+    "blocks": 8,
+    "ctimeMs": 1794065816413.9336,
+    "dev": 2096,
+    "gid": 1000,
+    "ino": 1723584,
+    "mode": 33188,
+    "mtimeMs": 1794065816413.9336,
+    "nlink": 1,
+    "rdev": 0,
+    "size": 127,
+    "uid": 1000,
+  },
+  "terminal": "completed",
+  "unchanged": [Function unchanged],
+}
+
+ ❯ src/agent/CursorChildRecord.test.ts:34:53
+     32| it("requires direct parent/root/child identity, never attaches a sibli…
+     33|  const f=await fixture();db(f.childDb,metadata({subagentInfo:{parentAg…
+     34|  expect(await f.reader.open(parent,child,()=>true)).toBeUndefined();f.…
+       |                                                     ^
+     35| });
+     36| it("rejects symlink/hardlink DB or child transcripts instead of follow…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  src/agent/CursorChildRecord.test.ts > rejects parent scope loss/forget/close and invalidates a returned record after source mutation
+AssertionError: expected { fd: FileHandle{ …(4), …(6) }, …(3) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "fd": FileHandle {
+    "_events": {},
+    "_eventsCount": 0,
+    "_maxListeners": undefined,
+    "close": [Function close],
+    Symbol(shapeMode): false,
+    Symbol(kCapture): false,
+    Symbol(kHandle): FileHandle {},
+    Symbol(kFd): 25,
+    Symbol(kRefs): 1,
+    Symbol(kClosePromise): null,
+  },
+  "lineage": {
+    "createdAt": 1000,
+    "id": "12345678-1234-4234-8234-123456789013",
+    "parentId": "12345678-1234-4234-8234-123456789012",
+    "rootParentId": "12345678-1234-4234-8234-123456789012",
+    "toolCallId": "generated-tool",
+    "type": "Explore",
+  },
+  "st": Stats {
+    "atimeMs": 1794065816833.929,
+    "birthtimeMs": 1794065816781.9297,
+    "blksize": 4096,
+    "blocks": 8,
+    "ctimeMs": 1794065816825.9292,
+    "dev": 2096,
+    "gid": 1000,
+    "ino": 1723594,
+    "mode": 33188,
+    "mtimeMs": 1794065816825.9292,
+    "nlink": 1,
+    "rdev": 0,
+    "size": 202,
+    "uid": 1000,
+  },
+  "unchanged": [Function unchanged],
+}
+
+ ❯ src/agent/CursorChildRecord.test.ts:55:97
+     53|  await appendFile(f.childFile,'{"role":"user","message":{"content":[{"…
+     54|  const next=await f.reader.open(parent,child,()=>true);expect(next?.te…
+     55|  const forgotten=f.reader.open(parent,child,()=>true);f.reader.forget(…
+       |                                                                                                 ^
+     56| });
+     57| it("never promotes parent-common settings, even when Stop, DB lineage …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  src/agent/CursorChildRecord.test.ts > never promotes parent-common settings, even when Stop, DB lineage and child completion all match
+AssertionError: expected { model: 'parent-model', …(3) } to deeply equal {}
+
+- Expected
++ Received
+
+- {}
++ {
++   "model": "parent-model",
++   "modelBasis": "session",
++   "reasoningEffort": "high",
++   "reasoningEffortBasis": "session",
++ }
+
+ ❯ src/agent/CursorChildRecord.test.ts:60:69
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  src/agent/CursorChildRecord.test.ts > does not inherit Node preload hooks or return encryption/provider metadata from its worker
+AssertionError: expected Stats{ dev: 2096, mode: 33188, …(12) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+Stats {
+  "atimeMs": 1794065817445.9226,
+  "birthtimeMs": 1794065817445.9226,
+  "blksize": 4096,
+  "blocks": 8,
+  "ctimeMs": 1794065817445.9226,
+  "dev": 2096,
+  "gid": 1000,
+  "ino": 1723588,
+  "mode": 33188,
+  "mtimeMs": 1794065817445.9226,
+  "nlink": 1,
+  "rdev": 0,
+  "size": 3,
+  "uid": 1000,
+}
+
+ ❯ src/agent/CursorChildRecord.test.ts:97:291
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  src/agent/CursorChildRecord.test.ts > preserves the installed config-root path instead of trimming significant trailing spaces
+AssertionError: expected undefined to be '12345678-1234-4234-8234-123456789013' // Object.is equality
+
+- Expected:
+"12345678-1234-4234-8234-123456789013"
+
++ Received:
+undefined
+
+ ❯ src/agent/CursorChildRecord.test.ts:103:83
+    101|  const f=await fixture(),config=f.roots.cursorConfigHome+" space ";f.r…
+    102|  const reader=new CursorChildRecords({home:f.root,cursorDataHome:f.roo…
+    103|  const record=await reader.open(parent,child,()=>true);expect(record?.…
+       |                                                                                   ^
+    104| });
+    105|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  7 failed | 13 passed (20)
+   Start at  00:36:56
+   Duration  1.44s (tests 88%, transform 9%, import 2%)
+
+undefined
+/workspaces/sodashitsu-cursor-native-child-bindings/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/CursorChildMetadata.test.ts src/agent/CursorChildRecord.test.ts

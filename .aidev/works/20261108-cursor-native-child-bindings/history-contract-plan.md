@@ -1,0 +1,13 @@
+# Separate bounded completed-child history unit
+
+The helper checkpoint is not the finished user feature: it currently provides no new selectable history. Do not insert completed Cursor children into active `AgentInfo.subagents`, alive counts, sidebar badges or statusline totals.
+
+Proposed next unit (requires root's scope/contract review, implemented in separate commits):
+
+1. A bounded private terminal collection per exact verified parent source (pane/instance/kind/session). Entries only originate from formal provider lifecycle or matched Stop+DB lineage+child transcript; no directory-wide discovery of assumed children. Initial Cursor collection contains server-observed official Stop reports only, and cannot reconstruct missing old hook events. Grok can reconstruct native finished records from its exact parent's updates.jsonl.
+2. A read-only `agent.subagent_history` RPC returns max64 entries/page from max256 known terminal relations. Each entry has childID,known role/description,explicit terminalStatus(completed/aborted/error),optional formal started/ended times and optional formally observed model/effort/basis. Missing values remain absent. Arrival time is not presented as actual finish time. Parent proof is checked before/after asynchronous opens. Unknown/mismatched current terminal records are not called completed.
+3. Parent information adds one expandable '終了した子の履歴' section within the existing window. Selecting an entry uses the current inline read-only transcript view. No new window/child input; existing machine/client/connection/pane/reference-kind/session/instance/proof guards invalidate both history and late replies.
+4. Existing read-only transcript grants can also originate from a freshly revalidated terminal-history entry. The transcript result needs an explicit optional terminalStatus, rather than inferring finished from running:false or state:unknown. NativeTranscript's newest optional state semantics remain intact.
+5. Other providers may implement the same terminal-source interface only from their existing formal completed/failed/cancelled evidence. Do not claim retrospective coverage without the exact provider binding/proof. Raw snapshots, saved graph controls, all usage/cost/history accounting and active-only list meanings remain intact.
+
+Commit split: protocol/collection+tests; server intake/owned wiring+tests; Web/TUI same-window presentation+tests/docs. Hooks integrate only through the existing explicit update/install mechanism, never silently edit global CLI hooks. Production wiring starts after the Codex long-record observer is fixed and integrated.

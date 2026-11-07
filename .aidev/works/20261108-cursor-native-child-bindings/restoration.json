@@ -1,0 +1,10 @@
+{
+  "negativeExit": 1,
+  "restoredExit": 0,
+  "byteExact": true,
+  "sha256": {
+    "packages/server/src/agent/CursorChildMetadata.ts": "8d1cf7740ea1e68e96368f748aa004a904e819dc878f9d47decc93151bdc20c6",
+    "packages/server/src/agent/CursorChildRecord.ts": "6a0721c198db4889344d1f2f97fb659be70b0471146ebfde91f61ae4cd861b0f",
+    "packages/server/src/agent/CursorChildMetadataQuery.ts": "c8abd84ee59cd2d258f93cb136b2277bd80074379588a8576c96937ae80dd083"
+  }
+}

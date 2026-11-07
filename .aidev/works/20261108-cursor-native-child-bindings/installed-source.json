@@ -1,0 +1,10 @@
+{
+  "version": "2026.11.05-86047df",
+  "sourceOnly": true,
+  "userDatabaseRead": false,
+  "sha256": {
+    "index.js": "e31b14bafcee9142507a5de52d636b8532112fe404d04f23fd8784d0d2078055",
+    "1623.index.js": "cc3731b3407f2a00d97933d7925161c33e596e732b91dd97086db2179575efce",
+    "7923.index.js": "097e0ed08e91e2b5c34715f8e57bedb7d276f6040ce417a0c88d4db464555ad3"
+  }
+}

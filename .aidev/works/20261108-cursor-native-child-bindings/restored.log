@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-native-child-bindings/packages/server
+
+
+ Test Files  2 passed (2)
+      Tests  20 passed (20)
+   Start at  00:36:58
+   Duration  1.32s (tests 88%, transform 9%, import 3%)
+
