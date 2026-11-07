@@ -63,3 +63,5 @@ export * from "./system/SystemResourcePoller.js";
 export * from "./sidebar/observedAgentModel.js";
 
 export * from "./layout/normalSession.js";
+
+export * from "./layout/normalSummary.js";

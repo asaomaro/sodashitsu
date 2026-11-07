@@ -1,9 +1,9 @@
 import {isAssistantPane,type LayoutNode,type Pane,type Tab,type Workspace} from "@sodashitsu/protocol";
 
 export interface SessionMaps {
- workspaces: ReadonlyMap<string,Workspace>;
- tabs: ReadonlyMap<string,Tab>;
- panes: ReadonlyMap<string,Pane>;
+ workspaces: Map<string,Workspace>;
+ tabs: Map<string,Tab>;
+ panes: Map<string,Pane>;
 }
 /** Presentation projection only. Raw lookup, input permission, history and accounting are unchanged. */
 export function normalSession(source:SessionMaps) {
@@ -12,6 +12,7 @@ export function normalSession(source:SessionMaps) {
   const tab=source.tabs.get(pane.tabId);
   if(isAssistantPane(pane,tab?source.workspaces.get(tab.workspaceId):undefined,tab))hiddenPaneIds.add(pane.id);
  }
+ if(!hiddenPaneIds.size)return {...source,hiddenPaneIds};
  const panes=new Map([...source.panes].filter(([id])=>!hiddenPaneIds.has(id)));
  const tabs=new Map<string,Tab>();
  for(const tab of source.tabs.values()) {
@@ -24,8 +25,8 @@ export function normalSession(source:SessionMaps) {
  }
  const workspaces=new Map<string,Workspace>();
  for(const ws of source.workspaces.values()) {
-  const tabIds=ws.tabIds.filter(id=>tabs.has(id));
-  if(!tabIds.length)continue;
+  const tabIds=ws.tabIds.filter(id=>!source.tabs.has(id)||tabs.has(id));
+  if(!tabIds.length&&ws.tabIds.some(id=>source.tabs.has(id)))continue;
   workspaces.set(ws.id,tabIds.length===ws.tabIds.length?ws:{...ws,tabIds,
    activeTabId:tabIds.includes(ws.activeTabId)?ws.activeTabId:tabIds[0]!});
  }

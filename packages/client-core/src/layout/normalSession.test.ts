@@ -17,3 +17,6 @@ it('does not infer hidden ownership from names, absent old-peer binding, or mism
  const raw=data();delete raw.workspaces.get('workspace')!.assistant;expect(normalSession(raw).panes.has('captain')).toBe(true);
  raw.workspaces.get('workspace')!.assistant={paneId:'captain'} as NonNullable<Workspace['assistant']>;raw.tabs.get('tab')!.workspaceId='other';expect(normalSession(raw).panes.has('captain')).toBe(true);
 });
+it('is an identity projection for partial old/event snapshots with no proven owned pane',()=>{
+ const raw=data();delete raw.workspaces.get('workspace')!.assistant;raw.tabs.clear();const normal=normalSession(raw);expect(normal.workspaces).toBe(raw.workspaces);expect([...normal.workspaces]).toEqual([...raw.workspaces]);expect([...normal.tabs]).toEqual([...raw.tabs]);expect([...normal.panes]).toEqual([...raw.panes]);
+});
