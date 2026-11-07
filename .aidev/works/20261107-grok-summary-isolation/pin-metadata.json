@@ -1,0 +1,124 @@
+{
+  "managedOnlyPin": true,
+  "userFixtureHookRan": false,
+  "networkNamespace": "loopback-only",
+  "realAuth": false,
+  "externalModelCalls": 0,
+  "cliExit": 1,
+  "timedOut": false,
+  "stdoutBytes": 215,
+  "stderrBytes": 141,
+  "requests": [
+    {
+      "path": "/models",
+      "method": "GET",
+      "chatEndpoint": false,
+      "json": false,
+      "rootKeys": [],
+      "toolFacts": [],
+      "bytes": 0
+    },
+    {
+      "path": "/api-key",
+      "method": "GET",
+      "chatEndpoint": false,
+      "json": false,
+      "rootKeys": [],
+      "toolFacts": [],
+      "bytes": 0
+    },
+    {
+      "path": "/",
+      "method": "GET",
+      "chatEndpoint": false,
+      "json": false,
+      "rootKeys": [],
+      "toolFacts": [],
+      "bytes": 0
+    },
+    {
+      "path": "/responses",
+      "method": "POST",
+      "chatEndpoint": true,
+      "json": true,
+      "rootKeys": [
+        "include",
+        "input",
+        "max_output_tokens",
+        "model",
+        "reasoning",
+        "store",
+        "stream",
+        "tool_choice",
+        "tools",
+        "temperature"
+      ],
+      "toolFacts": [
+        {
+          "field": "tool_choice",
+          "kind": "dict",
+          "count": 2,
+          "names": null
+        },
+        {
+          "field": "tools",
+          "kind": "list",
+          "count": 1,
+          "names": [
+            "session_title"
+          ]
+        }
+      ],
+      "bytes": 1217
+    },
+    {
+      "path": "/responses",
+      "method": "POST",
+      "chatEndpoint": true,
+      "json": true,
+      "rootKeys": [
+        "include",
+        "input",
+        "max_output_tokens",
+        "model",
+        "reasoning",
+        "store",
+        "stream",
+        "tool_choice",
+        "tools",
+        "temperature"
+      ],
+      "toolFacts": [
+        {
+          "field": "tool_choice",
+          "kind": "str",
+          "count": null,
+          "names": null
+        },
+        {
+          "field": "tools",
+          "kind": "list",
+          "count": 1,
+          "names": [
+            "session_title"
+          ]
+        }
+      ],
+      "bytes": 1181
+    },
+    {
+      "path": "/chat/completions",
+      "method": "POST",
+      "chatEndpoint": true,
+      "json": true,
+      "rootKeys": [
+        "model",
+        "messages",
+        "stream",
+        "stream_options"
+      ],
+      "toolFacts": [],
+      "bytes": 7208
+    }
+  ]
+}

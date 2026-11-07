@@ -1,3 +1,4 @@
+import {prepareGrokCursorSummary,parseGrokCursorSummary} from "./GrokCursorSummary.js";
 import {isolatedAntigravity} from "./AgentIsolation.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
@@ -59,7 +60,7 @@ export class SummaryService {
       if (
         typeof v.result?.text !== "string" ||
         v.result.text.length > 128 * 1024 ||
-        !["claude", "codex", "muse", "agy", "copilot"].includes(v.result.kind) ||
+        !["claude", "codex", "muse", "agy", "copilot", "grok", "cursor"].includes(v.result.kind) ||
         typeof v.result.model !== "string" ||
         !AssistantLaunchSettings.shape.effort.safeParse(v.result.effort??"").success ||
         typeof v.result.partial !== "boolean" ||
@@ -163,7 +164,7 @@ export class SummaryService {
         const v: unknown = JSON.parse(raw);
         if (Array.isArray(v))
           for (const key of v.slice(-300))
-            if (typeof key === "string" && /^(claude|codex|muse|agy|copilot):[a-zA-Z0-9_-]{1,128}$/.test(key))
+            if (typeof key === "string" && /^(claude|codex|muse|agy|copilot|grok|cursor):[a-zA-Z0-9_-]{1,128}$/.test(key))
               this.issued.add(key);
       } catch {}
     })());
@@ -541,10 +542,15 @@ export class SummaryService {
         env.COPILOT_HOME=config;
       }
       if (settings.kind === "codex") await this.codexEnv(env);
+      let executable:string=settings.kind;
+      if(settings.kind==="grok"||settings.kind==="cursor"){
+        const prepared=await prepareGrokCursorSummary(settings.kind,dir,prompt,settings,env);
+        args=prepared.args;executable=prepared.executable;
+      }
       const target = settings.kind==="agy" ? await isolatedAntigravity(dir,env) :
         process.platform === "win32"
-          ? await windowsAgentExecutable(settings.kind, env)
-          : { file: settings.kind, prefix: [] };
+          ? await windowsAgentExecutable(executable, env)
+          : { file: executable, prefix: [] };
       if (settings.sessionId && this.conversations.isActive(settings.kind, settings.sessionId))
         throw new RpcError(
           "invalid_params",
@@ -608,7 +614,7 @@ export class SummaryService {
             failure ?? (code === 0 ? undefined : summaryFailure(text, diagnostic.toString("utf8"))),
           ),
         );
-        child.stdin.end(prompt);
+        child.stdin.end(settings.kind==="grok"||settings.kind==="cursor"?undefined:prompt);
       });
       check();
       let text: string,
@@ -624,6 +630,8 @@ export class SummaryService {
           throw new RpcError("agent_prompt_failed", "要約を生成できません");
         text = result.result;
         sessionId = typeof result.session_id === "string" ? result.session_id : newId;
+      } else if(settings.kind==="grok"||settings.kind==="cursor"){
+        text=parseGrokCursorSummary(settings.kind,stdout);sessionId=null;
       } else if(settings.kind==="agy"){
         let result:any;try{result=JSON.parse(stdout);}catch{throw new RpcError("agent_prompt_failed","分析の応答形式が不正です");}
         if(result.status!=="SUCCESS"||typeof result.response!=="string")throw new RpcError("agent_prompt_failed","分析を生成できません");
