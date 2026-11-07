@@ -186,9 +186,9 @@ export function statuslineSegments(
   };
   const execution = u?.executionSettings;
   observation("effort", "effort", execution?.reasoningEffort ?? (u?.reasoningEffort ? {value:u.reasoningEffort,source:u.source,basis:"statusline"} : undefined), !execution?.reasoningEffort);
-  observation("approval", "承認policy", execution?.approvalPolicy);
-  observation("approval", "承認mode", execution?.approvalMode);
-  observation("approval", "権限mode", execution?.permissionMode);
+  observation("approval", "承認モード", execution?.approvalPolicy);
+  observation("approval", "承認モード", execution?.approvalMode);
+  observation("approval", "承認モード", execution?.permissionMode);
   if (finite(u?.contextUsedPct))
     add(
       "context",
@@ -231,7 +231,7 @@ export function statuslineSegments(
             const pad = (n: number) => String(n).padStart(2, "0");
             add(
               id === "fiveHour" ? "fiveHourReset" : id === "weekly" ? "weeklyReset" : "otherLimitsReset",
-              `${account.label} ${id === "fiveHour" ? "5h" : id === "weekly" ? "週" : w.label}解除 ${reset.getFullYear()}/${pad(reset.getMonth() + 1)}/${pad(reset.getDate())} ${pad(reset.getHours())}:${pad(reset.getMinutes())}${w.stale ? " *" : ""}`,
+              `${id === "fiveHour" ? "5h" : id === "weekly" ? "週" : w.label}解除 ${reset.getFullYear()}/${pad(reset.getMonth() + 1)}/${pad(reset.getDate())} ${pad(reset.getHours())}:${pad(reset.getMinutes())}${w.stale ? " *" : ""}`,
               "model",
             );
           }
@@ -239,7 +239,7 @@ export function statuslineSegments(
         if (!finite(w.usedPct)) continue;
         add(
           id,
-          `${account.label} ${w.label} ${statuslineGauge(w.usedPct, settings.graphs[id])}${w.stale ? " *" : ""}`,
+          `${w.label} ${statuslineGauge(w.usedPct, settings.graphs[id])}${w.stale ? " *" : ""}`,
           severity(w.usedPct),
         );
       }

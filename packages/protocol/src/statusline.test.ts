@@ -170,10 +170,10 @@ it("independently selects cross-session weekly cost and exact rate-limit reset d
   expect(result.find((s) => s.field === "weeklyCost")?.text).toBe("今週 $12.346");
   expect(result.find((s) => s.field === "cost")?.text).toBe("$1.000");
   expect(result.find((s) => s.field === "fiveHourReset")?.text).toBe(
-    "Claude 5h解除 2026/10/16 03:04",
+    "5h解除 2026/10/16 03:04",
   );
   expect(result.find((s) => s.field === "weeklyReset")?.text).toBe(
-    "Claude 週解除 2026/10/16 04:04 *",
+    "週解除 2026/10/16 04:04 *",
   );
   expect(result.some((s) => s.field === "fiveHour" || s.field === "weekly")).toBe(false);
   const missing = { ...usage };
@@ -244,7 +244,7 @@ it("formats observed effort and distinct approval/permission values with source 
  executionSettings:{reasoningEffort:{value:"high",source:"rollout",basis:"turn",observedAt:1000},approvalPolicy:{value:"on-request",source:"rollout",basis:"turn"},approvalMode:{value:"promptUnmatched",source:"muse-events",basis:"session"},permissionMode:{value:"plan",source:"hook",basis:"hook"},sandboxMode:{value:"workspace-write",source:"rollout",basis:"turn"}}} as import("./usage.js").AgentUsage;
  const settings=loadStatuslineSettings({fields:{effort:true,approval:true},order:["effort","approval"]});
  const result=statuslineSegments(pane,usage,[],settings);
- expect(result.filter(s=>s.field==="effort"||s.field==="approval").map(s=>s.text)).toEqual(["effort high","承認policy on-request","承認mode promptUnmatched","権限mode plan"]);
+ expect(result.filter(s=>s.field==="effort"||s.field==="approval").map(s=>s.text)).toEqual(["effort high","承認モード on-request","承認モード promptUnmatched","承認モード plan"]);
  expect(result[0]!.title).toContain("ターンの記録 / rollout / 1970-01-01T00:00:01.000Z");expect(result[0]!.title).toContain("現在のCLI設定とは異なる");
  expect(result.some(s=>s.text.includes("workspace-write")||s.text.includes("stale"))).toBe(false);
  expect(statuslineSegments(pane,{...usage,kind:"claude"},[],settings).some(s=>s.field==="effort"||s.field==="approval")).toBe(false);
@@ -258,4 +258,20 @@ it("formats observed effort and distinct approval/permission values with source 
  for(const value of ["", "\u001b[31mhigh", "x".repeat(129)])expect(statuslineSegments(pane,{...usage,executionSettings:{reasoningEffort:{value,source:"rollout",basis:"turn"}}},[],settings).some(s=>s.field==="effort")).toBe(false);
  const session=statuslineSegments(pane,{...usage,executionSettings:{reasoningEffort:{value:"low",source:"muse-events",basis:"session",observedAt:1e30}}},[],settings).find(s=>s.field==="effort")!;
  expect(session.text).toBe("effort low");expect(session.title).toContain("セッション設定の記録（ターンの一時指定は未反映の場合があります） / muse-events");
+});
+
+
+it.each(["claude", "codex", "muse", "agy", "copilot", "bob", "grok", "cursor"])("omits redundant provider prefixes from all %s limit fields", (kind) => {
+  const pane = { agent: { kind, label: "Agent", state: "idle" } } as import("./model.js").Pane;
+  const accounts = [{kind, label: "Provider", windows: [
+    {label: "5h", usedPct: 25, resetsAt: new Date(2026, 9, 16, 3, 4).getTime()},
+    {label: "週", usedPct: 25, resetsAt: new Date(2026, 9, 16, 3, 4).getTime()},
+    {label: "日", usedPct: 25, resetsAt: new Date(2026, 9, 16, 3, 4).getTime()},
+  ]}] as import("./usage.js").AccountUsage[];
+  const settings = loadStatuslineSettings({fields: {agent:true, fiveHour:true, weekly:true, otherLimits:true, fiveHourReset:true, weeklyReset:true, otherLimitsReset:true}, graphs: {fiveHour:{visible:false}, weekly:{visible:false}, otherLimits:{visible:false}}});
+  const result = statuslineSegments(pane, undefined, accounts, settings);
+  expect(result.filter(s => ["fiveHour", "weekly", "otherLimits", "fiveHourReset", "weeklyReset", "otherLimitsReset"].includes(s.field)).map(s => s.text)).toEqual([
+    "5h 25%", "週 25%", "日 25%", "5h解除 2026/10/16 03:04", "日解除 2026/10/16 03:04", "週解除 2026/10/16 03:04",
+  ]);
+  expect(result.find(s => s.field === "agent")?.text).toBe(kind);
 });
