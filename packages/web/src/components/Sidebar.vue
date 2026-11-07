@@ -501,9 +501,9 @@ function toggleSubagents(agent:AgentInfo):void {
 }
 function subagentCount(agent:AgentInfo):number {return agent.subagents?.count??0;}
 function subagentStatus(agent:AgentInfo):string {return subagentCountLabel(agent.subagents);}
-function childSession(child:SubagentInfo):string {return child.description?.trim()||(child.type?.trim()?subagentModelLabel(child):undefined)||"サブエージェント";}
-function childModel(child:SubagentInfo):string|undefined {return child.description?.trim()||!child.type?.trim()?subagentModelLabel(child):undefined;}
-function childTitle(child:SubagentInfo):string {return [child.type,child.description,subagentEffortLabel(child)?.title,subagentStateLabel(child),"親エージェント内（独立した端末はありません）"].filter(Boolean).join(" · ");}
+function childSession(child:SubagentInfo):string {return child.description?.trim()||child.type?.trim()||"サブエージェント";}
+function childModel(child:SubagentInfo):string|undefined {return subagentModelLabel(child);}
+function childTitle(child:SubagentInfo):string {return [child.type,child.model,child.description,subagentEffortLabel(child)?.title,subagentStateLabel(child),"親エージェント内（独立した端末はありません）"].filter(Boolean).join(" · ");}
 
 /** その pane のエージェントのサブエージェントの一覧を開く（ダイアログ。対象は選んでいるマシンの pane）。 */
 

@@ -1,0 +1,33 @@
+{
+  "files": [
+    {
+      "file": "packages/client-core/src/sidebar/observedAgentModel.ts",
+      "fixedSha256": "f977dcb990b9b57accad2e6a7600ffd764a32627b601e95c8397ab2abcf590cd",
+      "restoredSha256": "f977dcb990b9b57accad2e6a7600ffd764a32627b601e95c8397ab2abcf590cd",
+      "byteExact": true
+    },
+    {
+      "file": "packages/web/src/components/SubagentList.vue",
+      "fixedSha256": "f94dea1dbb3b6953000373a6f8158a8daa97e7cdcecbf0169bc62861979067b9",
+      "restoredSha256": "f94dea1dbb3b6953000373a6f8158a8daa97e7cdcecbf0169bc62861979067b9",
+      "byteExact": true
+    },
+    {
+      "file": "packages/web/src/components/graph/SubagentTranscriptWindow.vue",
+      "fixedSha256": "6b488d6c3685eb1bb766a696a0bfaa3b425f0c8939111af9fb9631b1a7f2cf07",
+      "restoredSha256": "6b488d6c3685eb1bb766a696a0bfaa3b425f0c8939111af9fb9631b1a7f2cf07",
+      "byteExact": true
+    },
+    {
+      "file": "packages/web/src/dashboard/PaneInfoView.vue",
+      "fixedSha256": "bd6814389c78ddd23a051dc99d11f49de6f7c5dd9f814559b61dbdbf328c4996",
+      "restoredSha256": "bd6814389c78ddd23a051dc99d11f49de6f7c5dd9f814559b61dbdbf328c4996",
+      "byteExact": true
+    }
+  ],
+  "negativeExitCodes": {
+    "negative-build": 0,
+    "negative": 1,
+    "negative-browser": 1
+  }
+}

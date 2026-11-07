@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SubagentTranscriptWindow from "../components/graph/SubagentTranscriptWindow.vue";
 import SubagentList from "../components/SubagentList.vue";
 /**
  * pane の利用状況（情報）の中身（20261010-agent-usage PR4。AC1）。デスクトップの小さな窓（`PaneInfoPopover`）と、1 列の画面の全面のダイアログ（`PaneInfoDialog`）が同じものを使う。
@@ -37,7 +38,6 @@ const seen = useSeenStore();
 const usageStore = useUsageStore();
 const machines = useMachinesStore();
 const conn = inject(ConnectionKey, null);
-void conn;
 
 // --- 時計（「N 分前」）。見えている間だけ 10 秒ごと ---------------------------------------------------------------------
 const now = ref(Date.now());
@@ -73,6 +73,18 @@ const sessionShort = computed(() => {
   return id ? id.slice(0, 8) : null;
 });
 const subagentCount = computed(() => agent.value?.subagents?.count ?? null);
+const transcript = ref<{id:string;scope:string;title:string}|null>(null);
+const transcriptScope=computed(()=>JSON.stringify([props.active,props.paneId,agent.value?.instanceId,agent.value?.kind,pane.value?.agentSession?.sessionId,machines.selectedId,session.clientId,view.connectionState]));
+const readableChildren=computed(()=>agent.value?.subagents?.items.filter(item=>item.hasTranscript)??[]);
+function openTranscript(id:string):void {
+ const child=readableChildren.value.find(item=>item.id===id);
+ if(!props.active||view.connectionState!=="open"||!conn||!child)return;
+ transcript.value={id,scope:transcriptScope.value,title:child.description||child.type||"サブエージェント"};
+}
+watch([transcriptScope,readableChildren],()=>{
+ if(transcript.value&&(transcript.value.scope!==transcriptScope.value||!readableChildren.value.some(item=>item.id===transcript.value!.id)))transcript.value=null;
+},{flush:"sync"});
+
 
 const tokenRows = computed(() => {
   const u = usage.value;
@@ -221,7 +233,7 @@ function openDashboard(): void {
         </dd>
       </dl>
 
-      <section v-if="subagentCount !== null && subagentCount>0" aria-label="サブエージェントの情報" class="pinfo-inline-subagents"><SubagentList :subagents="agent?.subagents" /></section>
+      <section v-if="subagentCount !== null && subagentCount>0" aria-label="サブエージェントの情報" class="pinfo-inline-subagents"><SubagentList :subagents="agent?.subagents" :readable="active && view.connectionState==='open' && !!conn" @transcript="openTranscript" /><SubagentTranscriptWindow v-if="transcript" :key="`${transcript.scope}:${transcript.id}`" inline :pane-id="paneId" :agent-id="transcript.id" :parent-name="name" :title="transcript.title" @close="transcript=null" /></section>
 
       <section v-if="accounts.length > 0" class="pinfo-accounts" data-pane-info-accounts aria-label="アカウントの利用枠">
         <h3 class="pinfo-sub">アカウントの利用枠</h3>

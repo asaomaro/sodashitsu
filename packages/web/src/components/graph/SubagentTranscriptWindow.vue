@@ -14,6 +14,7 @@ import type { AgentSubagentTranscriptResult, SubagentTranscriptEntry } from "@so
 import { ConnectionKey } from "../../injection.js";
 
 const props = defineProps<{
+  inline?: boolean;
   paneId: string;
   agentId: string;
   /** 見出しに出す名前（親の pane の呼び名）。 */
@@ -136,7 +137,7 @@ function clampPos(x: number, y: number): { x: number; y: number } {
   };
 }
 function onGripDown(ev: PointerEvent): void {
-  if (ev.button !== 0) return;
+  if (props.inline || ev.button !== 0) return;
   drag = { px: ev.clientX, py: ev.clientY, x: pos.value.x, y: pos.value.y };
   (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
 }
@@ -161,7 +162,7 @@ function onKeydown(ev: KeyboardEvent): void {
 
 onMounted(() => {
   const b = boxOfParent();
-  if (b.w > 0) pos.value = clampPos(b.w - W - 16, TOP);
+  if (!props.inline && b.w > 0) pos.value = clampPos(b.w - W - 16, TOP);
   void poll();
   timer = setInterval(() => void poll(), POLL_MS);
   void nextTick(() => root.value?.focus({ preventScroll: true }));
@@ -195,12 +196,13 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
   <section
     ref="root"
     class="sat"
+    :class="{'sat-inline': inline}"
     role="region"
     aria-label="サブエージェントの記録（読むだけ）"
     tabindex="-1"
     data-subagent-transcript
     :data-agent-id="agentId"
-    :style="{ left: `${pos.x}px`, top: `${pos.y}px`, width: `${W}px`, height: `${H}px` }"
+    :style="inline ? undefined : { left: `${pos.x}px`, top: `${pos.y}px`, width: `${W}px`, height: `${H}px` }"
     @keydown="onKeydown"
     @pointerdown.stop
     @wheel.stop
@@ -221,7 +223,7 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
       <button data-assistant-feature
         type="button"
         class="sat-btn sat-close"
-        aria-label="記録の窓を閉じる"
+        :aria-label="inline ? '会話を閉じる' : '記録の窓を閉じる'"
         @click="emit('close')"
       >
         ×
@@ -279,6 +281,17 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
   box-shadow: var(--soda-shape-shadow, 0 4px 16px rgb(0 0 0 / 45%));
   font-size: 12px;
 }
+.sat.sat-inline {
+  position: relative;
+  width: 100%;
+  height: 340px;
+  min-width: 0;
+  max-height: 50vh;
+  resize: none;
+  box-shadow: none;
+  margin-top: 0.5em;
+}
+.sat-inline .sat-grip { cursor: default; }
 .sat:focus {
   outline: 2px solid var(--soda-accent, #6070a1);
   outline-offset: -2px;

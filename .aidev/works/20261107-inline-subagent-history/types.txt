@@ -1,0 +1,7 @@
+Scope: 3 of 9 workspace projects
+packages/client-core typecheck$ tsc --noEmit -p tsconfig.typecheck.json
+packages/tui typecheck$ tsc --noEmit -p tsconfig.typecheck.json
+packages/web typecheck$ vue-tsc --noEmit -p tsconfig.typecheck.json
+packages/tui typecheck: Done
+packages/client-core typecheck: Done
+packages/web typecheck: Done

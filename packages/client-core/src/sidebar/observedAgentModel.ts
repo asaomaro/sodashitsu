@@ -9,9 +9,9 @@ export function observedAgentModel(pane:Pane,usage:AgentUsage|null|undefined):{t
 }
 export function subagentEffortLabel(child:SubagentInfo):{text:string;title:string}|undefined {
  const value=child.reasoningEffort?.trim(),basis=child.reasoningEffortBasis;
- if(!value||!(/^[^\x00-\x1f\x7f-\x9f]{1,128}$/).test(value)||!['creation','turn'].includes(basis??''))return undefined;
+ if(!value||!(/^[^\x00-\x1f\x7f-\x9f]{1,128}$/).test(value)||!['creation','turn','session'].includes(basis??''))return undefined;
  return {text:value,title:`effort ${value}`};
 }
 export function subagentModelLabel(child:SubagentInfo):string|undefined {
- const model=child.type?.trim(),effort=subagentEffortLabel(child);return model?[model,effort?.text].filter(Boolean).join(' '):effort?`effort ${effort.text}`:undefined;
+ const model=child.modelBasis==='turn'?child.model?.trim():undefined,effort=subagentEffortLabel(child);return model?[model,effort?.text].filter(Boolean).join(' '):effort?`effort ${effort.text}`:undefined;
 }

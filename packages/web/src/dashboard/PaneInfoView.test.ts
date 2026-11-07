@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionStore } from "../store/session.js";
 import { useUsageStore } from "../store/usage.js";
 import { useViewStore } from "../store/view.js";
+import {ConnectionKey} from "../injection.js";
 import PaneInfoView from "./PaneInfoView.vue";
 
 /** 20261010-agent-usage PR4 の AC1・AC5: pane の利用状況の窓の中身（出し分け・無い項目・古い印・入口）。 */
@@ -44,7 +45,8 @@ const account = (over: Partial<AccountUsage> = {}): AccountUsage => ({
   ...over,
 });
 
-function setup(p: Pane) {
+function setup(p: Pane, connection?: {request: ReturnType<typeof vi.fn>}) {
+  useViewStore(pinia).onConnectionState("open");
   const session = useSessionStore(pinia);
   session.workspaceUpserted({ id: "w1", label: "repo", cwd: "/", tabIds: ["t1"], activeTabId: "t1", groupId: null, git: { branch: "feature/x" }, autoLabel: false } as unknown as Workspace);
   session.tabUpserted({ id: "t1", workspaceId: "w1", label: "main", layout: { type: "pane", paneId: p.id }, focusedPaneId: p.id, zoomedPaneId: null, sizeOwnerClientId: null } as Tab);
@@ -52,7 +54,7 @@ function setup(p: Pane) {
   const emitted: string[] = [];
   const wrapper = mount(PaneInfoView, {
     props: { paneId: p.id, kind: "popover", active: true, onClose: () => emitted.push("close") },
-    global: { plugins: [pinia] },
+    global: { plugins: [pinia],provide:connection?{[ConnectionKey as symbol]:connection}:{} },
     attachTo: document.body,
   });
   return { wrapper, usage: useUsageStore(pinia), view: useViewStore(pinia), emitted };
@@ -217,4 +219,31 @@ it.each(["codex","muse","copilot","agy"])("labels %s native membership counts wi
 it("bounds inline child rows at 64 without opening a separate list",()=>{
  const {wrapper,view}=setup(pane("p1",agent({subagents:{count:70,items:Array.from({length:70},(_,i)=>({id:`c${i}`,startedAt:0,type:"child-model",description:`child-session-${i}`,reasoningEffort:"low",reasoningEffortBasis:"creation"}))}})));
  expect(wrapper.findAll('.subagent-list-item')).toHaveLength(64);expect(wrapper.text()).toContain('ほか 6 件');expect(wrapper.text()).toContain('low');expect(view.dialogContext).toBeNull();wrapper.unmount();
+});
+
+
+it.each(['claude','codex'])('reads proven %s child conversation inside pane information without an input or other dialog',async kind=>{
+ const request=vi.fn(async()=>({status:'ok',entries:[{kind:'say',text:'Generated child reply'}],offset:1,reset:false,omittedBefore:false,running:false}));
+ const a=agent({kind,subagents:{count:2,items:[{id:'readable',type:'Explore',description:'Child task',startedAt:1,hasTranscript:true},{id:'unproved',startedAt:1}]}});
+ const {wrapper,view}=setup(pane('p1',a),{request});
+ expect(wrapper.findAll('.subagent-list-transcript')).toHaveLength(1);
+ await wrapper.get('.subagent-list-transcript').trigger('click');for(let i=0;i<6;i++)await wrapper.vm.$nextTick();
+ const transcript=wrapper.get('[data-subagent-transcript]');expect(transcript.classes()).toContain('sat-inline');expect(transcript.text()).toContain('Generated child reply');
+ expect(transcript.findAll('textarea,input')).toHaveLength(0);expect(transcript.text()).toContain('読むだけ');expect(view.dialogContext).toBeNull();
+ expect(request.mock.calls).toEqual([['agent.subagent_transcript',{paneId:'p1',agentId:'readable'}]]);
+ await transcript.get('button').trigger('click');expect(wrapper.find('[data-subagent-transcript]').exists()).toBe(false);
+ await vi.advanceTimersByTimeAsync(3000);expect(request).toHaveBeenCalledTimes(1);wrapper.unmount();
+});
+
+it.each(['instance','proof','inactive','disconnect'])('invalidates inline child read on %s change, discarding an in-flight response',async change=>{
+ let resolve!:(r:unknown)=>void;const request=vi.fn(()=>new Promise(r=>{resolve=r}));
+ const a=agent({kind:'codex',subagents:{count:1,items:[{id:'child',startedAt:1,hasTranscript:true}]}});
+ const {wrapper}=setup(pane('p1',a),{request});await wrapper.get('.subagent-list-transcript').trigger('click');
+ if(change==='inactive')await wrapper.setProps({active:false});
+ else if(change==='disconnect')useViewStore(pinia).onConnectionState('reconnecting');
+ else useSessionStore(pinia).paneUpserted(pane('p1',{...a,...(change==='instance'?{instanceId:'new'}:{subagents:{count:1,items:[{id:'child',startedAt:1}]}})}));
+ await wrapper.vm.$nextTick();expect(wrapper.find('[data-subagent-transcript]').exists()).toBe(false);
+ resolve({status:'ok',entries:[{kind:'say',text:'STALE GENERATED REPLY'}],offset:1,reset:false,omittedBefore:false,running:false});
+ for(let i=0;i<6;i++)await wrapper.vm.$nextTick();await vi.advanceTimersByTimeAsync(3000);
+ expect(wrapper.text()).not.toContain('STALE GENERATED REPLY');expect(request).toHaveBeenCalledTimes(1);wrapper.unmount();
 });

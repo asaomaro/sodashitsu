@@ -9,8 +9,9 @@ import { subagentModelLabel,subagentEffortLabel,subagentStateLabel, subagentEmpt
  * 上下キーでスクロールできる。経過時間は 10 秒ごとに進める（ここが持つ）。短い説明などはエージェントが書いた文なので、文字として出す（HTML として解釈しない）。
  * 親は `focus()` でこの領域へフォーカスを移せる。開いている間だけ描く（`v-if`）ので、タイマーも開いている間だけ動く。
  */
-const props = defineProps<{ subagents?: AgentInfo["subagents"] }>();
+const props = defineProps<{ subagents?: AgentInfo["subagents"]; readable?: boolean }>();
 
+const emit=defineEmits<{ transcript:[agentId:string] }>();
 const listEl = ref<HTMLElement | null>(null);
 const now = ref(Date.now());
 const ticker = setInterval(() => (now.value = Date.now()), 10_000);
@@ -36,9 +37,10 @@ defineExpose({ focus: () => listEl.value?.focus() });
     <div v-for="item in items" :key="item.id" class="subagent-list-item" role="listitem">
       <div class="subagent-list-item-head">
         <span v-if="item.state" class="subagent-list-state" :data-state="item.state ?? 'working'">{{ subagentStateLabel(item) }}</span>
-        <span class="subagent-list-type" :title="subagentEffortLabel(item)?.title">{{ subagentModelLabel(item) ?? "サブエージェント" }}</span>
+        <span class="subagent-list-type" :title="subagentEffortLabel(item)?.title">{{ subagentModelLabel(item) ?? item.type ?? "サブエージェント" }}</span>
         <span v-if="item.background" class="subagent-list-bg">バックグラウンド</span>
         <span class="subagent-list-elapsed">{{ formatSubagentElapsed(item.startedAt, now) }}</span>
+        <button v-if="readable && item.hasTranscript" type="button" class="subagent-list-transcript" :aria-label="`${item.description || item.type || 'サブエージェント'}の会話を読む`" @click="emit('transcript',item.id)">会話</button>
       </div>
       <div v-if="item.description" class="subagent-list-desc">{{ item.description }}</div>
     </div>
@@ -73,6 +75,14 @@ defineExpose({ focus: () => listEl.value?.focus() });
   display: flex;
   gap: 0.6em;
   align-items: baseline;
+}
+.subagent-list-transcript {
+  color: inherit;
+  background: var(--soda-menu-bg);
+  border: 1px solid var(--soda-menu-border);
+  border-radius: var(--soda-shape-radius-s);
+  font: inherit;
+  cursor: pointer;
 }
 .subagent-list-type {
   font-weight: 600;

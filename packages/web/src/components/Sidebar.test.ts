@@ -742,7 +742,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     expect(w.text()).not.toContain("所属する子（作業中の件数ではありません）");
   });
   it("appends only an already observed same-kind parent model and preserves full child titles",async()=>{
-    setup(makeAgent({kind:"codex",label:"Codex",subagents:{count:1,countBasis:"alive",items:[{id:"child",startedAt:0,state:"unknown",type:"gpt-child-model",description:"/generated/full/session/path"}]}}));
+    setup(makeAgent({kind:"codex",label:"Codex",subagents:{count:1,countBasis:"alive",items:[{id:"child",startedAt:0,state:"unknown",model:"gpt-child-model",modelBasis:"turn",description:"/generated/full/session/path"}]}}));
     const usage=useUsageStore(pinia);usage.panes.p1={paneId:"p1",kind:"codex",model:"gpt-observed-model",tokens:{basis:"context"},source:"rollout",updatedAt:1};
     const w=mountSidebar(makeConnection());expect(w.get('[data-agent-pane="p1"]').text()).toContain("Codex gpt-observed-model");expect(w.get('[data-agent-pane="p1"]').attributes("title")).toContain("gpt-observed-model");
     await btn(w).trigger("click");const child=w.get('[data-subagent-id="child"]');expect(child.attributes("title")).toContain("gpt-child-model · /generated/full/session/path · 状態不明");expect(child.findAll('[role="img"]')).toHaveLength(1);expect(child.text()).not.toContain("状態不明");
@@ -751,7 +751,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     delete usage.panes.p1;await nextTick();expect(w.get('[data-agent-pane="p1"]').text()).toContain("Codex");
   });
   it("keeps observed effort independent of footer visibility, with expansion first and no sidebar info",async()=>{
-    setup(makeAgent({kind:"codex",subagents:{count:1,items:[{id:"child",startedAt:0,type:"child-model",description:"child-session",reasoningEffort:"low",reasoningEffortBasis:"creation"}]}}));
+    setup(makeAgent({kind:"codex",subagents:{count:1,items:[{id:"child",startedAt:0,type:"child-role",model:"child-model",modelBasis:"turn",description:"child-session",reasoningEffort:"low",reasoningEffortBasis:"creation"}]}}));
     useSettingsStore(pinia).statuslineSettings.enabled=false;
     const store=useUsageStore(pinia);store.panes.p1={paneId:"p1",kind:"codex",model:"parent-model",reasoningEffort:"high",tokens:{basis:"context"},source:"rollout",updatedAt:1};
     const w=mountSidebar(makeConnection()),parent=w.get('[data-agent-pane="p1"]');expect(parent.text()).toContain("parent-model high");expect(parent.find('.sidebar-agent-info').exists()).toBe(false);expect(parent.find('.sidebar-row-line1 .sidebar-subagent-btn').exists()).toBe(true);

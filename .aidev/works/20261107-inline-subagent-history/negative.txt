@@ -1,0 +1,146 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-inline-history
+
+ ❯ |@sodashitsu/client-core| src/sidebar/observedAgentModel.test.ts (7 tests | 3 failed) 22ms
+   × shows child effort without a timing suffix while retaining observation validation 9ms
+   × omits invalid child observations and labels effort without a model explicitly 3ms
+   × uses only turn-observed models, preserves role identity separately and supports session-default effort 2ms
+ ❯ |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts (22 tests | 6 failed) 459ms
+   × reads proven claude child conversation inside pane information without an input or other dialog 19ms
+   × reads proven codex child conversation inside pane information without an input or other dialog 10ms
+   × invalidates inline child read on instance change, discarding an in-flight response 24ms
+   × invalidates inline child read on proof change, discarding an in-flight response 11ms
+   × invalidates inline child read on inactive change, discarding an in-flight response 11ms
+   × invalidates inline child read on disconnect change, discarding an in-flight response 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > reads proven claude child conversation inside pane information without an input or other dialog
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > reads proven codex child conversation inside pane information without an input or other dialog
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/dashboard/PaneInfoView.test.ts:229:55
+    227|  const a=agent({kind,subagents:{count:2,items:[{id:'readable',type:'Ex…
+    228|  const {wrapper,view}=setup(pane('p1',a),{request});
+    229|  expect(wrapper.findAll('.subagent-list-transcript')).toHaveLength(1);
+       |                                                       ^
+    230|  await wrapper.get('.subagent-list-transcript').trigger('click');for(l…
+    231|  const transcript=wrapper.get('[data-subagent-transcript]');expect(tra…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > invalidates inline child read on instance change, discarding an in-flight response
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > invalidates inline child read on proof change, discarding an in-flight response
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > invalidates inline child read on inactive change, discarding an in-flight response
+ FAIL  |@sodashitsu/web| src/dashboard/PaneInfoView.test.ts > invalidates inline child read on disconnect change, discarding an in-flight response
+Error: Unable to get .subagent-list-transcript within: <section data-v-395bcb99="" class="pinfo pinfo-popover" data-pane-info="" data-pane-info-pane="p1" aria-label="pane の利用状況">
+  <header data-v-395bcb99="" class="pinfo-head"><span data-v-e93665c8="" data-v-395bcb99="" class="state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span><span data-v-395bcb99="" class="pinfo-name" title="Claude Code">Claude Code</span><span data-v-395bcb99="" class="dash-chip" data-pane-info-kind="">Codex</span></header>
+  <dl data-v-395bcb99="" class="pinfo-dl">
+    <dt data-v-395bcb99="">状態</dt>
+    <dd data-v-395bcb99="" data-pane-info-state="">待機中<span data-v-395bcb99="" class="dash-muted pinfo-since">（2 分前から）</span></dd>
+    <dt data-v-395bcb99="">モデル</dt>
+    <dd data-v-395bcb99="" data-pane-info-model="">—</dd>
+  </dl>
+  <h3 data-v-395bcb99="" class="pinfo-sub">このセッションの利用状況</h3>
+  <p data-v-395bcb99="" class="dash-muted" role="status" data-pane-info-loading="">読み込んでいます…</p>
+  <h3 data-v-395bcb99="" class="pinfo-sub">セッション</h3>
+  <dl data-v-395bcb99="" class="pinfo-dl">
+    <dt data-v-395bcb99="">会話の id</dt>
+    <dd data-v-395bcb99="" data-pane-info-session="">—</dd>
+    <dt data-v-395bcb99="">作業フォルダ</dt>
+    <dd data-v-395bcb99="" class="pinfo-path" title="/work/p1" data-pane-info-cwd="">/work/p1</dd>
+    <dt data-v-395bcb99="">ブランチ</dt>
+    <dd data-v-395bcb99="" data-pane-info-branch="">feature/x</dd>
+    <dt data-v-395bcb99="">サブエージェント</dt>
+    <dd data-v-395bcb99="" data-pane-info-subagents="" title="サブエージェント 1件">1件</dd>
+  </dl>
+  <section data-v-395bcb99="" aria-label="サブエージェントの情報" class="pinfo-inline-subagents">
+    <div data-v-d665ee61="" data-v-395bcb99="" class="subagent-list" tabindex="0" role="list" aria-label="サブエージェントの一覧">
+      <!--v-if-->
+      <div data-v-d665ee61="" class="subagent-list-item" role="listitem">
+        <div data-v-d665ee61="" class="subagent-list-item-head">
+          <!--v-if--><span data-v-d665ee61="" class="subagent-list-type">サブエージェント</span>
+          <!--v-if--><span data-v-d665ee61="" class="subagent-list-elapsed">497666時間</span>
+        </div>
+        <!--v-if-->
+      </div>
+      <!--v-if-->
+    </div>
+  </section>
+  <!--v-if-->
+  <div data-v-395bcb99="" class="pinfo-foot"><button data-v-395bcb99="" data-assistant-feature="" type="button" class="pinfo-btn" data-pane-info-open-dashboard="">ダッシュボードを開く</button></div>
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/dashboard/PaneInfoView.test.ts:241:62
+    239|  let resolve!:(r:unknown)=>void;const request=vi.fn(()=>new Promise(r=…
+    240|  const a=agent({kind:'codex',subagents:{count:1,items:[{id:'child',sta…
+    241|  const {wrapper}=setup(pane('p1',a),{request});await wrapper.get('.sub…
+       |                                                              ^
+    242|  if(change==='inactive')await wrapper.setProps({active:false});
+    243|  else if(change==='disconnect')useViewStore(pinia).onConnectionState('…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  |@sodashitsu/client-core| src/sidebar/observedAgentModel.test.ts > shows child effort without a timing suffix while retaining observation validation
+AssertionError: expected 'role low' to be 'child-model low' // Object.is equality
+
+Expected: "child-model low"
+Received: "role low"
+
+ ❯ src/sidebar/observedAgentModel.test.ts:17:191
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  |@sodashitsu/client-core| src/sidebar/observedAgentModel.test.ts > omits invalid child observations and labels effort without a model explicitly
+AssertionError: expected 'child' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"child"
+
+ ❯ src/sidebar/observedAgentModel.test.ts:20:87
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  |@sodashitsu/client-core| src/sidebar/observedAgentModel.test.ts > uses only turn-observed models, preserves role identity separately and supports session-default effort
+AssertionError: expected 'Explore' to be 'observed-model low' // Object.is equality
+
+Expected: "observed-model low"
+Received: "Explore"
+
+ ❯ src/sidebar/observedAgentModel.test.ts:29:36
+     27| it('uses only turn-observed models, preserves role identity separately…
+     28|  const child={id:'c',startedAt:1,type:'Explore',model:'observed-model'…
+     29|  expect(subagentModelLabel(child)).toBe('observed-model low');expect(s…
+       |                                    ^
+     30|  expect(subagentModelLabel({id:'c',startedAt:1,type:'gpt-started-model…
+     31| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  9 failed | 20 passed (29)
+   Start at  23:17:01
+   Duration  4.21s (transform 69%, import 15%, tests 9%, environment 6%)
+
+  Transform  |@sodashitsu/web| transforming modules took 2.63s · 66% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

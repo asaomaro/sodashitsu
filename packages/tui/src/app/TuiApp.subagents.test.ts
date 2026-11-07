@@ -78,8 +78,8 @@ describe("端末版のサブエージェントの表示", () => {
     const h=await start({subagents:subs(2)});let b=h.badge()!;
     h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();
     expect(h.app.ui.dialogContext).toBeNull();expect(h.app.model.focusedPaneId).toBe("p1");
-    let screen=await h.screen();expect(screen).not.toContain("実行中");expect(screen).toContain("Explore");expect(screen).toContain("説明0");expect(screen).not.toContain("▸2");expect(h.badge()!.w).toBe(1);
-    h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({state:"working",subagents:subs(1,"更新")})});h.app.renderNow();expect(await h.screen()).toContain("更新");
+    let screen=await h.screen();expect(screen).not.toContain("実行中");expect(screen).toContain("説明0");expect(screen).not.toContain("▸2");expect(h.badge()!.w).toBe(1);
+    h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({state:"working",subagents:{count:1,items:[sub("s0",{description:"更新"})]}})});h.app.renderNow();expect(await h.screen()).toContain("更新");
     b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();screen=await h.screen();expect(screen).toContain("▸1");expect(screen).not.toContain("説明0");
     b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({instanceId:"new",subagents:subs(2)})});h.app.renderNow();expect(await h.screen()).toContain("▸2");
     expect(h.ws.requests("pane.focus")).toHaveLength(0);
@@ -92,15 +92,15 @@ describe("端末版のサブエージェントの表示", () => {
     dispatcherOf(h.app).showSubagentsOf("p3");h.app.renderNow();screen=await h.screen();expect(screen).toContain("（所属）");expect(screen).toContain("状態不明");
   });
   it("puts the child session first and model second while preserving fallback",async()=>{
-    const h=await start({subagents:{count:1,items:[sub("ordered",{description:"Session First",type:"Model Second",state:"unknown"})]}});const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();let screen=await h.screen();expect(screen.indexOf("Session First")).toBeGreaterThanOrEqual(0);expect(screen.indexOf("Model Second")).toBeGreaterThan(screen.indexOf("Session First"));
+    const h=await start({subagents:{count:1,items:[sub("ordered",{description:"Session First",type:"role",model:"Model Second",modelBasis:"turn",state:"unknown"})]}});const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();let screen=await h.screen();expect(screen.indexOf("Session First")).toBeGreaterThanOrEqual(0);expect(screen.indexOf("Model Second")).toBeGreaterThan(screen.indexOf("Session First"));
     h.ws.event("pane.agent_status_changed",{paneId:"p3",agent:agent({subagents:{count:1,items:[sub("model-only",{type:"Model Only"})]}})});h.app.renderNow();screen=await h.screen();expect(screen).toContain("Model Only");expect(screen).not.toContain("Session First");
   });
   it("展開行の上限と残り件数をsidebarスクロールで確認できる",async()=>{
     const h=await start({subagents:{count:70,items:Array.from({length:64},(_,i)=>sub(`s${i}`,{type:`担当${i}`,description:`作業${i}`}))}});
     const b=h.badge()!;h.io.type(down(b.x!,b.y)+up(b.x!,b.y));h.app.renderNow();
-    expect(await h.screen()).toContain("担当0");
+    expect(await h.screen()).toContain("作業0");
     (h.app as unknown as {sidebarScroll:{agents:number}}).sidebarScroll.agents=10000;h.app.renderNow();
-    const screen=await h.screen();expect(screen).toContain("担当63");expect(screen).toContain("ほか 6 件");expect(screen).not.toContain("担当64");
+    const screen=await h.screen();expect(screen).toContain("作業63");expect(screen).toContain("ほか 6 件");expect(screen).not.toContain("作業64");
   });
 
   it("上下で読み（ホイールも）、Esc で閉じる。一覧が長ければ ↑↓ の印が出る。64 件を超えれば「ほか n 件」", async () => {
@@ -362,7 +362,7 @@ describe("端末版のサブエージェントの表示", () => {
     expect(rows.some((r) => /1分\s*░\s*│/.test(r))).toBe(true);
   });
   it("puts expansion on the first row without sidebar info and preserves the pane information action",async()=>{
-    const h=await start({subagents:{count:1,items:[sub("c",{type:"child-model",description:"child-session",reasoningEffort:"low",reasoningEffortBasis:"creation"})]}}),badge=h.badge()!;
+    const h=await start({subagents:{count:1,items:[sub("c",{type:"child-role",model:"child-model",modelBasis:"turn",description:"child-session",reasoningEffort:"low",reasoningEffortBasis:"creation"})]}}),badge=h.badge()!;
     expect(h.hits().some(x=>x.kind==="info")).toBe(false);expect(badge.y).toBe(h.hits().find(x=>x.kind==="agent"&&x.paneId==="p3")!.y);dispatcherOf(h.app).showUsageOf("p3");h.app.renderNow();expect(h.app.ui.dialogContext).toMatchObject({kind:"usage",paneId:"p3"});const screen=await h.screen();expect(screen).toContain("child-session");expect(screen).toContain("child-model low");
   });
   it("keeps a single-row fallback and watches usage independently from disabled footer",async()=>{
