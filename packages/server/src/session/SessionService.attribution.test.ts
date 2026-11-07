@@ -217,6 +217,19 @@ describe("SessionService — 会話の参照は、その pane の前面のエー
     expect(service.hasVerifiedAgentSession("p1", "replacement-instance", id)).toBe(false);
   });
 
+  for(const kind of ["grok","cursor"] as const) it(`${kind}: only actual front UUID resume arguments establish restored freshness`,()=>{
+    const id="12345678-1234-4234-8234-123456789012";
+    service.reportAgentSession("p1",kind,id); // saved/no-PID reference alone cannot bind a new instance
+    service.setFrontAgent("p1",{kind,pids:new Set([100]),resumeId:id},{deferSettlement:true});
+    service.updatePaneRuntime("p1",{agent:agent({kind,instanceId:"resumed"})},{settleReports:true});
+    expect(service.hasVerifiedAgentSession("p1","resumed",id)).toBe(true);
+    service.updatePaneRuntime("p1",{agent:agent({kind,instanceId:"new-instance"})},{settleReports:true});
+    expect(service.hasVerifiedAgentSession("p1","new-instance",id)).toBe(true); // still the same explicit live front argv
+    service.setFrontAgent("p1",{kind,pids:new Set([200])},{deferSettlement:true});
+    service.updatePaneRuntime("p1",{agent:agent({kind,instanceId:"without-resume"})},{settleReports:true});
+    expect(service.hasVerifiedAgentSession("p1","without-resume",id)).toBe(false);
+  });
+
   it("deferred settlement also runs when the detected agent is unchanged", () => {
     front([100], "grok");
     service.updatePaneRuntime("p1", {agent:agent({kind:"grok",instanceId:"existing"})});

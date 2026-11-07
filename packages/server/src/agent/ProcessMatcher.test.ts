@@ -175,6 +175,8 @@ it("attributes Antigravity resume argv only to its outer CLI process", () => {
 });
 
 it.each([
+  ["grok", ["--model", "fixture", "--reasoning-effort", "low", "--resume", "12345678-abcd-ef01-2345-6789abcdef01"]],
+  ["cursor", ["--resume", "12345678-abcd-ef01-2345-6789abcdef01"]],
   ["claude", ["--resume", "12345678-abcd-ef01-2345-6789abcdef01"]],
   ["claude", ["-r", "12345678-abcd-ef01-2345-6789abcdef01"]],
   ["claude", ["--resume=12345678-abcd-ef01-2345-6789abcdef01"]],
@@ -186,7 +188,7 @@ it.each([
   const id = args.at(-1)!.split("=").at(-1)!;
   expect(agentResumeSessionId(job(10, [{ ...proc(10, [kind, ...args]), ppid: 1 }]), kind)).toBe(id);
 });
-it.each(["claude", "copilot", "muse"] as const)("does not infer a %s session from a picker, latest, prompt, or nested agent", kind => {
+it.each(["claude", "copilot", "muse", "grok", "cursor"] as const)("does not infer a %s session from a picker, latest, prompt, or nested agent", kind => {
   const id = "01a19c67-c59e-7060-aa2e-7f556e90b495";
   const resume = kind === "muse" ? ["resume", id] : ["--resume", id];
   for (const args of [["--", ...resume], ["--continue"], ["--resume"], ["resume", "--last"], ["--resume", "session-name"], ["--prompt", ...resume]]) {
@@ -204,7 +206,7 @@ it("refuses conflicting wrapper/agent resume IDs instead of selecting a file by 
   expect(agentResumeSessionId(job(10, [b, a]), "copilot")).toBeUndefined();
 });
 
-it.each(["claude", "copilot", "muse", "agy"] as const)("rejects ambiguous option operands for %s rather than treating their text as resume evidence", kind => {
+it.each(["claude", "copilot", "muse", "agy", "grok", "cursor"] as const)("rejects ambiguous option operands for %s rather than treating their text as resume evidence", kind => {
   const id = "01a19c67-c59e-7060-aa2e-7f556e90b495";
   const resume = kind === "muse" ? ["resume", id] : [kind === "agy" ? "--conversation" : "--resume", id];
   for (const option of ["--system-prompt", "--append-system-prompt", "--agent-name", "--unknown-future-option"]) {
@@ -214,4 +216,11 @@ it.each(["claude", "copilot", "muse", "agy"] as const)("rejects ambiguous option
   // A known value option consumes its operand; even a resume-looking value is
   // never revisited as a flag/subcommand. Unknown argument arity waits for hooks.
   expect(agentResumeSessionId(job(10, [{ ...proc(10, [kind, "--model", ...resume]), ppid: 1 }]), kind)).toBeUndefined();
+});
+
+it("extracts Cursor resume from its verified Windows bundled Node entry without treating arbitrary index.js as Cursor",()=>{
+ const id="12345678-abcd-ef01-2345-6789abcdef01";
+ const argv=[String.raw`C:\tools\cursor-agent\versions\2026.11.05\node.exe`,String.raw`C:\tools\cursor-agent\versions\2026.11.05\index.js`,"--resume",id];
+ expect(agentResumeSessionId(job(10,[{...proc(10,argv),ppid:1}]),"cursor")).toBe(id);
+ expect(agentResumeSessionId(job(10,[{...proc(10,["node","/unrelated/index.js","--resume",id]),ppid:1}]),"cursor")).toBeUndefined();
 });

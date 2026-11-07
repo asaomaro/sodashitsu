@@ -1509,9 +1509,9 @@ export class SessionService {
       const resumeId = this.frontAgents.get(paneId)?.resumeId;
       if (resumeId !== undefined && isCodexSessionId(resumeId)) this.attachByEvidence(paneId, "codex", resumeId, "argv");
     }
-    if (patch.agent && ["agy", "claude", "muse", "copilot"].includes(patch.agent.kind) && this.argvApplied.get(paneId) !== patch.agent.instanceId) {
+    if (patch.agent && ["agy", "claude", "muse", "copilot", "grok", "cursor"].includes(patch.agent.kind) && this.argvApplied.get(paneId) !== patch.agent.instanceId) {
       this.argvApplied.set(paneId, patch.agent.instanceId);
-      const front = this.frontAgents.get(paneId), kind = patch.agent.kind as "agy" | "claude" | "muse" | "copilot";
+      const front = this.frontAgents.get(paneId), kind = patch.agent.kind as "agy" | "claude" | "muse" | "copilot" | "grok" | "cursor";
       const id = front?.kind === kind ? front.resumeId : undefined;
       if (id !== undefined && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) && (kind !== "muse" || id[14] === "7")) this.attachByEvidence(paneId, kind, id, "argv");
     }

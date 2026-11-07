@@ -67,7 +67,7 @@ export function agentProcessPids(job: ForegroundJob, kind: string): number[] {
  * Pickers, latest-session switches, prompt strings and nested tool agents are not evidence.
  */
 export function agentResumeSessionId(job: ForegroundJob, kind: string): string | undefined {
-  if (!["claude", "codex", "muse", "agy", "copilot"].includes(kind)) return undefined;
+  if (!["claude", "codex", "muse", "agy", "copilot", "grok", "cursor"].includes(kind)) return undefined;
   const pids = new Set(agentProcessPids(job, kind)), ids = new Set<string>();
   for (const p of job.processes) {
     if (!pids.has(p.pid)) continue;
@@ -78,9 +78,9 @@ export function agentResumeSessionId(job: ForegroundJob, kind: string): string |
       // Only a small, unambiguous resume grammar is argv evidence. Unknown
       // options (including prompt-bearing ones) require a later hook instead.
       let at = lookupAgentKind(args[0] ?? "") === kind ? 1
-        : ["node", "bun"].includes(normalizedAgentLookupName(pathBasename(args[0] ?? ""))) && lookupAgentKind(args[1] ?? "") === kind ? 2 : -1;
+        : ["node", "bun"].includes(normalizedAgentLookupName(pathBasename(args[0] ?? ""))) && (lookupAgentKind(args[1] ?? "") === kind || kind === "cursor" && cursorAgentNameFromBundledNodeArgv(args) === "cursor") ? 2 : -1;
       if (at < 0) continue;
-      const valueFlags = kind === "muse" ? ["--model", "--reasoning-effort", "--effort"]
+      const valueFlags = kind === "muse" || kind === "grok" ? ["--model", "--reasoning-effort", "--effort"]
         : kind === "claude" ? ["--model", "--effort"] : kind === "copilot" ? ["--model"] : ["--model"];
       const flags = kind === "agy" ? ["--conversation"] : kind === "claude" ? ["--resume", "-r"] : ["--resume"];
       const values = new Set<string>();
