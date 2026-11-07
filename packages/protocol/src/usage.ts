@@ -62,6 +62,23 @@ export function formatUsageCredits(c: UsageCredits, digits = 3): string {
   return `${c.amount.toFixed(digits)} ${CREDIT_UNIT_LABEL[c.unit] ?? c.unit}`;
 }
 
+/** One observed provider setting. A recorded turn or hook is not proof of current session configuration. */
+export interface AgentSettingObservation {
+  value: string;
+  source: UsageSource | "hook";
+  basis: "turn" | "session" | "statusline" | "hook";
+  /** Provider observation time, when known. Poll time is never substituted. */
+  observedAt?: number;
+}
+
+/** Keep provider approval, permission mode and sandbox concepts separate; missing means unknown. */
+export interface AgentExecutionSettings {
+  reasoningEffort?: AgentSettingObservation;
+  approvalPolicy?: AgentSettingObservation;
+  permissionMode?: AgentSettingObservation;
+  sandboxMode?: AgentSettingObservation;
+}
+
 /** セッション（pane のエージェント）ごとの利用状況。 */
 export interface AgentUsage {
   paneId: string;
@@ -71,6 +88,7 @@ export interface AgentUsage {
   model: string | null;
   tokens: AgentUsageTokens;
   reasoningEffort?: string;
+  executionSettings?: AgentExecutionSettings;
   contextPressure?: "normal" | "warning" | "blocked";
   costEstimated?: boolean;
   costPartial?: boolean;
