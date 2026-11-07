@@ -64,8 +64,8 @@ export const AssistantLaunchSettings = z.object({
 }).strict();
 export type AssistantLaunchSettings = z.infer<typeof AssistantLaunchSettings>;
 /** CLI spellings and supported effort values, shared by launch validation and settings. */
-export const ASSISTANT_AGENT_KINDS = ["claude", "codex", "muse", "agy", "copilot", "grok"] as const;
-export const ASSISTANT_AGENT_LABELS = {claude:"Claude Code",codex:"Codex",muse:"Muse Code",agy:"Antigravity CLI",copilot:"GitHub Copilot CLI",grok:"Grok Build"} as const;
+export const ASSISTANT_AGENT_KINDS = ["claude", "codex", "muse", "agy", "copilot", "grok", "cursor"] as const;
+export const ASSISTANT_AGENT_LABELS = {claude:"Claude Code",codex:"Codex",muse:"Muse Code",agy:"Antigravity CLI",copilot:"GitHub Copilot CLI",grok:"Grok Build",cursor:"Cursor CLI"} as const;
 export interface AssistantAudioCapabilities {
   kind: string | null;
   /** Integration support only; does not prove CLI/model readiness or grant a turn. */
@@ -94,6 +94,7 @@ export const ASSISTANT_EFFORTS = {
  agy:["low","medium","high","xhigh","max"],
  copilot:["none","minimal","low","medium","high","xhigh","max"],
  grok:["none","minimal","low","medium","high","xhigh","max"],
+ cursor:[],
 } as const;
 export function assistantLaunchArgs(kind:string,input:unknown):string[]{
  const settings=AssistantLaunchSettings.parse(input);
@@ -111,6 +112,7 @@ export const AssistantAgentProfiles=z.object({
  agy:AssistantLaunchSettings.default({model:"",effort:""}),
  copilot:AssistantLaunchSettings.default({model:"",effort:""}),
  grok:AssistantLaunchSettings.default({model:"",effort:""}),
+ cursor:AssistantLaunchSettings.default({model:"",effort:""}),
 }).strict().superRefine((profiles,ctx)=>{
  for(const kind of ASSISTANT_AGENT_KINDS){try{assistantLaunchArgs(kind,profiles[kind]);}
  catch{ctx.addIssue({code:"custom",path:[kind,"effort"],message:"指定できないeffortです"});}}

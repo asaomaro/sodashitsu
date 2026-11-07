@@ -9,6 +9,6 @@ it("pins conversation requests to device and actor instead of a caller-selected 
   expect(AssistantConversationParams.safeParse({ ...input, instanceId: "latest" }).success).toBe(false);
 });
 it("keeps the supported conversation providers explicit", () => {
-  for (const kind of ["claude", "codex", "copilot", "agy", "muse", "grok"]) expect(AssistantConversationKind.safeParse(kind).success).toBe(true);
+  for (const kind of ["claude", "codex", "copilot", "agy", "muse", "grok", "cursor"]) expect(AssistantConversationKind.safeParse(kind).success).toBe(true);
   expect(AssistantConversationKind.safeParse("bob").success).toBe(false);
 });

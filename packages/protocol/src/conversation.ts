@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AssistantLaunchSettings, ASSISTANT_EFFORTS } from "./desktopAssistant.js";
-export const ConversationKind = z.enum(["claude", "codex", "muse", "agy", "copilot", "grok"]);
+export const ConversationKind = z.enum(["claude", "codex", "muse", "agy", "copilot", "grok", "cursor"]);
 export type ConversationKind = z.infer<typeof ConversationKind>;
 export interface ConversationMessage {
   id: string;

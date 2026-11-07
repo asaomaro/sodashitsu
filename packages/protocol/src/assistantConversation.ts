@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ConversationPage } from "./conversation.js";
-export const AssistantConversationKind = z.enum(["claude", "codex", "copilot", "agy", "muse", "grok"]);
+export const AssistantConversationKind = z.enum(["claude", "codex", "copilot", "agy", "muse", "grok", "cursor"]);
 export type AssistantConversationKind = z.infer<typeof AssistantConversationKind>;
 export const AssistantConversationParams = z.object({
   deviceId: z.uuid(), instanceId: z.uuid(),

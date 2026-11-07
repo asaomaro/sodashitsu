@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-assistant-profile/packages/protocol
+
+
+ Test Files  3 passed (3)
+      Tests  16 passed (16)
+   Start at  16:59:15
+   Duration  285ms (transform 48%, import 43%, tests 6%, worker 2%)
+
