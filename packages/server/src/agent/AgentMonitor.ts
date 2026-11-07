@@ -239,12 +239,13 @@ export class AgentMonitor {
             ...(agentResumeSessionId(job, kind) !== undefined ? { resumeId: agentResumeSessionId(job, kind)! } : {}),
           }
         : null,
+      { deferSettlement: true },
     );
     const trackerResult = tracker.update(kind, judgment);
     const patch: PaneRuntimePatch = { busy, title };
     if (cwd !== undefined) patch.cwd = cwd;
     if (trackerResult !== "unchanged") patch.agent = trackerResult;
-    this.session.updatePaneRuntime(paneId, patch);
+    this.session.updatePaneRuntime(paneId, patch, { settleReports: true });
   }
 
   /** `ProcessInspector.foregroundJob` を上限付きで待つ。上限に達したら reject し、呼び出し側

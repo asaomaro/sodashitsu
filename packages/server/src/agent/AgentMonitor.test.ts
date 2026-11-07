@@ -166,7 +166,7 @@ class FakePersistScheduler implements PersistScheduler {
 
 const HOST_INFO: HostInfo = { os: "linux", windowsBuild: null, hostname: "test" };
 
-function makeHarness() {
+function makeHarness(ancestorsOf?: (pid:number)=>number[]|null) {
   const terminals = new FakeTerminalManager();
   const bus = new EventBus();
   const processInspector = new FakeProcessInspector();
@@ -181,6 +181,7 @@ function makeHarness() {
     scrollbackLines: 1000,
     spawnGraceMs: 1,
     defaultCwd: "/home/u",
+    ...(ancestorsOf ? {ancestorsOf,pidAlive:()=>true} : {}),
     logger: new MemoryLogger(),
   });
   const monitorLogger = new MemoryLogger();
@@ -204,6 +205,21 @@ describe("AgentMonitor", () => {
   // 偽の時計は pane を作り終えたあと（各テストの中で）だけ有効にする。
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  for(const kind of ["grok","cursor"] as const) it(`${kind}: the real monitor settles a single startup report after installing its instance`,async()=>{
+    let shellPid=0;
+    const {terminals,processInspector,manifestStore,session,monitor}=makeHarness(pid=>[pid,shellPid,1]);
+    manifestStore.set(kind,simpleManifest(kind));
+    const {pane}=await session.createWorkspace("/home/u","fixture");
+    const host=terminals.get(pane.id) as FakeTerminalHost;shellPid=host.pid;
+    const executable=kind==="cursor"?"cursor-agent":"grok";
+    processInspector.jobs.set(host.pid,{processGroupId:999,processes:[{pid:999,ppid:host.pid,exe:executable,argv:[executable],cwd:null}]});
+    const id="12345678-1234-4234-8234-123456789012";
+    session.reportAgentSession(pane.id,kind,id,999); // exactly once, before detection
+    vi.useFakeTimers();monitor.start();
+    try{await advance(150);const actor=session.getPane(pane.id)?.agent;expect(actor?.kind).toBe(kind);expect(session.hasVerifiedAgentSession(pane.id,actor!.instanceId,id)).toBe(true);}
+    finally{await monitor.stop();}
   });
 
   it("エージェントを見つけたら3秒の起動猶予のあと判定し、pane.agent_status_changed が届く（D46）", async () => {

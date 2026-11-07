@@ -1377,7 +1377,7 @@ export class SessionService {
     this.bus.publish({ event: "pane.size_changed", data: { paneId, cols, rows } });
   }
 
-  updatePaneRuntime(paneId: PaneId, patch: PaneRuntimePatch): void {
+  updatePaneRuntime(paneId: PaneId, patch: PaneRuntimePatch, opts: { settleReports?: boolean } = {}): void {
     let pane = this.model.getPane(paneId);
     if (!pane) return;
     // Codex が終わった（TUI が終了の文言 `codex resume <id>` を画面に出す）: その pane の会話の参照を、画面の文言で付ける・直す
@@ -1518,6 +1518,9 @@ export class SessionService {
     // 会話参照の消滅も保存契機にする（design D8）——さもないと、サーバが不意に落ちたときに
     // 「もう有効ではない」という事実が session.json に反映されないまま残ることがある。
     if (cwdChanged || clearsAgentSession || droppedForNewAgent) this.persist.touch();
+    // AgentMonitor publishes front PIDs before the runtime instance. Consume a
+    // PID-verified startup report only after that same observation is installed.
+    if (opts.settleReports) this.settlePending(paneId);
   }
 
   private get codexLookup(): boolean {
@@ -1772,7 +1775,7 @@ export class SessionService {
   }
 
   /** 前面のエージェント（その pane の前面のジョブのエージェント自身のプロセス）を知らせる。`null` は、居ない。保留した報告があれば、ここで決める。 */
-  setFrontAgent(paneId: PaneId, front: { kind: string; pids: ReadonlySet<number>; verifiable?: boolean; resumeId?: string } | null): void {
+  setFrontAgent(paneId: PaneId, front: { kind: string; pids: ReadonlySet<number>; verifiable?: boolean; resumeId?: string } | null, opts: { deferSettlement?: boolean } = {}): void {
     if (front) {
       // `verifiable` が偽: 親子の情報が取れない環境（pid が前面のエージェントに含まれるかを、確かめられない）。種類の確かめだけにする。
       this.frontAgents.set(paneId, {
@@ -1785,7 +1788,7 @@ export class SessionService {
     } else {
       this.frontAgents.delete(paneId);
     }
-    this.settlePending(paneId);
+    if (!opts.deferSettlement) this.settlePending(paneId);
     this.expireResumeAttempt(paneId);
   }
 

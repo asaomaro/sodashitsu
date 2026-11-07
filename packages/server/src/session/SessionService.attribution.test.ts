@@ -204,6 +204,39 @@ describe("SessionService — 会話の参照は、その pane の前面のエー
     expect(refOf()?.sessionId).toBe("aaaaaaaa-1111");
   });
 
+  for (const kind of ["grok", "cursor"] as const) it(`${kind}: a single PID-bearing startup report becomes fresh after the actual monitor detection order`, () => {
+    const id = "12345678-1234-4234-8234-123456789012";
+    service.reportAgentSession("p1", kind, id, 100);
+    expect(service.hasVerifiedAgentSession("p1", "fixture-instance", id)).toBe(false);
+    // AgentMonitor publishes front PIDs first, then the new runtime instance.
+    service.setFrontAgent("p1", { kind, pids: new Set([100]) }, {deferSettlement:true});
+    service.updatePaneRuntime("p1", { agent: agent({kind, instanceId:"fixture-instance"}) }, {settleReports:true});
+    expect(refOf()).toMatchObject({kind,sessionId:id});
+    expect(service.hasVerifiedAgentSession("p1", "fixture-instance", id)).toBe(true);
+    service.updatePaneRuntime("p1", { agent: agent({kind, instanceId:"replacement-instance"}) });
+    expect(service.hasVerifiedAgentSession("p1", "replacement-instance", id)).toBe(false);
+  });
+
+  it("deferred settlement also runs when the detected agent is unchanged", () => {
+    front([100], "grok");
+    service.updatePaneRuntime("p1", {agent:agent({kind:"grok",instanceId:"existing"})});
+    noFront();
+    service.reportAgentSession("p1", "grok", "fresh-session", 100);
+    service.setFrontAgent("p1", {kind:"grok",pids:new Set([100])}, {deferSettlement:true});
+    service.updatePaneRuntime("p1", {busy:false}, {settleReports:true});
+    expect(service.hasVerifiedAgentSession("p1","existing","fresh-session")).toBe(true);
+  });
+  for (const wrong of ["missing-pid", "child-pid", "wrong-kind", "expired", "closed"] as const) it(`deferred monitor settlement does not promote ${wrong} startup reports`, async () => {
+    const id="unverified-session";
+    service.reportAgentSession("p1", "grok", id, wrong==="missing-pid"?undefined:wrong==="child-pid"?200:100);
+    if(wrong==="expired"){now+=16000;service.setFrontAgent("p1",null);}
+    if(wrong==="closed"){await service.closePane("p1");}
+    const kind=wrong==="wrong-kind"?"cursor":"grok";
+    service.setFrontAgent("p1", {kind,pids:new Set([100])}, {deferSettlement:true});
+    service.updatePaneRuntime("p1", {agent:agent({kind,instanceId:"candidate"})}, {settleReports:true});
+    expect(service.hasVerifiedAgentSession("p1","candidate",id)).toBe(false);
+  });
+
   it("保留した報告は、検出されたエージェントの pid が違えば捨てる", () => {
     service.reportAgentSession("p1", "claude", "bbbbbbbb-2222", 200);
     detect([100]);
