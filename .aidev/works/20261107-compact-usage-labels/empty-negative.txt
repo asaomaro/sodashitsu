@@ -1,0 +1,36 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-compact-usage-labels
+
+ ❯ |@sodashitsu/client-core| src/agent/subagents.test.ts (6 tests | 1 failed) 13ms
+   × distinguishes membership, work and unknown while preserving omitted defaults 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/client-core| src/agent/subagents.test.ts > distinguishes membership, work and unknown while preserving omitted defaults
+AssertionError: expected '所属するサブエージェントはありません' to be 'サブエージェントはありません' // Object.is equality
+
+Expected: "サブエージェントはありません"
+Received: "所属するサブエージェントはありません"
+
+ ❯ src/agent/subagents.test.ts:40:123
+     38|  expect(subagentCountLabel({count:2,items:[]})).toBe("サブエージェント 2件");
+     39|  expect(subagentCountLabel({count:2,items:[],countBasis:"alive"})).toB…
+     40|  expect(subagentEmptyLabel(undefined)).toContain("未取得");expect(subagen…
+       |                                                                                                                           ^
+     41|  expect(subagentEmptyLabel({count:0,items:[]})).toBe("実行中のサブエージェントはありま…
+     42| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  19:03:02
+   Duration  191ms (transform 57%, import 21%, tests 17%, worker 5%)
+

@@ -21,3 +21,7 @@ Node v24.15.0, pnpm 9.15.9. Worktree-owned dependency installation and generated
 - Byte-exact restore of all seven runtime sources verified by SHA256 (`restoration.json`), rebuild, 374 tests and browser pass again. Tests remain fixed during this negative control.
 
 The common count label no longer explains working/alive semantics in visible/aria text. The data remains unchanged; membership footer title remains descriptive. No inference or provider acquisition behavior changes.
+
+## Review follow-up
+
+The alive empty-state text is also compact: `サブエージェントはありません`. The working-only empty state still explicitly says `実行中`. Existing helper semantic suite: old helper 1 failure, byte-exact `cmp`/SHA256 restore then 6 pass (`empty-negative.txt`, `empty-restored.txt`, `empty-restoration.json`); scoped core build exit 0. This follow-up does not change positive-list DOM or protocol metadata.
