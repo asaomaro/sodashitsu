@@ -1,0 +1,26 @@
+{
+  "results": [
+    {
+      "log": "negative-guards.log",
+      "exitCode": 1
+    },
+    {
+      "log": "negative-old-model-label.log",
+      "exitCode": 1
+    },
+    {
+      "log": "restored-server.log",
+      "exitCode": 0
+    },
+    {
+      "log": "restored-core.log",
+      "exitCode": 0
+    }
+  ],
+  "sha256": {
+    "packages/server/src/agent/GrokSubagentRecords.ts": "2997704ae505d4f6f3fb78337ada2ea71a6dc66d425f0657231011df692ed565",
+    "packages/server/src/agent/GrokSubagentReader.ts": "63036b0be29663770bd406437297014dff3c151b2c5c9a603d1806e77bab8361",
+    "packages/client-core/src/sidebar/observedAgentModel.ts": "c30a9ab979791881d4d674aafadecd92a279e48565a6d957f193601b2af517d8"
+  },
+  "byteExact": true
+}

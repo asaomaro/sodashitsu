@@ -1,0 +1,247 @@
+{
+  "networkNamespace": "loopback-only",
+  "realAuth": false,
+  "externalModelCalls": 0,
+  "provider": "own local deterministic HTTP mock, not a real model",
+  "cliExit": 0,
+  "timedOut": false,
+  "elapsedMs": 516,
+  "stdoutBytes": 3480,
+  "stderrBytes": 0,
+  "requests": [
+    {
+      "path": "/models",
+      "method": "GET",
+      "toolNames": [],
+      "bytes": 0
+    },
+    {
+      "path": "/api-key",
+      "method": "GET",
+      "toolNames": [],
+      "bytes": 0
+    },
+    {
+      "path": "/",
+      "method": "GET",
+      "toolNames": [],
+      "bytes": 0
+    },
+    {
+      "path": "/responses",
+      "method": "POST",
+      "toolNames": [
+        "session_title"
+      ],
+      "bytes": 1299
+    },
+    {
+      "path": "/responses",
+      "method": "POST",
+      "toolNames": [
+        "session_title"
+      ],
+      "bytes": 1263
+    },
+    {
+      "path": "/chat/completions",
+      "method": "POST",
+      "toolNames": [
+        "kill_command_or_subagent",
+        "get_command_or_subagent_output",
+        "spawn_subagent"
+      ],
+      "bytes": 12535
+    },
+    {
+      "path": "/chat/completions",
+      "method": "POST",
+      "toolNames": [
+        "kill_command_or_subagent",
+        "get_command_or_subagent_output",
+        "spawn_subagent"
+      ],
+      "bytes": 13148
+    },
+    {
+      "path": "/chat/completions",
+      "method": "POST",
+      "toolNames": [],
+      "bytes": 1445
+    },
+    {
+      "path": "/chat/completions",
+      "method": "POST",
+      "toolNames": [
+        "session_title"
+      ],
+      "bytes": 1165
+    },
+    {
+      "path": "/chat/completions",
+      "method": "POST",
+      "toolNames": [],
+      "bytes": 4037
+    },
+    {
+      "path": "/chat/completions",
+      "method": "POST",
+      "toolNames": [
+        "kill_command_or_subagent",
+        "get_command_or_subagent_output",
+        "spawn_subagent"
+      ],
+      "bytes": 13949
+    },
+    {
+      "path": "/chat/completions",
+      "method": "POST",
+      "toolNames": [],
+      "bytes": 1980
+    }
+  ],
+  "spawnSchema": {
+    "required": [
+      "prompt",
+      "description"
+    ],
+    "properties": [
+      "prompt",
+      "description",
+      "background",
+      "isolation",
+      "resume_from",
+      "cwd",
+      "model"
+    ],
+    "sentKeys": [
+      "prompt",
+      "description"
+    ]
+  },
+  "files": [
+    {
+      "name": "events.jsonl",
+      "bytes": 618
+    },
+    {
+      "name": "rewind_points.jsonl",
+      "bytes": 106
+    },
+    {
+      "name": "chat_history.jsonl",
+      "bytes": 4073
+    },
+    {
+      "name": "updates.jsonl",
+      "bytes": 1607
+    },
+    {
+      "name": "events.jsonl",
+      "bytes": 2102
+    },
+    {
+      "name": "rewind_points.jsonl",
+      "bytes": 212
+    },
+    {
+      "name": "chat_history.jsonl",
+      "bytes": 8993
+    },
+    {
+      "name": "updates.jsonl",
+      "bytes": 8211
+    }
+  ],
+  "nativeEvents": [
+    {
+      "file": "updates.jsonl",
+      "outerKeys": [
+        "timestamp",
+        "method",
+        "params"
+      ],
+      "event": {
+        "sessionUpdate": "subagent_spawned",
+        "subagent_id": "01a1b675-8b2e-78f3-9d3b-4533ea165d9a",
+        "attempt_id": "at1.e57ebaa541174bd088d877d9d8feb7aa",
+        "parent_session_id": "01a1b675-8a9f-75a3-aedb-b5289c04f773",
+        "parent_prompt_id": "1ef97dff-947e-4aca-8246-a02052035987",
+        "child_session_id": "01a1b675-8b2e-78f3-9d3b-4533ea165d9a",
+        "subagent_type": "general-purpose",
+        "model": "grok-4"
+      }
+    },
+    {
+      "file": "updates.jsonl",
+      "outerKeys": [
+        "timestamp",
+        "method",
+        "params"
+      ],
+      "event": {
+        "sessionUpdate": "subagent_finished",
+        "subagent_id": "01a1b675-8b2e-78f3-9d3b-4533ea165d9a",
+        "attempt_id": "at1.e57ebaa541174bd088d877d9d8feb7aa",
+        "child_session_id": "01a1b675-8b2e-78f3-9d3b-4533ea165d9a",
+        "status": "completed",
+        "turns": 1,
+        "tool_calls": 0
+      }
+    }
+  ],
+  "nativeEnvelopes": [
+    {
+      "recordSessionId": "01a1b675-8a9f-75a3-aedb-b5289c04f773",
+      "row": {
+        "timestamp": 1794062519,
+        "method": "_x.ai/session/update",
+        "params": {
+          "sessionId": "01a1b675-8a9f-75a3-aedb-b5289c04f773",
+          "update": {
+            "sessionUpdate": "subagent_spawned",
+            "subagent_id": "01a1b675-8b2e-78f3-9d3b-4533ea165d9a",
+            "attempt_id": "at1.e57ebaa541174bd088d877d9d8feb7aa",
+            "parent_session_id": "01a1b675-8a9f-75a3-aedb-b5289c04f773",
+            "parent_prompt_id": "1ef97dff-947e-4aca-8246-a02052035987",
+            "child_session_id": "01a1b675-8b2e-78f3-9d3b-4533ea165d9a",
+            "subagent_type": "general-purpose",
+            "description": "Native mock child",
+            "effective_context_source": "new",
+            "model": "grok-4"
+          },
+          "_meta": {
+            "eventId": "01a1b675-8a9f-75a3-aedb-b5289c04f773-14",
+            "agentTimestampMs": 1794062519093
+          }
+        }
+      }
+    },
+    {
+      "recordSessionId": "01a1b675-8a9f-75a3-aedb-b5289c04f773",
+      "row": {
+        "timestamp": 1794062519,
+        "method": "_x.ai/session/update",
+        "params": {
+          "sessionId": "01a1b675-8a9f-75a3-aedb-b5289c04f773",
+          "update": {
+            "sessionUpdate": "subagent_finished",
+            "subagent_id": "01a1b675-8b2e-78f3-9d3b-4533ea165d9a",
+            "attempt_id": "at1.e57ebaa541174bd088d877d9d8feb7aa",
+            "child_session_id": "01a1b675-8b2e-78f3-9d3b-4533ea165d9a",
+            "status": "completed",
+            "tool_calls": 0,
+            "turns": 1,
+            "duration_ms": 151,
+            "tokens_used": 12,
+            "will_wake": true
+          },
+          "_meta": {
+            "eventId": "01a1b675-8a9f-75a3-aedb-b5289c04f773-23",
+            "agentTimestampMs": 1794062519268
+          }
+        }
+      }
+    }
+  ]
+}

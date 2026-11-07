@@ -46,8 +46,8 @@ export async function locateGrokSession(id:string,opts:GrokSessionRoots={}):Prom
 }
 /** Only provider-defined leaves, revalidated around nofollow/single-file open.
  * Callers still enforce their own file-size/schema/session-ID limits. */
-export async function openGrokSessionRecord(id:string,name:'usage.json'|'chat_history.jsonl',opts:GrokSessionRoots={}):Promise<OpenedFile|null>{
- if(!['usage.json','chat_history.jsonl'].includes(name))return null;
+export async function openGrokSessionRecord(id:string,name:'usage.json'|'chat_history.jsonl'|'updates.jsonl',opts:GrokSessionRoots={}):Promise<OpenedFile|null>{
+ if(!['usage.json','chat_history.jsonl','updates.jsonl'].includes(name))return null;
  const location=await locateGrokSession(id,opts);if(!location)return null;
  const path=join(location.dir,name);let opened:OpenedFile|null=null;
  try{
