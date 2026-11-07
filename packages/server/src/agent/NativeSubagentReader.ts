@@ -1,0 +1,101 @@
+import { realpath, lstat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join, sep } from "node:path";
+import { findCodexRecordFile } from "./codexSession.js";
+import { openVerified, readRange, type OpenedFile } from "./safeFile.js";
+import { openExtra, type ExtraRoots } from "../conversation/ExtraAgentRecords.js";
+import { NativeSubagentRecords, type NativeSubagentKind } from "./NativeSubagentRecords.js";
+import type { Subagents } from "./SubagentTracker.js";
+
+export interface NativeSubagentSource {
+  paneId: string;
+  instanceId: string;
+  kind: NativeSubagentKind;
+  sessionId: string;
+}
+interface State {
+  key: string;
+  fold: NativeSubagentRecords;
+  offset: number;
+  dev: number;
+  ino: number;
+  invalid: boolean;
+  reading?: Promise<Subagents | undefined>;
+}
+const CHUNK = 4 * 1024 * 1024;
+const MAX_BYTES = 512 * 1024 * 1024;
+const MAX_LINE = 256 * 1024;
+
+/** Exact owned-session files only. No CLI/model launch, directory-wide transcript scan, or latest-session fallback. */
+export class NativeSubagentReader {
+  private readonly states = new Map<string, State>();
+  private closed = false;
+  constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}) {}
+
+  forget(paneId: string): void { this.states.delete(paneId); }
+  close(): void { this.closed = true; this.states.clear(); }
+
+  async read(source: NativeSubagentSource): Promise<Subagents | undefined> {
+    if (this.closed) return undefined;
+    const key = JSON.stringify([source.instanceId, source.kind, source.sessionId]);
+    let state = this.states.get(source.paneId);
+    if (!state || state.key !== key) {
+      state = { key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false };
+      this.states.set(source.paneId, state);
+    }
+    const current = state;
+    current.reading ??= this.refresh(source, current).catch(() => undefined).finally(() => { delete current.reading; });
+    const value = await current.reading;
+    return !this.closed && this.states.get(source.paneId) === current ? value : undefined;
+  }
+
+  private async open(source: NativeSubagentSource): Promise<OpenedFile | null> {
+    if (source.kind !== "codex") return openExtra(source.kind, source.sessionId, this.roots);
+    const home = await realpath(this.roots.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex")).catch(() => null);
+    if (!home) return null;
+    const file = await findCodexRecordFile(home, source.sessionId);
+    if (!file || !file.startsWith(join(home, "sessions") + sep) || await realpath(file).catch(() => null) !== file) return null;
+    const opened = await openVerified(file);
+    if (!opened) return null;
+    try {
+      const after = await lstat(file);
+      if (after.dev !== opened.st.dev || after.ino !== opened.st.ino || await realpath(file) !== file) throw Error("record changed");
+      return opened;
+    } catch { await opened.fd.close(); return null; }
+  }
+
+  private async refresh(source: NativeSubagentSource, state: State): Promise<Subagents | undefined> {
+    const opened = await this.open(source);
+    if (!opened) return undefined;
+    try {
+      const { fd, st } = opened;
+      if (state.dev !== st.dev || state.ino !== st.ino || st.size < state.offset) {
+        state.offset = 0; state.fold = new NativeSubagentRecords(source.kind, source.sessionId); state.invalid = false;
+      }
+      state.dev = st.dev; state.ino = st.ino;
+      if (state.invalid || st.size > MAX_BYTES) return undefined;
+      const bytes = await readRange(fd, state.offset, Math.min(CHUNK, st.size - state.offset));
+      const scanning = state.offset + bytes.length < st.size;
+      const end = bytes.lastIndexOf(10);
+      if (end < 0) {
+        if (bytes.length > MAX_LINE) state.invalid = true;
+        return state.invalid ? undefined : state.fold.snapshot();
+      }
+      let start = 0;
+      while (start <= end) {
+        const next = bytes.indexOf(10, start);
+        if (next < 0 || next > end) break;
+        if (next - start > MAX_LINE) state.invalid = true;
+        else if (next > start) {
+          try { state.fold.consume(JSON.parse(bytes.subarray(start, next).toString("utf8"))); }
+          catch { state.invalid = true; }
+        }
+        start = next + 1;
+      }
+      state.offset += end + 1;
+      // Do not show a historical prefix as current activity until the full available record was folded.
+      if (state.invalid || scanning) return undefined;
+      return state.fold.snapshot();
+    } finally { await opened.fd.close(); }
+  }
+}

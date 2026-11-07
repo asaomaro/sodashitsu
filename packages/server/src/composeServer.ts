@@ -137,6 +137,7 @@ import { AgentForkRunner } from "./agent/AgentForkRunner.js";
 import { GraphPaneCleanup } from "./graph/GraphPaneCleanup.js";
 import { GraphMaintainer } from "./graph/GraphMaintainer.js";
 import { SubagentTracker } from "./agent/SubagentTracker.js";
+import { NativeSubagentService } from "./agent/NativeSubagentService.js";
 import { SubagentTranscriptReader } from "./agent/SubagentTranscript.js";
 import { UsageInsightsReader } from "./usage/UsageInsights.js";
 import { UsageService } from "./usage/UsageService.js";
@@ -669,6 +670,7 @@ export async function composeServer(
     clearTimer: (h) => clearTimeout(h as NodeJS.Timeout),
     logger,
   });
+  const nativeSubagents = new NativeSubagentService({ session, bus });
   // サブエージェントの記録を、読むだけで追う（20261008-graph-first の PR6c）。場所は、上の数え上げが持つ報告から、サーバが組み立てる。
   const subagentTranscripts = new SubagentTranscriptReader({
     tracker: subagents,
@@ -1224,6 +1226,7 @@ export async function composeServer(
         }
         builtinViews.sync();
         sessionLoaded = true;
+        nativeSubagents.start();
         // 止まっている間に閉じた pane のノードを外す（復元した pane に無いもの。id は再利用されないので、`session.json` が読めなかった起動の保存済みノードもここで外れる）。
         const prunedNodes = await paneCleanup.pruneMissing();
         if (prunedNodes > 0) logger.info("graph.json had nodes of closed panes; removed them", { nodes: prunedNodes });
@@ -1311,7 +1314,7 @@ export async function composeServer(
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
-        subagents.close();
+        subagents.close();nativeSubagents.close();
         remoteLinks.closeAll();
         paneHistory?.stop();
         imageSweeper?.stop();
@@ -1369,7 +1372,7 @@ export async function composeServer(
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
-        subagents.close();
+        subagents.close();nativeSubagents.close();
         remoteLinks.closeAll();
         extraOrigins.close();
         delegations.close();
@@ -1410,7 +1413,7 @@ export async function composeServer(
           // Worker復旧では同じスレッドで旧コードを再構成する。保存失敗でも
           // 旧待ち受け・周期処理を残して新サーバと競合させない。
           graphEngine.stop();lineage.close();builtinViews.close();summarySub.dispose();summaries.close();await scheduler.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
-          usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
+          usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();nativeSubagents.close();
           remoteLinks.closeAll();await machines.stop().catch(()=>undefined);
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();
           await graph.close().catch(()=>undefined);
