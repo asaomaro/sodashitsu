@@ -1,0 +1,82 @@
+10:56:08 PM [vite] (client) [console.warn] [Vue warn]: injection "Symbol(viewSync)" not found. 
+  at <PaneLayout workspaceId="w" tabId="t" layout= {"type":"pane","paneId":"visible-worker"}  ... > 
+  at <App>
+fixture console: Failed to load resource: the server responded with a status of 404 (Not Found)
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+ExpectError: expect(locator).not.toContainText(expected) failed
+
+Locator: locator('.sidebar')
+Expected substring: not "captain-hidden"
+Received string: "端末グラフ状況その他 ▾▾spaces開いた順○captain-workspace▾agentsグループ順○captain-workspacework-tabcaptain-hiddenCodex○captain-workspacework-tabvisible-workerCodex＋ 新規メニュー‹"
+Timeout: 5000ms
+
+Call log:
+  - Expect "not toContainText" locator('.sidebar') with timeout 5000ms
+  - waiting for locator('.sidebar')
+    14 × locator resolved to <nav class="sidebar" data-v-6dec5f19="">…</nav>
+       - unexpected value "端末グラフ状況その他 ▾▾spaces開いた順○captain-workspace▾agentsグループ順○captain-workspacework-tabcaptain-hiddenCodex○captain-workspacework-tabvisible-workerCodex＋ 新規メニュー‹"
+
+    at captureRawStack (/workspaces/sodashitsu-captain-normal-view/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js:8588:17)
+    at callMatcherAsStep (/workspaces/sodashitsu-captain-normal-view/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13310:57)
+    at Object.toContainText (/workspaces/sodashitsu-captain-normal-view/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13302:23)
+    at /workspaces/sodashitsu-captain-normal-view/.aidev/works/20261107-captain-normal-view/browser.mjs:12:998 {
+  matcherResult: {
+    name: 'toContainText',
+    expected: 'captain-hidden',
+    message: 'expect(locator).not.toContainText(expected) failed\n' +
+      '\n' +
+      "Locator: locator('.sidebar')\n" +
+      'Expected substring: not "captain-hidden"\n' +
+      'Received string: "端末グラフ状況その他 ▾▾spaces開いた順○captain-workspace▾agentsグループ順○captain-workspacework-tabcaptain-hiddenCodex○captain-workspacework-tabvisible-workerCodex＋ 新規メニュー‹"\n' +
+      'Timeout: 5000ms\n' +
+      '\n' +
+      'Call log:\n' +
+      `  - Expect "not toContainText" locator('.sidebar') with timeout 5000ms\n` +
+      "  - waiting for locator('.sidebar')\n" +
+      '    14 × locator resolved to <nav class="sidebar" data-v-6dec5f19="">…</nav>\n' +
+      '       - unexpected value "端末グラフ状況その他 ▾▾spaces開いた順○captain-workspace▾agentsグループ順○captain-workspacework-tabcaptain-hiddenCodex○captain-workspacework-tabvisible-workerCodex＋ 新規メニュー‹"\n',
+    pass: true,
+    actual: '端末グラフ状況その他 ▾▾spaces開いた順○captain-workspace▾agentsグループ順○captain-workspacework-tabcaptain-hiddenCodex○captain-workspacework-tabvisible-workerCodex＋ 新規メニュー‹',
+    log: [
+      `  - Expect "not toContainText" locator('.sidebar') with timeout 5000ms`,
+      "  - waiting for locator('.sidebar')",
+      '    14 × locator resolved to <nav class="sidebar" data-v-6dec5f19="">…</nav>',
+      '       - unexpected value "端末グラフ状況その他 ▾▾spaces開いた順○captain-workspace▾agentsグループ順○captain-workspacework-tabcaptain-hiddenCodex○captain-workspacework-tabvisible-workerCodex＋ 新規メニュー‹"'
+    ],
+    timeout: 5000,
+    ariaSnapshot: '- navigation:\n' +
+      '  - group "画面の切り替え":\n' +
+      '    - button "端末" [pressed]\n' +
+      '    - button "グラフ"\n' +
+      '    - button "状況（ダッシュボード）": 状況\n' +
+      '    - button "その他 ▾"\n' +
+      '  - region "spaces":\n' +
+      '    - button "spaces" [expanded]\n' +
+      `    - 'button "並び順: 開いた順（押すと切り替え）"': 開いた順\n` +
+      '    - img "待機中": ○\n' +
+      '    - text: captain-workspace\n' +
+      '  - separator "spaces と agents の境目"\n' +
+      '  - region "agents":\n' +
+      '    - button "agents" [expanded]\n' +
+      `    - 'button "並び順: グループ順（押すと切り替え）"': グループ順\n` +
+      '    - img "待機中": ○\n' +
+      '    - text: captain-workspace work-tab\n' +
+      '    - button "captain-hiddenの利用状況（情報）"\n' +
+      '    - text: captain-hidden Codex\n' +
+      '    - img "待機中": ○\n' +
+      '    - text: captain-workspace work-tab\n' +
+      '    - button "visible-workerの利用状況（情報）"\n' +
+      '    - text: visible-worker Codex\n' +
+      '  - button "新規": ＋ 新規\n' +
+      '  - button "メニュー"\n' +
+      '  - button "表示モード：ダークモード。クリックでシステムに合わせる"\n' +
+      '  - button "通知の一覧"\n' +
+      '  - button "サイドバーを畳む" [expanded]\n' +
+      '  - separator "サイドバーの幅"'
+  }
+}
+
+Node.js v24.22.2

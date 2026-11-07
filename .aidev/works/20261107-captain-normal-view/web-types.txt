@@ -1,0 +1,4 @@
+
+> @sodashitsu/web@0.1.0 typecheck /workspaces/sodashitsu-captain-normal-view/packages/web
+> vue-tsc --noEmit -p tsconfig.typecheck.json
+

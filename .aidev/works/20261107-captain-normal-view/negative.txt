@@ -1,0 +1,76 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-captain-normal-view
+
+ ❯ |@sodashitsu/tui| src/model/SessionModel.test.ts (12 tests | 1 failed | 11 skipped) 10ms
+   × normal TUI focus/layout excludes exact captain while raw pane and same-tab sibling remain 9ms
+ ❯ |@sodashitsu/web| src/store/normalSession.test.ts (3 tests | 1 failed | 2 skipped) 14ms
+   × repairs a hidden saved/server focus to normal sibling while raw dedicated attachment remains available 13ms
+ ❯ |@sodashitsu/web| src/components/Sidebar.test.ts (206 tests | 1 failed | 205 skipped) 49ms
+   × hides the exact captain row/empty workspace but retains its raw dedicated pane 48ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/components/Sidebar.test.ts > hides the exact captain row/empty workspace but retains its raw dedicated pane
+AssertionError: expected '端末グラフ状況その他 ▾▾spaces開いた順▾agentsグループ順◐c…' not to contain 'captain-hidden'
+
+Expected: "captain-hidden"
+Received: "端末グラフ状況その他 ▾▾spaces開いた順▾agentsグループ順◐captain-workt1captain-hiddenClaude Code＋ 新規メニュー‹"
+
+ ❯ src/components/Sidebar.test.ts:2757:95
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |@sodashitsu/web| src/store/normalSession.test.ts > repairs a hidden saved/server focus to normal sibling while raw dedicated attachment remains available
+AssertionError: expected 'captain' to be 'work' // Object.is equality
+
+Expected: "work"
+Received: "captain"
+
+ ❯ src/store/normalSession.test.ts:19:197
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |@sodashitsu/tui| src/model/SessionModel.test.ts > normal TUI focus/layout excludes exact captain while raw pane and same-tab sibling remain
+AssertionError: expected { type: 'split', id: 's1', …(4) } to deeply equal { type: 'pane', paneId: 'p2' }
+
+- Expected
++ Received
+
+  {
++   "a": {
++     "paneId": "p1",
++     "type": "pane",
++   },
++   "b": {
+      "paneId": "p2",
+      "type": "pane",
++   },
++   "dir": "right",
++   "id": "s1",
++   "ratio": 0.5,
++   "type": "split",
+  }
+
+ ❯ src/model/SessionModel.test.ts:180:125
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  3 failed | 218 skipped (221)
+   Start at  22:55:59
+   Duration  5.25s (transform 78%, import 16%, environment 5%, tests 1%)
+
+  Transform  |@sodashitsu/web| transforming modules took 4.29s · 76% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

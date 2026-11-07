@@ -1,0 +1,5 @@
+10:56:25 PM [vite] (client) [console.warn] [Vue warn]: injection "Symbol(viewSync)" not found. 
+  at <PaneLayout workspaceId="w" tabId="t" layout= {"type":"pane","paneId":"visible-worker"}  ... > 
+  at <App>
+fixture console: Failed to load resource: the server responded with a status of 404 (Not Found)
+{"generatedOnly":true,"realSidebarTabBarPaneLayout":true,"siblingRetained":true,"captainOnlyEmpty":true,"rawDedicatedLookupRetained":true,"normalFocusRepaired":true,"pageErrors":[]}

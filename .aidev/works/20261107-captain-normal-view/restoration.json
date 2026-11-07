@@ -1,0 +1,18 @@
+{
+  "negativeExitCode": 1,
+  "browserNegativeExitCode": 1,
+  "restoration": {
+    "packages/web/src/components/Sidebar.vue": {
+      "sha256": "147e23c6b5d51e9117d9309bdec85baca8453e38225b1e484ee7a4a77189848a",
+      "exact": true
+    },
+    "packages/web/src/store/StoreAdapter.ts": {
+      "sha256": "d7e7c46d36fa44ebee0bf99471bc2270afa2e0ad025603fe358c6800ca01a215",
+      "exact": true
+    },
+    "packages/tui/src/model/SessionModel.ts": {
+      "sha256": "711c134a2680fce64f19e86ea59de76b0018af81350897c14c8c242a9cf0ed8e",
+      "exact": true
+    }
+  }
+}
