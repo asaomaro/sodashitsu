@@ -64,8 +64,8 @@ export const AssistantLaunchSettings = z.object({
 }).strict();
 export type AssistantLaunchSettings = z.infer<typeof AssistantLaunchSettings>;
 /** CLI spellings and supported effort values, shared by launch validation and settings. */
-export const ASSISTANT_AGENT_KINDS = ["claude", "codex", "muse", "agy", "copilot"] as const;
-export const ASSISTANT_AGENT_LABELS = {claude:"Claude Code",codex:"Codex",muse:"Muse Code",agy:"Antigravity CLI",copilot:"GitHub Copilot CLI"} as const;
+export const ASSISTANT_AGENT_KINDS = ["claude", "codex", "muse", "agy", "copilot", "grok"] as const;
+export const ASSISTANT_AGENT_LABELS = {claude:"Claude Code",codex:"Codex",muse:"Muse Code",agy:"Antigravity CLI",copilot:"GitHub Copilot CLI",grok:"Grok Build"} as const;
 export interface AssistantAudioCapabilities {
   kind: string | null;
   /** Integration support only; does not prove CLI/model readiness or grant a turn. */
@@ -93,6 +93,7 @@ export const ASSISTANT_EFFORTS = {
  muse:["none","minimal","low","medium","high","xhigh","max","ultra"],
  agy:["low","medium","high","xhigh","max"],
  copilot:["none","minimal","low","medium","high","xhigh","max"],
+ grok:["none","minimal","low","medium","high","xhigh","max"],
 } as const;
 export function assistantLaunchArgs(kind:string,input:unknown):string[]{
  const settings=AssistantLaunchSettings.parse(input);
@@ -101,7 +102,7 @@ export function assistantLaunchArgs(kind:string,input:unknown):string[]{
  }
  const key=kind as keyof typeof ASSISTANT_EFFORTS;
  if(settings.effort&&!(ASSISTANT_EFFORTS[key] as readonly string[]).includes(settings.effort))throw Error("このエージェントでは指定できないeffortです");
- return [...(settings.model?["--model",settings.model]:[]),...(settings.effort?kind==="codex"?["-c",`model_reasoning_effort=${JSON.stringify(settings.effort)}`]:[kind==="muse"||kind==="copilot"?"--reasoning-effort":"--effort",settings.effort]:[])];
+ return [...(settings.model?["--model",settings.model]:[]),...(settings.effort?kind==="codex"?["-c",`model_reasoning_effort=${JSON.stringify(settings.effort)}`]:[kind==="muse"||kind==="copilot"||kind==="grok"?"--reasoning-effort":"--effort",settings.effort]:[])];
 }
 export const AssistantAgentProfiles=z.object({
  claude:AssistantLaunchSettings.default({model:"",effort:""}),
@@ -109,6 +110,7 @@ export const AssistantAgentProfiles=z.object({
  muse:AssistantLaunchSettings.default({model:"",effort:""}),
  agy:AssistantLaunchSettings.default({model:"",effort:""}),
  copilot:AssistantLaunchSettings.default({model:"",effort:""}),
+ grok:AssistantLaunchSettings.default({model:"",effort:""}),
 }).strict().superRefine((profiles,ctx)=>{
  for(const kind of ASSISTANT_AGENT_KINDS){try{assistantLaunchArgs(kind,profiles[kind]);}
  catch{ctx.addIssue({code:"custom",path:[kind,"effort"],message:"指定できないeffortです"});}}

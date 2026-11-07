@@ -18,12 +18,21 @@ it("persists independent profiles while rejecting unsupported combinations", () 
  expect(() => DesktopAssistantPreferences.parse({agentProfiles:{claude:{effort:"ultra"}}})).toThrow();
 });
 
-it("offers all five independent profiles with their native model/effort flags",()=>{
+it("offers all six independent profiles with their native model/effort flags",()=>{
  for(const kind of ["muse","agy","copilot"]){
   expect(assistantLaunchArgs(kind,{model:"test-model",effort:"high"})).toEqual(["--model","test-model",kind==="agy"?"--effort":"--reasoning-effort","high"]);
  }
  const profiles=DesktopAssistantPreferences.parse({}).agentProfiles;
- expect(Object.keys(profiles)).toEqual(["claude","codex","muse","agy","copilot"]);
+ expect(Object.keys(profiles)).toEqual(["claude","codex","muse","agy","copilot","grok"]);
  expect(()=>assistantLaunchArgs("agy",{effort:"ultra"})).toThrow();
  expect(()=>assistantLaunchArgs("copilot",{effort:"ultra"})).toThrow();
+});
+
+it("preserves Grok launch choices without treating them as observations",()=>{
+ expect(assistantLaunchArgs("grok",{model:"grok-custom",effort:"xhigh"})).toEqual(["--model","grok-custom","--reasoning-effort","xhigh"]);
+ const legacy=DesktopAssistantPreferences.parse({agentProfiles:{codex:{model:"old",effort:"low"}}});
+ expect(legacy.agentProfiles.grok).toEqual({model:"",effort:""});
+ const saved=DesktopAssistantPreferences.parse({...legacy,agentProfiles:{...legacy.agentProfiles,grok:{model:"grok-custom",effort:"medium"}}});
+ expect(DesktopAssistantPreferences.parse(JSON.parse(JSON.stringify(saved))).agentProfiles).toEqual(saved.agentProfiles);
+ expect(()=>assistantLaunchArgs("grok",{effort:"ultra"})).toThrow();
 });
