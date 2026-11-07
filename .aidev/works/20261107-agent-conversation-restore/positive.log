@@ -1,0 +1,17 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-agent-conversation-parity/packages/server
+> vitest run src/assistant/AssistantSessions.test.ts src/agent/ProcessMatcher.test.ts src/assistant/AssistantConversation.test.ts src/conversation/ConversationService.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agent-conversation-parity/packages/server
+
+
+ Test Files  4 passed (4)
+      Tests  145 passed (145)
+   Start at  11:46:23
+   Duration  2.91s (transform 45%, tests 43%, import 11%)
+
+  Transform  transforming modules took 2.03s · 45% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

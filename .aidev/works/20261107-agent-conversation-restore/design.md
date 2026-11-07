@@ -1,0 +1,3 @@
+# 設計
+
+既存ProcessMatcher.agentProcessPidsの外側CLI境界を維持し、明示UUID再開引数を5種類で取得する。`--`以降、picker/latest/name、既知の値引数内の文字列、ツール配下の同種agentは採用しない。複数の明示IDは競合として棄却する。MuseはCLIと同じUUIDv7だけを認める。SessionServiceは前面kindと現在instanceが一致した一度だけargv証拠をattachByEvidenceへ渡す。Codexの終了/復元処理は維持する。

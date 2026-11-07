@@ -285,11 +285,12 @@ it("bounds concurrent workspace creation at32 devices", async () => {
   expect(f.session.snapshot().workspaces.filter((w) => w.assistant)).toHaveLength(32);
 });
 
-it("round-trips ownership and verified conversation identity without starting another agent after restore", async () => {
+it.each(["claude", "codex", "muse", "agy", "copilot"] as const)("round-trips dedicated %s ownership and verified conversation identity without starting another agent after restore", async kind => {
   const f = await fixture();
-  const { device, info, agent } = await f.ready();
-  const sessionId = randomUUID();
-  f.session.reportAgentSession(info.paneId, "codex", sessionId);
+  const device = randomUUID(), info = await f.ensure(device, kind), agent = f.detect(info);
+  await f.ensure(device, kind);
+  const sessionId = kind === "muse" ? "01a19c67-c59e-7060-aa2e-7f556e90b495" : randomUUID();
+  f.session.reportAgentSession(info.paneId, kind, sessionId);
   const pane = f.session.getPane(info.paneId)!;
   const tab = f.session.getTab(pane.tabId)!;
   const ws = f.session.getWorkspace(info.workspaceId)!;
@@ -354,7 +355,7 @@ it("round-trips ownership and verified conversation identity without starting an
     }
     if (evidence.startsWith("argv"))
       g.session.setFrontAgent(info.paneId, {
-        kind: "codex",
+        kind,
         pids: new Set([1234]),
         resumeId: sessionId,
       });
@@ -365,18 +366,18 @@ it("round-trips ownership and verified conversation identity without starting an
       continue;
     }
     if (evidence === "hook") {
-      expect((await g.ensure(device)).state).toBe("conflict"); // Persisted reference alone is never proof.
-      g.session.reportAgentSession(info.paneId, "codex", sessionId);
+      expect((await g.ensure(device, kind)).state).toBe("conflict"); // Persisted reference alone is never proof.
+      g.session.reportAgentSession(info.paneId, kind, sessionId);
     }
-    expect((await g.ensure(device)).state).toBe("ready");
+    expect((await g.ensure(device, kind)).state).toBe("ready");
     expect(g.manager.target(device, resumed.instanceId).paneId).toBe(info.paneId);
     expect(g.start).not.toHaveBeenCalled();
     const foreign = { ...resumed, instanceId: randomUUID() };
-    g.session.setFrontAgent(info.paneId, { kind: "codex", pids: new Set([5678]) });
+    g.session.setFrontAgent(info.paneId, { kind, pids: new Set([5678]) });
     g.session.updatePaneRuntime(info.paneId, { agent: foreign });
     expect(g.session.getPane(info.paneId)?.agentSession?.sessionId).toBe(sessionId);
-    g.session.reportAgentSession(info.paneId, "codex", sessionId);
-    expect((await g.ensure(device)).state).toBe("conflict");
+    g.session.reportAgentSession(info.paneId, kind, sessionId);
+    expect((await g.ensure(device, kind)).state).toBe("conflict");
     expect(g.manager.get(device)?.state).toBe("conflict");
     expect(() => g.manager.target(device, foreign.instanceId)).toThrow("変更");
   }
@@ -391,9 +392,10 @@ it("requires a verified current conversation and idle actor for direct Codex aud
  f.session.updatePaneRuntime(info.paneId,{agent:{...agent,instanceId:randomUUID()}});expect(()=>f.manager.audioTarget(device,agent.instanceId)).toThrow();
 });
 
-it("pins assistant prompts and keys through the existing final queued-input guard", async () => {
+it.each(["claude", "codex", "muse", "agy", "copilot"] as const)("pins dedicated %s prompts and keys through the existing final queued-input guard", async kind => {
   const f = await fixture();
-  const { device, info, agent } = await f.ready();
+  const device = randomUUID(), info = await f.ensure(device, kind), agent = f.detect(info);
+  await f.ensure(device, kind);
   const surface = new ControlSurface(new MemoryLogger());
   const deps = {
     session: f.session,
@@ -826,7 +828,7 @@ it("checks image expiry again after final target metadata inspection", async () 
  } finally {now.mockRestore();release?.();}
 });
 
-it.each(["codex","copilot","agy","muse"] as const)("requires this dedicated %s actor's verified conversation ID",async kind=>{
+it.each(["claude","codex","copilot","agy","muse"] as const)("requires this dedicated %s actor's verified conversation ID",async kind=>{
  const f=await fixture(),device=randomUUID(),info=await f.ensure(device,kind),actor=f.detect(info);await f.ensure(device,kind);
  expect(()=>f.manager.conversationTarget(device,actor.instanceId)).toThrow("会話ID");const id=randomUUID();f.session.reportAgentSession(info.paneId,kind,id);
  expect(f.manager.conversationTarget(device,actor.instanceId)).toMatchObject({kind,sessionId:id,paneId:info.paneId});expect(()=>f.manager.conversationTarget(device,randomUUID())).toThrow();

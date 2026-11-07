@@ -173,3 +173,33 @@ it("attributes Antigravity resume argv only to its outer CLI process", () => {
   }
   expect(agentResumeSessionId(job(10, [proc(10, ["agy", "--conversation", "../bad"])]), "agy")).toBeUndefined();
 });
+
+it.each([
+  ["claude", ["--resume", "12345678-abcd-ef01-2345-6789abcdef01"]],
+  ["claude", ["-r", "12345678-abcd-ef01-2345-6789abcdef01"]],
+  ["claude", ["--resume=12345678-abcd-ef01-2345-6789abcdef01"]],
+  ["copilot", ["--resume=12345678-abcd-ef01-2345-6789abcdef01"]],
+  ["copilot", ["--resume", "12345678-abcd-ef01-2345-6789abcdef01"]],
+  ["muse", ["resume", "01a19c67-c59e-7060-aa2e-7f556e90b495"]],
+  ["muse", ["--model", "fixture", "resume", "01a19c67-c59e-7060-aa2e-7f556e90b495"]],
+] as const)("takes the explicit %s resume UUID from its live CLI arguments %j", (kind, args) => {
+  const id = args.at(-1)!.split("=").at(-1)!;
+  expect(agentResumeSessionId(job(10, [{ ...proc(10, [kind, ...args]), ppid: 1 }]), kind)).toBe(id);
+});
+it.each(["claude", "copilot", "muse"] as const)("does not infer a %s session from a picker, latest, prompt, or nested agent", kind => {
+  const id = "01a19c67-c59e-7060-aa2e-7f556e90b495";
+  const resume = kind === "muse" ? ["resume", id] : ["--resume", id];
+  for (const args of [["--", ...resume], ["--continue"], ["--resume"], ["resume", "--last"], ["--resume", "session-name"], ["--prompt", ...resume]]) {
+    expect(agentResumeSessionId(job(10, [{ ...proc(10, [kind, ...args]), ppid: 1 }]), kind)).toBeUndefined();
+  }
+  const parent = { ...proc(10, [kind]), ppid: 1 };
+  const tool = { ...proc(11, ["bash"]), ppid: 10 };
+  const child = { ...proc(12, [kind, ...resume]), ppid: 11 };
+  expect(agentResumeSessionId(job(10, [parent, tool, child]), kind)).toBeUndefined();
+});
+it("refuses conflicting wrapper/agent resume IDs instead of selecting a file by process order", () => {
+  const a = { ...proc(10, ["copilot", "--resume=12345678-abcd-ef01-2345-6789abcdef01"]), ppid: 1 };
+  const b = { ...proc(11, ["copilot", "--resume=abcdef01-abcd-ef01-2345-6789abcdef01"]), ppid: 10 };
+  expect(agentResumeSessionId(job(10, [a, b]), "copilot")).toBeUndefined();
+  expect(agentResumeSessionId(job(10, [b, a]), "copilot")).toBeUndefined();
+});

@@ -1,0 +1,10 @@
+{
+  "packages/server/src/agent/ProcessMatcher.ts": {
+    "byteExact": true,
+    "sha256": "7c4e0007af6e69a64fc440dd8f4c64c8bb8be5ee703f1d2135ccc8e71775bb61"
+  },
+  "packages/server/src/session/SessionService.ts": {
+    "byteExact": true,
+    "sha256": "6ae3e8094aaf8c197b28d3c3071647f8ddde531838e4d6224c1fcdeb0c205eeb"
+  }
+}

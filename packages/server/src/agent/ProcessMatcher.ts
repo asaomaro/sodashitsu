@@ -63,21 +63,42 @@ export function agentProcessPids(job: ForegroundJob, kind: string): number[] {
   return [...cluster];
 }
 
-/**
- * 前面のジョブの、`kind` のエージェントのプロセスの引数にある、会話の id（Codex の `codex resume <id>`）。無ければ undefined。
- * 復元で打ち込んだ・利用者が打った `codex resume <id>` の pane は、daemon の報告を待たずに、どの会話かが分かる（20261010-codex-multi-pane）。
+/** Explicit UUID resume arguments from the actual outer agent processes only.
+ * Pickers, latest-session switches, prompt strings and nested tool agents are not evidence.
  */
 export function agentResumeSessionId(job: ForegroundJob, kind: string): string | undefined {
-  if (kind !== "codex" && kind !== "agy") return undefined;
-  const pids = new Set(agentProcessPids(job, kind));
+  if (!["claude", "codex", "muse", "agy", "copilot"].includes(kind)) return undefined;
+  const pids = new Set(agentProcessPids(job, kind)), ids = new Set<string>();
   for (const p of job.processes) {
     if (!pids.has(p.pid)) continue;
-    const flag = p.argv.findIndex(a => a === "--conversation");
-    const raw = flag >= 0 ? p.argv[flag + 1] : p.argv.find(a => a.startsWith("--conversation="))?.slice(15);
-    const id = kind === "agy" ? (raw && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) ? raw : undefined) : codexResumeIdFromArgv(p.argv);
-    if (id !== undefined) return id;
+    const end = p.argv.indexOf("--"), args = end < 0 ? p.argv : p.argv.slice(0, end);
+    let raw: string | undefined;
+    if (kind === "codex") raw = codexResumeIdFromArgv(args);
+    else if (kind === "muse") {
+      const at = args.indexOf("resume");
+      // The canonical resume command is positional. Never interpret another
+      // subcommand's operand, or an option's literal value, as the subcommand.
+      if (at < 1 || args[at - 1]?.startsWith("-")) continue;
+      if (args.slice(1, at).some((a, i) => !a.startsWith("-") && !args[i]?.startsWith("-") && lookupAgentKind(a) !== "muse")) continue;
+      raw = args[at + 1];
+    } else {
+      const flags = kind === "agy" ? ["--conversation"] : kind === "claude" ? ["--resume", "-r"] : ["--resume"];
+      const values = new Set<string>();
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i]!;
+        if (["--prompt", "-p", "--model", "--settings", "--agent", "--effort", "--reasoning-effort"].includes(args[i - 1]!)) continue;
+        for (const flag of flags) {
+          const candidate = arg === flag ? args[i + 1] : arg.startsWith(flag + "=") ? arg.slice(flag.length + 1) : undefined;
+          if (candidate !== undefined) values.add(candidate);
+        }
+      }
+      if (values.size === 1) raw = [...values][0];
+      else if (values.size > 1) return undefined;
+    }
+    if (raw && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(raw) && (kind !== "muse" || raw[14] === "7")) ids.add(raw.toLowerCase());
   }
-  return undefined;
+  // Conflicting wrapper/agent arguments must not choose a conversation by order.
+  return ids.size === 1 ? [...ids][0] : undefined;
 }
 
 /**

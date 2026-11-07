@@ -1,0 +1,92 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-agent-conversation-parity/packages/server
+> vitest run src/assistant/AssistantSessions.test.ts src/agent/ProcessMatcher.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agent-conversation-parity/packages/server
+
+ ❯ src/agent/ProcessMatcher.test.ts (66 tests | 7 failed) 15ms
+   × takes the explicit claude resume UUID from its live CLI arguments ["--resume","12345678-abcd-ef01-2345-6789abcdef01"] 3ms
+   × takes the explicit claude resume UUID from its live CLI arguments ["-r","12345678-abcd-ef01-2345-6789abcdef01"] 2ms
+   × takes the explicit claude resume UUID from its live CLI arguments ["--resume=12345678-abcd-ef01-2345-6789abcdef01"] 0ms
+   × takes the explicit copilot resume UUID from its live CLI arguments ["--resume=12345678-abcd-ef01-2345-6789abcdef01"] 0ms
+   × takes the explicit copilot resume UUID from its live CLI arguments ["--resume","12345678-abcd-ef01-2345-6789abcdef01"] 0ms
+   × takes the explicit muse resume UUID from its live CLI arguments ["resume","01a19c67-c59e-7060-aa2e-7f556e90b495"] 0ms
+   × takes the explicit muse resume UUID from its live CLI arguments ["--model","fixture","resume","01a19c67-c59e-7060-aa2e-7f556e90b495"] 0ms
+ ❯ src/assistant/AssistantSessions.test.ts (59 tests | 3 failed) 1448ms
+   × round-trips dedicated claude ownership and verified conversation identity without starting another agent after restore 26ms
+   × round-trips dedicated muse ownership and verified conversation identity without starting another agent after restore 14ms
+   × round-trips dedicated copilot ownership and verified conversation identity without starting another agent after restore 13ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/ProcessMatcher.test.ts > takes the explicit claude resume UUID from its live CLI arguments ["--resume","12345678-abcd-ef01-2345-6789abcdef01"]
+ FAIL  src/agent/ProcessMatcher.test.ts > takes the explicit claude resume UUID from its live CLI arguments ["-r","12345678-abcd-ef01-2345-6789abcdef01"]
+ FAIL  src/agent/ProcessMatcher.test.ts > takes the explicit claude resume UUID from its live CLI arguments ["--resume=12345678-abcd-ef01-2345-6789abcdef01"]
+ FAIL  src/agent/ProcessMatcher.test.ts > takes the explicit copilot resume UUID from its live CLI arguments ["--resume=12345678-abcd-ef01-2345-6789abcdef01"]
+ FAIL  src/agent/ProcessMatcher.test.ts > takes the explicit copilot resume UUID from its live CLI arguments ["--resume","12345678-abcd-ef01-2345-6789abcdef01"]
+AssertionError: expected undefined to be '12345678-abcd-ef01-2345-6789abcdef01' // Object.is equality
+
+- Expected:
+"12345678-abcd-ef01-2345-6789abcdef01"
+
++ Received:
+undefined
+
+ ❯ src/agent/ProcessMatcher.test.ts:187:92
+    185| ] as const)("takes the explicit %s resume UUID from its live CLI argum…
+    186|   const id = args.at(-1)!.split("=").at(-1)!;
+    187|   expect(agentResumeSessionId(job(10, [{ ...proc(10, [kind, ...args]),…
+       |                                                                                            ^
+    188| });
+    189| it.each(["claude", "copilot", "muse"] as const)("does not infer a %s s…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  src/agent/ProcessMatcher.test.ts > takes the explicit muse resume UUID from its live CLI arguments ["resume","01a19c67-c59e-7060-aa2e-7f556e90b495"]
+ FAIL  src/agent/ProcessMatcher.test.ts > takes the explicit muse resume UUID from its live CLI arguments ["--model","fixture","resume","01a19c67-c59e-7060-aa2e-7f556e90b495"]
+AssertionError: expected undefined to be '01a19c67-c59e-7060-aa2e-7f556e90b495' // Object.is equality
+
+- Expected:
+"01a19c67-c59e-7060-aa2e-7f556e90b495"
+
++ Received:
+undefined
+
+ ❯ src/agent/ProcessMatcher.test.ts:187:92
+    185| ] as const)("takes the explicit %s resume UUID from its live CLI argum…
+    186|   const id = args.at(-1)!.split("=").at(-1)!;
+    187|   expect(agentResumeSessionId(job(10, [{ ...proc(10, [kind, ...args]),…
+       |                                                                                            ^
+    188| });
+    189| it.each(["claude", "copilot", "muse"] as const)("does not infer a %s s…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  src/assistant/AssistantSessions.test.ts > round-trips dedicated claude ownership and verified conversation identity without starting another agent after restore
+ FAIL  src/assistant/AssistantSessions.test.ts > round-trips dedicated muse ownership and verified conversation identity without starting another agent after restore
+ FAIL  src/assistant/AssistantSessions.test.ts > round-trips dedicated copilot ownership and verified conversation identity without starting another agent after restore
+AssertionError: expected 'conflict' to be 'ready' // Object.is equality
+
+Expected: "ready"
+Received: "conflict"
+
+ ❯ src/assistant/AssistantSessions.test.ts:372:50
+    370|       g.session.reportAgentSession(info.paneId, kind, sessionId);
+    371|     }
+    372|     expect((await g.ensure(device, kind)).state).toBe("ready");
+       |                                                  ^
+    373|     expect(g.manager.target(device, resumed.instanceId).paneId).toBe(i…
+    374|     expect(g.start).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  10 failed | 115 passed (125)
+   Start at  11:48:48
+   Duration  2.68s (tests 53%, transform 39%, import 8%)
+
+/workspaces/sodashitsu-agent-conversation-parity/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 test: `vitest run src/assistant/AssistantSessions.test.ts src/agent/ProcessMatcher.test.ts`
+Exit status 1

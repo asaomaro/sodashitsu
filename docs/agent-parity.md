@@ -34,3 +34,9 @@ Antigravityによる自動要約/レポート実行はLinuxのbubblewrapで利�
 ## statuslineの情報
 
 公開された数値を共通表示へ統合しています。CLIによって報告項目は異なります。Copilotの累計・文脈・AIC、Antigravityの報告コスト・effort・残量、MuseのMSP文脈と正規化済み累計・契約枠は[利用状況の追加情報](agent-usage.md#ステータスラインの追加情報)を参照してください。未報告項目まで同じ値が取れるという意味ではありません。
+
+## 専用会話の復元で確認する情報
+
+5種類とも、保存した専用セッションの所有情報に加え、現在のエージェントinstanceに結び付くフック、または実際の前面CLIの明示的なUUID再開引数を照合します。Claudeの`--resume`/`-r`、Codex/Museの`resume <UUID>`、Antigravityの`--conversation`、Copilotの`--resume`が対象です。MuseはUUIDv7に限定します。会話名、最新の会話、選択画面、プロンプト文字列、ツールが起動した子エージェントから会話IDを推測しません。ラッパーと本体でIDが競合する場合も採用しません。clear/fork後の会話変更はフックで追跡します。
+
+2026-11-07に、Claude・Muse・CopilotでUUID再開後にフックより先に専用会話を復元できない経路を修正しました。5種類の保存/復元と送信直前の対象確認はfixtureで検証しています。各CLIでモデルを呼ぶ実会話往復の検証とは区別します。
