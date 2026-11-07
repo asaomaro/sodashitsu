@@ -207,6 +207,7 @@ export class SubagentTracker {
   private start(r: Extract<Report, { type: "subagent_start" }>, pane: PaneState): void {
     const s = this.sessionOf(pane, r.sessionId);
     if (r.transcriptPath !== undefined) s.transcriptPath = r.transcriptPath;
+    this.pruneStopped(s); // Resume may reuse the same child ID after the existing stop-order guard expires.
     // 終了の報告のほうが先に届いた ID は、数えない（終了の報告は並行に走るので、起動より先に着くことがある）。
     if (s.items.has(r.agentId) || s.stopped.has(r.agentId)) return;
     const now = this.deps.now();

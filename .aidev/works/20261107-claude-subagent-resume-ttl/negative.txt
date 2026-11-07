@@ -1,0 +1,63 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-claude-subagent-ttl
+
+ ❯ |@sodashitsu/server| src/agent/SubagentTracker.test.ts (75 tests | 2 failed) 44ms
+   ❯ SubagentTracker（数える部分） (75)
+     × 正式な同じ子の再開は終了記憶の期限後に数え直す 7ms
+     × Stop先着直後の古いStartは復活させず、61秒後の正式Startでだけ復帰する 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentTracker.test.ts > SubagentTracker（数える部分） > 正式な同じ子の再開は終了記憶の期限後に数え直す
+AssertionError: expected [] to deeply equal [ 'resumed-child' ]
+
+- Expected
++ Received
+
+- [
+-   "resumed-child",
+- ]
++ []
+
+ ❯ src/agent/SubagentTracker.test.ts:121:19
+    119|     advance(61_000);
+    120|     rep({ type: "subagent_start", agentId: "resumed-child" });
+    121|     expect(ids()).toEqual(["resumed-child"]);
+       |                   ^
+    122|   });
+    123|   it("Stop先着直後の古いStartは復活させず、61秒後の正式Startでだけ復帰する", () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentTracker.test.ts > SubagentTracker（数える部分） > Stop先着直後の古いStartは復活させず、61秒後の正式Startでだけ復帰する
+AssertionError: expected [] to deeply equal [ 'stop-first' ]
+
+- Expected
++ Received
+
+- [
+-   "stop-first",
+- ]
++ []
+
+ ❯ src/agent/SubagentTracker.test.ts:132:19
+    130|     advance(1_000);
+    131|     rep({ type: "subagent_start", agentId: "stop-first" });
+    132|     expect(ids()).toEqual(["stop-first"]);
+       |                   ^
+    133|   });
+    134|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 73 passed (75)
+   Start at  16:54:37
+   Duration  268ms (transform 56%, tests 30%, import 12%, worker 2%)

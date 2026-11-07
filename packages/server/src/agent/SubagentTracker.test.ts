@@ -110,6 +110,28 @@ describe("SubagentTracker（数える部分）", () => {
     });
   });
 
+  it("正式な同じ子の再開は終了記憶の期限後に数え直す", () => {
+    rep({ type: "subagent_start", agentId: "resumed-child" });
+    expect(ids()).toEqual(["resumed-child"]);
+    rep({ type: "subagent_stop", agentId: "resumed-child" });
+    rep({ type: "subagent_start", agentId: "resumed-child" });
+    expect(ids()).toEqual([]); // The ambiguous late-start guard still applies within the existing TTL.
+    advance(61_000);
+    rep({ type: "subagent_start", agentId: "resumed-child" });
+    expect(ids()).toEqual(["resumed-child"]);
+  });
+  it("Stop先着直後の古いStartは復活させず、61秒後の正式Startでだけ復帰する", () => {
+    rep({ type: "subagent_stop", agentId: "stop-first" });
+    rep({ type: "subagent_start", agentId: "stop-first" });
+    expect(ids()).toEqual([]);
+    advance(60_000);
+    rep({ type: "subagent_start", agentId: "stop-first" });
+    expect(ids()).toEqual([]);
+    advance(1_000);
+    rep({ type: "subagent_start", agentId: "stop-first" });
+    expect(ids()).toEqual(["stop-first"]);
+  });
+
   it("知らない ID の終了は無視する", () => {
     rep({ type: "subagent_start", agentId: "a1" });
     rep({ type: "subagent_stop", agentId: "zzz" });
