@@ -172,6 +172,8 @@ export interface AgentSessionRef {
 /** エージェントが中で動かしているサブエージェント 1 件（pane は持たない。20261004-subagent-display）。 */
 export interface SubagentInfo {
   id: string;
+  /** Current task state. Omitted means working for existing providers; alive membership alone is unknown. */
+  state?: "working" | "idle" | "unknown";
   /** サブエージェントの種類。分からなければ項目なし。 */
   type?: string;
   description?: string;
@@ -214,7 +216,12 @@ export interface AgentInfo {
    * 実行中のサブエージェント（20261004-subagent-display）。フックの報告を一度も受けていない検出では項目なし（＝分からない）。
    * 受けたことがあれば持つ（0 件なら `count: 0`）。`items` は起動した順で最大 64 件、`count` は実際の数。この検出（`instanceId`）にだけ付く。
    */
-  subagents?: { count: number; items: SubagentInfo[] };
+  subagents?: {
+    count: number;
+    items: SubagentInfo[];
+    /** Omitted means working tasks. alive counts provider-owned children, including idle/unknown tasks. */
+    countBasis?: "working" | "alive";
+  };
 }
 
 export interface HostInfo {
