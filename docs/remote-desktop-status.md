@@ -76,7 +76,7 @@ U11は指定5種類の機能実装と生成回帰試験を完了しています�
 | U11 | 指定5種類の吹き出し会話／機能実装済・実会話検証別 | Claude・Codex・Muse Code・Antigravity CLI・Copilot CLIの会話adapter/表示/送信は既存対応。2026-11-07にClaude/Muse/Copilotの明示UUIDによる専用会話復元を修正し、5種類の所有情報復元・送信ガードをfixtureで検証 | 指定5種類の実CLI/モデルによる往復の合格はR5で管理。Bob Shellなど指定外のagentは専用端末へ展開し、全agent対応とはまとめない |
 | U12 | Codex以外への任意音声fileのモデル入力／連携調査 | 直接音声送信の実装はCodexのみ。WhisperとCLI独自音声は別 | 対象CLI/providerの統合方法とモデル入力形式を確認する。利用可能な方式には既存専用sessionへの明示送信・取消/期限・対応外エラーを実装し、別AIへ自動送信しない。利用可能なAPIを確認できないagentは未対応のまま記録する。実機合格はR5 |
 
-U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desktop/DesktopProviderCore.ts)、[Provider](../packages/server/src/desktop/DesktopProvider.ts)、[native helper](../scripts/remote-desktop/linux-portal-helper.py)と[macOS helper](../scripts/remote-desktop/macos-desktop-helper.swift)で確認しました。U9は[サインアウト後の専用経路](remote-desktop.md#サインアウト後の接続専用サービス実機検証待ち)、U11/U12は[assistantChat](../packages/desktop-assistant/src/assistantChat.ts)、[AssistantSessions](../packages/server/src/assistant/AssistantSessions.ts)、[CodexAudio](../packages/server/src/assistant/CodexAudio.ts)で確認しました。
+U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desktop/DesktopProviderCore.ts)、[Provider](../packages/server/src/desktop/DesktopProvider.ts)、[native helper](../scripts/remote-desktop/linux-portal-helper.py)と[macOS helper](../scripts/remote-desktop/macos-desktop-helper.swift)で確認しました。U9は[サインアウト後の専用経路](remote-desktop.md#サインアウト後の接続専用サービス実機で一部確認済み)、U11/U12は[assistantChat](../packages/desktop-assistant/src/assistantChat.ts)、[AssistantSessions](../packages/server/src/assistant/AssistantSessions.ts)、[CodexAudio](../packages/server/src/assistant/CodexAudio.ts)で確認しました。
 
 ## 着手順と依存関係
 
