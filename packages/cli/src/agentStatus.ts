@@ -51,6 +51,8 @@ export interface SubagentView {
   depth: number | null;
   /** Omission preserves the previous working-only JSON shape. */
   state?: SubagentInfo["state"];
+  model?: string;
+  modelBasis?: SubagentInfo["modelBasis"];
   reasoningEffort?: string;
   reasoningEffortBasis?: SubagentInfo["reasoningEffortBasis"];
 }
@@ -92,6 +94,8 @@ export function subagentsViewOf(subagents: AgentInfo["subagents"]): AgentView["s
       parentId: s.parentId ?? null,
       depth: s.depth ?? null,
       ...(s.state===undefined?{}:{state:s.state}),
+      ...(s.model===undefined?{}:{model:s.model}),
+      ...(s.modelBasis===undefined?{}:{modelBasis:s.modelBasis}),
       ...(s.reasoningEffort===undefined?{}:{reasoningEffort:s.reasoningEffort}),
       ...(s.reasoningEffortBasis===undefined?{}:{reasoningEffortBasis:s.reasoningEffortBasis}),
     })),

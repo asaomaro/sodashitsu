@@ -29,3 +29,8 @@ it('uses only turn-observed models, preserves role identity separately and suppo
  expect(subagentModelLabel(child)).toBe('observed-model low');expect(subagentModelLabel({id:'c',startedAt:1,type:'Explore',reasoningEffort:'low',reasoningEffortBasis:'session'})).toBe('effort low');
  expect(subagentModelLabel({id:'c',startedAt:1,type:'gpt-started-model'})).toBeUndefined();
 });
+
+it('shows only explicitly observed creation/session models without reintroducing time captions',()=>{
+ for(const basis of ['creation','session'] as const)expect(subagentModelLabel({id:'c',startedAt:0,type:'role',model:'effective-child',modelBasis:basis,reasoningEffort:'low',reasoningEffortBasis:'session'})).toBe('effective-child low');
+ expect(subagentModelLabel({id:'c',startedAt:0,type:'requested-parent',model:'unproven'})).toBeUndefined();
+});

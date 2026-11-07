@@ -13,5 +13,5 @@ export function subagentEffortLabel(child:SubagentInfo):{text:string;title:strin
  return {text:value,title:`effort ${value}`};
 }
 export function subagentModelLabel(child:SubagentInfo):string|undefined {
- const model=child.modelBasis==='turn'?child.model?.trim():undefined,effort=subagentEffortLabel(child);return model?[model,effort?.text].filter(Boolean).join(' '):effort?`effort ${effort.text}`:undefined;
+ const model=['turn','creation','session'].includes(child.modelBasis??'')?child.model?.trim():undefined,effort=subagentEffortLabel(child);return model?[model,effort?.text].filter(Boolean).join(' '):effort?`effort ${effort.text}`:undefined;
 }

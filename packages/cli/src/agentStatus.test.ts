@@ -276,3 +276,12 @@ it("keeps optional observed child effort and creation provenance in CLI JSON",()
  const result=subagentsViewOf({count:1,items:[{id:"generated-child",startedAt:1,reasoningEffort:"low",reasoningEffortBasis:"creation"}]});
  expect(result?.items[0]).toMatchObject({reasoningEffort:"low",reasoningEffortBasis:"creation"});
 });
+
+it('preserves formally observed child model/basis in CLI JSON without filling unknown values',()=>{
+ for(const basis of ['turn','creation','session'] as const){
+  const value=subagentsViewOf({count:1,items:[{id:'child',startedAt:0,model:'child-model',modelBasis:basis}]});
+  expect(JSON.parse(JSON.stringify(value)).items[0]).toMatchObject({model:'child-model',modelBasis:basis});
+ }
+ const unknown=subagentsViewOf({count:1,items:[{id:'child',startedAt:0,type:'parent-requested'}]})!.items[0]!;
+ expect(unknown).not.toHaveProperty('model');expect(unknown).not.toHaveProperty('modelBasis');
+});
