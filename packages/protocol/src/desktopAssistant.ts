@@ -66,6 +66,27 @@ export type AssistantLaunchSettings = z.infer<typeof AssistantLaunchSettings>;
 /** CLI spellings and supported effort values, shared by launch validation and settings. */
 export const ASSISTANT_AGENT_KINDS = ["claude", "codex", "muse", "agy", "copilot"] as const;
 export const ASSISTANT_AGENT_LABELS = {claude:"Claude Code",codex:"Codex",muse:"Muse Code",agy:"Antigravity CLI",copilot:"GitHub Copilot CLI"} as const;
+export interface AssistantAudioCapabilities {
+  kind: string | null;
+  /** Integration support only; does not prove CLI/model readiness or grant a turn. */
+  nativeAudio: boolean;
+  nativeAudioReason: string;
+  /** The local transcription route exists; the client must check its engine/settings. */
+  localTranscription: boolean;
+}
+/** Pure discovery: no CLI, model, audio engine, filesystem or credentials are accessed. */
+export function assistantAudioCapabilities(kind: string | null): AssistantAudioCapabilities {
+  return {
+    kind,
+    nativeAudio: kind === "codex",
+    nativeAudioReason: kind === "codex"
+      ? "音声入力対応モデルと、会話IDを確認した待機中の専用Codexが必要です。"
+      : kind
+        ? "このエージェントへの音声ファイル直接送信には未対応です。ローカルで文字起こしし、内容を確認して会話へ送れます。"
+        : "専用セッションを選択してください。ローカルの文字起こしは単独でも利用できます。",
+    localTranscription: true,
+  };
+}
 export const ASSISTANT_EFFORTS = {
  claude:["low","medium","high","xhigh","max"],
  codex:["none","minimal","low","medium","high","xhigh","max","ultra"],

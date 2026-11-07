@@ -7,7 +7,7 @@ import { AssistantConversationParams, type AssistantConversationPage } from "./a
 import {AssistantSettingsGetParams,AssistantSettingsSetParams,type AssistantSettingsResult} from "./assistantSettings.js";
 import { UsageHistoryParams, type UsageHistory, UsageReportParams, type UsageReport } from "./usageAnalytics.js";
 import { ExecMethods, type ExecResults } from "./exec.js";
-import { AssistantAudioBeginParams,AssistantAudioChunkParams,AssistantAudioIdParams } from "./desktopAssistant.js";
+import { AssistantAudioBeginParams,AssistantAudioChunkParams,AssistantAudioIdParams,type AssistantAudioCapabilities } from "./desktopAssistant.js";
 import { AssistantImageCancelParams, AssistantAppParams, AssistantAppOpenParams, AssistantAppCallParams, type AssistantAppsInfo, AssistantReminderSaveParams, AssistantReminderIdParams, type AssistantRemindersInfo, AssistantSourceParams, AssistantReplyParams, AssistantReplyKeysParams, type AssistantSourceInfo, AssistantSessionGetParams, AssistantSessionEnsureParams, AssistantSessionPromptParams, AssistantSessionKeysParams, AssistantSessionAdoptParams, type AssistantSessionInfo } from "./desktopAssistant.js";
 import { WorkMethods, WorkTransferMethods, type WorkResults } from "./work.js";
 import { WorkAgentMethods, type WorkAgentResults } from "./workAgent.js";
@@ -1620,6 +1620,7 @@ export const METHOD_SCHEMAS = {
   "assistant.adopt": AssistantSessionAdoptParams,
   "assistant.cancel_image": AssistantImageCancelParams,
   "assistant.audio_begin":AssistantAudioBeginParams,
+  "assistant.audio_capabilities":AssistantSessionGetParams,
   "assistant.audio_chunk":AssistantAudioChunkParams,
   "assistant.audio_commit":AssistantAudioIdParams,
   "assistant.audio_cancel":AssistantAudioIdParams,
@@ -1826,6 +1827,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "voice.cancel":{cancelled:boolean};
   "assistant.settings.set":AssistantSettingsResult;
   "assistant.audio_begin":{uploadId:string};
+  "assistant.audio_capabilities":AssistantAudioCapabilities;
   "assistant.audio_chunk":Record<string,never>;
   "assistant.audio_commit":{sent:true;turnId:string};
   "assistant.audio_cancel":Record<string,never>;
