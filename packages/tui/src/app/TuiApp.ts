@@ -1661,9 +1661,10 @@ export class TuiApp {
     this.shown = { workspaceId, tabId, paneId: focusedPaneId, nav };
   }
 
+  private sidebarUsageVisible=false;
   private usageWanted(): boolean {
     return this.ui.screen === "dashboard" ||
-      (!this.prefs.sidebarCollapsed&&!this.prefs.sectionsCollapsed.agents&&[...this.model.panes.values()].some(p=>p.agent&&!p.virtual)) ||
+      (this.sidebarUsageVisible&&!this.prefs.sidebarCollapsed&&!this.prefs.sectionsCollapsed.agents&&[...this.model.panes.values()].some(p=>p.agent&&!p.virtual)) ||
       ["usage", "usageAccounts", "accountCost"].includes(this.ui.dialogContext?.kind ?? "") ||
       (this.ui.screen === "base" &&
         loadStatuslineSettings(this.prefs.shared.statuslineSettings).enabled &&
@@ -1713,6 +1714,7 @@ export class TuiApp {
     });
     // Keep the renderer full-sized; pane/sidebar rectangles exclude the footer.
     layout.rows = rows;
+    this.sidebarUsageVisible=!!layout.sidebar&&layout.sidebar.w>0&&layout.sidebar.h>0&&!layout.sidebarCollapsed;
     this.statuslines.adjust(layout);
     this.usage.sync(this.usageWanted());
     return layout;

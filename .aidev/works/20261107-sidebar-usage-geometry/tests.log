@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-usage-geometry/packages/tui
+
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  18:02:41
+   Duration  4.26s (tests 49%, transform 42%, import 9%)
+

@@ -373,4 +373,14 @@ describe("端末版のサブエージェントの表示", () => {
     h.app.prefs.setLocal({...h.app.prefs.localState,sidebarSectionsCollapsed:{agents:true}});h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(false));
   });
 
+  it("stops sidebar-only usage when responsive layout hides it, retaining explicit info reason",async()=>{
+    const h=await start({subagents:subs(1)});h.app.prefs.apply({statuslineSettings:loadStatuslineSettings({enabled:false})},20000);h.app.renderNow();
+    await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(true));
+    h.io.resizeTo(63,30);h.app.renderNow();expect((h.app as unknown as {layout():{sidebar?:unknown}}).layout().sidebar).toBeUndefined();expect(h.app.prefs.sidebarCollapsed).toBe(false);
+    await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(false));
+    dispatcherOf(h.app).showUsageOf("p3");h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(true));
+    h.app.ui.closeDialog();h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(false));
+    h.io.resizeTo(100,30);h.app.renderNow();await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at(-1)?.params as {on:boolean}).on).toBe(true));
+  });
+
 });

@@ -1,0 +1,41 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-sidebar-usage-geometry/packages/tui
+
+ ❯ src/app/TuiApp.subagents.test.ts (23 tests | 1 failed | 22 skipped) 1133ms
+   ❯ 端末版のサブエージェントの表示 (23)
+     × stops sidebar-only usage when responsive layout hides it, retaining explicit info reason 1131ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > stops sidebar-only usage when responsive layout hides it, retaining explicit info reason
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/app/TuiApp.subagents.test.ts:380:105
+    378|     await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at…
+    379|     h.io.resizeTo(63,30);h.app.renderNow();expect((h.app as unknown as…
+    380|     await vi.waitFor(()=>expect((h.ws.requests("agent.usage_watch").at…
+       |                                                                                                         ^
+    381|     dispatcherOf(h.app).showUsageOf("p3");h.app.renderNow();await vi.w…
+    382|     h.app.ui.closeDialog();h.app.renderNow();await vi.waitFor(()=>expe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 skipped (23)
+   Start at  18:01:31
+   Duration  4.64s (transform 62%, tests 25%, import 13%)
+
+  Transform  transforming modules took 2.84s · 62% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-sidebar-usage-geometry/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/app/TuiApp.subagents.test.ts -t responsive layout hides
