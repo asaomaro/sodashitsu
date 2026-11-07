@@ -6,3 +6,5 @@
 - muse.jsonl: 親session streamのsubagent.control.*行のみ。recordはkind/subagent_id/parent_session_id/role/objective/depth/control_statusをホワイトリスト抽出し、それ以外のポリシー識別子・path・結果本文を除いた。行のID/sequence/型/version/時刻は実記録のまま。
 
 認証はprivate temp HOMEにだけコピーし、各probeはtimeoutとprocess-group cleanup、finallyでcredential削除。rootのprobe-receiptsと負対照は.aidev/works/20261107-nonclaude-subagents/evidenceを参照。利用者paneや通常会話を利用していない。Copilotのtestデータは導入SDK schema由来の生成fixtureで、実CLI確認の証拠ではない。
+
+Copilotの互換生成ケースは、導入SDK 0.0.362の`custom_agent.*`と現行公式SDKの`subagent.started/completed/failed`をそれぞれ明示する。toolCallId/イベントIDによる照合・重複除去、selected/deselectedの非実行扱い、不正/未知lifecycleの未取得を確認する。実CLIの子往復のfixtureではない。公式フィールド定義: https://github.com/github/copilot-sdk/blob/main/docs/features/streaming-events.md#sub-agent-and-skill-events

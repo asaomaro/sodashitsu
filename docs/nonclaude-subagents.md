@@ -7,7 +7,7 @@
 | Claude Code | 既存のSubagentStart/Stop等のフック | 従来の対応を維持 |
 | Codex | 親rolloutの`SubAgentActivity`と、同じ所有daemonのread-only `thread/read` | 0.166.0で隔離子起動・終了を確認。daemon 0.167.0の正式Unix WebSocketで所属3子のactiveを確認。Windows等の現在状態transportは未対応 |
 | Muse Code | 親session streamの`subagent.control.*`の開始・状態・result_ready | 1.4.14-R7309.1で隔離実CLIの子起動・終了を確認 |
-| GitHub Copilot CLI | 親`events.jsonl`のcustom_agent.started/completed/failed | 導入0.0.362のSDK schema・生成fixtureで確認。実CLI往復は未検証 |
+| GitHub Copilot CLI | 親`events.jsonl`の`custom_agent.started/completed/failed`および`subagent.started/completed/failed` | 導入0.0.362のSDK schemaと[現行SDKの正式イベント](https://github.com/github/copilot-sdk/blob/main/docs/features/streaming-events.md#sub-agent-and-skill-events)から生成fixtureで確認。実CLI往復は未検証 |
 | Antigravity CLI | 親の正式な`invoke_subagent`起動結果と、直属の子descriptorのUUID・`spawnStepIndex` | 1.4.12の隔離実CLIで子起動・応答・native list・killを確認。ALIVEは所属数、作業状態は不明 |
 | Bob Shell、その他 | 未対応 | 正式な親子取得契約が未確認。件数を推測しない |
 
@@ -40,3 +40,5 @@ Copilotの隔離実probeは、最初は隔離HOMEに認証が無いため停止�
 [Antigravity実起動記録](../.aidev/works/20261107-antigravity-subagents/probe.md)とsanitizeした親子fixtureを保存しています。利用者の会話・paneは使用せず、private HOMEの認証コピー・raw記録は採取後に削除しました。
 
 実CLIのfixtureは新しい空の一時PJと隔離HOMEだけで採取し、利用者paneや通常会話を操作していません。認証ファイル・account情報・利用者のプロンプト本文をリポジトリへ保存していません。production配線は一時サーバ・偽の親CLI・実記録形式から既存WebSocket event/snapshotまで確認します。[検証記録](../.aidev/works/20261107-nonclaude-subagents/)を参照してください。
+
+Copilotの両イベント名は同じ`toolCallId`を子の鍵にし、イベントIDで重複を除きます。`subagent.selected/deselected`はメインのcustom agent選択なので子の開始・終了として数えません。未知・不正な子lifecycleは未取得とし、親の`session.idle`や記録の時刻から子の現在の待機を補いません。

@@ -19,6 +19,7 @@ export class NativeSubagentRecords {
   private readonly codexRelations = new Map<string, { item: SubagentInfo; completed: boolean }>();
   private readonly codexReferences = new Map<string, SubagentInfo>();
   private codexMalformed = false;
+  private copilotMalformed = false;
   private seen = false;
   private limited = false;
   constructor(readonly kind: NativeSubagentKind, readonly sessionId: string) {}
@@ -32,7 +33,7 @@ export class NativeSubagentRecords {
   }
 
   snapshot(): Subagents | undefined {
-    if (!this.seen || this.limited || this.codexMalformed) return undefined;
+    if (!this.seen || this.limited || this.codexMalformed || this.copilotMalformed) return undefined;
     if (this.uncertain.size) {
       if (this.kind !== "codex" || [...this.uncertain].some(id => !this.codexReferences.has(id))) return undefined;
       const members = [
@@ -123,12 +124,17 @@ export class NativeSubagentRecords {
   }
 
   private copilot(row: Record<string, any>): void {
-    const data = object(row.data);
-    if (!data || typeof row.type !== "string" || !row.type.startsWith("custom_agent.")) return;
-    const at = Date.parse(row.timestamp);
-    if (!Number.isFinite(at)) return;
-    if (typeof row.id !== "string" || !ID.test(row.id) || !this.admit(`p:${row.id}`)) return;
+    if (typeof row.type !== "string" || !/^(?:custom_agent|subagent)\./.test(row.type)) return;
+    // Selecting the main custom agent is not a child execution lifecycle.
+    if (["subagent.selected", "subagent.deselected"].includes(row.type)) return;
+    const data = object(row.data), at = Date.parse(row.timestamp);
+    if (!data || !Number.isFinite(at) || typeof row.id !== "string" || !ID.test(row.id)
+      || typeof data.toolCallId !== "string" || !ID.test(data.toolCallId) || row.ephemeral === true) {
+      this.copilotMalformed = true; return;
+    }
+    if (!this.admit(`p:${row.id}`)) return;
     const type = label(data.agentName, 64), description = label(data.agentDescription, 200);
-    this.apply(data.toolCallId, row.type === "custom_agent.started" ? "active" : ["custom_agent.completed", "custom_agent.failed"].includes(row.type) ? "terminal" : "unknown", at, { ...(type ? { type } : {}), ...(description ? { description } : {}) });
+    const phase = row.type.slice(row.type.indexOf(".") + 1);
+    this.apply(data.toolCallId, phase === "started" ? "active" : ["completed", "failed"].includes(phase) ? "terminal" : "unknown", at, { ...(type ? { type } : {}), ...(description ? { description } : {}) });
   }
 }

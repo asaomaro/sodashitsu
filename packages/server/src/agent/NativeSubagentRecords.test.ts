@@ -104,4 +104,32 @@ describe("native subagent lifecycle records", () => {
     fold.consume(row("custom_agent.failed", "record-4", "call-2"));
     expect(fold.snapshot()?.count).toBe(0);
   });
+  it.each(["custom_agent", "subagent"])("folds explicit %s lifecycle, deduplicates events, and never treats selection as child work", family => {
+    const fold = new NativeSubagentRecords("copilot", "owned-parent");
+    const row = (phase: string, id: string, toolCallId = "child-call") => ({ id, type: `${family}.${phase}`, timestamp: "2026-11-07T00:00:00Z", data: { toolCallId, agentName: "explore" } });
+    fold.consume({ type: "subagent.selected", data: { agentName: "explore" } });
+    expect(fold.snapshot()).toBeUndefined();
+    fold.consume(row("started", "event-start"));
+    fold.consume(row("started", "event-start"));
+    expect(fold.snapshot()).toMatchObject({ count: 1, items: [{ id: "child-call", type: "explore" }] });
+    fold.consume({ type: "subagent.deselected", data: { toolCallId: "child-call" } });
+    expect(fold.snapshot()?.count).toBe(1);
+    fold.consume(row("completed", "event-complete"));
+    fold.consume(row("started", "event-start"));
+    expect(fold.snapshot()).toEqual({ count: 0, items: [] });
+    fold.consume(row("started", "event-second", "second-call"));
+    fold.consume(row("failed", "event-failed", "second-call"));
+    expect(fold.snapshot()).toEqual({ count: 0, items: [] });
+  });
+  it.each(["custom_agent", "subagent"])("fails closed for malformed and unknown %s lifecycle", family => {
+    const valid = { id: "event-start", type: `${family}.started`, timestamp: "2026-11-07T00:00:00Z", data: { toolCallId: "child-call" } };
+    for (const bad of [{ data: {} }, { id: "" }, { timestamp: "bad" }, { ephemeral: true }, { type: `${family}.future_state` }]) {
+      const fold = new NativeSubagentRecords("copilot", "owned-parent");
+      fold.consume({ ...valid, type: `${family}.completed` });
+      expect(fold.snapshot()?.count).toBe(0);
+      fold.consume({ ...valid, ...bad, id: "event-next", ...(bad.id !== undefined ? { id: bad.id } : {}) });
+      expect(fold.snapshot()).toBeUndefined();
+    }
+  });
+
 });

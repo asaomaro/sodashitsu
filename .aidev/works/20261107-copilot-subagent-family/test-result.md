@@ -1,0 +1,7 @@
+# Copilot lifecycle compatibility
+
+Scope: explicit legacy custom_agent.* and current subagent.* event families, same toolCallId child key, shared event-ID deduplication. selected/deselected select the main custom agent and never start/stop a child. Unknown lifecycle or malformed lifecycle envelope returns undefined rather than stale working/zero. No current-idle inference, provider process, settings, production input, or new model turn.
+
+Evidence: installed @github/copilot 0.0.362 sdk/index.d.ts has custom_agent.started/completed/failed; current upstream field reference documents subagent.started/completed/failed with toolCallId: https://github.com/github/copilot-sdk/blob/main/docs/features/streaming-events.md#sub-agent-and-skill-events (read 2026-11-07). The latest upstream schema is distinct from the installed version. Both tests are generated schema fixtures, not actual CLI child verification. Existing session/instance verified ownership and reader safety guards are unchanged. session.idle is ephemeral and applies to the parent, not a durable child idle proof.
+
+Node24.22.2; protocol bootstrap and server tsc -b and server complete test-source typecheck exit0. Old NativeSubagentRecords.ts only gives 3 failures / 10 passes on new 13-case suite (negative.txt); fixed file restored byte-exact SHA256 2e963fe10b1e9166a174eef197b5835e39377905eecd52c53650a7500aa5f4f7. Related Records/Reader/Service suites then 47 passed (restored.txt). Independent review requested from root. No duplicate full repository tests.
