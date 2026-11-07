@@ -1,0 +1,35 @@
+{
+  "oldMinimumGuardBudgetMet": false,
+  "fixed": {
+    "audioOpened": false,
+    "wasapiActivated": false,
+    "count": 100,
+    "meanMs": 0.13164300000000004,
+    "p50Ms": 0.07690000000000001,
+    "p95Ms": 0.1252,
+    "maxMs": 4.8079
+  },
+  "speedRatioFixedToOld": 0.04556453357469575,
+  "restored": {
+    "audioOpened": false,
+    "wasapiActivated": false,
+    "count": 100,
+    "meanMs": 0.10688200000000002,
+    "p50Ms": 0.07730000000000001,
+    "p95Ms": 0.1062,
+    "maxMs": 2.7392000000000003
+  },
+  "minimumChecksPerFrame": 7,
+  "oldGetter": {
+    "audioOpened": false,
+    "wasapiActivated": false,
+    "count": 100,
+    "meanMs": 2.889154999999999,
+    "p50Ms": 2.746,
+    "p95Ms": 3.7549,
+    "maxMs": 5.969600000000001
+  },
+  "restoredMinimumGuardBudgetMet": true,
+  "framePeriodMs": 20,
+  "fixedMinimumGuardBudgetMet": true
+}

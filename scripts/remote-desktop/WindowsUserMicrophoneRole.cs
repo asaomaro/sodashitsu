@@ -19,6 +19,7 @@ public static class SodaDesktopUserMicrophoneRole {
     }
     [StructLayout(LayoutKind.Sequential)]struct InfoEx {public uint level;public Level1 data;}
     [DllImport("kernel32.dll")]static extern uint WTSGetActiveConsoleSessionId();
+    [DllImport("kernel32.dll",SetLastError=true)]static extern bool ProcessIdToSessionId(uint processId,out uint sessionId);
     [DllImport("Wtsapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool WTSQuerySessionInformation(IntPtr server,uint session,int kind,out IntPtr data,out uint length);
     [DllImport("Wtsapi32.dll")]static extern void WTSFreeMemory(IntPtr data);
     [DllImport("advapi32.dll",SetLastError=true)]static extern bool GetTokenInformation(IntPtr token,int kind,out int value,int size,out int needed);
@@ -66,8 +67,19 @@ public static class SodaDesktopUserMicrophoneRole {
         }
         if(found==null)throw InvalidLogon();return found;
     }
+    internal static int CheckedSession(bool success,uint session){
+        if(!success||session==0||session>Int32.MaxValue)throw new InvalidOperationException("Ordinary microphone session required");
+        return checked((int)session);
+    }
+    // Read the same PID afresh. The .NET Framework ProcessInfo getter is too costly
+    // for this per-frame guard; neither session nor lock/token facts are cached.
+    internal static int NativeSessionId(int processId){
+        uint session=0;
+        bool success=processId>0&&ProcessIdToSessionId((uint)processId,out session);
+        return CheckedSession(success,session);
+    }
     static SodaDesktopUserMicrophonePolicy.Facts Read(Process process,WindowsIdentity identity){
-        var facts=new SodaDesktopUserMicrophonePolicy.Facts{System=identity.IsSystem,Owner=identity.User==null?null:identity.User.Value,Session=process.SessionId,ActiveSession=checked((int)WTSGetActiveConsoleSessionId()),LockState=-1};
+        var facts=new SodaDesktopUserMicrophonePolicy.Facts{System=identity.IsSystem,Owner=identity.User==null?null:identity.User.Value,Session=NativeSessionId(process.Id),ActiveSession=checked((int)WTSGetActiveConsoleSessionId()),LockState=-1};
         int elevated,needed;if(!GetTokenInformation(identity.Token,20,out elevated,4,out needed)||needed!=4)throw new InvalidOperationException("Ordinary microphone token required");facts.Elevated=elevated!=0;
         facts.Logon=LogonSid(identity.Token);
         IntPtr data;uint size;

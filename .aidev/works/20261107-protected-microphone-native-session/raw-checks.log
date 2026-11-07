@@ -1,0 +1,84 @@
+POSITIVE
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+native_logon_proof=true;managed_logon_count=0;peer_same_logon=true
+user_microphone_policy_checks_passed: ordinary SID/logon/session, UAC/Default only, irreversible lock, deadline/heartbeat/stream; fake facts only
+microphone_generated_pcm_checks_passed
+
+NEGATIVE native-session
+System.Exception: Malformed microphone session admitted
+   �ꏊ SodaMicrophoneTokenChecks.SessionDenied(Action call)
+   �ꏊ SodaMicrophoneTokenChecks.Generated()
+   �ꏊ Validator.Main()
+
+NEGATIVE native-logon
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+System.Exception: Role facts lost native logon
+   �ꏊ SodaMicrophoneTokenChecks.Native(Int32 peerPid)
+   �ꏊ Validator.Main()
+
+NEGATIVE lock
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+native_logon_proof=true;managed_logon_count=0;peer_same_logon=true
+System.Exception: Microphone survived lock
+   �ꏊ SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   �ꏊ Validator.Main()
+
+NEGATIVE system
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+native_logon_proof=true;managed_logon_count=0;peer_same_logon=true
+System.Exception: SYSTEM audio actor admitted
+   �ꏊ SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   �ꏊ Validator.Main()
+
+NEGATIVE elevation
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+native_logon_proof=true;managed_logon_count=0;peer_same_logon=true
+System.Exception: Elevated audio actor admitted
+   �ꏊ SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   �ꏊ Validator.Main()
+
+NEGATIVE logon
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+native_logon_proof=true;managed_logon_count=0;peer_same_logon=true
+System.Exception: Other logon microphone admitted
+   �ꏊ SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   �ꏊ Validator.Main()
+
+NEGATIVE startup
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+native_logon_proof=true;managed_logon_count=0;peer_same_logon=true
+System.Exception: Microphone startup extended
+   �ꏊ SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   �ꏊ Validator.Main()
+
+NEGATIVE heartbeat
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+native_logon_proof=true;managed_logon_count=0;peer_same_logon=true
+System.Exception: Microphone heartbeat expired
+   �ꏊ SodaDesktopUserMicrophonePolicy.GeneratedChecks()
+   �ꏊ Validator.Main()
+
+NEGATIVE peer
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+native_logon_proof=true;managed_logon_count=0;peer_same_logon=true
+user_microphone_policy_checks_passed: ordinary SID/logon/session, UAC/Default only, irreversible lock, deadline/heartbeat/stream; fake facts only
+System.Exception: Unverified peer activated microphone endpoint
+   �ꏊ SodaMicrophoneChecks.Run()
+   �ꏊ Validator.Main()
+
+RESTORED
+generated_native_session_boundary_rejections=8
+generated_token_group_boundary_rejections=28
+native_logon_proof=true;managed_logon_count=0;peer_same_logon=true
+user_microphone_policy_checks_passed: ordinary SID/logon/session, UAC/Default only, irreversible lock, deadline/heartbeat/stream; fake facts only
+microphone_generated_pcm_checks_passed
+

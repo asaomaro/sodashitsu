@@ -21,9 +21,15 @@ public static class SodaMicrophoneTokenChecks {
         public string Read(){return SodaDesktopUserMicrophoneRole.LogonGroups(Data,Length);}
         public void Dispose(){if(Data!=IntPtr.Zero){for(int n=0;n<Length;n++)Marshal.WriteByte(Data,n,0);Marshal.FreeHGlobal(Data);Data=IntPtr.Zero;}}
     }
-    static int rejected;
+    static int rejected,sessionRejected;
+    static void SessionDenied(Action call){try{call();}catch(InvalidOperationException){sessionRejected++;return;}throw new Exception("Malformed microphone session admitted");}
     static void Denied(Action call){try{call();}catch(InvalidOperationException){rejected++;return;}throw new Exception("Malformed microphone token groups admitted");}
     public static void Generated(){
+        if(SodaDesktopUserMicrophoneRole.CheckedSession(true,1)!=1||SodaDesktopUserMicrophoneRole.CheckedSession(true,Int32.MaxValue)!=Int32.MaxValue)throw new Exception("Native session rejected");
+        foreach(uint session in new[]{0u,(uint)Int32.MaxValue+1u,UInt32.MaxValue})SessionDenied(()=>SodaDesktopUserMicrophoneRole.CheckedSession(true,session));
+        foreach(uint session in new[]{0u,1u,UInt32.MaxValue})SessionDenied(()=>SodaDesktopUserMicrophoneRole.CheckedSession(false,session));
+        foreach(int pid in new[]{-1,0})SessionDenied(()=>SodaDesktopUserMicrophoneRole.NativeSessionId(pid));
+        Console.WriteLine("generated_native_session_boundary_rejections="+sessionRejected);
         const string logon="S-1-5-5-123-456",other="S-1-5-32-545";const uint flags=0xc0000007u;
         using(var g=new Groups(new[]{other,logon},new[]{7u,flags}))if(g.Read()!=logon)throw new Exception("Native logon rejected");
         using(var g=new Groups(new string[0],new uint[0]))Denied(()=>g.Read());
@@ -49,6 +55,7 @@ public static class SodaMicrophoneTokenChecks {
                 var method=typeof(SodaDesktopUserMicrophoneRole).GetMethod("Read",BindingFlags.Static|BindingFlags.NonPublic);
                 var facts=(SodaDesktopUserMicrophonePolicy.Facts)method.Invoke(null,new object[]{self,identity});
                 if(facts.Logon!=actual)throw new Exception("Role facts lost native logon");
+                if(facts.Session!=self.SessionId||facts.Session!=SodaDesktopUserMicrophoneRole.NativeSessionId(self.Id))throw new Exception("Native session fact changed");
             }
             foreach(IdentityReference group in identity.Groups)if(group.Value.StartsWith("S-1-5-5-",StringComparison.Ordinal))managed++;
             if(peerPid>0)using(var peer=Process.GetProcessById(peerPid)){IntPtr token;if(!OpenProcessToken(peer.Handle,8,out token))throw new Exception("Peer token unavailable");try{if(SodaDesktopUserMicrophoneRole.LogonSid(token)!=actual)throw new Exception("Other peer logon");}finally{CloseHandle(token);}}
