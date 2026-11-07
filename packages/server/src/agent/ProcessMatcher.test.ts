@@ -224,3 +224,15 @@ it("extracts Cursor resume from its verified Windows bundled Node entry without 
  expect(agentResumeSessionId(job(10,[{...proc(10,argv),ppid:1}]),"cursor")).toBe(id);
  expect(agentResumeSessionId(job(10,[{...proc(10,["node","/unrelated/index.js","--resume",id]),ppid:1}]),"cursor")).toBeUndefined();
 });
+
+for(const masked of [true,false])for(const ca of [true,false])it(`reads the installed Linux Cursor bundled wrapper (masked=${masked}, systemCA=${ca})`,()=>{
+ const id="12345678-abcd-ef01-2345-6789abcdef01",root="/fixture/cursor-agent/versions/2026.11.05";
+ const argv=[masked?"/fixture/bin/cursor-agent":root+"/node",...(ca?["--use-system-ca"]:[]),root+"/index.js","--resume",id];
+ const p={...proc(10,argv),ppid:1};expect(match(job(10,[p]))).toBe("cursor");expect(agentResumeSessionId(job(10,[p]),"cursor")).toBe(id);
+});
+it("does not strip unsafe or unrelated Cursor Node prefixes",()=>{
+ const id="12345678-abcd-ef01-2345-6789abcdef01",root="/fixture/cursor-agent/versions/2026.11.05";
+ for(const prefix of [["--eval","anything",root+"/index.js"],["--require","anything",root+"/index.js"],["--unknown",root+"/index.js"],["--use-system-ca","/unrelated/index.js"],["/fixture/other/versions/v/index.js"],["cursor-agent/versions/v/index.js"],["/fixture/cursor-agent/versions/../index.js"]]){
+  const p={...proc(10,["cursor-agent",...prefix,"--resume",id]),ppid:1};expect(agentResumeSessionId(job(10,[p]),"cursor")).toBeUndefined();expect(agentResumeSessionId(job(10,[p]),"grok")).toBeUndefined();
+ }
+});

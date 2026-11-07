@@ -77,8 +77,9 @@ export function agentResumeSessionId(job: ForegroundJob, kind: string): string |
     else {
       // Only a small, unambiguous resume grammar is argv evidence. Unknown
       // options (including prompt-bearing ones) require a later hook instead.
-      let at = lookupAgentKind(args[0] ?? "") === kind ? 1
-        : ["node", "bun"].includes(normalizedAgentLookupName(pathBasename(args[0] ?? ""))) && (lookupAgentKind(args[1] ?? "") === kind || kind === "cursor" && cursorAgentNameFromBundledNodeArgv(args) === "cursor") ? 2 : -1;
+      let at = kind === "cursor" ? cursorBundledArgumentsStart(args) ?? -1 : -1;
+      if(at<0) at = lookupAgentKind(args[0] ?? "") === kind ? 1
+        : ["node", "bun"].includes(normalizedAgentLookupName(pathBasename(args[0] ?? ""))) && lookupAgentKind(args[1] ?? "") === kind ? 2 : -1;
       if (at < 0) continue;
       const valueFlags = kind === "muse" || kind === "grok" ? ["--model", "--reasoning-effort", "--effort"]
         : kind === "claude" ? ["--model", "--effort"] : kind === "copilot" ? ["--model"] : ["--model"];
@@ -202,25 +203,31 @@ function wrappedAgentNameFromRuntimeArgv(runtime: string, argv: string[]): strin
   }
 }
 
-/** cursor-agent の Windows 版が bundle する node（`<...>/cursor-agent/versions/<v>/{node.exe,index.js}`）。 */
-function cursorAgentNameFromBundledNodeArgv(argv: string[]): string | null {
-  const first = argv[0];
-  const second = argv[1];
-  if (first === undefined || second === undefined) return null;
-  const runtimePair = pathParentAndBasename(first);
-  const scriptPair = pathParentAndBasename(second);
-  if (!runtimePair || !scriptPair) return null;
-  const [runtimeParent, runtimeName] = runtimePair;
-  const [scriptParent, scriptName] = scriptPair;
-  if (runtimeName.toLowerCase() !== "node.exe" || scriptName.toLowerCase() !== "index.js" || runtimeParent.toLowerCase() !== scriptParent.toLowerCase()) {
-    return null;
+/** Installed Cursor wrappers: bundled node/index.js, and Linux exec -a cursor-agent
+ * with the optional --use-system-ca switch. Never consume arbitrary Node flags. */
+function cursorBundledArgumentsStart(argv:string[]):number|null {
+  const first=argv[0];if(!first)return null;
+  const name=normalizedAgentLookupName(pathBasename(first));
+  if(!["node","cursor-agent"].includes(name))return null;
+  let at=1;
+  if(argv[at]==="--use-system-ca")at++;
+  const script=argv[at];if(!script)return null;
+  const pair=pathParentAndBasename(script);if(!pair)return null;
+  const [parent,leaf]=pair;
+  const windows=/^[A-Za-z]:[\\/]/.test(script)||script.startsWith("\\\\");
+  const equal=(a:string,b:string)=>windows?a.toLowerCase()===b.toLowerCase():a===b;
+  if((!windows&&!script.startsWith("/"))||/[\x00-\x1f\x7f]/.test(script)||!equal(leaf,"index.js"))return null;
+  const parts=parent.split(/[/\\]/).filter(Boolean);
+  if(parts.some(part=>part==="."||part===".."))return null;
+  if(!equal(parts.at(-3)??"","cursor-agent")||!equal(parts.at(-2)??"","versions")||!parts.at(-1)?.trim())return null;
+  if(name==="node"){
+    const runtime=pathParentAndBasename(first);
+    if(!runtime||!equal(runtime[0],parent)||!["node","node.exe"].includes(runtime[1].toLowerCase()))return null;
   }
-  const parts = runtimeParent.split(/[/\\]/).filter((c) => c.length > 0);
-  const version = parts[parts.length - 1];
-  const versions = parts[parts.length - 2];
-  const pkg = parts[parts.length - 3];
-  if (version === undefined || versions === undefined || pkg === undefined) return null;
-  return pkg.toLowerCase() === "cursor-agent" && versions.toLowerCase() === "versions" && version.trim() !== "" ? "cursor" : null;
+  return at+1;
+}
+function cursorAgentNameFromBundledNodeArgv(argv: string[]): string | null {
+  return cursorBundledArgumentsStart(argv)!==null?"cursor":null;
 }
 
 function pathParentAndBasename(path: string): [parent: string, basename: string] | null {
