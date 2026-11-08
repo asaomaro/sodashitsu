@@ -37,8 +37,8 @@ describe("THEME_LABELS", () => {
       "rose-pine": "Rosé Pine",
       "rose-pine-dawn": "Rosé Pine Dawn",
       vesper: "Vesper",
-      "sodashitsu-assistant":"操舵室アシスタント",
-      "sodashitsu-assistant-dark":"操舵室アシスタント（ダーク）",
+      "sodashitsu-assistant":"sodashitu light",
+      "sodashitsu-assistant-dark":"sodashitsu dark",
     });
     expect(Object.keys(THEME_LABELS).sort()).toEqual([...THEME_NAMES].sort());
   });

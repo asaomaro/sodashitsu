@@ -24,7 +24,7 @@ function open(): void {
 </script>
 
 <template>
-  <button type="button" class="notify-bell" :class="variant ? `notify-bell-${variant}` : undefined" data-notification-bell :aria-label="label" :title="label" aria-haspopup="dialog" @click="open">
+  <button data-assistant-feature type="button" class="notify-bell" :class="variant ? `notify-bell-${variant}` : undefined" data-notification-bell :aria-label="label" :title="label" aria-haspopup="dialog" @click="open">
     <svg class="notify-bell-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
       <path d="M8 1.5a4 4 0 0 0-4 4v2.2c0 .5-.2 1-.5 1.4L2.3 10.5a.6.6 0 0 0 .5 1h10.4a.6.6 0 0 0 .5-1l-1.2-1.4a2.2 2.2 0 0 1-.5-1.4V5.5a4 4 0 0 0-4-4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
       <path d="M6.3 13a1.8 1.8 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />

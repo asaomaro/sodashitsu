@@ -69,7 +69,7 @@ sodactl display set confirm --kind panel --html-file ask.html --wait --timeout 6
 
 ### 枠の中で使える CSS の変数
 
-枠の中の既定のスタイルは、アプリの配色に合わせて変わる。自分のスタイルで使えるのは、アプリの `--soda-*` の変数（`--soda-bg`・`--soda-fg`・`--soda-accent`・`--soda-accent-fg`・`--soda-menu-bg`・`--soda-menu-border`・`--soda-subtle-bg`・`--soda-error-fg`・`--soda-warn-fg` など）。明暗は `:root` の `data-dark="1"|"0"` で分かる。変数は次の `render`（中身の更新）で追従する。
+枠の中の既定のスタイルは、アプリの配色に合わせて変わる。自分のスタイルで使えるのは、アプリの `--soda-*` の変数（`--soda-bg`・`--soda-fg`・`--soda-accent`・`--soda-accent-fg`・`--soda-menu-bg`・`--soda-menu-border`・`--soda-subtle-bg`・`--soda-error-fg`・`--soda-warn-fg` など）。明暗は `:root` の `data-dark="1"|"0"` で分かる。配色はテーマ変更時に内容を描き直さず追従する。静的HTMLとscript-htmlの面には、共通theme bridgeからスクロールバーの色と標準の細さ（thin／8px）も渡す。プラグイン側の内容を書き換える必要はない。未保存の入力や実行中スクリプトはそのまま保持する。
 
 ## 行の決まり（stdout）
 

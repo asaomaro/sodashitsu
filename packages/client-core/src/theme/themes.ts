@@ -24,8 +24,8 @@ export const THEME_LABELS: Readonly<Record<ThemeName, string>> = {
   "rose-pine": "Rosé Pine",
   "rose-pine-dawn": "Rosé Pine Dawn",
   vesper: "Vesper",
-  "sodashitsu-assistant": "操舵室アシスタント",
-  "sodashitsu-assistant-dark": "操舵室アシスタント（ダーク）",
+  "sodashitsu-assistant": "sodashitu light",
+  "sodashitsu-assistant-dark": "sodashitsu dark",
 };
 
 /** herdr の `sibling_theme_names`（`src/app/mod.rs:219-244`）の7組と製品独自の1組。[暗い, 明るい]。 */

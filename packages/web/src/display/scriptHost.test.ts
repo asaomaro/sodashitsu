@@ -416,6 +416,6 @@ it("updates immutable soda.theme and CSS without replaying the script or losing 
  const input=document.querySelector<HTMLInputElement>("#draft")!;input.value="edited";
  const soda=f.win.soda as {theme:{buttonTheme:string;vars:Record<string,string>}};
  const old=soda.theme;
- f.send({type:"theme",theme:{dark:false,buttonTheme:"none",buttonCss:".soda-button{color:red}",vars:{"--soda-accent":"#123456"}}});
- expect(soda.theme).not.toBe(old);expect(soda.theme.buttonTheme).toBe("none");expect(Object.isFrozen(soda.theme)).toBe(true);expect(document.querySelector("#draft")).toBe(input);expect(input.value).toBe("edited");expect(document.head.querySelector("style")?.textContent).toContain(".soda-button");expect(posted(f).filter((m:any)=>m.type==="rendered")).toHaveLength(1);
+ f.send({type:"theme",theme:{dark:false,buttonTheme:"none",buttonCss:".soda-button{color:red}",scrollbarCss:".generated-scrollbar{scrollbar-width:thin}",vars:{"--soda-accent":"#123456"}}});
+ expect(soda.theme).not.toBe(old);expect(soda.theme.buttonTheme).toBe("none");expect(Object.isFrozen(soda.theme)).toBe(true);expect(document.querySelector("#draft")).toBe(input);expect(input.value).toBe("edited");expect(document.head.querySelector("style")?.textContent).toContain(".soda-button");expect(document.head.textContent).toContain(".generated-scrollbar");expect(posted(f).filter((m:any)=>m.type==="rendered")).toHaveLength(1);
 });

@@ -1,0 +1,1054 @@
+{"generated":true,"cases":24,"failures":[{"labels":{"light":"操舵室アシスタント","dark":"操舵室アシスタント（ダーク）"}},{"name":"sodashitsu-assistant","mode":"none","gap":5.59375},{"name":"sodashitsu-assistant","mode":"none","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"sodashitsu-assistant","mode":"none","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"sodashitsu-assistant","mode":"actions","gap":5.59375},{"name":"sodashitsu-assistant","mode":"actions","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"sodashitsu-assistant","mode":"actions","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"sodashitsu-assistant","mode":"features","bell":{"bell":"rgba(0, 0, 0, 0)","toggle":"rgb(201, 166, 79)","accent":"rgb(201, 166, 79)","gap":5.59375}},{"name":"sodashitsu-assistant","mode":"features","gap":5.59375},{"name":"sodashitsu-assistant","mode":"features","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"sodashitsu-assistant","mode":"features","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"sodashitsu-assistant-dark","mode":"none","gap":5.59375},{"name":"sodashitsu-assistant-dark","mode":"none","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"sodashitsu-assistant-dark","mode":"none","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"sodashitsu-assistant-dark","mode":"actions","gap":5.59375},{"name":"sodashitsu-assistant-dark","mode":"actions","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"sodashitsu-assistant-dark","mode":"actions","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"sodashitsu-assistant-dark","mode":"features","bell":{"bell":"rgba(0, 0, 0, 0)","toggle":"rgb(201, 166, 79)","accent":"rgb(201, 166, 79)","gap":5.59375}},{"name":"sodashitsu-assistant-dark","mode":"features","gap":5.59375},{"name":"sodashitsu-assistant-dark","mode":"features","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"sodashitsu-assistant-dark","mode":"features","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(201, 166, 79)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"dracula","mode":"none","gap":5.59375},{"name":"dracula","mode":"none","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(96, 112, 161)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"dracula","mode":"none","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(96, 112, 161)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"dracula","mode":"actions","gap":5.59375},{"name":"dracula","mode":"actions","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(96, 112, 161)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"dracula","mode":"actions","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(96, 112, 161)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"dracula","mode":"features","bell":{"bell":"rgba(0, 0, 0, 0)","toggle":"rgb(96, 112, 161)","accent":"rgb(96, 112, 161)","gap":5.59375}},{"name":"dracula","mode":"features","gap":5.59375},{"name":"dracula","mode":"features","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(96, 112, 161)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"dracula","mode":"features","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(96, 112, 161)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"one-light","mode":"none","gap":5.59375},{"name":"one-light","mode":"none","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(58, 109, 220)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"one-light","mode":"none","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(58, 109, 220)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"one-light","mode":"actions","gap":5.59375},{"name":"one-light","mode":"actions","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(58, 109, 220)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"one-light","mode":"actions","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(58, 109, 220)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}},{"name":"one-light","mode":"features","bell":{"bell":"rgba(0, 0, 0, 0)","toggle":"rgb(58, 109, 220)","accent":"rgb(58, 109, 220)","gap":5.59375}},{"name":"one-light","mode":"features","gap":5.59375},{"name":"one-light","mode":"features","frame":"script","scrollbar":{"width":"auto","color":"auto","accent":"rgb(58, 109, 220)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":1,"same":true}},{"name":"one-light","mode":"features","frame":"static","scrollbar":{"width":"auto","color":"auto","accent":"rgb(58, 109, 220)","gutter":15,"scrollHeight":600,"clientHeight":115,"overflow":"auto","radius":"0px","value":"edited generated draft","runs":0,"same":true}}],"errors":[]}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
++ actual - expected
+
++ [
++   {
++     labels: {
++       dark: '操舵室アシスタント（ダーク）',
++       light: '操舵室アシスタント'
++     }
++   },
++   {
++     gap: 5.59375,
++     mode: 'none',
++     name: 'sodashitsu-assistant'
++   },
++   {
++     frame: 'script',
++     mode: 'none',
++     name: 'sodashitsu-assistant',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'none',
++     name: 'sodashitsu-assistant',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     gap: 5.59375,
++     mode: 'actions',
++     name: 'sodashitsu-assistant'
++   },
++   {
++     frame: 'script',
++     mode: 'actions',
++     name: 'sodashitsu-assistant',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'actions',
++     name: 'sodashitsu-assistant',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     bell: {
++       accent: 'rgb(201, 166, 79)',
++       bell: 'rgba(0, 0, 0, 0)',
++       gap: 5.59375,
++       toggle: 'rgb(201, 166, 79)'
++     },
++     mode: 'features',
++     name: 'sodashitsu-assistant'
++   },
++   {
++     gap: 5.59375,
++     mode: 'features',
++     name: 'sodashitsu-assistant'
++   },
++   {
++     frame: 'script',
++     mode: 'features',
++     name: 'sodashitsu-assistant',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'features',
++     name: 'sodashitsu-assistant',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     gap: 5.59375,
++     mode: 'none',
++     name: 'sodashitsu-assistant-dark'
++   },
++   {
++     frame: 'script',
++     mode: 'none',
++     name: 'sodashitsu-assistant-dark',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'none',
++     name: 'sodashitsu-assistant-dark',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     gap: 5.59375,
++     mode: 'actions',
++     name: 'sodashitsu-assistant-dark'
++   },
++   {
++     frame: 'script',
++     mode: 'actions',
++     name: 'sodashitsu-assistant-dark',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'actions',
++     name: 'sodashitsu-assistant-dark',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     bell: {
++       accent: 'rgb(201, 166, 79)',
++       bell: 'rgba(0, 0, 0, 0)',
++       gap: 5.59375,
++       toggle: 'rgb(201, 166, 79)'
++     },
++     mode: 'features',
++     name: 'sodashitsu-assistant-dark'
++   },
++   {
++     gap: 5.59375,
++     mode: 'features',
++     name: 'sodashitsu-assistant-dark'
++   },
++   {
++     frame: 'script',
++     mode: 'features',
++     name: 'sodashitsu-assistant-dark',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'features',
++     name: 'sodashitsu-assistant-dark',
++     scrollbar: {
++       accent: 'rgb(201, 166, 79)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     gap: 5.59375,
++     mode: 'none',
++     name: 'dracula'
++   },
++   {
++     frame: 'script',
++     mode: 'none',
++     name: 'dracula',
++     scrollbar: {
++       accent: 'rgb(96, 112, 161)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'none',
++     name: 'dracula',
++     scrollbar: {
++       accent: 'rgb(96, 112, 161)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     gap: 5.59375,
++     mode: 'actions',
++     name: 'dracula'
++   },
++   {
++     frame: 'script',
++     mode: 'actions',
++     name: 'dracula',
++     scrollbar: {
++       accent: 'rgb(96, 112, 161)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'actions',
++     name: 'dracula',
++     scrollbar: {
++       accent: 'rgb(96, 112, 161)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     bell: {
++       accent: 'rgb(96, 112, 161)',
++       bell: 'rgba(0, 0, 0, 0)',
++       gap: 5.59375,
++       toggle: 'rgb(96, 112, 161)'
++     },
++     mode: 'features',
++     name: 'dracula'
++   },
++   {
++     gap: 5.59375,
++     mode: 'features',
++     name: 'dracula'
++   },
++   {
++     frame: 'script',
++     mode: 'features',
++     name: 'dracula',
++     scrollbar: {
++       accent: 'rgb(96, 112, 161)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'features',
++     name: 'dracula',
++     scrollbar: {
++       accent: 'rgb(96, 112, 161)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     gap: 5.59375,
++     mode: 'none',
++     name: 'one-light'
++   },
++   {
++     frame: 'script',
++     mode: 'none',
++     name: 'one-light',
++     scrollbar: {
++       accent: 'rgb(58, 109, 220)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'none',
++     name: 'one-light',
++     scrollbar: {
++       accent: 'rgb(58, 109, 220)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     gap: 5.59375,
++     mode: 'actions',
++     name: 'one-light'
++   },
++   {
++     frame: 'script',
++     mode: 'actions',
++     name: 'one-light',
++     scrollbar: {
++       accent: 'rgb(58, 109, 220)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'actions',
++     name: 'one-light',
++     scrollbar: {
++       accent: 'rgb(58, 109, 220)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     bell: {
++       accent: 'rgb(58, 109, 220)',
++       bell: 'rgba(0, 0, 0, 0)',
++       gap: 5.59375,
++       toggle: 'rgb(58, 109, 220)'
++     },
++     mode: 'features',
++     name: 'one-light'
++   },
++   {
++     gap: 5.59375,
++     mode: 'features',
++     name: 'one-light'
++   },
++   {
++     frame: 'script',
++     mode: 'features',
++     name: 'one-light',
++     scrollbar: {
++       accent: 'rgb(58, 109, 220)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 1,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   },
++   {
++     frame: 'static',
++     mode: 'features',
++     name: 'one-light',
++     scrollbar: {
++       accent: 'rgb(58, 109, 220)',
++       clientHeight: 115,
++       color: 'auto',
++       gutter: 15,
++       overflow: 'auto',
++       radius: '0px',
++       runs: 0,
++       same: true,
++       scrollHeight: 600,
++       value: 'edited generated draft',
++       width: 'auto'
++     }
++   }
++ ]
+- []
+
+    at file:///workspaces/sodashitsu-theme-scrollbar-followup/.aidev/works/20261108-theme-scrollbar-followup/browser.mjs:19:209 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: [
+    { labels: { light: '操舵室アシスタント', dark: '操舵室アシスタント（ダーク）' } },
+    { name: 'sodashitsu-assistant', mode: 'none', gap: 5.59375 },
+    {
+      name: 'sodashitsu-assistant',
+      mode: 'none',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'sodashitsu-assistant',
+      mode: 'none',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    { name: 'sodashitsu-assistant', mode: 'actions', gap: 5.59375 },
+    {
+      name: 'sodashitsu-assistant',
+      mode: 'actions',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'sodashitsu-assistant',
+      mode: 'actions',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    {
+      name: 'sodashitsu-assistant',
+      mode: 'features',
+      bell: {
+        bell: 'rgba(0, 0, 0, 0)',
+        toggle: 'rgb(201, 166, 79)',
+        accent: 'rgb(201, 166, 79)',
+        gap: 5.59375
+      }
+    },
+    { name: 'sodashitsu-assistant', mode: 'features', gap: 5.59375 },
+    {
+      name: 'sodashitsu-assistant',
+      mode: 'features',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'sodashitsu-assistant',
+      mode: 'features',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    { name: 'sodashitsu-assistant-dark', mode: 'none', gap: 5.59375 },
+    {
+      name: 'sodashitsu-assistant-dark',
+      mode: 'none',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'sodashitsu-assistant-dark',
+      mode: 'none',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    {
+      name: 'sodashitsu-assistant-dark',
+      mode: 'actions',
+      gap: 5.59375
+    },
+    {
+      name: 'sodashitsu-assistant-dark',
+      mode: 'actions',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'sodashitsu-assistant-dark',
+      mode: 'actions',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    {
+      name: 'sodashitsu-assistant-dark',
+      mode: 'features',
+      bell: {
+        bell: 'rgba(0, 0, 0, 0)',
+        toggle: 'rgb(201, 166, 79)',
+        accent: 'rgb(201, 166, 79)',
+        gap: 5.59375
+      }
+    },
+    {
+      name: 'sodashitsu-assistant-dark',
+      mode: 'features',
+      gap: 5.59375
+    },
+    {
+      name: 'sodashitsu-assistant-dark',
+      mode: 'features',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'sodashitsu-assistant-dark',
+      mode: 'features',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(201, 166, 79)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    { name: 'dracula', mode: 'none', gap: 5.59375 },
+    {
+      name: 'dracula',
+      mode: 'none',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(96, 112, 161)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'dracula',
+      mode: 'none',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(96, 112, 161)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    { name: 'dracula', mode: 'actions', gap: 5.59375 },
+    {
+      name: 'dracula',
+      mode: 'actions',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(96, 112, 161)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'dracula',
+      mode: 'actions',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(96, 112, 161)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    {
+      name: 'dracula',
+      mode: 'features',
+      bell: {
+        bell: 'rgba(0, 0, 0, 0)',
+        toggle: 'rgb(96, 112, 161)',
+        accent: 'rgb(96, 112, 161)',
+        gap: 5.59375
+      }
+    },
+    { name: 'dracula', mode: 'features', gap: 5.59375 },
+    {
+      name: 'dracula',
+      mode: 'features',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(96, 112, 161)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'dracula',
+      mode: 'features',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(96, 112, 161)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    { name: 'one-light', mode: 'none', gap: 5.59375 },
+    {
+      name: 'one-light',
+      mode: 'none',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(58, 109, 220)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'one-light',
+      mode: 'none',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(58, 109, 220)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    { name: 'one-light', mode: 'actions', gap: 5.59375 },
+    {
+      name: 'one-light',
+      mode: 'actions',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(58, 109, 220)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'one-light',
+      mode: 'actions',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(58, 109, 220)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    },
+    {
+      name: 'one-light',
+      mode: 'features',
+      bell: {
+        bell: 'rgba(0, 0, 0, 0)',
+        toggle: 'rgb(58, 109, 220)',
+        accent: 'rgb(58, 109, 220)',
+        gap: 5.59375
+      }
+    },
+    { name: 'one-light', mode: 'features', gap: 5.59375 },
+    {
+      name: 'one-light',
+      mode: 'features',
+      frame: 'script',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(58, 109, 220)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 1,
+        same: true
+      }
+    },
+    {
+      name: 'one-light',
+      mode: 'features',
+      frame: 'static',
+      scrollbar: {
+        width: 'auto',
+        color: 'auto',
+        accent: 'rgb(58, 109, 220)',
+        gutter: 15,
+        scrollHeight: 600,
+        clientHeight: 115,
+        overflow: 'auto',
+        radius: '0px',
+        value: 'edited generated draft',
+        runs: 0,
+        same: true
+      }
+    }
+  ],
+  expected: [],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.15.0

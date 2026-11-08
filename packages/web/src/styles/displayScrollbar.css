@@ -1,0 +1,8 @@
+/* The host supplies the same palette and 8px/thin geometry to each isolated display document. */
+:root { --soda-scrollbar-width: thin; --soda-scrollbar-size: 8px; }
+:root, :root :where(*) { scrollbar-width:var(--soda-scrollbar-width);scrollbar-color:var(--soda-accent) var(--soda-assistant-scroll-track,var(--soda-menu-hover-bg)); }
+:root :where(*)::-webkit-scrollbar { width:var(--soda-scrollbar-size);height:var(--soda-scrollbar-size); }
+:root :where(*)::-webkit-scrollbar-track { background:var(--soda-assistant-scroll-track,var(--soda-menu-hover-bg));border-radius:8px; }
+:root :where(*)::-webkit-scrollbar-thumb { background:var(--soda-accent);border:2px solid var(--soda-assistant-scroll-track,var(--soda-menu-hover-bg));border-radius:8px; }
+:root :where(*)::-webkit-scrollbar-button { display:none; }
+:root :where(*)::-webkit-scrollbar-corner { background:transparent; }

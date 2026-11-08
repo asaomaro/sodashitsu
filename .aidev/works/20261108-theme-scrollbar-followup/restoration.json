@@ -1,0 +1,42 @@
+{
+  "oldBuild": 0,
+  "negativeCore": 1,
+  "negativeWeb": 1,
+  "negativeBrowser": 1,
+  "files": {
+    "packages/client-core/src/theme/themes.ts": {
+      "before": "399c650f0e061f29115f6e5d7793093fd20bed11d0dfe190d4f7869c3f0b70b8",
+      "after": "399c650f0e061f29115f6e5d7793093fd20bed11d0dfe190d4f7869c3f0b70b8",
+      "byteExact": true
+    },
+    "packages/web/src/components/Sidebar.vue": {
+      "before": "d86f11ca6184b215ef096bd6898c1b599f8895f136d361725b221455dcef0fb9",
+      "after": "d86f11ca6184b215ef096bd6898c1b599f8895f136d361725b221455dcef0fb9",
+      "byteExact": true
+    },
+    "packages/web/src/components/NotificationBell.vue": {
+      "before": "027a61c273f9cc2e93fa51deab601ef3e9edf841cd8dff8516a8af6704b032be",
+      "after": "027a61c273f9cc2e93fa51deab601ef3e9edf841cd8dff8516a8af6704b032be",
+      "byteExact": true
+    },
+    "packages/web/src/display/themeVars.ts": {
+      "before": "63e73bd1ae9aa60efc78b93253b133797517126f12a43939f1d933dd5bf3a3be",
+      "after": "63e73bd1ae9aa60efc78b93253b133797517126f12a43939f1d933dd5bf3a3be",
+      "byteExact": true
+    },
+    "packages/web/public/display-view/frame.js": {
+      "before": "6140f08b4b3d2fba960daa1673d7c7c9c4b7e2c2be93348a9f8908cd02898620",
+      "after": "6140f08b4b3d2fba960daa1673d7c7c9c4b7e2c2be93348a9f8908cd02898620",
+      "byteExact": true
+    },
+    "packages/web/public/display-view/script.html": {
+      "before": "2b36f8b0e6dd3d95e6973dc35ae74519c38dc98b85525806fceb9024e33ea803",
+      "after": "2b36f8b0e6dd3d95e6973dc35ae74519c38dc98b85525806fceb9024e33ea803",
+      "byteExact": true
+    }
+  },
+  "restoredBuild": 0,
+  "restoredCore": 0,
+  "restoredWeb": 0,
+  "restoredBrowser": 0
+}

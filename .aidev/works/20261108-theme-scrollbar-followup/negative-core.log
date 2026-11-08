@@ -1,0 +1,54 @@
+
+> @sodashitsu/client-core@0.1.0 test /workspaces/sodashitsu-theme-scrollbar-followup/packages/client-core
+> vitest run src/theme/themes.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-theme-scrollbar-followup/packages/client-core
+
+ ❯ src/theme/themes.test.ts (15 tests | 1 failed) 14ms
+   ❯ THEME_LABELS (1)
+     × 19 のテーマすべてに、design の表示名（上流のテーマの正式な呼び名） 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/theme/themes.test.ts > THEME_LABELS > 19 のテーマすべてに、design の表示名（上流のテーマの正式な呼び名）
+AssertionError: expected { …(19) } to deeply equal { …(19) }
+
+- Expected
++ Received
+
+@@ -9,12 +9,12 @@
+    "nord": "Nord",
+    "one-dark": "One Dark",
+    "one-light": "One Light",
+    "rose-pine": "Rosé Pine",
+    "rose-pine-dawn": "Rosé Pine Dawn",
+-   "sodashitsu-assistant": "sodashitu light",
+-   "sodashitsu-assistant-dark": "sodashitsu dark",
++   "sodashitsu-assistant": "操舵室アシスタント",
++   "sodashitsu-assistant-dark": "操舵室アシスタント（ダーク）",
+    "solarized": "Solarized Dark",
+    "solarized-light": "Solarized Light",
+    "tokyo-night": "Tokyo Night",
+    "tokyo-night-day": "Tokyo Night Day",
+    "vesper": "Vesper",
+
+ ❯ src/theme/themes.test.ts:22:26
+     20| describe("THEME_LABELS", () => {
+     21|   it("19 のテーマすべてに、design の表示名（上流のテーマの正式な呼び名）", () => {
+     22|     expect(THEME_LABELS).toEqual({
+       |                          ^
+     23|       catppuccin: "Catppuccin Mocha",
+     24|       "catppuccin-latte": "Catppuccin Latte",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+   Start at  10:13:24
+   Duration  1.05s (transform 76%, import 22%, tests 1%, worker 1%)
+
+/workspaces/sodashitsu-theme-scrollbar-followup/packages/client-core:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/client-core@0.1.0 test: `vitest run src/theme/themes.test.ts`
+Exit status 1

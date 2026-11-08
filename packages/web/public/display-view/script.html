@@ -307,6 +307,7 @@
   }
 
   var buttonThemeStyle=null;
+  var scrollbarThemeStyle=null;
   function applyTheme(theme) {
     if (!theme || typeof theme !== 'object') return;
     var de = rd(docElement, DOC, 'documentElement');
@@ -316,6 +317,10 @@
     if(typeof theme.buttonCss==='string'&&theme.buttonCss.length<=32768){
       if(!buttonThemeStyle){buttonThemeStyle=rApply(docCreateElementNS,DOC,[HTML_NS,'style']);rApply(nodeAppend,rd(docHead,DOC,'head'),[buttonThemeStyle]);}
       if(styleTextSet)rApply(styleTextSet,buttonThemeStyle,[theme.buttonCss]);
+    }
+    if(typeof theme.scrollbarCss==='string'&&theme.scrollbarCss.length<=4096){
+      if(!scrollbarThemeStyle){scrollbarThemeStyle=rApply(docCreateElementNS,DOC,[HTML_NS,'style']);rApply(nodeAppend,rd(docHead,DOC,'head'),[scrollbarThemeStyle]);}
+      if(styleTextSet)rApply(styleTextSet,scrollbarThemeStyle,[theme.scrollbarCss]);
     }
     var vars = theme.vars;
     if (vars && typeof vars === 'object') {

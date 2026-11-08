@@ -1,0 +1,13 @@
+
+> @sodashitsu/client-core@0.1.0 test /workspaces/sodashitsu-theme-scrollbar-followup/packages/client-core
+> vitest run src/theme/themes.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-theme-scrollbar-followup/packages/client-core
+
+
+ Test Files  1 passed (1)
+      Tests  15 passed (15)
+   Start at  10:13:33
+   Duration  1.13s (transform 77%, import 22%, worker 1%, tests 1%)
+

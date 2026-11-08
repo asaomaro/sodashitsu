@@ -78,6 +78,7 @@
   }
 
   var buttonThemeStyle = null;
+  var scrollbarThemeStyle = null;
   function applyTheme(theme) {
     if (!theme || typeof theme !== 'object') return;
     var de = docElement.call(document);
@@ -86,6 +87,10 @@
     if(typeof theme.buttonCss==='string'&&theme.buttonCss.length<=32768){
       if(!buttonThemeStyle){buttonThemeStyle=docCreateElement.call(document,'style');appendChild.call(docHead.call(document),buttonThemeStyle);}
       buttonThemeStyle.textContent=theme.buttonCss;
+    }
+    if(typeof theme.scrollbarCss==='string'&&theme.scrollbarCss.length<=4096){
+      if(!scrollbarThemeStyle){scrollbarThemeStyle=docCreateElement.call(document,'style');appendChild.call(docHead.call(document),scrollbarThemeStyle);}
+      scrollbarThemeStyle.textContent=theme.scrollbarCss;
     }
     var vars = theme.vars;
     if (vars && typeof vars === 'object') {

@@ -609,11 +609,11 @@ test.describe("モバイル", () => {
 });
 
 
-test("操舵室アシスタントの通常版とダーク版を選択し、保存とOSの明暗に追従する", async ({ browser, appServer }) => {
+test("sodashitu lightの通常版とダーク版を選択し、保存とOSの明暗に追従する", async ({ browser, appServer }) => {
   const o=await openBrowser(browser,appServer,{colorScheme:"light"});
   await openSettingsByKey(o.page);
-  await expect(themeSelect(o.page).locator('option[value="sodashitsu-assistant"]')).toHaveText("操舵室アシスタント");
-  await expect(themeSelect(o.page).locator('option[value="sodashitsu-assistant-dark"]')).toHaveText("操舵室アシスタント（ダーク）");
+  await expect(themeSelect(o.page).locator('option[value="sodashitsu-assistant"]')).toHaveText("sodashitu light");
+  await expect(themeSelect(o.page).locator('option[value="sodashitsu-assistant-dark"]')).toHaveText("sodashitsu dark");
   for(const [name,bg,scheme] of [["sodashitsu-assistant","#f8f5ec","light"],["sodashitsu-assistant-dark","#172438","dark"]] as const){
     await themeSelect(o.page).selectOption(name);
     await expect.poll(()=>sidebarBg(o.page)).toBe(hexToRgb(bg));

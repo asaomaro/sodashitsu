@@ -1,0 +1,24 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-theme-scrollbar-followup/packages/web
+> vitest run src/display/frameJs.test.ts src/display/scriptHost.test.ts src/components/NotificationBell.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-theme-scrollbar-followup/packages/web
+
+DOMException [NotSupportedError]: Failed to load script "http://localhost:3000/display-view/frame.js". JavaScript file loading is disabled.
+    at HTMLScriptElement.#loadScript (file:///workspaces/sodashitsu-theme-scrollbar-followup/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/nodes/html-script-element/HTMLScriptElement.js:549:31)
+    at HTMLScriptElement.[connectedToDocument] (file:///workspaces/sodashitsu-theme-scrollbar-followup/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/nodes/html-script-element/HTMLScriptElement.js:315:33)
+    at HTMLScriptElement.[connectedToNode] (file:///workspaces/sodashitsu-theme-scrollbar-followup/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/nodes/node/Node.js:801:53)
+    at HTMLBodyElement.[appendChild] (file:///workspaces/sodashitsu-theme-scrollbar-followup/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/nodes/node/Node.js:421:45)
+    at HTMLBodyElement.[appendChild] (file:///workspaces/sodashitsu-theme-scrollbar-followup/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/nodes/element/Element.js:1102:62)
+    at HTMLBodyElement.appendChild (file:///workspaces/sodashitsu-theme-scrollbar-followup/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/nodes/node/Node.js:314:48)
+    at insertChildren (eval at boot (/workspaces/sodashitsu-theme-scrollbar-followup/packages/web/src/display/scriptHost.test.ts:31:3), <anonymous>:368:11)
+    at inject (eval at boot (/workspaces/sodashitsu-theme-scrollbar-followup/packages/web/src/display/scriptHost.test.ts:31:3), <anonymous>:390:21)
+    at onRender (eval at boot (/workspaces/sodashitsu-theme-scrollbar-followup/packages/web/src/display/scriptHost.test.ts:31:3), <anonymous>:510:7)
+    at Object.onPort [as onmessage] (eval at boot (/workspaces/sodashitsu-theme-scrollbar-followup/packages/web/src/display/scriptHost.test.ts:31:3), <anonymous>:526:7)
+
+ Test Files  2 passed (2)
+      Tests  41 passed (41)
+   Start at  10:13:34
+   Duration  437ms (environment 58%, transform 22%, tests 14%, import 5%, worker 1%)
+

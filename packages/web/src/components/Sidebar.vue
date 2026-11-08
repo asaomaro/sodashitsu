@@ -1679,10 +1679,12 @@ watchDragInterrupt(view, () => {
 }
 .sidebar-footer-modern .theme-mode-toggle {
   margin-left: auto;
+  margin-right: -0.2em;
 }
 /* 畳んだ幅は縦に積み、中央に寄せる（下の `.sidebar-collapsed .sidebar-footer`）。ベルの `margin-left: auto` は横並びのときだけ。 */
 .sidebar-collapsed .sidebar-footer-modern .theme-mode-toggle {
   margin-left: 0;
+  margin-right: 0;
 }
 /* モダンの配置（AC13）: 境の線の縦の中央の、たたむ・広げるの印。当たりは 24px の正方形、見た目は小さな丸。幅のつまみ（`.sidebar-divider`・z-index 3）より上。 */
 .sidebar-edge-toggle {
