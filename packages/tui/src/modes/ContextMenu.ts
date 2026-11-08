@@ -91,7 +91,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
           ),
       },
       // エージェントが 1 件以上のサブエージェントを動かしているとき（20261004-subagent-display）。メニューを開くのは右クリックだけなので、これはマウス用の入口（キーボードは既定の prefix+shift+s）。
-      ...((pane?.agent?.subagents?.count ?? 0) > 0
+      ...(pane?.agent
         ? [{ label: "サブエージェントの一覧", run: () => actions.showSubagentsOf(target.paneId) }]
         : []),
       ...(pane?.agent

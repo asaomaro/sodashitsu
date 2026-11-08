@@ -20,6 +20,7 @@ export class SubagentTranscript {
     private readonly scope: () => string | null,
     private readonly openedScope: string,
     private readonly redraw: () => void,
+    private readonly historyEntryId?: string,
   ) {
     this.timer = setInterval(() => void this.poll(), 1500);
     this.timer.unref?.();
@@ -36,27 +37,58 @@ export class SubagentTranscript {
     if (this.busy || !this.valid()) return;
     this.busy = true;
     try {
-      const result = await this.conn.request("agent.subagent_transcript", {
-        paneId: this.paneId, agentId: this.agentId,
+      const selection = {
+        paneId: this.paneId,
+        agentId: this.agentId,
         ...(this.offset !== undefined ? { offset: this.offset } : {}),
-      });
+      };
+      const result =
+        this.historyEntryId !== undefined
+          ? await this.conn.request("agent.subagent_history_transcript", {
+              ...selection,
+              entryId: this.historyEntryId,
+            })
+          : await this.conn.request("agent.subagent_transcript", selection);
       if (!this.valid()) return;
+      if (this.historyEntryId !== undefined && result.status === "unreadable") {
+        this.dispose();
+        this.redraw();
+        return;
+      }
       this.offset = result.offset;
-      if (result.reset) { this.rows = []; this.omitted = false; }
-      this.omitted ||= !!result.omittedBefore || !!result.clipped || result.entries.some(entry=>entry.truncated);
+      if (result.reset) {
+        this.rows = [];
+        this.omitted = false;
+      }
+      this.omitted ||=
+        !!result.omittedBefore ||
+        !!result.clipped ||
+        result.entries.some((entry) => entry.truncated);
       if (result.status === "ok") {
         this.rows.push(...result.entries);
         // The Web reader keeps at most 800 entries; additionally cap retained text at one API read (1 MiB).
-        let chars = this.rows.reduce((n, row) => n + row.text.length + (row.kind==="tool"?row.name.length:0), 0);
+        let chars = this.rows.reduce(
+          (n, row) => n + row.text.length + (row.kind === "tool" ? row.name.length : 0),
+          0,
+        );
         while (this.rows.length > 800 || chars > 1024 * 1024) {
-          const removed=this.rows.shift()!;chars -= removed.text.length+(removed.kind==="tool"?removed.name.length:0);
+          const removed = this.rows.shift()!;
+          chars -= removed.text.length + (removed.kind === "tool" ? removed.name.length : 0);
           this.omitted = true;
         }
         this.note = this.rows.length ? "" : "まだ書かれたものがありません";
       } else this.note = result.status === "pending" ? "記録がまだありません" : "記録を読めません";
     } catch (error) {
-      if((error as {code?:string}|null)?.code==="not_found"){
-        this.dispose();this.redraw();return;
+      if (
+        (error as { code?: string } | null)?.code === "not_found" ||
+        (this.historyEntryId !== undefined &&
+          ["method_not_found", "unknown_method"].includes(
+            (error as { code?: string } | null)?.code ?? "",
+          ))
+      ) {
+        this.dispose();
+        this.redraw();
+        return;
       }
       if (this.valid()) this.note = "会話記録を取得できません";
     } finally {
@@ -64,12 +96,19 @@ export class SubagentTranscript {
       if (!this.dead) this.redraw();
     }
   }
-  lines(width: number, navigation="情報へ戻る", bare=false): string[] {
+  lines(width: number, navigation = "情報へ戻る", bare = false): string[] {
     if (!this.valid()) return [`記録の参照が無効になりました。Escで${navigation}`];
     return [
       ...(bare ? [] : [...wrapText(plainText(this.title), width), "この記録は閲覧専用です"]),
       ...(this.omitted ? ["長い記録の一部を省いています"] : []),
-      ...this.rows.flatMap(row => wrapText(plainText(`${row.kind === "prompt" ? "指示" : row.kind === "say" ? "発言" : row.kind === "tool" ? `道具 ${row.name}` : "結果"}: ${row.text}`), width)),
+      ...this.rows.flatMap((row) =>
+        wrapText(
+          plainText(
+            `${row.kind === "prompt" ? "指示" : row.kind === "say" ? "発言" : row.kind === "tool" ? `道具 ${row.name}` : "結果"}: ${row.text}`,
+          ),
+          width,
+        ),
+      ),
       ...(this.note ? [this.note] : []),
       ...(bare ? [] : [`↑↓ スクロール · Esc ${navigation}`]),
     ];

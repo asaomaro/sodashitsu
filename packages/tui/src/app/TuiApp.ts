@@ -30,6 +30,7 @@ import { ConversationDialog } from "../modes/ConversationDialog.js";
 import { configuredAgentActions, headerActionsFor } from "@sodashitsu/protocol";
 import { AgentForkDialog } from "../modes/AgentForkDialog.js";
 import { UsageModel } from "../model/UsageModel.js";
+import {SubagentList} from "../modes/SubagentList.js";
 import { ChildConversationDialog } from "../modes/ChildConversationDialog.js";
 import { AccountCostDialog, UsageDialog, UsageDashboard } from "../modes/UsageView.js";
 import {
@@ -1381,7 +1382,11 @@ export class TuiApp {
       );
     if (ctx.kind === "sessionTools")
       return new WindowOverlay(new SessionToolsDialog(ctx.mode,ctx.paneId,this.ui,this.rpc,()=>this.scheduleRender()), {w:110,h:32});
-    if(ctx.kind==="childConversation")return new ChildConversationDialog(ctx.paneId,ctx.agentId,ctx.instanceId,this.model,this.ui,this.rpc,()=>this.ended||this.connectionState!=="open"||this.ui.dialogContext!==ctx?null:JSON.stringify([this.machines.selectedId,this.model.clientId]),()=>this.scheduleRender());
+    if(ctx.kind==="subagents")return new SubagentList(ctx.paneId,this.ui,this.model,Date.now,{port:this.rpc,redraw:()=>this.scheduleRender(),scope:()=>{
+      const p=this.model.panes.get(ctx.paneId),a=p?.agent,r=p?.agentSession;
+      return this.ended||this.connectionState!=="open"||this.ui.dialogContext!==ctx||!this.model.clientId||!a||a.instanceId!==ctx.instanceId||!r?.sessionId||r.kind!==a.kind?null:JSON.stringify([this.machines.selectedId,this.model.clientId,ctx.paneId,a.instanceId,a.kind,a.verified,r.kind,r.sessionId]);
+    }});
+    if(ctx.kind==="childConversation")return new ChildConversationDialog(ctx.paneId,ctx.agentId,ctx.instanceId,this.model,this.ui,this.rpc,()=>this.ended||this.connectionState!=="open"||this.ui.dialogContext!==ctx?null:JSON.stringify([this.machines.selectedId,this.model.clientId]),()=>this.scheduleRender(),ctx.historical);
     if (ctx.kind === "conversation" || ctx.kind === "pastSessions")
       return new ConversationDialog(
         ctx.kind === "pastSessions" ? "sessions" : ctx.mode,

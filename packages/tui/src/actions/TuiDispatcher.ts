@@ -918,7 +918,7 @@ export class TuiDispatcher {
    */
   showSubagentsOf(paneId: string): void {
     const agent = this.model.panes.get(paneId)?.agent;
-    if (!agent || (agent.subagents?.count ?? 0) < 1) return;
+    if (!agent) return;
     this.ui.openDialogWithContext({ kind: "subagents", paneId, instanceId: agent.instanceId });
   }
 

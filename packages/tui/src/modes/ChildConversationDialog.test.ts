@@ -5,6 +5,7 @@ import { Grid } from "../render/Screen.js";
 import { ThemeColors } from "../render/color.js";
 import { snapshot } from "../testing/fixtures.js";
 import { ChildConversationDialog } from "./ChildConversationDialog.js";
+import type { SubagentHistoryItem } from "@sodashitsu/protocol";
 import type { RequestPort } from "../term/PaneRegistry.js";
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -27,6 +28,7 @@ function fixture(
     mode: "parent-draft",
     reason: "transport-unavailable",
   }),
+  historical?: SubagentHistoryItem,
 ) {
   const model = new SessionModel();
   model.applySnapshot(snapshot(), "client");
@@ -66,6 +68,7 @@ function fixture(
     { request: rpc } as unknown as RequestPort,
     () => outer,
     vi.fn(),
+    historical,
   );
   const render = () => {
     const grid = new Grid(110, 34);
@@ -423,5 +426,157 @@ it("clears child numbers immediately when an observed child birth changes", asyn
   expect(f.render()).not.toContain("入力: 42");
   await vi.advanceTimersByTimeAsync(30000);
   expect(f.request).toHaveBeenCalledTimes(1);
+  f.dialog.dispose();
+});
+
+const historyItem: SubagentHistoryItem = {
+  id: "c",
+  entryId: "99999999-9999-4999-8999-999999999999",
+  terminalStatus: "completed",
+  description: "Finished generated child",
+  hasTranscript: true,
+};
+it("routes a historical child to strict transcript and usage only, leaving input as an explicit parent draft", async () => {
+  const f = fixture(
+    vi.fn(async (method: string) =>
+      method === "agent.subagent_history_transcript"
+        ? { ...result(), entries: [{ kind: "say", text: "EXACT GENERATED HISTORY" }] }
+        : method === "agent.subagent_history_usage"
+          ? {
+              status: "ok",
+              usage: {
+                source: "rollout",
+                consumptionScope: "self",
+                tokens: { basis: "transcript", input: 7 },
+                partial: true,
+              },
+            }
+          : {},
+    ) as never,
+    false,
+    undefined,
+    historyItem,
+  );
+  await flush();
+  expect(f.render()).toContain("EXACT GENERATED HISTORY");
+  expect(f.render()).toContain("終了履歴 · 完了");
+  key(f, "c");
+  expect(f.render()).not.toContain("送信先: 子");
+  key(f, "u");
+  await flush();
+  expect(f.render()).toContain("入力: 7");
+  expect(f.request.mock.calls.map((c) => c[0])).toEqual([
+    "agent.subagent_history_transcript",
+    "agent.subagent_history_usage",
+  ]);
+  for (const call of f.request.mock.calls)
+    expect(call[1]).toMatchObject({ entryId: historyItem.entryId });
+  expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control")).toBe(false);
+  key(f, "Escape");
+  key(f, "p");
+  f.dialog.handlePaste("generated parent request");
+  expect(f.request).toHaveBeenCalledTimes(2);
+  key(f, "Enter");
+  key(f, "Enter");
+  await flush();
+  expect(f.request.mock.calls.at(-1)?.[0]).toBe("agent.prompt_checked");
+  f.dialog.dispose();
+});
+it("does not downgrade an invalid history selector to current data or input", async () => {
+  const f = fixture(undefined, false, undefined, { ...historyItem, entryId: "invalid" });
+  await flush();
+  expect(f.request).not.toHaveBeenCalled();
+  expect(f.rpc).not.toHaveBeenCalled();
+  f.model.panes.set("p1", {
+    ...f.p,
+    agent: {
+      ...f.p.agent,
+      subagents: {
+        count: 1,
+        items: [{ id: "c", startedAt: 1, model: "CURRENT-MODEL", modelBasis: "turn" }],
+      },
+    },
+  });
+  expect(f.render()).toContain("参照が無効");
+  expect(f.render()).not.toContain("CURRENT-MODEL");
+  f.dialog.dispose();
+});
+it("stops an old peer historical read without current fallback", async () => {
+  const f = fixture(
+    vi.fn(async () => {
+      throw { code: "method_not_found" };
+    }) as never,
+    false,
+    undefined,
+    historyItem,
+  );
+  await flush();
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(f.request).toHaveBeenCalledTimes(1);
+  expect(f.request.mock.calls[0]?.[0]).toBe("agent.subagent_history_transcript");
+  expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control")).toBe(false);
+  f.dialog.dispose();
+});
+it("clears old historical text and stops when the exact entry becomes unreadable", async () => {
+  let reads = 0;
+  const f = fixture(
+    vi.fn(async () =>
+      ++reads === 1
+        ? { ...result(), entries: [{ kind: "say", text: "REVOKED GENERATED HISTORY" }] }
+        : {
+            status: "unreadable",
+            entries: [],
+            offset: 1,
+            reset: false,
+            omittedBefore: false,
+            running: false,
+          },
+    ) as never,
+    false,
+    undefined,
+    historyItem,
+  );
+  await flush();
+  expect(f.render()).toContain("REVOKED GENERATED HISTORY");
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(f.render()).not.toContain("REVOKED GENERATED HISTORY");
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(f.request).toHaveBeenCalledTimes(2);
+  expect(f.request.mock.calls.every((c) => c[0] === "agent.subagent_history_transcript")).toBe(
+    true,
+  );
+  f.dialog.dispose();
+});
+it("opens sibling and terminal selectors within the same conversation overlay", async () => {
+  const f = fixture(
+    vi.fn(async (method) =>
+      method === "agent.subagent_history"
+        ? {
+            status: "ok",
+            items: [historyItem],
+            offset: 1,
+            revision: "88888888-8888-4888-8888-888888888888",
+            reset: false,
+            more: false,
+            omittedBefore: false,
+            incomplete: false,
+          }
+        : {},
+    ) as never,
+    false,
+  );
+  await flush();
+  key(f, "h");
+  expect(f.render()).toContain("サブエージェント");
+  key(f, "h");
+  await flush();
+  expect(f.render()).toContain("Finished generated child");
+  key(f, "Enter");
+  expect(f.ui.dialogContext).toMatchObject({
+    kind: "childConversation",
+    agentId: "c",
+    historical: { entryId: historyItem.entryId },
+  });
+  expect(f.model.panes.get("p1")?.agent?.subagents?.count).toBe(1);
   f.dialog.dispose();
 });

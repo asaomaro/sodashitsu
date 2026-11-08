@@ -161,7 +161,7 @@ describe("端末版のサブエージェントの表示", () => {
     const h=await start({subagents:subs(2)});dispatcherOf(h.app).showSubagentsOf("p3");h.app.renderNow();h.io.type("\t\r");await vi.waitFor(()=>expect(h.app.ui.dialogContext).toMatchObject({kind:"childConversation",paneId:"p3",agentId:"s1"}));
   });
 
-  it("操作 show_subagents（既定のキーは prefix+shift+s）: フォーカスしている pane のエージェントの一覧を開く。件数が 0・エージェントなしでは何もしない", async () => {
+  it("操作 show_subagents（既定のキーは prefix+shift+s）: フォーカスしている pane のエージェントの一覧を開く。エージェントなしでは何もしない", async () => {
     const h = await start({ subagents: subs(2) });
     dispatcherOf(h.app).run({ type: "showSubagents" });
     expect(h.app.ui.dialogContext).toBeNull(); // 焦点は p1（エージェントなし）
@@ -199,7 +199,7 @@ describe("端末版のサブエージェントの表示", () => {
     await vi.waitFor(() => expect(h.app.ui.dialogContext).toBeNull());
   });
 
-  it("pane のメニューに「サブエージェントの一覧」が出る（1 件以上のときだけ）。選ぶと一覧が開く", async () => {
+  it("pane のメニューに「サブエージェントの一覧」が出る（現在0件でもエージェントがいれば表示）。選ぶと一覧が開く", async () => {
     const h = await start({ subagents: subs(2) });
     const deps = { ui: h.app.ui, model: h.app.model, actions: dispatcherOf(h.app) };
     const labels = (paneId: string) =>
@@ -225,6 +225,10 @@ describe("端末版のサブエージェントの表示", () => {
     );
   });
 
+  it("現在の子が0件でもメニューと既存操作から終了一覧に到達し、badge/countを増やさない",async()=>{
+    const h=await start({subagents:subs(0)});expect(h.badge()).toBeUndefined();const entry=menuItems({target:{kind:"pane",paneId:"p3"},x:0,y:0} as never,{ui:h.app.ui,model:h.app.model,actions:dispatcherOf(h.app)}).find(i=>i.label==="サブエージェントの一覧");expect(entry).toBeDefined();entry!.run();expect(h.app.ui.dialogContext).toMatchObject({kind:"subagents",paneId:"p3"});expect(h.app.model.panes.get("p3")?.agent?.subagents?.count).toBe(0);h.app.ui.closeDialog();h.app.model.focusPane("p3");dispatcherOf(h.app).run({type:"showSubagents"});expect(h.app.ui.dialogContext).toMatchObject({kind:"subagents",paneId:"p3"});
+  });
+
   it("開いている間に、エージェントが居なくなる・入れ替わる・pane が閉じると閉じる。同じ instanceId の更新では閉じず、一覧が更新される", async () => {
     const h = await start({ subagents: subs(2) });
     dispatcherOf(h.app).showSubagentsOf("p3");
@@ -241,8 +245,9 @@ describe("端末版のサブエージェントの表示", () => {
       agent: agent({ instanceId: "other", label: "Claude" }),
     });
     expect(h.app.ui.dialogContext).toBeNull();
-    dispatcherOf(h.app).showSubagentsOf("p3"); // 項目が無い（分からない）ので開かない
-    expect(h.app.ui.dialogContext).toBeNull();
+    dispatcherOf(h.app).showSubagentsOf("p3"); // 現在の子が未取得でも、終了履歴への入口を残す
+    expect(h.app.ui.dialogContext).toMatchObject({kind:"subagents",instanceId:"other"});
+    h.app.ui.closeDialog();
     h.ws.event("pane.agent_status_changed", {
       paneId: "p3",
       agent: agent({ instanceId: "other", subagents: subs(1) }),
