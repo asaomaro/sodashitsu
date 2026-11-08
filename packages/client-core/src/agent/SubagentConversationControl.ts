@@ -86,6 +86,7 @@ export class SubagentConversationControl {
   private dead = false;
   private revision = 0;
   private controlRevision = 0;
+  private controlTail: Promise<void> | null = null;
   private timer: ReturnType<typeof setInterval> | undefined;
   private readonly openedScope: string | null;
   constructor(
@@ -131,7 +132,31 @@ export class SubagentConversationControl {
     }
     await this.query();
   }
-  private async query(): Promise<AgentSubagentControlResult | null> {
+  private async query(
+    stillCurrent: () => boolean = () => true,
+  ): Promise<AgentSubagentControlResult | null> {
+    const previous = this.controlTail;
+    let release!: () => void;
+    const tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Install the queue entry before callbacks can request another read.
+    this.controlTail = tail;
+    try {
+      if (previous) await previous;
+      if (!this.valid()) {
+        this.dispose();
+        return null;
+      }
+      if (!this.active() || !stillCurrent() || this.unsupported || this.deliveryUnknown)
+        return null;
+      return await this.queryNow();
+    } finally {
+      release();
+      if (this.controlTail === tail) this.controlTail = null;
+    }
+  }
+  private async queryNow(): Promise<AgentSubagentControlResult | null> {
     const revision = ++this.controlRevision;
     this.checking = true;
     this.controlFailed = false;
@@ -186,7 +211,7 @@ export class SubagentConversationControl {
     this.last = null;
     this.emit();
     try {
-      const capability = await this.query();
+      const capability = await this.query(stillCurrent);
       if (!this.valid()) {
         this.dispose();
         return null;
@@ -225,13 +250,17 @@ export class SubagentConversationControl {
         this.dispose();
         return null;
       }
-      if (revision !== this.revision || !stillCurrent()) return null;
+      if (revision !== this.revision) return null;
       const result = resultOf(raw);
-      this.last = result;
+      // Uncertainty belongs to this target, even when its draft was replaced while sending.
       if (result.status === "delivery-unknown") {
         this.deliveryUnknown = true;
         this.capability = null;
-      } else if (result.status === "rejected") {
+        this.last = result;
+      }
+      if (!stillCurrent()) return null;
+      this.last = result;
+      if (result.status === "rejected") {
         this.capability = {
           mode: "parent-draft",
           reason: result.reason === "request-conflict" ? "scope-expired" : result.reason,

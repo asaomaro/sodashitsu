@@ -189,8 +189,7 @@ it("ignores a send response after its parent scope expires", async () => {
   );
   await f.control.refresh();
   const sent = f.control.send("text", () => true);
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 12; i++) await Promise.resolve();
   f.invalidate();
   resolve(accepted);
   expect(await sent).toBeNull();
@@ -230,3 +229,67 @@ it("does not apply an old send receipt to a replaced draft", async () => {
   expect(await sent).toBeNull();
   expect(f.control.state.last).toBeNull();
 });
+
+it("serializes a background read before the fresh submit read", async () => {
+  let checks = 0,
+    inFlight = 0,
+    maxInFlight = 0;
+  let finishBackground!: (value: unknown) => void;
+  const f = fixture(async (method) => {
+    if (method !== "agent.subagent_control") return accepted;
+    checks++;
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    try {
+      if (checks === 2)
+        return await new Promise((resolve) => {
+          finishBackground = resolve;
+        });
+      return ready(checks === 1 ? lease1 : lease2);
+    } finally {
+      inFlight--;
+    }
+  });
+  await f.control.refresh();
+  const background = f.control.refresh();
+  const submit = f.control.send("generated text", () => true);
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  expect(checks).toBe(2);
+  expect(f.request.mock.calls.filter(([m]) => m === "agent.subagent_send")).toHaveLength(0);
+  finishBackground(ready());
+  await background;
+  expect(await submit).toEqual(accepted);
+  expect(checks).toBe(3);
+  expect(maxInFlight).toBe(1);
+  expect(f.request.mock.calls.at(-1)?.[1]).toMatchObject({ leaseId: lease2 });
+});
+it.each(["unknown", "throw", "malformed"])(
+  "locks the target after %s even if the draft changed during delivery",
+  async (why) => {
+    let current = true;
+    let finish!: (value: unknown) => void;
+    let fail!: (error: unknown) => void;
+    const f = fixture((method) =>
+      method === "agent.subagent_control"
+        ? ready()
+        : new Promise((resolve, reject) => {
+            finish = resolve;
+            fail = reject;
+          }),
+    );
+    await f.control.refresh();
+    const submit = f.control.send("old draft", () => current);
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+    current = false;
+    if (why === "throw") fail({ code: "timeout" });
+    else
+      finish(why === "unknown" ? { status: "delivery-unknown", reason: "delivery-unknown" } : {});
+    expect(await submit).toBeNull();
+    expect(f.control.state.deliveryUnknown).toBe(true);
+    expect(f.control.state.capability).toBeNull();
+    expect(f.control.state.last?.status).toBe("delivery-unknown");
+    await f.control.refresh();
+    expect(await f.control.send("replacement draft", () => true)).toBeNull();
+    expect(f.request.mock.calls.filter(([m]) => m === "agent.subagent_send")).toHaveLength(1);
+  },
+);
