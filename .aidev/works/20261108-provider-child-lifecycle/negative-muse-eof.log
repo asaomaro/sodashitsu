@@ -1,0 +1,39 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-provider-child-lifecycle
+
+ ❯ |@sodashitsu/server| src/agent/MuseChildObservations.test.ts (8 tests | 1 failed | 7 skipped) 35ms
+   × refreshes Muse child settings at an unchanged parent EOF without losing the observed model between polls 33ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/MuseChildObservations.test.ts > refreshes Muse child settings at an unchanged parent EOF without losing the observed model between polls
+AssertionError: expected undefined to be 'first-child-model' // Object.is equality
+
+- Expected:
+"first-child-model"
+
++ Received:
+undefined
+
+ ❯ src/agent/MuseChildObservations.test.ts:93:56
+     91|  try{
+     92|   expect((await reader.read(source))?.items[0]?.model).toBe("first-chi…
+     93|   expect((await reader.read(source))?.items[0]?.model).toBe("first-chi…
+       |                                                        ^
+     94|   await appendFile(join(nested,"session.jsonl"),configured("next-child…
+     95|  }finally{reader.close();}
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 skipped (8)
+   Start at  12:33:01
+   Duration  1.03s (transform 76%, import 20%, tests 4%)
+

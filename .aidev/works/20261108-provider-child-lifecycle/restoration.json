@@ -1,0 +1,12 @@
+[
+  {
+    "source": "packages/server/src/agent/NativeSubagentRecords.ts",
+    "restoredSHA256": "3e87c1b593205b236df5257f580de9d68901ea9978ee8f2d652090f816e8b6cd",
+    "byteExact": true
+  },
+  {
+    "source": "packages/server/src/agent/NativeSubagentReader.ts",
+    "restoredSHA256": "80b0c7707fa35ec57b8f5ddc453499a27974d3488bcef2541b56fe8c5d3b1130",
+    "byteExact": true
+  }
+]

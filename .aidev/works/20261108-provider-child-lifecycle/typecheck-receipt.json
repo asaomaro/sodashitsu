@@ -1,0 +1,24 @@
+{
+  "exitCode": 0,
+  "sourceHEAD": "04b4050b567347a5ed3ff86c8dd0092580418e87",
+  "command": [
+    "pnpm",
+    "exec",
+    "tsc",
+    "--noEmit",
+    "--target",
+    "ES2023",
+    "--module",
+    "NodeNext",
+    "--moduleResolution",
+    "NodeNext",
+    "--strict",
+    "--noUncheckedIndexedAccess",
+    "--exactOptionalPropertyTypes",
+    "--esModuleInterop",
+    "--skipLibCheck",
+    "packages/server/src/agent/NativeSubagentRecords.ts",
+    "packages/server/src/agent/NativeSubagentReader.ts",
+    "packages/server/src/agent/MuseChildObservations.test.ts"
+  ]
+}
