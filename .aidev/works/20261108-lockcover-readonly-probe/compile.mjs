@@ -4,7 +4,8 @@ export const PINS=Object.freeze({"scripts/remote-desktop/WindowsDesktopUnlock.cs
 export const CSC=String.raw`C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`;
 const refs=['System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Web.Extensions.dll','System.ServiceProcess.dll'];
 const hash=b=>createHash('sha256').update(b).digest('hex');
-function execute(command,args){return new Promise(resolve=>{const child=execFile(command,args,{windowsHide:true,shell:false,timeout:45000,maxBuffer:65536,encoding:'buffer'},(error,stdout,stderr)=>resolve({exit:error?typeof error.code==='number'?error.code:null:0,error:error?error.killed?'timeout':error.code==='ERR_CHILD_PROCESS_STDIO_MAXBUFFER'?'output_limit':'compile_failed':null,stdout,stderr}));child.stdin?.end();});}
+export function compilerError(error){return !error?null:error.code==='ERR_CHILD_PROCESS_STDIO_MAXBUFFER'?'output_limit':error.killed?'timeout':'compile_failed';}
+function execute(command,args){return new Promise(resolve=>{const child=execFile(command,args,{windowsHide:true,shell:false,timeout:45000,maxBuffer:65536,encoding:'buffer'},(error,stdout,stderr)=>resolve({exit:error?typeof error.code==='number'?error.code:null:0,error:compilerError(error),stdout,stderr}));child.stdin?.end();});}
 export async function compile(repo,out,run=execute){
  const sources=[];for(const[path,sha]of Object.entries(PINS)){const file=join(repo,path);if((await lstat(file)).isSymbolicLink())throw Error('source_link');const bytes=await readFile(file);if(hash(bytes)!==sha)throw Error('source_hash');sources.push({name:basename(file),bytes});}
  await mkdir(out,{mode:0o700});for(const source of sources)await writeFile(join(out,source.name),source.bytes,{flag:'wx',mode:0o600});

@@ -29,7 +29,7 @@ The output directory must not exist; its parent must already be private to the o
 
 ## Verification status
 
-- Linux Node24 generated compiler-boundary checks:5 passed. Source pins, fixed argv/no execution, private bounded diagnostics, mismatch-before-spawn, no output reuse, and fixed readonly reflection surface covered.
+- Linux Node24 generated compiler-boundary checks:6 passed. Source pins, fixed argv/no execution, private bounded diagnostics, mismatch-before-spawn, no output reuse, and fixed readonly reflection surface covered.
 - Node syntax check:0. No product build/type/test repeated.
 - Product/source pin listing and compiler staging read-only semantics require final independent review before Windows execution.
 - Actual C# compile, C# --self-test and --observe have not been executed by this author. Windows work belongs to root only.

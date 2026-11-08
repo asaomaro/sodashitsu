@@ -4,9 +4,9 @@
     "scripts/remote-desktop/WindowsDesktopUnlock.cs": "44a7a537234c7c183e8a089da8154a29cf351c6952bc6533b6af41056ef03c2c",
     "scripts/remote-desktop/WindowsDesktopHost.cs": "0c42d61014ddfa7d2021d18bae3503e08db20227a2f2994fccece1449163a5e3",
     ".aidev/works/20261108-lockcover-readonly-probe/LockCoverProbe.cs": "71442c317fafa10f9df7c29e5129227045d56ed70a0e0e156639433b6693eced",
-    ".aidev/works/20261108-lockcover-readonly-probe/compile.mjs": "7115813fc8fad7edbbd6923880b29858c9f4955ae74747ceb13134b6857551c0",
-    ".aidev/works/20261108-lockcover-readonly-probe/checks.mjs": "be74d0e57e8e41dc3102b6fc711d81be7effcee460e95643d201cc3203a82442",
-    ".aidev/works/20261108-lockcover-readonly-probe/README.md": "73bba46da76d0cb99014dfecca2ecc6557ad9edd464292b044d34be0d86be644",
+    ".aidev/works/20261108-lockcover-readonly-probe/compile.mjs": "ca1d92df6380971eaa914c8545737efee806b3ceed961bce76bc51b3f34693ea",
+    ".aidev/works/20261108-lockcover-readonly-probe/checks.mjs": "0a21b6f4d86b164554866869254f8b836d6e174c4a588d0fc2e02029986f1a3a",
+    ".aidev/works/20261108-lockcover-readonly-probe/README.md": "95c45b98172a129926d0d9fcceb06c61a59fc3cd3effb9925a8daef1f24c137d",
     ".aidev/works/20261108-lockcover-readonly-probe/compiler-argv.json": "c29a4ab9679da654fe3134eddae4a113be3fdd38cf1a3e24b6323d2e315cb534",
     ".aidev/works/20261108-lockcover-readonly-probe/source-pins.json": "ac9e291e333ded1004cf9556f25ed62c0efc5de6666ffa0c92603b179d4eb9d9",
     ".aidev/works/20261108-lockcover-readonly-probe/dependency-inventory.json": "ca310eb52583a6401955c3f4df31a149d667068a02723615406671ca26e3c8b0"

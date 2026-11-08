@@ -1,13 +1,14 @@
-✔ fixed source hashes and compiler argv, no fixture execution (17.006976ms)
-✔ compile failure diagnostics kept privately with a bounded public receipt (9.744116ms)
-✔ source mismatch rejected before compiler call and output creation (7.017818ms)
-✔ existing output cannot be reused (3.832567ms)
-✔ product routing definitions are not copied and fixture invokes only fixed readonly methods (0.796383ms)
-ℹ tests 5
+✔ fixed source hashes and compiler argv, no fixture execution (20.850629ms)
+✔ compile failure diagnostics kept privately with a bounded public receipt (7.923306ms)
+✔ source mismatch rejected before compiler call and output creation (6.118228ms)
+✔ existing output cannot be reused (3.148003ms)
+✔ product routing definitions are not copied and fixture invokes only fixed readonly methods (0.893387ms)
+✔ output cap has priority over killed flag and fixed error codes never include exception details (0.15901ms)
+ℹ tests 6
 ℹ suites 0
-ℹ pass 5
+ℹ pass 6
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 89.757745
+ℹ duration_ms 84.942814
