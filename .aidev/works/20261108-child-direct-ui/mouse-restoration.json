@@ -3,5 +3,7 @@
   "beforeSHA": "141da2c94231a717f1d51b6e9bf415f7437f64c8a7709f70e065d56174422cc2",
   "afterSHA": "141da2c94231a717f1d51b6e9bf415f7437f64c8a7709f70e065d56174422cc2",
   "byteExact": true,
-  "restoredExit": 0
+  "restoredExit": 0,
+  "sourceHead": "f1c2fec6100fa496f91ac5ce4151e54de41ce99b",
+  "tuiTypeExit": 0
 }

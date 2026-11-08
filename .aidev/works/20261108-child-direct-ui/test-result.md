@@ -9,3 +9,5 @@
 - TUIは実Grid描画を関連テストから確認。直接/親の送信先、未知配送状態、2段階Enter、scope/close失効、長文を切り捨てず拒否する動作を確認。
 
 exact d531 の Web/TUI test-inclusive型は両方exit0。続いて新Web/TUI会話hostの2製品sourceだけ旧6bへ戻すと Web7件/TUI12件と生成browserが失敗。git管理領域の永続recoveryから2sourceをSHA256完全一致で復元し、Web41件/TUI32件と同じbrowserが再成功した。`binding-restoration.json`と`negative-{web,tui,browser}.log`/`restored-{web,tui,browser}.log`が生出力。型実行中に製品sourceは変更していない。
+
+最後の独立レビューで TUI 編集中の送信行クリックが確認field未遷移のためno-opになるP2を検出。`f1c2fec6`で明示クリック時のみvalid/!pending/directを照合して確認fieldへ移す修正を追加。旧d531 runtimeで新Grid mouse回帰1件が失敗し、SHA141da2c9…完全復元後33件成功。exact f1c2 TUI test-inclusive型0（Websource不変のためWeb型は繰り返さない）。`mouse-{negative,restored}.log`/`mouse-restoration.json`/`mouse-final-type.log`に記録。
