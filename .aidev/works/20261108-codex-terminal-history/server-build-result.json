@@ -1,0 +1,127 @@
+{
+  "sourceHead": "1c1e200588de00efa5bc66aa40584add181595ba",
+  "productHead": "0ff8ba6e",
+  "sourceOriginal": "c1d64ac1148c812d7f80ec21b82d4be989791240",
+  "sourceRebaseBase": "c9003083304a6459ae5b660cd256f24cea639ef0",
+  "eightSourceAndTestsUnchanged": true,
+  "docsConflictOnly": true,
+  "normalWebTuiHistorySentencePreserved": true,
+  "node": "24.22.2",
+  "pnpm": "9.15.9",
+  "nodeOptions": "--max-old-space-size=8192",
+  "command": "NODE_OPTIONS=--max-old-space-size=8192 node corepack/dist/corepack.js pnpm@9.15.9 --filter @sodashitsu/server build",
+  "exitCode": 0,
+  "log": "server-build.log",
+  "earlyCorrection": {
+    "exitCode": 143,
+    "log": "server-build-early-memory-correction.log",
+    "reason": "Initial child tsc lacked inherited 8GiB flag; own tsc stopped during initial dependency compilation before any server build completed. One complete server build subsequently succeeded."
+  },
+  "completedAtUtc": "2026-11-08T06:44:49.371113+00:00",
+  "distFiles": 1836,
+  "relatedArtifacts": {
+    "agent/CodexSubagentStream.d.ts": {
+      "bytes": 435,
+      "sha256": "4c1c6d0c6f0c8a400e642e2cf869c0d975cb51daad855584d6c777d8d5b1bfc4"
+    },
+    "agent/CodexSubagentStream.d.ts.map": {
+      "bytes": 419,
+      "sha256": "741f5f7b5b0ac04fb8e442f47260fb459abc33efc56e66ad2decae82d144bf5d"
+    },
+    "agent/CodexSubagentStream.js": {
+      "bytes": 2145,
+      "sha256": "49d206b3952a03af1ea2dfa8fbc5c2ab34305c36a64db4e157ae51649c1b133c"
+    },
+    "agent/CodexSubagentStream.js.map": {
+      "bytes": 2191,
+      "sha256": "ea4cc2b6232255cec70e8545c1e1b29f97db402d72310b99db5f36dad104af5b"
+    },
+    "agent/CodexTerminalBindings.d.ts": {
+      "bytes": 743,
+      "sha256": "447acdcb8ab553a4b7a5e1eba8e91c10a78ca623ce78fce7af55cd26ba562a91"
+    },
+    "agent/CodexTerminalBindings.d.ts.map": {
+      "bytes": 639,
+      "sha256": "09d78f890afebe9cf8ec56c7cf16a52e4304520b714c6b10c76fbe071c53fcf7"
+    },
+    "agent/CodexTerminalBindings.js": {
+      "bytes": 1945,
+      "sha256": "caa911ea65dc83c5b904ee9f8268e4a8eba7e2fc0f3280c7538c9c9ac8f82162"
+    },
+    "agent/CodexTerminalBindings.js.map": {
+      "bytes": 2177,
+      "sha256": "c730ff5bbea5eff241157c7a69528f68c749320d4c1d9cbdd7e5b708408d7794"
+    },
+    "agent/NativeSubagentReader.d.ts": {
+      "bytes": 2369,
+      "sha256": "81adfdb877584d0fa315ce8fddec38b145cd6e4a75607c3e113838602cbd6717"
+    },
+    "agent/NativeSubagentReader.d.ts.map": {
+      "bytes": 1903,
+      "sha256": "be2157c13e77478c58e4c6455c31196b75895c155b41fe36571015d4ce00d2e1"
+    },
+    "agent/NativeSubagentReader.js": {
+      "bytes": 18429,
+      "sha256": "776a42a91a306666cbbac904094c931e30ffa19cef528c00f7448ae9f92e6027"
+    },
+    "agent/NativeSubagentReader.js.map": {
+      "bytes": 19763,
+      "sha256": "13eb37bc91b1ac5f43d97c51261a941c5ac79fdece9d6f52613e3b0729dff76e"
+    },
+    "agent/NativeSubagentRecords.d.ts": {
+      "bytes": 1619,
+      "sha256": "23bf39ef8c2f970721cce2da8f5e38d43e751279bea003d7e9ff76cfd3c6b160"
+    },
+    "agent/NativeSubagentRecords.d.ts.map": {
+      "bytes": 1527,
+      "sha256": "96ee2f548f00c23b6eb8556864a7e0631455a3a6ce5fc712050aec09ce658b57"
+    },
+    "agent/NativeSubagentRecords.js": {
+      "bytes": 12559,
+      "sha256": "8d704e4eb1f9551b0849730cafec91cdc2ed8b4aae3268e8dba29fc5e2da3e67"
+    },
+    "agent/NativeSubagentRecords.js.map": {
+      "bytes": 14268,
+      "sha256": "193729cd45d3e7941c1c13e02014af54cdf0ff88bdfd032ec800e02e6b0d507f"
+    },
+    "agent/NativeSubagentService.d.ts": {
+      "bytes": 2186,
+      "sha256": "dd2114fc8b2151e94c2052b4ee647cccf65b4f3bd0bf8a34f391c8bf53d09741"
+    },
+    "agent/NativeSubagentService.d.ts.map": {
+      "bytes": 2135,
+      "sha256": "dac93cc5c38ee0b5e9dab38fe59eabbbbdfd906d56c4a6475de6413784ec19de"
+    },
+    "agent/NativeSubagentService.js": {
+      "bytes": 9303,
+      "sha256": "7bac7c55b6bd7f545e837348cb0284e1cc7f1976bff14e55d997827268c2bf8f"
+    },
+    "agent/NativeSubagentService.js.map": {
+      "bytes": 10942,
+      "sha256": "fec75be25ff06bebd2cd2edac1fae1eb959723f90107277ad1682a2750cb1c1b"
+    },
+    "composeServer.d.ts": {
+      "bytes": 6794,
+      "sha256": "e9ca8fcc965df1574518f61af137f682426f9a0ec8b7ddc4f4a4bf143d463ae5"
+    },
+    "composeServer.d.ts.map": {
+      "bytes": 2604,
+      "sha256": "726c9488257951af8050e83a1d20303da0e1eac1b0e409df41f18fe9bc8641bc"
+    },
+    "composeServer.js": {
+      "bytes": 115819,
+      "sha256": "c27cecc55fe77c6501f2bcb650d0414c22fc55a26960ab07e6fe7a56c0cea9c1"
+    },
+    "composeServer.js.map": {
+      "bytes": 79617,
+      "sha256": "f4aa3c60049b7277c5d8ead9a19b20b6ee9bfd5dde4494dd6d4ea216c5b0abe2"
+    }
+  },
+  "hostManifest": {
+    "sha256": "ee15ca5ec579d107619830c936a08c2a6d826483917ee907235970c03f6d4fad",
+    "entries": 41,
+    "allEntriesMatch": true
+  },
+  "workspaceAliases": "own worktree packages; output directories are regular own directories; shared node_modules contains dependencies only",
+  "noSourceEditsDuringBuild": true
+}
