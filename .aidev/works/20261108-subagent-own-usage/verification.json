@@ -7,7 +7,33 @@
   "testHeapMiB": 8192,
   "defaultHeapAttempt": "OOM; not a type pass",
   "targetedReaderBundleExitCode": 0,
-  "actualCurrentChildMembership": "unavailable; stopped without child file reads",
+  "actualCurrentChildMembership": "fresh formal scope recovered; 3 children",
   "realModelCalls": 0,
-  "windowsOperations": 0
+  "windowsOperations": 0,
+  "actualFinalReader": {
+    "exitCode": 0,
+    "children": 3,
+    "fileBytes": [
+      85173791,
+      77270394,
+      79241174
+    ],
+    "calls": [
+      21,
+      19,
+      19
+    ],
+    "uniqueResponses": [
+      2359,
+      2097,
+      2072
+    ],
+    "allEOF": true,
+    "allContextAndWindowKnown": true,
+    "allTokenFieldsKnown": true,
+    "partial": true,
+    "scopeUnchanged": true,
+    "parentNamespaceUnchanged": true,
+    "elapsedMs": 1935
+  }
 }

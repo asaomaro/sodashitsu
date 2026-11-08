@@ -1,0 +1,4 @@
+{"childIndex":0,"calls":21,"fileBytes":85173791,"offset":85173791,"uniqueResponses":2359,"tokenFields":["cacheRead","cacheWrite","input","output","reasoning","total"],"contextKnown":true,"windowKnown":true,"partial":true,"scanning":false,"modelCalls":0}
+{"childIndex":1,"calls":19,"fileBytes":77270394,"offset":77270394,"uniqueResponses":2097,"tokenFields":["cacheRead","cacheWrite","input","output","reasoning","total"],"contextKnown":true,"windowKnown":true,"partial":true,"scanning":false,"modelCalls":0}
+{"childIndex":2,"calls":19,"fileBytes":79241174,"offset":79241174,"uniqueResponses":2072,"tokenFields":["cacheRead","cacheWrite","input","output","reasoning","total"],"contextKnown":true,"windowKnown":true,"partial":true,"scanning":false,"modelCalls":0}
+{"finished":true,"formalParentUnique":true,"parentNamespaceUnchanged":true,"scopeUnchanged":true,"children":3,"elapsedMs":1935,"modelCalls":0}
