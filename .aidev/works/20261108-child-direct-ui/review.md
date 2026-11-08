@@ -1,0 +1,5 @@
+# 最後の独立レビュー
+
+共通4ea/5dはrootが読取り点検し、background/fresh readの並列とdraft変更中のunknown消去のP2を5dで再レビュー済み。Web/TUI bindingは実装者以外のagent_audio_backendが全差分を点検した。TUI編集中の送信行クリックがno-opになるP2をf1c2で修正し、Grid mouse旧版1fail→SHA141da2c9…完全復元→33pass、exact f1c2 TUI型0の証跡d442を照合した上で再レビューを閉じた。追加must/should無し。
+
+sourceScope/前後鮮度・fresh lease・同時送信抑制・unknown無自動再送・親checked別操作・単体graph reader閲覧専用・新hostだけbare表示を確認。実モデルやWindowsで子へ送信した検証ではなく、生成fixtureと実DOM/Gridの確認である。後続のusage/historyは別単位として残す。

@@ -2,6 +2,6 @@
 - [x] background/fresh read直列化、配送不明とdraft適用の分離（root P2独立再レビュー通過）
 - [x] Web/TUI bindingの固定と関連意味テスト、生成DOM
 - [x] exact固定sourceのWeb/TUI型・旧binding負例・完全復元の最終記録
-- [ ] binding全体の最後の独立レビュー（root。必須）
+- [x] binding全体の最後の独立レビュー（root/別実装者backend。完了）
 - [ ] 子利用状況の表示（backend正式数値projectionの完成後、別単位）
 - [ ] 終了子履歴の専用会話画面への入口と表示（別単位。情報パネルへ戻さない）
