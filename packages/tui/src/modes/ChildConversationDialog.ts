@@ -1,5 +1,12 @@
+import { randomUUID } from "node:crypto";
+import { MAX_AGENT_PROMPT_BYTES } from "@sodashitsu/protocol";
 import type { KeyInput } from "@sodashitsu/client-core";
-import { paneNameOf, subagentModelLabel } from "@sodashitsu/client-core";
+import {
+  paneNameOf,
+  subagentModelLabel,
+  SubagentConversationControl,
+  subagentControlMessage,
+} from "@sodashitsu/client-core";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
 import type { RequestPort } from "../term/PaneRegistry.js";
@@ -30,10 +37,12 @@ export class ChildConversationDialog implements Overlay {
   private readonly childName: string;
   private readonly readable: boolean;
   private readonly draft = new TextInput();
+  private readonly childDraft = new TextInput();
+  private readonly control: SubagentConversationControl;
   private readonly scrollbar = new ScrollBar();
   private rect: Rect | null = null;
   private scroll = 0;
-  private field: "history" | "draft" | "send" = "history";
+  private field: "history" | "draft" | "send" | "child-draft" | "child-send" = "history";
   private busy = false;
   private dead = false;
   private generation = 0;
@@ -53,7 +62,15 @@ export class ChildConversationDialog implements Overlay {
     this.childName = child?.description?.trim() || child?.type?.trim() || "サブエージェント";
     this.readable = child?.hasTranscript === true;
     this.openedScope = child ? this.scope() : null;
+    this.control = new SubagentConversationControl(
+      conn,
+      { paneId, agentId },
+      () => (this.valid() ? this.openedScope : null),
+      () => this.redraw(),
+      randomUUID,
+    );
     this.syncTranscript();
+    this.control.start();
   }
   private child() {
     return this.model.panes
@@ -89,7 +106,7 @@ export class ChildConversationDialog implements Overlay {
   }
   private syncTranscript(): void {
     if (!this.valid()) {
-      if(!this.dead)this.dispose();
+      if (!this.dead) this.dispose();
       return;
     }
     const child = this.child(),
@@ -113,10 +130,39 @@ export class ChildConversationDialog implements Overlay {
         this.redraw,
       );
   }
+  private pending(): boolean {
+    return this.busy || this.control.state.sending;
+  }
+  private direct(): boolean {
+    return this.control.state.capability?.mode === "direct" && !this.control.state.deliveryUnknown;
+  }
+  private async sendChild(): Promise<void> {
+    const text = this.childDraft.value,
+      g = this.generation;
+    if (!this.valid() || this.pending() || !this.direct()) return;
+    const result = await this.control.send(
+      text,
+      () =>
+        this.valid() &&
+        g === this.generation &&
+        this.childDraft.value === text &&
+        !this.busy &&
+        this.field === "child-send",
+    );
+    if (
+      result?.status === "accepted" &&
+      this.valid() &&
+      g === this.generation &&
+      this.childDraft.value === text
+    )
+      this.childDraft.value = "";
+    this.redraw();
+  }
   private prepareParent(): void {
-    if (!this.valid()) return;
+    if (!this.valid() || this.pending()) return;
     this.field = "draft";
-    if (!this.draft.value) this.draft.value = `サブエージェント「${this.childName}」への依頼: `;
+    if (!this.draft.value)
+      this.draft.value = `サブエージェント「${plainText(this.childName)}」への依頼: ${this.childDraft.value}`;
     this.note = "";
   }
   private async sendParent(): Promise<void> {
@@ -127,7 +173,7 @@ export class ChildConversationDialog implements Overlay {
       g = this.generation;
     if (
       !this.valid() ||
-      this.busy ||
+      this.pending() ||
       !p ||
       !a?.name ||
       !w?.projectDir ||
@@ -170,27 +216,55 @@ export class ChildConversationDialog implements Overlay {
       else this.cancel();
       return;
     }
-    if (!this.valid() || this.busy) return;
+    if (!this.valid() || this.pending()) return;
     if (this.field === "history") {
-      if (k.key === "p" && !k.ctrl && !k.alt) this.prepareParent();
+      if (!k.ctrl && !k.alt && !k.meta && k.key.toLowerCase() === "p") this.prepareParent();
+      else if (!k.ctrl && !k.alt && !k.meta && k.key.toLowerCase() === "c" && this.direct())
+        this.field = "child-draft";
       else if (isDown(k)) this.scroll++;
       else if (isUp(k)) this.scroll = Math.max(0, this.scroll - 1);
-    } else if (k.key === "Tab") this.field = this.field === "draft" ? "send" : "draft";
-    else if (isEnter(k)) {
-      if (this.field === "send") void this.sendParent();
-      else this.field = "send";
-    } else if (this.field === "draft") {
-      this.draft.handleKey(k);
-      if (new TextEncoder().encode(this.draft.value).byteLength > 16 * 1024)
-        this.draft.value = this.draft.value.slice(0, 4096);
+    } else {
+      const child = this.field === "child-draft" || this.field === "child-send";
+      if (child && !this.direct()) return;
+      if (k.key === "Tab")
+        this.field = child
+          ? this.field === "child-draft"
+            ? "child-send"
+            : "child-draft"
+          : this.field === "draft"
+            ? "send"
+            : "draft";
+      else if (isEnter(k)) {
+        if (this.field === "send") void this.sendParent();
+        else if (this.field === "child-send") void this.sendChild();
+        else this.field = child ? "child-send" : "send";
+      } else if (this.field === "draft" || this.field === "child-draft")
+        this.edit((input) => input.handleKey(k));
+    }
+  }
+  private edit(change: (input: TextInput) => void): void {
+    const child = this.field === "child-draft",
+      input = child ? this.childDraft : this.draft;
+    const value = input.value,
+      cursor = input.cursor;
+    change(input);
+    if (
+      child
+        ? input.value.length > 16384
+        : new TextEncoder().encode(input.value).byteLength > MAX_AGENT_PROMPT_BYTES
+    ) {
+      input.value = value;
+      input.cursor = cursor;
+      this.note = "入力が長すぎるため追加できません";
     }
   }
   handlePaste(text: string): void {
-    if (this.valid() && !this.busy && this.field === "draft") {
-      this.draft.insert(text.slice(0, 4096));
-      if (new TextEncoder().encode(this.draft.value).byteLength > 16 * 1024)
-        this.draft.value = this.draft.value.slice(0, 4096);
-    }
+    if (
+      this.valid() &&
+      !this.pending() &&
+      (this.field === "draft" || (this.field === "child-draft" && this.direct()))
+    )
+      this.edit((input) => input.insert(text));
   }
   handleScrollMouse(ev: OverlayMouse): boolean {
     return this.scrollbar.handleMouse(ev);
@@ -203,14 +277,20 @@ export class ChildConversationDialog implements Overlay {
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "wheel") this.scroll = Math.max(0, this.scroll + (ev.button === 65 ? 1 : -1));
     if (ev.action === "down" && ev.button === 0 && ev.y === this.sendY && this.field !== "history")
-      void this.sendParent();
+      void (this.field === "child-draft" || this.field === "child-send"
+        ? this.sendChild()
+        : this.sendParent());
     return true;
   }
   dispose(): void {
     this.dead = true;
     this.generation++;
     this.draft.value = "";
-    this.note="";this.field="history";this.busy=false;
+    this.childDraft.value = "";
+    this.control.dispose();
+    this.note = "";
+    this.field = "history";
+    this.busy = false;
     this.transcript?.dispose();
     this.transcript = null;
   }
@@ -235,22 +315,24 @@ export class ChildConversationDialog implements Overlay {
       ? [
           ...header,
           ...(this.transcript
-            ? this.transcript
-                .lines(area.w,"会話を閉じる")
+            ? this.transcript.lines(area.w, "会話を閉じる", true)
             : ["会話記録は未取得です"]),
-          "閲覧専用。この接続経路では子へ直接送信できません",
+          subagentControlMessage(this.control.state),
         ]
       : ["会話の参照が無効になりました。Escで閉じてください"];
-    const draftView = this.draft.view(Math.max(0, area.w - 8));
+    const childCompose = this.field === "child-draft" || this.field === "child-send";
+    const draftView = (childCompose ? this.childDraft : this.draft).view(Math.max(0, area.w - 8));
     const footer =
       this.field === "history"
-        ? ["P: 親への依頼を下書き · ↑↓: スクロール · Esc: 閉じる"]
+        ? [
+            `${this.direct() ? "C: 子へ送信 · " : ""}P: 親への依頼を下書き · ↑↓: スクロール · Esc: 閉じる`,
+          ]
         : [
-            `送信先: 親「${p ? paneNameOf(p) : "—"}」`,
+            `送信先: ${childCompose ? `子「${this.childName}」` : `親「${p ? paneNameOf(p) : "—"}」`}`,
             `下書き: ${draftView.text}`,
-            this.busy
+            this.pending()
               ? "送信中…"
-              : `${this.field === "send" ? "▶ " : ""}[ 親へ送信 ]  Tab:項目移動 / Enter:確認・送信 / Esc:履歴へ`,
+              : `${this.field === "send" || this.field === "child-send" ? "▶ " : ""}[ ${childCompose ? "子" : "親"}へ送信 ]  Tab:項目移動 / Enter:確認・送信 / Esc:履歴へ`,
           ];
     if (this.note) footer.push(this.note);
     const bodyH = Math.max(0, area.h - footer.length);
@@ -273,7 +355,9 @@ export class ChildConversationDialog implements Overlay {
         this.scroll = offset;
       },
     );
-    return this.field === "draft" && !this.busy && this.valid()
+    return (this.field === "draft" || (this.field === "child-draft" && this.direct())) &&
+      !this.pending() &&
+      this.valid()
       ? {
           visible: true,
           x: Math.min(area.x + area.w - 1, area.x + 8 + draftView.cursorCol),

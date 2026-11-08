@@ -64,15 +64,14 @@ export class SubagentTranscript {
       if (!this.dead) this.redraw();
     }
   }
-  lines(width: number, navigation="情報へ戻る"): string[] {
+  lines(width: number, navigation="情報へ戻る", bare=false): string[] {
     if (!this.valid()) return [`記録の参照が無効になりました。Escで${navigation}`];
     return [
-      ...wrapText(plainText(this.title), width),
-      "読むだけ。指示はメインエージェントへ送ってください",
+      ...(bare ? [] : [...wrapText(plainText(this.title), width), "この記録は閲覧専用です"]),
       ...(this.omitted ? ["長い記録の一部を省いています"] : []),
       ...this.rows.flatMap(row => wrapText(plainText(`${row.kind === "prompt" ? "指示" : row.kind === "say" ? "発言" : row.kind === "tool" ? `道具 ${row.name}` : "結果"}: ${row.text}`), width)),
       ...(this.note ? [this.note] : []),
-      `↑↓ スクロール · Esc ${navigation}`,
+      ...(bare ? [] : [`↑↓ スクロール · Esc ${navigation}`]),
     ];
   }
   dispose(): void {
