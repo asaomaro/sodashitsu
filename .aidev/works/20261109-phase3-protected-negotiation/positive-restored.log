@@ -1,0 +1,26 @@
+✔ B requires native lock while generating, exact epoch retirement, measured quiet and restored old-stream rejection (1.83418ms)
+✔ C requires actual UAC mode and own request/recovery, not Default or only ACK (0.209104ms)
+✔ only fixture B receiver may observe locked same scope; C stays unlocked; no SYSTEM/elevated/foreign identity (0.338238ms)
+✔ observer preserves begin return/arguments and only reports exact accepted microphone epoch (0.729757ms)
+✔ unreported or malformed measurement fields do not become zero/known success (0.246205ms)
+✔ observer bounds physical channels and refuses replacement epoch instead of transferring proof (0.335954ms)
+✔ native ready rejects synthetic true or malformed markers even with a windows-gdi label (0.278245ms)
+✔ original socket closure/rejection is independent from one-use ticket rejection; no reply remains unknown (0.266303ms)
+✔ protected-microphone-phase3/run-a.mjs: viewer offers elevated+protected PCM prerequisites while lane stays microphone-only (11.390967ms)
+✔ protected-microphone-phase3-bc/session.mjs: viewer offers elevated+protected PCM prerequisites while lane stays microphone-only (5.736781ms)
+✔ generated997Hz calibrated amplitude and energy, no real audio (30.035576ms)
+✔ same streak frames+wall required; baseline contamination/gaps/discontinuity/condensed delivery fail (213.427814ms)
+✔ absolute100 silent ticks, synchronous delivery and bounded worker cleanup (2087.917738ms)
+✔ async or blocking sender is a diagnostic failure, never a successful cadence (207.010834ms)
+✔ full300 generated tone cadence retains all frames over6sec, main event loop remains live (6073.191116ms)
+✔ long wall and long frame streaks cannot be combined across different intervals (40.661781ms)
+✔ approval/default endpoints/expiry remain failclosed and child environment excludes preload/history (1.914505ms)
+✔ private child cannot inherit custom desktop commands or change parent environment (0.12715ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8713.866666
