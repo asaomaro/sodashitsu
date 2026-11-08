@@ -35,3 +35,12 @@ it.each(["world_state","dynamic_tools_updated","inter_agent_communication","inte
  stream.consume(Buffer.from(JSON.stringify({type,payload:{type:{nested:"not a discriminator"},model:"x".repeat(300000),state:{type:"turn_context",model:"forged"}}})+"\n"));
  expect(stream.invalid).toBe(false);expect(stream.value).toMatchObject({model:"actual",reasoningEffort:"high"});
 });
+it("observes a bounded payload before the root turn discriminator without accepting non-turn or nested candidates",()=>{
+ const stream=new CodexChildTurnStream(0,0);
+ const text=JSON.stringify({payload:{model:"generated-model",effort:"medium",nested:{model:"forged"}},timestamp:"2026-11-08T00:00:01Z",type:"turn_context"})+"\n";
+ for(const byte of Buffer.from(text))stream.consume(Buffer.from([byte]));
+ expect(stream.invalid).toBe(false);expect(stream.value).toMatchObject({model:"generated-model",reasoningEffort:"medium"});
+ stream.consume(Buffer.from(JSON.stringify({payload:{model:"x".repeat(1000),effort:"low",nested:{type:"turn_context",model:"forged"}},type:"world_state"})+"\n"));
+ expect(stream.invalid).toBe(false);expect(stream.value.model).toBe("generated-model");
+ const tooLong=new CodexChildTurnStream(0,0);tooLong.consume(Buffer.from(JSON.stringify({payload:{model:"x".repeat(1000)},type:"turn_context"})+"\n"));expect(tooLong.invalid).toBe(true);
+});

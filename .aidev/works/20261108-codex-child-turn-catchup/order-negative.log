@@ -1,0 +1,56 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-child-turn-catchup
+
+ ❯ packages/server/src/agent/CodexChildTurnStream.test.ts (18 tests | 1 failed | 17 skipped) 15ms
+   × observes a bounded payload before the root turn discriminator without accepting non-turn or nested candidates 14ms
+ ❯ packages/server/src/agent/CodexChildObservationCache.test.ts (10 tests | 1 failed | 9 skipped) 1977ms
+   × a timed-out final stat cannot roll back a newer same-entry append 1976ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/CodexChildObservationCache.test.ts > a timed-out final stat cannot roll back a newer same-entry append
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/server/src/agent/CodexChildObservationCache.test.ts:93:404
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/server/src/agent/CodexChildTurnStream.test.ts > observes a bounded payload before the root turn discriminator without accepting non-turn or nested candidates
+AssertionError: expected {} to match object { model: 'generated-model', …(1) }
+
+- Expected
++ Received
+
+- {
+-   "model": "generated-model",
+-   "reasoningEffort": "medium",
+- }
++ {}
+
+ ❯ packages/server/src/agent/CodexChildTurnStream.test.ts:42:58
+     40|  const text=JSON.stringify({payload:{model:"generated-model",effort:"m…
+     41|  for(const byte of Buffer.from(text))stream.consume(Buffer.from([byte]…
+     42|  expect(stream.invalid).toBe(false);expect(stream.value).toMatchObject…
+       |                                                          ^
+     43|  stream.consume(Buffer.from(JSON.stringify({payload:{model:"x".repeat(…
+     44|  expect(stream.invalid).toBe(false);expect(stream.value.model).toBe("g…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 11 skipped (13)
+      Tests  2 failed | 200 skipped (202)
+   Start at  09:15:54
+   Duration  3.16s (transform 60%, import 26%, tests 14%, worker 1%)
+
+  Transform  transforming modules took 8.61s · 60% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

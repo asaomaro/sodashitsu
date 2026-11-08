@@ -24,3 +24,11 @@
 - runtime固定snapshotへcmp完全一致復元し、200 tests / 13 suites pass（late-restored.log）。
 - 最終source固定後server全体noEmit（test含む）exit0。
 - 本修正ではproduction read/Windows操作/model呼出しなし。先行actual結果は1e1に対する証拠として保持。
+
+## JSON項目順と末尾statの追加修正
+
+payloadがroot.typeより先でも、boundedなmodel/effort候補を保持して完全syntaxと正式turn_contextを確認してから採用する。非turn/nested候補は設定へ反映せず、候補上限超過は本文を蓄積しない。turn値が上限を超えた場合はunknown。末尾fd.stat後もvalidを再確認し、timeoutした旧readが同Entryの新append revisionを戻さない。
+
+- 旧6f5e runtimeで順序変更・遅着最終statの2caseが2 fail（order-negative.log）。
+- 固定runtime2filesへcmp完全一致復元後、202 tests / 13 suites pass（order-restored.log）。
+- 最終source固定後server全体noEmit（test含む）exit0。Windows/追加実record/model操作なし。

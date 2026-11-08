@@ -128,6 +128,7 @@ export class CodexChildObservationCache{
    if(!valid())return;
    if(entry.primary.offset===Number(before.size)&&!entry.primary.partial&&!entry.primary.invalid){entry.initialDone=true;delete entry.suffix;}
    const after=await opened.fd.stat({bigint:true});
+   if(!valid())return;
    if(after.dev!==before.dev||after.ino!==before.ino||after.size<before.size||(after.size===before.size&&!same(after,before))){entry.reset=true;entry.available=false;return;}
    entry.revision=after;
   }finally{await opened.fd.close().catch(()=>undefined);}

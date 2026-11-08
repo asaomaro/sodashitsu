@@ -11,6 +11,7 @@ export class CodexRecordEnvelope {
   private turnTimestamp?: string;
   private turnModel?: string;
   private turnEffort?: string;
+  private oversizedTurnCandidate=false;
   get recordType(): string | undefined { return this.rootType; }
   get turnMetadata(): { timestamp?: string; model?: string; effort?: string } {
     return {...(this.turnTimestamp!==undefined?{timestamp:this.turnTimestamp}:{}),...(this.turnModel!==undefined?{model:this.turnModel}:{}),...(this.turnEffort!==undefined?{effort:this.turnEffort}:{})};
@@ -41,7 +42,7 @@ export class CodexRecordEnvelope {
       this.bytes++;
       const c = String.fromCharCode(b);
       if (this.mode === "string") {
-        if (this.capture) { if (this.token.length >= 768) { this.bad = true; return false; } this.token += c; }
+        if (this.capture) { if (this.token.length >= 768) { if(this.purpose==="turn"&&!this.keyToken&&this.stack.at(-1)?.context==="payload"&&["model","effort"].includes(this.stack.at(-1)?.key??"")){this.oversizedTurnCandidate=true;this.capture=false;this.token="";}else{this.bad = true; return false;} } this.token += c; }
         if (this.unicode) { if (!/[0-9a-fA-F]/.test(c)) this.bad = true; else this.unicode--; continue; }
         if (this.escaped) { this.escaped = false; if (c === "u") this.unicode = 4; else if (!'"\\/bfnrt'.includes(c)) this.bad = true; continue; }
         if (b < 32) { this.bad = true; continue; }
@@ -78,7 +79,7 @@ export class CodexRecordEnvelope {
         if (this.importantType(frame)) { this.bad = true; continue; }
         this.started = true; this.stack.push({ kind: c === "{" ? "object" : "array", phase: c === "{" ? "keyOrEnd" : "valueOrEnd", context, ...(context !== "other" ? { seen: new Set<string>() } : {}) }); continue;
       }
-      if (c === '"') { this.startString(false, frame?.context !== "other" && (this.importantType(frame) || this.purpose === "turn" && (frame?.context === "root" && frame.key === "timestamp" || this.rootType === "turn_context" && frame?.context === "payload" && ["model", "effort"].includes(frame.key ?? "")))); continue; }
+      if (c === '"') { this.startString(false, frame?.context !== "other" && (this.importantType(frame) || this.purpose === "turn" && (frame?.context === "root" && frame.key === "timestamp" || (this.rootType === undefined || this.rootType === "turn_context") && frame?.context === "payload" && ["model", "effort"].includes(frame.key ?? "")))); continue; }
       if (this.importantType(frame)) { this.bad = true; continue; }
       this.mode = "scalar"; this.token = c;
     }
@@ -87,7 +88,7 @@ export class CodexRecordEnvelope {
   finishSyntax(): boolean {
     try { this.utf8.decode(); } catch { this.bad = true; }
     if (this.mode === "scalar") this.endScalar();
-    return !this.bad && this.ended && this.stack.length === 0 && this.mode === "idle";
+    return !this.bad && !(this.rootType==="turn_context"&&this.oversizedTurnCandidate) && this.ended && this.stack.length === 0 && this.mode === "idle";
   }
   finish(): boolean { return this.finishSyntax() && this.irrelevant; }
   private importantType(frame: Frame | undefined): boolean {
