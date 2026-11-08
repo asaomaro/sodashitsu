@@ -74,7 +74,7 @@ describe("記録を読むだけの窓", () => {
     await flush();
     expect(wrapper.findAll("[data-kind]").map((r) => r.attributes("data-kind"))).toEqual(["prompt", "say", "tool", "result", "say"]);
     expect(wrapper.find("input, textarea, [contenteditable]").exists()).toBe(false);
-    expect(wrapper.text()).toContain("読むだけ。サブエージェントには、入力できません");
+    expect(wrapper.text()).toContain("この記録の窓は閲覧専用です");
     wrapper.unmount();
   });
 

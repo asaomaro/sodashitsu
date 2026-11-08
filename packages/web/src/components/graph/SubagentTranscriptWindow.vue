@@ -3,7 +3,7 @@
  * グラフの上の、サブエージェントの記録を**読むだけの窓**（20261008-graph-first の PR6c・AC-U4）。端末の窓（`GraphTerminalWindow`）と同じ見た目の枠（見出しをつかんで動かす・縁で大きさを変える・［×］）。
  * 端末の窓は端末・窓の記憶・3 つの上限に結びついていて、枠だけを借りられない（守りの領域を変えずに済ませるため、同じ見た目の部品を別に持つ）。**端末の窓の数（3 つ）には数えない**——この窓は同時に 1 つで、別の小さなノードを開けば入れ替わる。
  *
- * - 入力はできない（「読むだけ。サブエージェントには、入力できません」と常に出す）。`agent.subagent_transcript` を 1.5 秒ごとに呼び、続きを下に足す（見ている画面の下端にいるときだけ、自動で追う）。
+ * - 入力はできない（「この記録の窓は閲覧専用です」と常に出す）。`agent.subagent_transcript` を 1.5 秒ごとに呼び、続きを下に足す（見ている画面の下端にいるときだけ、自動で追う）。
  * - **中身は文字として出す**（`{{ }}` だけ。`v-html`・リンクにしない・画像を読まない）。道具の結果は折りたたみ（先頭だけ）。
  * - 窓が見えている間（このコンポーネントが居て、ブラウザのタブが隠れていない間）だけ読む。サブエージェントが終わっても、窓を閉じるまで読める（サーバが、窓を開いたときに報告されていたものは許す）。
  * - 場所は送らない（pane の id・サブエージェントの id・続きの位置だけ）。読めない理由はサーバの固定の文をそのまま出す。
@@ -15,6 +15,7 @@ import { ConnectionKey } from "../../injection.js";
 
 const props = defineProps<{
   inline?: boolean;
+  bare?: boolean;
   paneId: string;
   agentId: string;
   /** 見出しに出す名前（親の pane の呼び名）。 */
@@ -210,7 +211,7 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
     @pointerdown.stop
     @wheel.stop
   >
-    <header class="sat-head">
+    <header v-if="!bare" class="sat-head">
       <div
         class="sat-grip"
         @pointerdown="onGripDown"
@@ -260,7 +261,7 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
       </template>
       <p v-if="note" class="sat-note" role="status" data-subagent-transcript-note>{{ note }}</p>
     </div>
-    <footer class="sat-foot">読むだけ。サブエージェントには、入力できません</footer>
+    <footer v-if="!bare" class="sat-foot">この記録の窓は閲覧専用です</footer>
   </section>
 </template>
 
