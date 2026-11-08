@@ -1,5 +1,5 @@
 import type { ResourceMonitorSnapshot, UsageInsights, UsageInsightsParams, InsightGroup, UsageReport } from "@sodashitsu/protocol";
-import type { KeyInput } from "@sodashitsu/client-core";
+import { usageOverviewAssessment, USAGE_OVERVIEW_ASSESSMENT_TITLE, USAGE_OVERVIEW_ASSESSMENT_RULE, USAGE_OVERVIEW_ASSESSMENT_LIMIT, type KeyInput } from "@sodashitsu/client-core";
 import type { RequestPort } from "../term/PaneRegistry.js";
 import type { UiState } from "../model/UiState.js";
 import type { Grid, Rect, CursorState } from "../render/Screen.js";
@@ -216,7 +216,11 @@ export class MonitorView {
       d.collecting ? "記録を収集中です。自動更新で集計が進みます。" : d.partial ? "一部の記録のみの集計です（収集状況を参照）。" : "取得できた記録に基づく集計です。",
     ];
     const groups = (title: string, rows: InsightGroup[]) => [sectionLine(title), ...rows.map(g=>`${g.calls > 0 && d.totals.calls > 0 ? bar(g.total,d.totals.total) : "[????????????]"} ${g.label} · ${tokens(g)} tok (${g.calls > 0 && d.totals.calls > 0 ? share(g.total,d.totals.total) : "未取得"}) · ${g.calls}回 · tool ${g.tools}`), ...(rows.length ? [] : ["記録なし"]),endLine()];
-    if (this.section === 0) return [...summary,`活動: 開始 ${d.activity.started} / 完了 ${d.activity.completed} / 中断 ${d.activity.aborted} / 失敗 ${d.activity.failed}`,...groups("エージェント別",d.byKind),...groups("日別",d.byDay)];
+    const assessment=usageOverviewAssessment(d);
+    const assessmentLines:MonitorLine[]=[sectionLine(USAGE_OVERVIEW_ASSESSMENT_TITLE),metricLine(assessment.score===null?"評価不能":`${assessment.grade} · ${assessment.score} / 100点`),"追加のエージェント呼び出しなし · 現在の期間・フィルタ・接続PC",
+      ...(assessment.provisional?["一部取得・集計中の暫定評価です。記録の追加で変わります。"]:[]),...(assessment.reason?[assessment.reason]:[]),
+      ...(assessment.known===null?[]:[`既知結果 ${assessment.known} / 呼び出し ${assessment.tools} 件 · 結果取得率 ${assessment.coveragePct===null?"—":assessment.coveragePct.toFixed(1)+"%"}`,`非失敗 ${assessment.success} · 失敗 ${assessment.failed} · 結果未取得 ${assessment.unknown}`]),USAGE_OVERVIEW_ASSESSMENT_RULE,USAGE_OVERVIEW_ASSESSMENT_LIMIT,endLine()];
+    if (this.section === 0) return [...summary,...assessmentLines,`活動: 開始 ${d.activity.started} / 完了 ${d.activity.completed} / 中断 ${d.activity.aborted} / 失敗 ${d.activity.failed}`,...groups("エージェント別",d.byKind),...groups("日別",d.byDay)];
     if (this.section === 1) return [...summary,sectionLine("前期間との比較"),`前期間 ${tokens(d.previous)} tok / ${d.previous.calls}回 · 差分 ${d.totals.calls > 0 && d.previous.calls > 0 ? number(d.totals.total-d.previous.total) : "未取得"} tok`,...groups("モデル別",d.byModel),...groups("プロジェクト別",d.byProject),...groups("アカウント別",d.byAccount),...groups("時間帯別",d.byHour)];
     if (this.section === 2) {
       const direct = d.tools.filter(t=>!t.nested), total = direct.reduce((n,t)=>n+t.calls,0);

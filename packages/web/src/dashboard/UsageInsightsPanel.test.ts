@@ -53,3 +53,12 @@ it('shows usage-unavailable sessions without zero-token totals or charts and kee
  expect(wrapper!.find('.insights-metrics article strong').text()).toBe('未取得');expect(wrapper!.find('svg[aria-label="期間トークンと前期間の推移"]').exists()).toBe(false);
  for(const kind of ['claude','codex','muse','agy','copilot'])expect(wrapper!.find(`option[value="${kind}"]`).exists()).toBe(true);
 });
+it('scores only the displayed filtered aggregate without invoking an agent and clears it with the scope',async()=>{
+ const calls=vi.fn(async(_id:string,p:UsageInsightsParams)=>{const d=fixture(p);d.totals={...d.totals,tools:200,knownResults:100,errors:5};d.partial=true;return d;});
+ const machines=setup(calls);await flushPromises();const card=wrapper!.get('[data-overview-assessment]');expect(card.text()).toContain('A · 95 / 100点');expect(card.text()).toContain('暫定');expect(card.text()).toContain('50.0%');expect(card.text()).toContain('非失敗 95');expect(card.text()).toContain('結果未取得 100');expect(card.text()).toContain('取得時点まで');expect(calls).toHaveBeenCalledTimes(1);
+ await wrapper!.setProps({layout:'compare'});expect(wrapper!.find('[data-overview-assessment]').exists()).toBe(false);await wrapper!.setProps({layout:'overview'});
+ machines.selectedId='remote';await flushPromises();expect(calls.mock.calls.at(-1)?.[0]).toBe('remote');expect(wrapper!.get('[data-overview-assessment]').text()).toContain('95 / 100点');
+});
+it('shows unassessed instead of a zero grade when tool results are unavailable',async()=>{
+ setup(async(_id,p)=>fixture(p));await flushPromises();expect(wrapper!.get('[data-overview-assessment]').text()).toContain('評価不能');expect(wrapper!.find('[data-grade="E"]').exists()).toBe(false);
+});

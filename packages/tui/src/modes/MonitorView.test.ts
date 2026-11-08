@@ -81,3 +81,8 @@ it("separates cards and headings, keeps composition shares neutral and marks res
  const noteY=Array.from({length:g.h},(_,y)=>y).find(y=>g.rowText(y).includes("CPUは1コア"))!;
  const notePercent=g.ch.slice(noteY*g.w,(noteY+1)*g.w).indexOf("%");expect(notePercent).toBeGreaterThan(0);expect(g.fg[noteY*g.w+notePercent]).not.toBe(theme.ui("--soda-error-fg"));
 });
+it("adds a common numeric score to overview only and never generates an agent report",async()=>{
+ const d=insightsFixture();d.totals={...d.totals,tools:200,knownResults:100,errors:5};d.partial=true;
+ const h=make("analytics",vi.fn(async()=>d));h.v.sync(true);await vi.waitFor(()=>expect(h.text(125,65)).toContain("A · 95 / 100点"));
+ expect(h.text(125,65)).toContain("暫定");expect(h.text(125,65)).toContain("50.0%");expect(h.text(125,65)).toContain("非失敗 95");expect(h.text(125,65)).toContain("結果未取得 100");expect(h.request).toHaveBeenCalledTimes(1);expect(h.request).toHaveBeenCalledWith("agent.usage_insights",expect.any(Object));h.key("2");expect(h.text(125,65)).not.toContain("ツール結果の機械評価");
+});
