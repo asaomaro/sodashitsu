@@ -43,3 +43,7 @@ B：新job/新state/通常receiverでtone安定を独立確認→root正式lock�
 C：別job/通常receiverとown no-op昇格要求だけを準備→rootがfresh own UAC画面を確認→実source=elevated-uac/windows-gdi/secure/protectedMicを再証明してbaseline/6秒受音。Default上のA成功をUAC成功へ転用しない。別user/対象不明ならmedia0。rootがown要求だけaccept/cancel→own no-op退役/Default復帰を確認する。AのDefault限定receiver/manifestを緩和して使い回さない。
 
 B/Cの前には既存のfresh unlock復旧が使えることをrootが確認する。使えなければ事実を返し、lock/UAC/PIN再試行ループ・新credential保存・自動ログイン設定を行わない。
+
+### 保護マイクの接続宣言
+
+制御側の接続は `DESKTOP_MICROPHONE_PROTOCOL` に加え `DESKTOP_PROTECTED_PROTOCOL` と `protectedMicrophone` feature を提示する。`features:true` / `elevatedDesktop:true` だけでは Relay の `elevatedRequested` が成立しない。音声専用 lane は従来どおり microphone protocol 1個のみ。入力許可用 protocol はこの測定には追加しない。MJS 更新後は新しい job/source manifest を作り直す。C# source は変更していないため、この修正だけでは再コンパイル不要だが既存 source/binary seal の再確認は必要。

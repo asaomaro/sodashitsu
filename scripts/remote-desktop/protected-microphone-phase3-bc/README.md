@@ -46,3 +46,7 @@ runnerは実source=elevated-uacへ到達するまでtoneを出さない。root�
 ## 終了/未知
 
 stopfile→receiver self TTL/物理close＋owned child exit0→private server close0→actual actor PID/start退役→CABLE両端session0/mute/volume/default不変を確認した場合だけprivate auth state削除。各rootごとのresultはevaluateB/Cが未取得をfalseへ倒し、失敗/unknownを成功扱いしない。own operator/Noop以外のprocessへkillや入力はしない。source/同意/実lock/受音未到達ならfailureとなり、成功のため設定・期限・採点を緩めない。本番parent/pane維持はrootがbefore/after確認する。
+
+### 保護マイクの接続宣言
+
+制御側の接続は `DESKTOP_MICROPHONE_PROTOCOL` に加え `DESKTOP_PROTECTED_PROTOCOL` と `protectedMicrophone` feature を提示する。`features:true` / `elevatedDesktop:true` だけでは Relay の `elevatedRequested` が成立しない。音声専用 lane は従来どおり microphone protocol 1個のみ。入力許可用 protocol はこの測定には追加しない。MJS 更新後は新しい job/source manifest を作り直す。C# source は変更していないため、この修正だけでは再コンパイル不要だが既存 source/binary seal の再確認は必要。
