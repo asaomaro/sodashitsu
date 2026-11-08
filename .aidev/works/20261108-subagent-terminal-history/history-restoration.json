@@ -1,0 +1,32 @@
+[
+  {
+    "name": "entry-selector",
+    "source": "packages/server/src/agent/SubagentTerminalHistory.ts",
+    "restoredSHA256": "7dc2f2fdfd268f917bd20042e245f69421349df4d7cbfd7b20e06dc885d22672",
+    "byteExact": true
+  },
+  {
+    "name": "private-current",
+    "source": "packages/server/src/agent/SubagentTerminalHistory.ts",
+    "restoredSHA256": "7dc2f2fdfd268f917bd20042e245f69421349df4d7cbfd7b20e06dc885d22672",
+    "byteExact": true
+  },
+  {
+    "name": "record-revision",
+    "source": "packages/server/src/agent/CursorChildObservations.ts",
+    "restoredSHA256": "16aa7f9178676d821b6eb264668284cc475b91c55ebb7c6f46a47f559510d761",
+    "byteExact": true
+  },
+  {
+    "name": "post-auth",
+    "source": "packages/server/src/surface/methods/subagentHistory.ts",
+    "restoredSHA256": "1779b334a4b25167e1db2fb552897bf7dab14847135ad6b9287087d26614018c",
+    "byteExact": true
+  },
+  {
+    "name": "old-compose",
+    "source": "packages/server/src/composeServer.ts",
+    "restoredSHA256": "2f9faaff405130f13cce183114a836b22fc29ae3e2fd2dec77a3162a3ba1d4f5",
+    "byteExact": true
+  }
+]

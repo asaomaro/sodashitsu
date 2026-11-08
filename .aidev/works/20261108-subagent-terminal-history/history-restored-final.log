@@ -1,0 +1,25 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-terminal-history
+
+{"ts":"2026-11-08T04:13:50.946Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T04:13:50.949Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T04:13:50.950Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T04:13:50.951Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T04:13:50.957Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-cursor-child-compose-JOaCT9/state/commands.json","count":0}
+{"ts":"2026-11-08T04:13:52.350Z","level":"info","msg":"agent session attached","paneId":"4d55b6eb-497f-4a93-83ed-07f7fd39f551","kind":"cursor","session":"2cfe574b","source":"hook"}
+
+ Test Files  6 passed (6)
+      Tests  38 passed (38)
+   Start at  13:13:43
+   Duration  9.71s (transform 54%, tests 32%, import 14%)
+
+  Transform  |@sodashitsu/server| transforming modules took 10.06s · 54% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

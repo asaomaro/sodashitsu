@@ -1,0 +1,32 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-terminal-history
+
+ ❯ |@sodashitsu/server| src/agent/CursorChildObservations.test.ts (16 tests | 1 failed | 15 skipped) 353ms
+   × retires an old terminal proof when a new child-file revision has a fresh self observation, without inferring alive state 351ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildObservations.test.ts > retires an old terminal proof when a new child-file revision has a fresh self observation, without inferring alive state
+AssertionError: expected 'f90d21ff587e4ac2ec40eb2adbbc9cabf9d22…' not to be 'f90d21ff587e4ac2ec40eb2adbbc9cabf9d22…' // Object.is equality
+ ❯ src/agent/CursorChildObservations.test.ts:55:62
+     53|  f.controller.offer(f.stop());await vi.waitFor(()=>expect(f.controller…
+     54|  expect(f.controller.terminals(f.pane.id).items[0]?.settings).toEqual(…
+     55|  expect(f.controller.terminals(f.pane.id).items[0]?.key).not.toBe(old.…
+       |                                                              ^
+     56| });
+     57| it.each(["parent","refkind","instance","verified","pid"])("rejects cha…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 skipped (16)
+   Start at  13:13:25
+   Duration  819ms (tests 54%, transform 38%, import 7%, worker 1%)
+

@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "rootDir": "../../../packages/server/src"
+  },
+  "files": [
+    "../../../packages/server/src/agent/SubagentTerminalHistory.ts",
+    "../../../packages/server/src/agent/SubagentTerminalHistory.test.ts",
+    "../../../packages/server/src/agent/SubagentTerminalBinding.ts",
+    "../../../packages/server/src/agent/CursorTerminalBindings.ts",
+    "../../../packages/server/src/agent/SubagentHistoryService.ts",
+    "../../../packages/server/src/agent/SubagentHistoryService.test.ts",
+    "../../../packages/server/src/agent/CursorChildObservations.test.ts",
+    "../../../packages/server/src/surface/methods/subagentHistory.test.ts",
+    "../../../packages/server/src/composeServer.subagentHistory.integration.test.ts"
+  ]
+}

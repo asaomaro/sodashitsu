@@ -1,0 +1,39 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-terminal-history
+
+ ❯ |@sodashitsu/server| src/agent/SubagentTerminalHistory.test.ts (14 tests | 1 failed | 13 skipped) 21ms
+   × retains private targets only behind current proofs and never serializes them into list rows 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentTerminalHistory.test.ts > retains private targets only behind current proofs and never serializes them into list rows
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:102:41
+    100|  const rows=await f.history.read({paneId});expect(JSON.stringify(rows)…
+    101|  const grant=await f.history.grantEntry(paneId,rows.items[0]!.entryId)…
+    102|  current=false;expect(grant?.current()).toBe(false);expect(await f.his…
+       |                                         ^
+    103| });
+    104|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  13:13:23
+   Duration  345ms (transform 57%, import 20%, tests 15%, worker 7%)
+

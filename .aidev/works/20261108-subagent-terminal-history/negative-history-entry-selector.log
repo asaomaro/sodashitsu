@@ -1,0 +1,54 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-terminal-history
+
+ ❯ |@sodashitsu/server| src/agent/SubagentTerminalHistory.test.ts (14 tests | 1 failed | 13 skipped) 16ms
+   × mints history entry IDs and never grants a later birth with an earlier selected ID 14ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentTerminalHistory.test.ts > mints history entry IDs and never grants a later birth with an earlier selected ID
+AssertionError: expected { source: { …(4) }, …(2) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "current": [Function current],
+  "item": {
+    "entryId": "a573e375-b548-4533-a9de-b6849b520169",
+    "hasTranscript": true,
+    "id": "child",
+    "startedAt": 2000,
+    "terminalStatus": "completed",
+  },
+  "source": {
+    "instanceId": "12345678-1234-4234-8234-123456789014",
+    "kind": "cursor",
+    "paneId": "12345678-1234-4234-8234-123456789012",
+    "sessionId": "12345678-1234-4234-8234-123456789013",
+  },
+}
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:94:71
+     92|  f.history.note(f.source,item(),"old-attempt",async()=>true);expect((a…
+     93|  f.history.note(f.source,{...item(),startedAt:2000},"new-attempt",asyn…
+     94|  expect(await f.history.grant(paneId,"child",()=>true,first.entryId)).…
+       |                                                                       ^
+     95| });
+     96|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  13:13:22
+   Duration  384ms (transform 65%, import 21%, tests 10%, worker 4%)
+
