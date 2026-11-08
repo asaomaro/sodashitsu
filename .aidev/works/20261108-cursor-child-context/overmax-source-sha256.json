@@ -1,0 +1,10 @@
+{
+  "sourceHead": "aa3966a198f4cb6f184226dd9f05baac2f734e26",
+  "files": {
+    "packages/client-core/src/agent/subagentUsageView.test.ts": "7b236b30b7c52a3623a228520e63e8471c78b36122bcfff0efa86490a41900a9",
+    "packages/server/src/agent/CursorChildContext.test.ts": "d0a45ee04da77e897325696f1d8c1be405980dabad35eff4abd918e8637bcf8e",
+    "packages/server/src/agent/CursorChildContext.ts": "d1b7c79249460a75aa48215bf01b34a5140b03adce31c0fcea2114ccbe117f10",
+    "packages/server/src/agent/CursorChildContextHistory.test.ts": "4d3e23564fb139c89e236ee4226fb490ed35151f163081f69c3e47503eb12891",
+    "packages/server/src/agent/CursorTerminalBindings.ts": "861bf98ee97a426e24978ec3a655a9301d80be2ab4a86a475840fdb12d861bab"
+  }
+}

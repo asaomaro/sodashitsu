@@ -1,0 +1,13 @@
+{
+  "negativeExit": 1,
+  "restoredExit": 0,
+  "before": {
+    "packages/server/src/agent/CursorChildContext.ts": "d1b7c79249460a75aa48215bf01b34a5140b03adce31c0fcea2114ccbe117f10",
+    "packages/server/src/agent/CursorTerminalBindings.ts": "861bf98ee97a426e24978ec3a655a9301d80be2ab4a86a475840fdb12d861bab"
+  },
+  "after": {
+    "packages/server/src/agent/CursorChildContext.ts": "d1b7c79249460a75aa48215bf01b34a5140b03adce31c0fcea2114ccbe117f10",
+    "packages/server/src/agent/CursorTerminalBindings.ts": "861bf98ee97a426e24978ec3a655a9301d80be2ab4a86a475840fdb12d861bab"
+  },
+  "byteExact": true
+}

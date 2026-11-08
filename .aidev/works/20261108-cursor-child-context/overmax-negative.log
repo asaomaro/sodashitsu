@@ -1,0 +1,62 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-context
+
+ ❯ |@sodashitsu/server| src/agent/CursorChildContext.test.ts (4 tests | 1 failed) 8ms
+   × retains formally encoded excess context while preserving uint32 limits 4ms
+ ❯ |@sodashitsu/server| src/agent/CursorChildContextHistory.test.ts (6 tests | 1 failed) 1498ms
+   × keeps raw over-window child context and clamps only the display percentage 173ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildContext.test.ts > retains formally encoded excess context while preserving uint32 limits
+AssertionError: expected undefined to deeply equal { used: 100, max: 50 }
+
+- Expected:
+{
+  "max": 50,
+  "used": 100,
+}
+
++ Received:
+undefined
+
+ ❯ src/agent/CursorChildContext.test.ts:16:58
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildContextHistory.test.ts > keeps raw over-window child context and clamps only the display percentage
+AssertionError: expected { status: 'unavailable', …(1) } to match object { status: 'ok', usage: { …(4) } }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "ok",
+-   "usage": {
+-     "contextTokens": 100,
+-     "contextUsedPct": 100,
+-     "contextWindowTokens": 50,
+-     "source": "cursor-db",
+-   },
++   "status": "unavailable",
+  }
+
+ ❯ src/agent/CursorChildContextHistory.test.ts:34:168
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 2 passed (4)
+      Tests  2 failed | 24 passed (26)
+   Start at  21:24:37
+   Duration  2.62s (transform 53%, tests 35%, import 13%)
+
