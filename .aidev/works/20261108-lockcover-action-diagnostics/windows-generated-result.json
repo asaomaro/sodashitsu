@@ -1,0 +1,24 @@
+{
+  "receipt": "windows-lockcover-action-generated-verified.json",
+  "receiptSha256": "2daa2d709cee8fbf35092f2532b10d2294ede914aa0bca9751208d8a4a1abcc9",
+  "candidate": "c26fd032348877e9415f4546e1ccb440f0870787",
+  "wrapperExit": 0,
+  "verified": {
+    "stage": "lockcover-action-generated",
+    "compileExit": 0,
+    "inputCount": 4,
+    "rawGitPinsExact": true,
+    "checkoutUnchanged": true,
+    "binarySha256": "2f2b388c5cc86a52760ae59977506486e31b1994dadd3aaf0b7762b623c96ba5",
+    "generatedExit": 0,
+    "generatedPassed": true,
+    "realInput": false,
+    "capture": false,
+    "service": false,
+    "lockOrUac": false,
+    "successLines": 2,
+    "csharpExecutionCount": 1,
+    "thirdDismissStarted": false
+  },
+  "harnessCorrection": "Original wrapper expected one success line; stored output contains both fixed success lines. Output/binary/source seals rechecked without a second C# execution."
+}

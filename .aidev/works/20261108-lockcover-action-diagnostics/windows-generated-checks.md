@@ -16,3 +16,7 @@ Use the exact four inputs and hashes in csharp-input-sha256.json. Resolve the th
 Capture compiler diagnostics privately with bounded output, no policy bypass. After compile0, root's normal hidden actor may run this new binary once with only --check, redirected streams and outer timeout. It invokes the existing generated cover-loop checks plus fake-send core checks: SYSTEM/false guard send0 with original short-circuit counts; actual fake return0/1/2/>2 outcomes; single fake send; wake never chains a key; diagnostic TextWriter failure leaves guard/action semantics intact; native8-record/enum ceiling. No SendInput is called by the fake core tests, and no real user desktop input/capture/service is used.
 
 Only root after review/deployment/source verification may decide on a separate fresh-ready/control/epoch and one explicit real action. Counts represent insertion acceptance, never target delivery/unlock success; no diagnostic authorizes input or weakens the old source guards.
+
+## Verified execution
+
+Root has now completed the generated check once: compile0 / --check0 / exact four raw seals / checkout unchanged, without real input/capture/service/lock/UAC. See test-result.md and windows-generated-result.json for the fixed binary hash and wrapper-expectation correction. These results do not authorize or claim a real third dismiss.
