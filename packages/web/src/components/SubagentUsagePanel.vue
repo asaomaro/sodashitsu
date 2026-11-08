@@ -147,10 +147,10 @@ p {
   opacity: 0.85;
 }
 .child-usage-meter {
-  height: 6px;
-  border-radius: 3px;
+  height: 0.6em;
+  border-radius: 0.3em;
   overflow: hidden;
-  background: var(--soda-selection-bg);
+  background: color-mix(in srgb, var(--soda-fg, #f8f8f2) 18%, transparent);
   margin: 0.4em 0;
 }
 .child-usage-meter span {
