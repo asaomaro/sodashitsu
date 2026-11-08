@@ -1,0 +1,10 @@
+- [x] rootへ最小context-only案/所有を提案・承認、AGY担当と共有filesを調整
+- [x] hookledger到達性未証明を保留し、installed raw childDB/root schemaを限定調査
+- [x] source cursor-db/unknownsource failclosed・presence-only有界decoder
+- [x] Stop時private root/DB-WAL ns seal捕捉、firstusage/laterroot切替禁止
+- [x] fd.close中DB更新P2の旧1fail再現→閉鎖後metadata-only再照合
+- [x] 70unit/認証ownAPI1/TUI35/compiled server fixture/2themeDOM
+- [x] 4負例段階→8runtime SHA完全復元、最終serverbuild/対象strict型
+- [ ] 最終独立レビュー（実装者以外、必須）
+- [ ] 実managed childDB/モデル/実Windows測定（本単位では未実施）
+- [ ] current Cursor一覧・子消費内訳/費用・Copilot子本文/数値・他CLI正式directはremaining.mdを維持

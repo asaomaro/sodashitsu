@@ -1,0 +1,31 @@
+{
+  "extends": "/workspaces/sodashitsu-cursor-child-context/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "/workspaces/sodashitsu-cursor-child-context/node_modules/@types"
+    ]
+  },
+  "files": [
+    "/workspaces/sodashitsu-cursor-child-context/packages/client-core/src/agent/subagentUsageView.test.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/client-core/src/agent/subagentUsageView.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/protocol/src/usage.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/CursorChildContext.test.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/CursorChildContext.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/CursorChildContextHistory.test.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/CursorChildMetadataQuery.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/CursorChildObservations.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/CursorChildRecord.test.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/CursorChildRecord.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/CursorTerminalBindings.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/CursorTerminalContext.test.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/SubagentHistoryService.test.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/SubagentHistoryService.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/agent/SubagentTerminalBinding.ts",
+    "/workspaces/sodashitsu-cursor-child-context/packages/server/src/composeServer.cursorChildObservations.integration.test.ts"
+  ]
+}

@@ -1,0 +1,37 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-context
+
+ ❯ |@sodashitsu/server| src/agent/CursorChildContext.test.ts (3 tests | 1 failed) 8ms
+   × does not manufacture protobuf defaults or accept ambiguous/invalid counters 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildContext.test.ts > does not manufacture protobuf defaults or accept ambiguous/invalid counters
+AssertionError: expected { used: +0, max: 100 } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "max": 100,
+  "used": 0,
+}
+
+ ❯ src/agent/CursorChildContext.test.ts:9:392
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  21:02:17
+   Duration  150ms (transform 60%, import 20%, tests 14%, worker 5%)
+

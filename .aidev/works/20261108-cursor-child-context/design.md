@@ -1,0 +1,11 @@
+# Cursor終了子の保存済み文脈量
+
+root承認の最小実効単位。b54基点。最初のhook4数値ledger案は、installed managed childの自己afterAgentResponse到達性が未証明なので採らない。正式なchild SQLite保存stateからcontextだけを読む。消費累計・費用・時間・親転用を追加しない。
+
+installed Cursor2026.11.05-86047dfのCliSubagentStoreFactoryはSQLiteBlobStore→AgentStore(s,s)でchild stateをraw保存。AgentStore.handleCheckpointはConversationStateStructure.serialize→SHA256→blobsへraw保存→meta.latestRootBlobId(hex)へ。root field5はConversationTokenDetailsでfield1 used_tokens/field2 max_tokensはuint32。root全体のSHAとポインタが一致するblobだけ、2MiB cap・固定worker/厳密meta+blobs schema・全syntaxとfield presenceを確認して2数値を返す。値の欠測をprotobuf default0へしない。unknown/bad/duplicate/wire/cap/hash不一致は数値無し、既証明lineageは保持。
+
+正式Stop/直属lineage/子終端markerを受理したbindingに、rootIdとDB/WALのdev/ino/size/mtimeNs/ctimeNs/存在をprivate sealとして捕捉する。初回usageの時には捕捉しない。binding keyへseal/rootを含め、callbackはexact entry proofとfresh safeopenで一致を要求。FD閉鎖後にも全opened namespace/ns identityとWAL有無をFD無しで再照合する。old-entryのfirstread前/既読後/close中にDBだけ新rootへ変わってもunavailable。current/alive推定・親集計に変化無し。
+
+共有private SubagentTerminalBindingにoptional readUsage、SubagentHistoryServiceが既存4physical/2秒のbounded scope内で前後検証して呼ぶ。未提供providerは既存経路。Cursor projectionはsource cursor-db/self/context only/partial、observedAt無し。未知sourceは共通formatterでfailclosed。既存専用history UIはそのまま再利用し、本文無しでも数値は独立して表示可能。
+
+担当Cursor専有filesとsharedHistoryService/TerminalBinding callbackのみ。backendAGYがNativeService/composeを担当し、競合無しと合意。NativeRecords/Reader/Service/compose実装/既存利用者hook設定の変更0。実モデル/会話変更/Windows0。

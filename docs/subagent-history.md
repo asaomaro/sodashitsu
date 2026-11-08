@@ -26,6 +26,6 @@ Grokは正式なspawn/finishedの親・子・attemptを、親記録の全EOFと�
 
 認証済みAPIの`agent.subagent_history`は最大256件の収集から64件ずつ返します。`incomplete`は収集・検証が部分的、`omittedBefore`は上限で古い項目が省かれたことを表します。`pending`/`unavailable`を「終了した子が無い」とは解釈しません。開始・終了時刻、モデル・effortは正式に分かった項目だけを載せます。
 
-各行の`entryId`は履歴の選択用です。本文は`agent.subagent_history_transcript`、数値は`agent.subagent_history_usage`へ親pane・子ID・entryIdを渡して読みます。ファイルの場所は受け取りません。子が同じIDで再開しても古い選択を新しい実行へ切り替えず、未対応の旧接続先でも現在の子へのAPIへ戻りません。Cursorの子の数値は未取得のままで、親の数値を代わりに表示しません。履歴からの直接送信は行いません。
+各行の`entryId`は履歴の選択用です。本文は`agent.subagent_history_transcript`、数値は`agent.subagent_history_usage`へ親pane・子ID・entryIdを渡して読みます。ファイルの場所は受け取りません。子が同じIDで再開しても古い選択を新しい実行へ切り替えず、未対応の旧接続先でも現在の子へのAPIへ戻りません。Cursorの終了子は、正式Stop時に固定した子自身の保存済み文脈量・上限だけを取得できます。消費内訳や費用は未取得で、親の数値を代わりに表示しません。履歴からの直接送信は行いません。
 
 これらはログイン済みの読取り口だけです。利用者のフックを黙って更新せず、CLI/モデルの新規起動やWindowsへの操作は行いません。現段階の結合検証は生成CLI/記録を使ったもので、実Codex/Muse/Copilot/Antigravity/Cursor/Grokの子の再開や実機での検証成功を表すものではありません。

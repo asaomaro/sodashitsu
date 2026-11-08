@@ -1,0 +1,16 @@
+{
+  "extends": "/workspaces/sodashitsu-cursor-child-context/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "/workspaces/sodashitsu-cursor-child-context/node_modules/@types"
+    ]
+  },
+  "files": [
+    "/workspaces/sodashitsu-cursor-child-context/packages/tui/src/modes/ChildConversationDialog.test.ts"
+  ]
+}

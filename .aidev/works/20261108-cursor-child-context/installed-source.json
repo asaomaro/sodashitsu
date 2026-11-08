@@ -1,0 +1,16 @@
+{
+  "version": "2026.11.05-86047df",
+  "sourceHashes": {
+    "index.js": "e31b14bafcee9142507a5de52d636b8532112fe404d04f23fd8784d0d2078055",
+    "1623.index.js": "cc3731b3407f2a00d97933d7925161c33e596e732b91dd97086db2179575efce",
+    "1212.index.js": "15b18cb92aa4093acc886d1ef6f6f308bc97a9abca69b89cde805f91e9760042"
+  },
+  "semantics": [
+    "CliSubagentStoreFactory.open -> raw SqliteBlobStore -> AgentStore",
+    "AgentStore serde ConversationStateStructure; checkpoint SHA256 root ID",
+    "field5 ConversationTokenDetails: field1 used_tokens uint32; field2 max_tokens uint32",
+    "raw child blobs schema id TEXT PRIMARY KEY/data BLOB; metadata hex UTF8 JSON",
+    "afterAgentResponse per-generation counters found in parent UI; managed-child hook reachability not established"
+  ],
+  "realManagedChildDatabaseObserved": false
+}

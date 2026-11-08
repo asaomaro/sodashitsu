@@ -1,0 +1,39 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-context
+
+ ❯ |@sodashitsu/server| src/agent/CursorChildContextHistory.test.ts (5 tests | 2 failed | 3 skipped) 573ms
+   × never captures a later latest-root for an old entry, even before its first usage query: false 303ms
+   × never captures a later latest-root for an old entry, even before its first usage query: true 269ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildContextHistory.test.ts > never captures a later latest-root for an old entry, even before its first usage query: false
+ FAIL  |@sodashitsu/server| src/agent/CursorChildContextHistory.test.ts > never captures a later latest-root for an old entry, even before its first usage query: true
+AssertionError: expected { status: 'ok', usage: { …(6) }, …(1) } to match object { status: 'unavailable' }
+(8 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "unavailable",
++   "status": "ok",
+  }
+
+ ❯ src/agent/CursorChildContextHistory.test.ts:23:63
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 skipped (5)
+   Start at  21:02:13
+   Duration  1.48s (transform 46%, tests 41%, import 12%)
+

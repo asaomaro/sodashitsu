@@ -9,7 +9,8 @@
 | Muse | 正式 child session に結ばれた usage report | 子の session stream の正式な単位・帰属を検証。キャッシュ不明時は正規化 input を省略します。 |
 | Antigravity | 正式 invoke/descriptor に結ばれた子 transcript の完了 step | 出生後の step の報告値。合計や料金を推計しません。 |
 | Grok | 正式 current child、または終了attemptを再検証した子の `usage.json` | 報告累計は子の配下を含む `subtree`。USD ticks の報告費用のみ。終了後は専用history APIの正式attempt proofが必要です。既存current APIのB grantだけでは履歴値を返しません。 |
-| Copilot / Cursor | 未接続 | 子自身の数値 reader は未実装です。上流 API が存在しないという意味ではありません。 |
+| Cursor | 正式な終了履歴に固定した子 `store.db` の latest-root `token_details` | 保存済み文脈量と上限だけ。終了binding確立時のroot・DB/WAL世代を保持し、後から新しいrootへ切り替えません。消費トークン・費用・現在一覧の数値は未取得です。 |
+| Copilot | 未接続 | 子自身の数値 reader は未実装です。親のsession使用量やtoolCallIdだけでは帰属させず、上流APIが存在しないとは断定しません。 |
 
 `tokens.total` は正式に報告された種類だけに載ります。未報告の数値を 0 に置き換えず、費用・コンテキスト上限も推測しません。`observedAt` は元の記録時刻です。取得した現在時刻ではありません。`partial` は記録の一部・欠測を、`scanning` は未読部分が残ることを示します。途中の無取得は消費 0 の確定ではありません。
 
@@ -24,3 +25,11 @@ Grok 以外の終了後の値は、確認済み対応に基づく履歴として
 1 回の明示問い合わせは子 1 件につき最大 4 MiB、記録は最大 512 MiB、1 行は最大 256 KiB、数値 cache は 64 件、同時物理処理は 4 件、期限は 2 秒です。巨大行や壊れた行は本文を保持せず部分値とします。重複排除の上限は 20,000 件で、上限を越えて古い ID を追い出して再加算することはありません。Grok ledger は 2 MiB までです。実行中の FD 処理が終わるまで同時処理枠を保持します。
 
 専用の`agent.subagent_history_usage`は[終了履歴](subagent-history.md)のentryIdを検証します。Grokは正式attemptと親記録の最新EOF世代を読み直した場合に限り、正確な子自身のledgerを返します。現在一覧に戻したり、既存current APIのgrantを緩めたりしません。
+
+## Cursorの終了子の保存済み文脈
+
+正式Stop・子SQLiteの直属の系譜・子記録の終端が一致して終了bindingを作った時に、子自身のlatest-rootとDB/WALの世代をprivateに固定します。履歴の利用状況を初めて開いた時の最新値へ切り替えることはありません。同じ子が再開されてDBだけ先に更新された場合も、古いentryIdで新しい文脈量を返しません。読取り前後と所有FDの閉鎖後に、親scope・ファイルのns世代・namespaceを再照合します。
+
+導入CLIの`ConversationStateStructure`にある`ConversationTokenDetails.used_tokens/max_tokens`だけを投影します。両fieldが実際に記録され、上限が正で整合する場合に限ります。未記録をprotobufの既定0で補いません。root本文は2MiBまで、元DB32MiB/WAL8MiBまでの既存private-copyと固定SQLite workerを使い、本文・暗号鍵・親の数値は返しません。取得元は「Cursor子DB」、範囲は子自身、常に一部取得です。正式な観測日時がないため、読取時刻を観測日時として表示しません。追加のモデル呼出しや既存フックの黙った更新はありません。
+
+これは終了した子の専用履歴APIの対応です。現在の子一覧・件数、消費内訳・累計・費用の取得を意味しません。未知の取得元は、この版の共通表示では数値を表示せず未取得にします。旧版や別の接続先の対応状況と、消費ゼロは区別してください。

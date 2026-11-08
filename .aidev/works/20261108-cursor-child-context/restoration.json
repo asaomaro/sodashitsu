@@ -1,0 +1,31 @@
+{
+  "results": {
+    "old": 1,
+    "seal": 1,
+    "lateClose": 1,
+    "presence": 1,
+    "restored": 0,
+    "publicAPI": 0
+  },
+  "before": {
+    "packages/server/src/agent/CursorChildMetadataQuery.ts": "2ecfb48f438dac6e044a57a2dff1cd049e6734b430f46669a5733f39ca268a17",
+    "packages/server/src/agent/CursorChildRecord.ts": "9dbb87e20190527553a44fd6791e28ece14699cb7b7763c83b5b185ea2dea0c4",
+    "packages/server/src/agent/CursorChildObservations.ts": "6ebed199d017599576c0f59b2526188964cacd2c927bde3b72eabe3e77920337",
+    "packages/server/src/agent/CursorTerminalBindings.ts": "464b8c441a2bce1216a04dc3e1be3d7abfbf1b1b5deb3c6ab7a6ef69e266cb08",
+    "packages/server/src/agent/SubagentHistoryService.ts": "afe4ce4a8af0ba0373600c43f4df02154f86a6034acf7c9929266e765056e092",
+    "packages/server/src/agent/SubagentTerminalBinding.ts": "f035ecf61c210c43e2a068ad872c048632128d2c65c68c3e1a3794276a22d184",
+    "packages/server/src/agent/CursorChildContext.ts": "1be8bcf5e250849d30b8b0b97a3d196a9035dfb44fd9071866595213101b8c44",
+    "packages/client-core/src/agent/subagentUsageView.ts": "d18d977ba6afadff9eafb3c081f19b071b9a013390e393960d382d0ccdd2a7f7"
+  },
+  "after": {
+    "packages/server/src/agent/CursorChildMetadataQuery.ts": "2ecfb48f438dac6e044a57a2dff1cd049e6734b430f46669a5733f39ca268a17",
+    "packages/server/src/agent/CursorChildRecord.ts": "9dbb87e20190527553a44fd6791e28ece14699cb7b7763c83b5b185ea2dea0c4",
+    "packages/server/src/agent/CursorChildObservations.ts": "6ebed199d017599576c0f59b2526188964cacd2c927bde3b72eabe3e77920337",
+    "packages/server/src/agent/CursorTerminalBindings.ts": "464b8c441a2bce1216a04dc3e1be3d7abfbf1b1b5deb3c6ab7a6ef69e266cb08",
+    "packages/server/src/agent/SubagentHistoryService.ts": "afe4ce4a8af0ba0373600c43f4df02154f86a6034acf7c9929266e765056e092",
+    "packages/server/src/agent/SubagentTerminalBinding.ts": "f035ecf61c210c43e2a068ad872c048632128d2c65c68c3e1a3794276a22d184",
+    "packages/server/src/agent/CursorChildContext.ts": "1be8bcf5e250849d30b8b0b97a3d196a9035dfb44fd9071866595213101b8c44",
+    "packages/client-core/src/agent/subagentUsageView.ts": "d18d977ba6afadff9eafb3c081f19b071b9a013390e393960d382d0ccdd2a7f7"
+  },
+  "byteExact": true
+}

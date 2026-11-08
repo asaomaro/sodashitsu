@@ -1,0 +1,185 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-context
+
+ ❯ |@sodashitsu/server| src/agent/CursorTerminalContext.test.ts (2 tests | 2 failed) 9ms
+   × withholds context when the numeric-owned FD cannot be confirmed closed 7ms
+   × rejects a newer root even if a mock record reuses an old generation seal 1ms
+ ❯ |@sodashitsu/client-core| src/agent/subagentUsageView.test.ts (13 tests | 2 failed) 34ms
+   × shows Cursor child DB context without inventing consumption or time 7ms
+   × fails closed on an unknown source instead of showing unattributed numbers 3ms
+ ❯ |@sodashitsu/server| src/agent/SubagentHistoryService.test.ts (4 tests | 1 failed) 1098ms
+   × discards provider-owned numeric callbacks after parent revocation without using a current fallback 1015ms
+ ❯ |@sodashitsu/server| src/agent/CursorChildContextHistory.test.ts (5 tests | 2 failed) 1305ms
+   × reads only sealed terminal child context, without hooks, parent totals, time, or consumption 309ms
+   × never captures a later latest-root for an old entry, even before its first usage query: true 218ms
+(node:1348958) Warning: Closing file descriptor 24 on garbage collection
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1348958) [DEP0137] DeprecationWarning: Closing a FileHandle object on garbage collection is deprecated. Please close FileHandle objects explicitly using FileHandle.prototype.close(). In the future, an error will be thrown if a file descriptor is closed during garbage collection.
+(node:1348958) Warning: Closing file descriptor 26 on garbage collection
+ ❯ |@sodashitsu/server| src/agent/CursorChildRecord.test.ts (18 tests | 2 failed) 2658ms
+   × reads only child latest-root context via the fixed private SQLite worker and seals the DB generation 168ms
+   × includes the live WAL generation in a sealed context snapshot 99ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/client-core| src/agent/subagentUsageView.test.ts > shows Cursor child DB context without inventing consumption or time
+AssertionError: expected [ …(4) ] to deep equally contain { label: '取得元', value: 'Cursor子DB' }
+
+- Expected:
+{
+  "label": "取得元",
+  "value": "Cursor子DB",
+}
+
++ Received:
+[
+  {
+    "label": "消費の範囲",
+    "value": "この子のみ",
+  },
+  {
+    "label": "コンテキスト",
+    "value": "25",
+  },
+  {
+    "label": "コンテキスト上限",
+    "value": "100",
+  },
+  {
+    "label": "コンテキスト使用率",
+    "value": "25%",
+  },
+]
+
+ ❯ src/agent/subagentUsageView.test.ts:102:148
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  |@sodashitsu/client-core| src/agent/subagentUsageView.test.ts > fails closed on an unknown source instead of showing unattributed numbers
+AssertionError: expected [ …(3) ] to have a length of +0 but got 3
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ src/agent/subagentUsageView.test.ts:105:147
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildContextHistory.test.ts > reads only sealed terminal child context, without hooks, parent totals, time, or consumption
+AssertionError: expected { status: 'unavailable', …(1) } to match object { status: 'ok', usage: { …(6) } }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "ok",
+-   "usage": {
+-     "consumptionScope": "self",
+-     "contextTokens": 25,
+-     "contextUsedPct": 25,
+-     "contextWindowTokens": 100,
+-     "partial": true,
+-     "source": "cursor-db",
+-   },
++   "status": "unavailable",
+  }
+
+ ❯ src/agent/CursorChildContextHistory.test.ts:18:110
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildContextHistory.test.ts > never captures a later latest-root for an old entry, even before its first usage query: true
+AssertionError: expected 'unavailable' to be 'ok' // Object.is equality
+
+Expected: "ok"
+Received: "unavailable"
+
+ ❯ src/agent/CursorChildContextHistory.test.ts:21:95
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildRecord.test.ts > reads only child latest-root context via the fixed private SQLite worker and seals the DB generation
+AssertionError: expected undefined to match object { used: 25, max: 100 }
+
+- Expected:
+{
+  "max": 100,
+  "used": 25,
+}
+
++ Received:
+undefined
+
+ ❯ src/agent/CursorChildRecord.test.ts:108:240
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildRecord.test.ts > includes the live WAL generation in a sealed context snapshot
+AssertionError: expected undefined to be 25 // Object.is equality
+
+- Expected:
+25
+
++ Received:
+undefined
+
+ ❯ src/agent/CursorChildRecord.test.ts:122:131
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorTerminalContext.test.ts > withholds context when the numeric-owned FD cannot be confirmed closed
+TypeError: f.target.readUsage is not a function
+ ❯ src/agent/CursorTerminalContext.test.ts:4:181
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorTerminalContext.test.ts > rejects a newer root even if a mock record reuses an old generation seal
+TypeError: f.target.readUsage is not a function
+ ❯ src/agent/CursorTerminalContext.test.ts:7:24
+      5| it('rejects a newer root even if a mock record reuses an old generatio…
+      6|  const f=fixture();f.binding.openRecord=async()=>({context:{rootId:'b'…
+      7|  expect(await f.target.readUsage!(f.allowed)).toBeUndefined();expect(f…
+       |                        ^
+      8| });
+      9|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentHistoryService.test.ts > discards provider-owned numeric callbacks after parent revocation without using a current fallback
+AssertionError: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ src/agent/SubagentHistoryService.test.ts:53:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  5 failed | 4 passed (9)
+      Tests  9 failed | 61 passed (70)
+   Start at  21:02:09
+   Duration  3.04s (tests 58%, transform 33%, import 9%)
+
+  Transform  |@sodashitsu/server| transforming modules took 3.42s · 29% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

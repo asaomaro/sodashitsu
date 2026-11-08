@@ -1,0 +1,11 @@
+{
+  "compiledServer": true,
+  "generatedOwnSQLite": true,
+  "explicitChildContext": true,
+  "firstReadAfterNewRootRejected": true,
+  "readAfterNewRootRejected": true,
+  "noConsumptionTimeOrActiveCount": true,
+  "providerOrModelCalls": 0,
+  "windowsOperations": 0,
+  "cleanup": "own history/observer/worker files closed and generated roots removed"
+}
