@@ -1,0 +1,25 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-terminal-proof
+
+{"ts":"2026-11-08T04:50:58.366Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T04:50:58.368Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T04:50:58.370Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T04:50:58.370Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T04:50:58.375Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-grok-terminal-compose-Z6rlXE/state/commands.json","count":0}
+{"ts":"2026-11-08T04:51:00.211Z","level":"info","msg":"agent session attached","paneId":"0b020547-bffd-4a4d-9ded-e9ca95c22976","kind":"grok","session":"f287c5b0","source":"hook"}
+
+ Test Files  6 passed (6)
+      Tests  51 passed (51)
+   Start at  13:50:51
+   Duration  9.79s (transform 62%, tests 22%, import 16%)
+
+  Transform  |@sodashitsu/server| transforming modules took 10.95s · 62% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

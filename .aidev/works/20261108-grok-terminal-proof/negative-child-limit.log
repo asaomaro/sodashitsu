@@ -1,0 +1,64 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-terminal-proof
+
+ ❯ |@sodashitsu/server| src/agent/GrokSubagentReader.test.ts (14 tests | 1 failed | 13 skipped) 85ms
+   × refuses over-limit child files without reading their body 82ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/GrokSubagentReader.test.ts > refuses over-limit child files without reading their body
+AssertionError: expected { fd: FileHandle{ …(4), …(6) }, …(2) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "fd": FileHandle {
+    "_events": {},
+    "_eventsCount": 0,
+    "_maxListeners": undefined,
+    "close": [Function close],
+    Symbol(shapeMode): false,
+    Symbol(kCapture): false,
+    Symbol(kHandle): FileHandle {},
+    Symbol(kFd): -1,
+    Symbol(kRefs): 0,
+    Symbol(kClosePromise): undefined,
+  },
+  "st": Stats {
+    "atimeMs": 1794113437817.078,
+    "birthtimeMs": 1794113437817.078,
+    "blksize": 4096,
+    "blocks": 0,
+    "ctimeMs": 1794113437817.078,
+    "dev": 2096,
+    "gid": 1000,
+    "ino": 1577672,
+    "mode": 33188,
+    "mtimeMs": 1794113437817.078,
+    "nlink": 1,
+    "rdev": 0,
+    "size": 536870913,
+    "uid": 1000,
+  },
+  "unchanged": [Function unchanged],
+}
+
+ ❯ src/agent/GrokSubagentReader.test.ts:105:188
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  13:50:36
+   Duration  1.72s (transform 74%, import 20%, tests 5%)
+

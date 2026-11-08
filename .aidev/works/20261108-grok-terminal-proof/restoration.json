@@ -1,0 +1,32 @@
+[
+  {
+    "name": "parent-revision",
+    "source": "packages/server/src/agent/GrokSubagentReader.ts",
+    "restoredSHA256": "2049fa576d61fa5bfbe66b800601959b78a37c2590e56924184464a2062c6dd6",
+    "byteExact": true
+  },
+  {
+    "name": "namespace",
+    "source": "packages/server/src/agent/GrokSubagentReader.ts",
+    "restoredSHA256": "2049fa576d61fa5bfbe66b800601959b78a37c2590e56924184464a2062c6dd6",
+    "byteExact": true
+  },
+  {
+    "name": "native-fresh",
+    "source": "packages/server/src/agent/NativeSubagentService.ts",
+    "restoredSHA256": "f74e108c77c5367e918994d8a9ff6ecf2432fb6f25b1efd4ed943d1869bb7ccf",
+    "byteExact": true
+  },
+  {
+    "name": "child-limit",
+    "source": "packages/server/src/agent/GrokSubagentReader.ts",
+    "restoredSHA256": "2049fa576d61fa5bfbe66b800601959b78a37c2590e56924184464a2062c6dd6",
+    "byteExact": true
+  },
+  {
+    "name": "old-compose",
+    "source": "packages/server/src/composeServer.ts",
+    "restoredSHA256": "836e2791b131fec143c0b6bd0987abf32656a915c0a9481408d3ab43030e5d20",
+    "byteExact": true
+  }
+]

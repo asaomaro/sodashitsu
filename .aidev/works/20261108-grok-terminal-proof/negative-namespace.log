@@ -1,0 +1,31 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-terminal-proof
+
+ ❯ |@sodashitsu/server| src/agent/GrokSubagentReader.test.ts (14 tests | 3 failed | 11 skipped) 151ms
+   × invalidates an old terminal namespace after forget even with identical lifecycle bytes 58ms
+   × invalidates an old terminal namespace after rotate even with identical lifecycle bytes 39ms
+   × invalidates an old terminal namespace after rewrite even with identical lifecycle bytes 51ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/GrokSubagentReader.test.ts > invalidates an old terminal namespace after forget even with identical lifecycle bytes
+ FAIL  |@sodashitsu/server| src/agent/GrokSubagentReader.test.ts > invalidates an old terminal namespace after rotate even with identical lifecycle bytes
+ FAIL  |@sodashitsu/server| src/agent/GrokSubagentReader.test.ts > invalidates an old terminal namespace after rewrite even with identical lifecycle bytes
+AssertionError: expected 'f1c4a894e8e6c35441350e2480539a642b064…' not to be 'f1c4a894e8e6c35441350e2480539a642b064…' // Object.is equality
+ ❯ src/agent/GrokSubagentReader.test.ts:80:125
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 11 skipped (14)
+   Start at  13:50:29
+   Duration  1.66s (transform 69%, import 20%, tests 10%)
+

@@ -1,0 +1,37 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-terminal-proof
+
+ ❯ |@sodashitsu/server| src/agent/GrokTerminalHistory.test.ts (2 tests | 1 failed | 1 skipped) 123ms
+   × never uses an old history selection for a new child attempt before or after native catchup 121ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/GrokTerminalHistory.test.ts > never uses an old history selection for a new child attempt before or after native catchup
+AssertionError: expected { status: 'ok', usage: { …(7) } } to match object { status: 'unavailable' }
+(8 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "unavailable",
++   "status": "ok",
+  }
+
+ ❯ src/agent/GrokTerminalHistory.test.ts:37:48
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  13:50:26
+   Duration  2.25s (transform 70%, import 24%, tests 6%)
+

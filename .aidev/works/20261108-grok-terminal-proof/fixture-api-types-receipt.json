@@ -1,0 +1,6 @@
+{
+  "exitCode": 0,
+  "sourceHEAD": "6146890e4e339450a48e520c9ce518719392d2d6",
+  "fixtureSHA256": "0ada370193ac5261a944461f0d4a65b6562a1b10212fe54c035616249b1f7226",
+  "method": "Unchanged fixture copied; only two local imports point at current production-build emitted declarations; public API contract typecheck, not full server test-inclusive check."
+}

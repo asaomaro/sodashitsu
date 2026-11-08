@@ -8,7 +8,7 @@
 | Claude Code | 正式 hook に結ばれた子 transcript の assistant message usage | 出生後の message ID ごとの報告値。キャッシュ内訳が未報告なら省略し、部分値と表示します。合計は合成しません。 |
 | Muse | 正式 child session に結ばれた usage report | 子の session stream の正式な単位・帰属を検証。キャッシュ不明時は正規化 input を省略します。 |
 | Antigravity | 正式 invoke/descriptor に結ばれた子 transcript の完了 step | 出生後の step の報告値。合計や料金を推計しません。 |
-| Grok | 正式 current child の `usage.json` | 報告累計は子の配下を含む `subtree`。USD ticks の報告費用のみ。終了後の attempt 再証明はまだ接続していないため、履歴値は返しません。 |
+| Grok | 正式 current child、または終了attemptを再検証した子の `usage.json` | 報告累計は子の配下を含む `subtree`。USD ticks の報告費用のみ。終了後は専用history APIの正式attempt proofが必要です。既存current APIのB grantだけでは履歴値を返しません。 |
 | Copilot / Cursor | 未接続 | 子自身の数値 reader は未実装です。上流 API が存在しないという意味ではありません。 |
 
 `tokens.total` は正式に報告された種類だけに載ります。未報告の数値を 0 に置き換えず、費用・コンテキスト上限も推測しません。`observedAt` は元の記録時刻です。取得した現在時刻ではありません。`partial` は記録の一部・欠測を、`scanning` は未読部分が残ることを示します。途中の無取得は消費 0 の確定ではありません。
@@ -22,3 +22,5 @@ Codex の per-response usage と累計の区別は、[公式 0.166 の TokenUsag
 Grok 以外の終了後の値は、確認済み対応に基づく履歴として `partial` と固定の理由を返します。現在の子 run の追加確認を保証する表示ではありません。ファイルの置換・切り詰め・同サイズ書き換えを観測したら集計 cache を破棄し、同じ正式な関係を再検証して最初から読みます。再証明できない場合は数値を返しません。
 
 1 回の明示問い合わせは子 1 件につき最大 4 MiB、記録は最大 512 MiB、1 行は最大 256 KiB、数値 cache は 64 件、同時物理処理は 4 件、期限は 2 秒です。巨大行や壊れた行は本文を保持せず部分値とします。重複排除の上限は 20,000 件で、上限を越えて古い ID を追い出して再加算することはありません。Grok ledger は 2 MiB までです。実行中の FD 処理が終わるまで同時処理枠を保持します。
+
+専用の`agent.subagent_history_usage`は[終了履歴](subagent-history.md)のentryIdを検証します。Grokは正式attemptと親記録の最新EOF世代を読み直した場合に限り、正確な子自身のledgerを返します。現在一覧に戻したり、既存current APIのgrantを緩めたりしません。

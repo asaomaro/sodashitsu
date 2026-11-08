@@ -1,0 +1,6 @@
+{
+  "exitCode": 0,
+  "sourceHEAD": "6146890e4e339450a48e520c9ce518719392d2d6",
+  "command": "Node24 / NODE_OPTIONS=--max-old-space-size=8192 pnpm exec tsc -b packages/server",
+  "unchangedDerivedCache": "build-cache.json"
+}
