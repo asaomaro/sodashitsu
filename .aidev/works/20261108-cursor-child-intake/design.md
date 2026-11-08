@@ -1,6 +1,6 @@
 # Cursor子自身の設定と終了binding
 
-base integration8a85748e。Root承認(b): DB lineage/createdAt＋child-self AARはモデル/effortのprivate観測だけ。現在存続/稼働中の証明にせず、Cursor current一覧/件数は未取得を維持。正式subagentStopと直属childfile終端一致だけを終了historyへ渡す。
+初期base integration8a85748e、最終rebase先08b9c752。Root承認(b): DB lineage/createdAt＋child-self AARはモデル/effortのprivate観測だけ。現在存続/稼働中の証明にせず、Cursor current一覧/件数は未取得を維持。正式subagentStopと直属childfile終端一致だけを終了historyへ渡す。
 
 所有: 新CursorChildReports/Observationsとtests、AgentReportSocketの専用whitelist、agent-hook-report.cjs、明示更新用AgentIntegrationInstaller、composeのreport fanout/closeのみ。親usage/starter/CLI settings/NativeReader current kindgateは緩和しない。新global hook自動導入0。終了historyRPC/UIは後続別commit。
 

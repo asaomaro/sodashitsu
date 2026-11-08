@@ -1,0 +1,7 @@
+{
+  "packages/server/src/agent/CursorChildReports.ts": "757daab9f0ce4fb51a5f5f402b3a3bb02f6e7cbea46b5f1eddc7d126c9a68f49",
+  "packages/server/src/agent/CursorChildObservations.ts": "b79aec2785a2a8d42a279bf8ab56ec91365d02da84b48d8b7fe48b1bf2742e14",
+  "packages/server/assets/agent-hook-report.cjs": "b1c76be23de458aeb258ee3e62355eeba292c5e6164360646d46cf82485f0417",
+  "packages/server/src/agent/AgentIntegrationInstaller.ts": "b547e0c88b27551c06e22383ec818bbb29da52056cb17badc8ddad3141bba029",
+  "packages/server/src/composeServer.ts": "e7da19c823dffc0f1b5de377481b383bdeaed1e32fd48c3bc20e0a2588a08588"
+}
