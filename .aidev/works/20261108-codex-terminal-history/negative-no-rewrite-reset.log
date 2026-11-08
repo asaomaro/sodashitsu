@@ -1,0 +1,28 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-terminal-history
+
+ ❯ packages/server/src/agent/CodexTerminalHistory.test.ts (9 tests | 1 failed | 8 skipped) 38ms
+   × refolds a same-size rewrite and rejects old namespaces after rotation or forget 36ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/CodexTerminalHistory.test.ts > refolds a same-size rewrite and rejects old namespaces after rotation or forget
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/server/src/agent/CodexTerminalHistory.test.ts:62:224
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 skipped (9)
+   Start at  15:37:07
+   Duration  1.28s (transform 76%, import 20%, tests 3%)
+

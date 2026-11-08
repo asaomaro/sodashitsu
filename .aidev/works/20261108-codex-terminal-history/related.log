@@ -1,0 +1,19 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-terminal-history
+
+{"ts":"2026-11-08T06:31:17.462Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T06:31:17.463Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T06:31:17.464Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T06:31:17.464Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T06:31:17.466Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-codex-terminal-public-VGm1bx/state/commands.json","count":0}
+{"ts":"2026-11-08T06:31:18.095Z","level":"info","msg":"agent session attached","paneId":"4d0aabe5-e6f3-4160-a350-90c2a1bf3344","kind":"codex","session":"2b505b93","source":"hook"}
+
+ Test Files  5 passed (5)
+      Tests  77 passed (77)
+   Start at  15:31:13
+   Duration  10.17s (tests 54%, transform 37%, import 9%)
+
+  Transform  transforming modules took 5.81s · 37% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

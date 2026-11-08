@@ -1,0 +1,8 @@
+{
+  "sourceHead": "c1d64ac1148c812d7f80ec21b82d4be989791240",
+  "node": "24.22.2",
+  "command": "node --max-old-space-size=8192 node_modules/typescript/bin/tsc -p .aidev/works/20261108-codex-terminal-history/tsconfig.json",
+  "exitCode": 0,
+  "scope": "strict production changed source plus new fixtures, transitive real compose dependencies; no emit; not entire repository test-inclusive check",
+  "log": "typecheck.log"
+}

@@ -1,0 +1,62 @@
+{
+  "sourceHead": "c1d64ac1148c812d7f80ec21b82d4be989791240",
+  "negative": [
+    {
+      "name": "old-compose",
+      "kind": "old source",
+      "exitCode": 1,
+      "failedAsExpected": true,
+      "source": "packages/server/src/composeServer.ts"
+    },
+    {
+      "name": "no-terminal-fact",
+      "kind": "targeted missing guard negative",
+      "exitCode": 1,
+      "failedAsExpected": true,
+      "source": "packages/server/src/agent/NativeSubagentRecords.ts"
+    },
+    {
+      "name": "no-rewrite-reset",
+      "kind": "targeted missing guard negative",
+      "exitCode": 1,
+      "failedAsExpected": true,
+      "source": "packages/server/src/agent/NativeSubagentReader.ts"
+    },
+    {
+      "name": "no-post-close-current",
+      "kind": "targeted missing guard negative",
+      "exitCode": 1,
+      "failedAsExpected": true,
+      "source": "packages/server/src/agent/NativeSubagentReader.ts"
+    },
+    {
+      "name": "skip-head-not-accounted",
+      "kind": "targeted missing guard negative",
+      "exitCode": 1,
+      "failedAsExpected": true,
+      "source": "packages/server/src/agent/CodexSubagentStream.ts"
+    }
+  ],
+  "restored": {
+    "packages/server/src/composeServer.ts": {
+      "sha256": "fb69cefc2a70c3c844679d7a877a8b5c28f18beec599cf859a384632e4dc9e73",
+      "actualSha256": "fb69cefc2a70c3c844679d7a877a8b5c28f18beec599cf859a384632e4dc9e73",
+      "byteExact": true
+    },
+    "packages/server/src/agent/NativeSubagentReader.ts": {
+      "sha256": "c41e6c724af376529cc8cec371c4cf52adbb5688f5f4aaff7b990fa5e6ae2bcb",
+      "actualSha256": "c41e6c724af376529cc8cec371c4cf52adbb5688f5f4aaff7b990fa5e6ae2bcb",
+      "byteExact": true
+    },
+    "packages/server/src/agent/NativeSubagentRecords.ts": {
+      "sha256": "05e80c8d018929dc151a77b67d2f20a1ece988e857d8ab887ff36102c1a6adae",
+      "actualSha256": "05e80c8d018929dc151a77b67d2f20a1ece988e857d8ab887ff36102c1a6adae",
+      "byteExact": true
+    },
+    "packages/server/src/agent/CodexSubagentStream.ts": {
+      "sha256": "475a797dcb291db98e0a447cef35243bc09d08a574d1c4aac6a5b9599bfc4204",
+      "actualSha256": "475a797dcb291db98e0a447cef35243bc09d08a574d1c4aac6a5b9599bfc4204",
+      "byteExact": true
+    }
+  }
+}

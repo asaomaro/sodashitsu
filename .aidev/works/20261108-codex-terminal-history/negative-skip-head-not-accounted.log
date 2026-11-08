@@ -1,0 +1,28 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-terminal-history
+
+ ❯ packages/server/src/agent/CodexTerminalHistory.test.ts (9 tests | 1 failed | 8 skipped) 47ms
+   × does not accept a later session header after a scalar first record or a missing terminal timestamp 46ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/CodexTerminalHistory.test.ts > does not accept a later session header after a scalar first record or a missing terminal timestamp
+AssertionError: expected [ { source: { …(4) }, …(9) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ packages/server/src/agent/CodexTerminalHistory.test.ts:89:260
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 skipped (9)
+   Start at  15:37:10
+   Duration  1.15s (transform 75%, import 21%, tests 4%)
+

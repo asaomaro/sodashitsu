@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-terminal-history
+
+ ❯ packages/server/src/agent/CodexTerminalHistory.test.ts (9 tests | 1 failed | 8 skipped) 79ms
+   × holds four physical verification slots through FD close and rejects late retired results 77ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/CodexTerminalHistory.test.ts > holds four physical verification slots through FD close and rejects late retired results
+AssertionError: expected [ true, true, true, true ] to deeply equal [ false, false, false, false ]
+
+- Expected
++ Received
+
+  [
+-   false,
+-   false,
+-   false,
+-   false,
++   true,
++   true,
++   true,
++   true,
+  ]
+
+ ❯ packages/server/src/agent/CodexTerminalHistory.test.ts:82:129
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 skipped (9)
+   Start at  15:37:08
+   Duration  1.33s (transform 74%, import 19%, tests 6%)
+
