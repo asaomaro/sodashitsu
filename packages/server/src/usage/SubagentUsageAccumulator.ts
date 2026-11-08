@@ -42,13 +42,17 @@ export class SubagentUsageAccumulator {
    const at=typeof row.timestamp==="string"?Date.parse(row.timestamp):NaN,m=object(row.message),u=object(m?.usage);
    if(!Number.isFinite(at)||at<this.startedAt||!id(m?.id)||!u)return;
    if(!count(u.input_tokens)||!count(u.output_tokens)||!count(u.cache_read_input_tokens??0)||!count(u.cache_creation_input_tokens??0)){this.partial=true;return;}
-   this.add(m.id,{input:u.input_tokens,output:u.output_tokens,cacheRead:u.cache_read_input_tokens??0,cacheWrite:u.cache_creation_input_tokens??0},at);
+   const read=count(u.cache_read_input_tokens),write=count(u.cache_creation_input_tokens);
+   if(!read||!write)this.partial=true;
+   this.add(m.id,{input:u.input_tokens,output:u.output_tokens,...(read?{cacheRead:u.cache_read_input_tokens}:{}),...(write?{cacheWrite:u.cache_creation_input_tokens}:{})},at);
    const tokens=u.input_tokens+(u.cache_read_input_tokens??0)+(u.cache_creation_input_tokens??0);
-   if(count(tokens)&&(!this.context||at>=this.context.at))this.context={tokens,at};
+   if(read&&write&&count(tokens)&&(!this.context||at>=this.context.at))this.context={tokens,at};
   }else{
    const usage=extraUsage(row,this.kind,this.recordId);
    if(!usage||usage.at<this.startedAt)return;
-   this.add(usage.id,{input:usage.input,output:usage.output,cacheRead:usage.cacheRead,cacheWrite:usage.cacheWrite},usage.at);
+   const cached=this.kind==="muse"?row.payload?.event?.record?.quantity?.cached_tokens:row.cache_read_tokens;
+   if(!count(cached))this.partial=true;
+   this.add(usage.id,{...(this.kind!=="muse"||count(cached)?{input:usage.input}:{}),output:usage.output,...(count(cached)?{cacheRead:usage.cacheRead}:{})},usage.at);
   }
  }
  snapshot(scanning=false):SubagentUsage|undefined{

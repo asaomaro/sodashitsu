@@ -1,0 +1,88 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-own-usage
+
+ ❯ packages/server/src/usage/SubagentUsageResolver.test.ts (12 tests | 4 failed | 8 skipped) 403ms
+   × keeps a successful known-child grant after completion without reintroducing sidebar membership 35ms
+   × expires history grants after 30 minutes without renewing them on historical reads 14ms
+   × reproves a known history record after atomic rotation but never carries old generation totals 16ms
+   × bounds known historical grants to 64 and never mints a missing grant from a valid filename 337ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/usage/SubagentUsageResolver.test.ts > keeps a successful known-child grant after completion without reintroducing sidebar membership
+AssertionError: expected { status: 'unavailable', …(1) } to match object { status: 'ok', usage: { …(2) } }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "ok",
+-   "usage": {
+-     "partial": true,
+-     "tokens": {
+-       "total": 120,
+-     },
+-   },
++   "status": "unavailable",
+  }
+
+ ❯ packages/server/src/usage/SubagentUsageResolver.test.ts:65:64
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  packages/server/src/usage/SubagentUsageResolver.test.ts > expires history grants after 30 minutes without renewing them on historical reads
+AssertionError: expected 'unavailable' to be 'ok' // Object.is equality
+
+Expected: "ok"
+Received: "unavailable"
+
+ ❯ packages/server/src/usage/SubagentUsageResolver.test.ts:71:168
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  packages/server/src/usage/SubagentUsageResolver.test.ts > reproves a known history record after atomic rotation but never carries old generation totals
+AssertionError: expected undefined to match object { tokens: { total: 320 }, …(1) }
+
+- Expected:
+{
+  "partial": true,
+  "tokens": {
+    "total": 320,
+  },
+}
+
++ Received:
+undefined
+
+ ❯ packages/server/src/usage/SubagentUsageResolver.test.ts:78:54
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  packages/server/src/usage/SubagentUsageResolver.test.ts > bounds known historical grants to 64 and never mints a missing grant from a valid filename
+AssertionError: expected undefined to be 120 // Object.is equality
+
+- Expected:
+120
+
++ Received:
+undefined
+
+ ❯ packages/server/src/usage/SubagentUsageResolver.test.ts:89:178
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed | 6 skipped (7)
+      Tests  4 failed | 34 skipped (38)
+   Start at  11:12:33
+   Duration  5.28s (transform 77%, import 19%, tests 4%)
+
+  Transform  transforming modules took 7.92s · 77% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

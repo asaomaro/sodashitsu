@@ -1,0 +1,13 @@
+{
+  "node": "24.22.2",
+  "relatedSuites": 7,
+  "relatedTests": 38,
+  "relatedExitCode": 0,
+  "testInclusiveTypecheckExitCode": 0,
+  "testHeapMiB": 8192,
+  "defaultHeapAttempt": "OOM; not a type pass",
+  "targetedReaderBundleExitCode": 0,
+  "actualCurrentChildMembership": "unavailable; stopped without child file reads",
+  "realModelCalls": 0,
+  "windowsOperations": 0
+}

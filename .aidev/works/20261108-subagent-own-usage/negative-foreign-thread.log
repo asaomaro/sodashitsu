@@ -1,0 +1,45 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-own-usage
+
+ ❯ packages/server/src/usage/SubagentUsageAccumulator.test.ts (8 tests | 1 failed | 7 skipped) 10ms
+   × counts only post-birth exact child responses once, never inherited thread/turn totals 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/usage/SubagentUsageAccumulator.test.ts > counts only post-birth exact child responses once, never inherited thread/turn totals
+AssertionError: expected { source: 'rollout', …(3) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "consumptionScope": "self",
+  "observedAt": 1794096001000,
+  "source": "rollout",
+  "tokens": {
+    "basis": "transcript",
+    "cacheRead": 30,
+    "cacheWrite": 10,
+    "input": 60,
+    "output": 20,
+    "reasoning": 5,
+    "total": 120,
+  },
+}
+
+ ❯ packages/server/src/usage/SubagentUsageAccumulator.test.ts:8:126
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 6 skipped (7)
+      Tests  1 failed | 37 skipped (38)
+   Start at  11:12:45
+   Duration  4.78s (transform 81%, import 18%)
+
+  Transform  transforming modules took 7.33s · 81% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

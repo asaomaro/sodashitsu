@@ -55,11 +55,29 @@ it("holds four physical slots and duplicate-request ownership through timeout un
   expect((await f.service.read("pane","0")).usage?.tokens?.total).toBe(120);
  }finally{release?.();f.service.close();}
 },6000);
-it("withholds a read whose child file changes during the asynchronous body read",async()=>{
+it("accepts a freshly reproven append during a read without discarding earlier progress",async()=>{
  const f=await fixture(),safe=await import("../agent/safeFile.js"),original=safe.readRange;let entered=false,release!:()=>void;const gate=new Promise<void>(r=>release=r),spy=vi.spyOn(safe,"readRange").mockImplementationOnce(async(...args)=>{const value=await original(...args);entered=true;await gate;return value;});
- try{const pending=f.service.read("pane","child");await vi.waitFor(()=>expect(entered).toBe(true));await appendFile(f.file,response("late"));release();expect(await pending).not.toHaveProperty("usage");expect((await f.service.read("pane","child")).usage?.tokens?.total).toBe(240);}finally{release?.();spy.mockRestore();f.service.close();}
+ try{const pending=f.service.read("pane","child");await vi.waitFor(()=>expect(entered).toBe(true));await appendFile(f.file,response("late"));release();expect((await pending).usage).toMatchObject({tokens:{total:120},scanning:true,partial:true});expect((await f.service.read("pane","child")).usage?.tokens?.total).toBe(240);}finally{release?.();spy.mockRestore();f.service.close();}
 });
 it("rechecks the target after asynchronous descriptor cleanup before returning numbers",async()=>{
  const f=await fixture();let closing=false,release!:()=>void;const gate=new Promise<void>(r=>release=r);f.target.openRecord=async()=>{const record=await f.open();if(record){const close=record.fd.close.bind(record.fd);vi.spyOn(record.fd,"close").mockImplementationOnce(async()=>{closing=true;await gate;return close();});}return record;};
  try{const pending=f.service.read("pane","child");await vi.waitFor(()=>expect(closing).toBe(true));f.valid=false;release();expect(await pending).not.toHaveProperty("usage");}finally{release?.();f.service.close();}
+});
+
+it("forgets observed over-limit generations before a later smaller file resumes",async()=>{
+ const f=await fixture(),reader=new SubagentUsageRecordReader();
+ const query=async(large=false)=>{const record=await f.open();if(!record)return undefined;
+  try{if(large){const stat=record.fd.stat.bind(record.fd);vi.spyOn(record.fd,"stat").mockImplementationOnce(async()=>({...await stat({bigint:true}),size:513n*1024n*1024n}) as never);}
+   return await reader.read({key:"scope",kind:"codex",recordId:"child",startedAt:born},record,()=>true);
+  }finally{await record.fd.close();}
+ };
+ try{expect((await query())?.tokens?.total).toBe(120);expect(await query(true)).toBeUndefined();
+  await writeFile(f.file,response("changed-longer-id").replace('"total_tokens":120','"total_tokens":320'));
+  expect((await query())?.tokens?.total).toBe(320);
+ }finally{reader.close();f.service.close();}
+});
+it("omits ended Grok ledgers until the original attempt can be freshly reproven",async()=>{
+ const f=await fixture(JSON.stringify({sessionId:"child",updatedAt:"2026-11-08T00:00:01Z",session:{inputTokens:100,outputTokens:20,cachedReadTokens:30,cacheCreationTokens:10,reasoningTokens:5,totalTokens:120,modelCalls:1}}));f.target.kind="grok";f.target.historyCurrent=()=>true;
+ try{expect((await f.service.read("pane","child")).status).toBe("ok");f.valid=false;expect(await f.service.read("pane","child")).toMatchObject({status:"unavailable",reason:expect.stringContaining("attempt")});}
+ finally{f.service.close();}
 });

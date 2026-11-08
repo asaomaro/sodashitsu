@@ -38,3 +38,7 @@ it("rejects an unproven birth time and foreign explicit Claude child IDs",()=>{
  const a=new SubagentUsageAccumulator("codex","child",NaN);a.consume(response());expect(a.snapshot()).toBeUndefined();
  const b=new SubagentUsageAccumulator("claude","child",born);b.consume({type:"assistant",timestamp:at,agentId:"other-child",message:{id:"foreign",usage:{input_tokens:123,output_tokens:5}}});expect(b.snapshot()).toBeUndefined();
 });
+it("omits unreported cache fields instead of turning absent counters into zero",()=>{
+ const a=new SubagentUsageAccumulator("claude","child",born);a.consume({type:"assistant",timestamp:at,message:{id:"call",model:"generated",usage:{input_tokens:10,output_tokens:2}}});expect(a.snapshot()).toMatchObject({tokens:{input:10,output:2},partial:true});expect(a.snapshot()?.tokens).not.toHaveProperty("cacheRead");expect(a.snapshot()?.tokens).not.toHaveProperty("cacheWrite");expect(a.snapshot()).not.toHaveProperty("contextTokens");
+ const b=new SubagentUsageAccumulator("agy","child",born);b.consume({source:"MODEL",type:"PLANNER_RESPONSE",status:"DONE",step_index:1,created_at:at,input_tokens:10,output_tokens:2});expect(b.snapshot()?.tokens).not.toHaveProperty("cacheRead");expect(b.snapshot()?.tokens).not.toHaveProperty("cacheWrite");
+});

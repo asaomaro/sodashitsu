@@ -1,0 +1,10 @@
+{
+  "packages/server/src/usage/SubagentUsageService.test.ts": "1ab8350b20a991e8c7293b97445642fddfe049ed77f48b28ddd4da52987f500d",
+  "packages/server/src/usage/SubagentUsageResolver.test.ts": "a39285eea635adee41865fb232ac3141519212e74233c3a276946c31a530fb13",
+  "packages/server/src/usage/SubagentUsageAccumulator.test.ts": "b606ff2e27da175470ec42a8f512bccb2c61b4cbf3bbb9d70959b017b429b624",
+  "packages/server/src/usage/SubagentUsageService.ts": "2377a18316e69b4e7aa2f93fd98f152e6aef606216e22eff7ea6ef501ba8c88c",
+  "packages/server/src/usage/SubagentUsageRecordReader.ts": "a13d657bb564245d26bf569dde273476ebb26ec1a63ffc862d8a54f31a591375",
+  "packages/server/src/usage/SubagentUsageAccumulator.ts": "585cce4f25a7c15852c44761ad15bbb660f9649b8c40709749560defa74f79c0",
+  "packages/server/src/usage/SubagentUsageResolver.ts": "2d968e02d538e24a610d7ef26a991248ca9374c1b554114e921b42060f0cc31a",
+  "packages/server/src/composeServer.subagentUsage.integration.test.ts": "aab90622532bf290259c5e3261ead0ea73eb3f3152fe64068cc0ad35c893e76d"
+}

@@ -1,0 +1,1 @@
+{"extends": "/workspaces/sodashitsu-subagent-own-usage/packages/server/tsconfig.typecheck.json", "compilerOptions": {"baseUrl": "/workspaces/sodashitsu-subagent-own-usage", "paths": {"@sodashitsu/protocol": ["packages/protocol/dist/index.d.ts"]}}}

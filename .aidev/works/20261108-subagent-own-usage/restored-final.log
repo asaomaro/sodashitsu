@@ -1,0 +1,19 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-own-usage
+
+{"ts":"2026-11-08T02:36:46.837Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T02:36:46.839Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T02:36:46.841Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T02:36:46.841Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T02:36:46.844Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-child-usage-public-6RzMdB/state/commands.json","count":0}
+{"ts":"2026-11-08T02:36:48.081Z","level":"info","msg":"agent session attached","paneId":"8acccd4c-ea8e-4283-8e86-03bb9a7b1d0d","kind":"codex","session":"93021654","source":"hook"}
+
+ Test Files  7 passed (7)
+      Tests  38 passed (38)
+   Start at  11:36:42
+   Duration  8.95s (tests 48%, transform 42%, import 9%)
+
+  Transform  transforming modules took 6.65s · 42% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

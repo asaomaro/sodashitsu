@@ -1,0 +1,29 @@
+{
+  "cases": [
+    {
+      "case": "negative-pre-history",
+      "exitCode": 1,
+      "restored": true
+    },
+    {
+      "case": "negative-over-limit",
+      "exitCode": 1,
+      "restored": true
+    },
+    {
+      "case": "negative-foreign-thread",
+      "exitCode": 1,
+      "restored": true
+    },
+    {
+      "case": "negative-grok-history",
+      "exitCode": 1,
+      "restored": true
+    }
+  ],
+  "sha256": {
+    "packages/server/src/usage/SubagentUsageService.ts": "2377a18316e69b4e7aa2f93fd98f152e6aef606216e22eff7ea6ef501ba8c88c",
+    "packages/server/src/usage/SubagentUsageRecordReader.ts": "a13d657bb564245d26bf569dde273476ebb26ec1a63ffc862d8a54f31a591375",
+    "packages/server/src/usage/SubagentUsageAccumulator.ts": "585cce4f25a7c15852c44761ad15bbb660f9649b8c40709749560defa74f79c0"
+  }
+}

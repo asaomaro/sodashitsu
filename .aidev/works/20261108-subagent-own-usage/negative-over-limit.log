@@ -1,0 +1,37 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-own-usage
+
+ ❯ packages/server/src/usage/SubagentUsageService.test.ts (11 tests | 1 failed | 10 skipped) 30ms
+   × forgets observed over-limit generations before a later smaller file resumes 28ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/usage/SubagentUsageService.test.ts > forgets observed over-limit generations before a later smaller file resumes
+AssertionError: expected 120 to be 320 // Object.is equality
+
+- Expected
++ Received
+
+- 320
++ 120
+
+ ❯ packages/server/src/usage/SubagentUsageService.test.ts:76:42
+     74|  try{expect((await query())?.tokens?.total).toBe(120);expect(await que…
+     75|   await writeFile(f.file,response("changed-longer-id").replace('"total…
+     76|   expect((await query())?.tokens?.total).toBe(320);
+       |                                          ^
+     77|  }finally{reader.close();f.service.close();}
+     78| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 6 skipped (7)
+      Tests  1 failed | 37 skipped (38)
+   Start at  11:12:39
+   Duration  5.35s (transform 80%, import 19%)
+
+  Transform  transforming modules took 8.09s · 80% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
