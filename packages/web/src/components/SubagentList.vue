@@ -43,6 +43,7 @@ defineExpose({ focus: () => listEl.value?.focus() });
         <button data-assistant-feature v-if="readable && item.hasTranscript" type="button" class="subagent-list-transcript" :aria-label="`${item.description || item.type || 'サブエージェント'}の会話を読む`" @click="emit('transcript',item.id)">会話</button>
       </div>
       <div v-if="item.description" class="subagent-list-desc">{{ item.description }}</div>
+      <slot name="usage" :item="item" />
     </div>
     <p v-if="more" class="subagent-list-more">{{ more }}</p>
   </div>

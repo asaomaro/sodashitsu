@@ -11,6 +11,7 @@ import { childRequestId } from "../conversation/childRequestId.js";
 import { ConnectionKey } from "../injection.js";
 import { useChildConversationStore } from "../store/childConversation.js";
 import { useSessionStore } from "../store/session.js";
+import SubagentUsagePanel from "./SubagentUsagePanel.vue";
 import SubagentTranscriptWindow from "./graph/SubagentTranscriptWindow.vue";
 const store = useChildConversationStore(),
   session = useSessionStore(),
@@ -221,6 +222,7 @@ async function sendParent(): Promise<void> {
       <p v-else role="status">この子の会話記録は未取得です。</p>
     </div>
     <footer>
+      <SubagentUsagePanel :key="`${target.scope}:${target.agentId}:usage`" :pane-id="target.paneId" :agent-id="target.agentId" />
       <p role="status">{{ controlNote }}</p>
       <form v-if="direct || childDraft" data-child-compose @submit.prevent="sendChild">
         <label

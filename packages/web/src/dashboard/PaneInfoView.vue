@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useChildConversationStore} from "../store/childConversation.js";
+import SubagentUsagePanel from "../components/SubagentUsagePanel.vue";
 import SubagentList from "../components/SubagentList.vue";
 /**
  * pane の利用状況（情報）の中身（20261010-agent-usage PR4。AC1）。デスクトップの小さな窓（`PaneInfoPopover`）と、1 列の画面の全面のダイアログ（`PaneInfoDialog`）が同じものを使う。
@@ -33,6 +35,8 @@ const view = useViewStore();
 const session = useSessionStore();
 const seen = useSeenStore();
 const usageStore = useUsageStore();
+const childScopes=useChildConversationStore(),expandedChildUsage=ref<string|null>(null);
+watch(()=>JSON.stringify([childScopes.scope(props.paneId),session.panes.get(props.paneId)?.agent?.subagents?.items.slice(0,64).map(c=>[c.id,c.startedAt])]),()=>{expandedChildUsage.value=null;});
 
 // --- 時計（「N 分前」）。見えている間だけ 10 秒ごと ---------------------------------------------------------------------
 const now = ref(Date.now());
@@ -215,7 +219,7 @@ function openDashboard(): void {
         </dd>
       </dl>
 
-      <section v-if="subagentCount !== null && subagentCount>0" aria-label="サブエージェントの情報" class="pinfo-inline-subagents"><SubagentList :subagents="agent?.subagents" /></section>
+      <section v-if="subagentCount !== null && subagentCount>0" aria-label="サブエージェントの情報" class="pinfo-inline-subagents"><SubagentList :subagents="agent?.subagents"><template #usage="{item}"><SubagentUsagePanel :pane-id="paneId" :agent-id="item.id" :active="active" :open="expandedChildUsage===item.id" @update:open="expandedChildUsage=$event?item.id:null" /></template></SubagentList></section>
 
       <section v-if="accounts.length > 0" class="pinfo-accounts" data-pane-info-accounts aria-label="アカウントの利用枠">
         <h3 class="pinfo-sub">アカウントの利用枠</h3>
