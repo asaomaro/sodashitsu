@@ -1,4 +1,5 @@
 import { AgentSubagentControlParams, AgentSubagentSendParams, type AgentSubagentControlResult, type AgentSubagentSendResult } from "./subagentControl.js";
+import {AgentSubagentUsageParams,type AgentSubagentUsageResult} from "./subagentUsage.js";
 import {NotificationSummaryParams,type NotificationWorkSummary} from "./conversation.js";
 import {AssistantModelCatalogParams,type AssistantModelCatalog} from "./desktopAssistant.js";
 import {UsageInsightsParams,type UsageInsights} from "./usageInsights.js";
@@ -1636,6 +1637,7 @@ export const METHOD_SCHEMAS = {
   "agent.model_options": AssistantModelCatalogParams,
   "agent.subagent_control": AgentSubagentControlParams,
   "agent.subagent_send": AgentSubagentSendParams,
+  "agent.subagent_usage": AgentSubagentUsageParams,
   "agent.subagent_transcript": AgentSubagentTranscriptParams,
   "notification.test": NotificationStateParams,
   "notification.state": NotificationStateParams,
@@ -1846,6 +1848,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "agent.model_options": AssistantModelCatalog;
   "agent.subagent_control": AgentSubagentControlResult;
   "agent.subagent_send": AgentSubagentSendResult;
+  "agent.subagent_usage": AgentSubagentUsageResult;
   "agent.subagent_transcript": AgentSubagentTranscriptResult;
   "notification.test": { ok: true };
   "notification.state": NotificationState;

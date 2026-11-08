@@ -1,3 +1,4 @@
+export * from "./subagentUsage.js";
 export * from "./desktopNativeAdaptive.js";
 export * from "./desktopCodecs.js";
 export * from "./ids.js";
