@@ -243,3 +243,17 @@ it("keeps child metadata in information without conversation controls",()=>{
  dialog.handleKey({key:"Tab"} as never);dialog.handleKey({key:"Enter"} as never);dialog.render({grid,theme:new ThemeColors("dracula")});
  const text=Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join("\n");expect(text).toContain("Generated Child");expect(text).toContain("observed-model medium");expect(text).not.toContain("[会話]");expect(text).not.toContain("Enter:会話");
 });
+
+it("expands dashboard child rows with unchanged parent usage and routes selected children to their own conversation",async()=>{
+ const {UsageDashboard}=await import('./UsageView.js'),model=new SessionModel();model.applySnapshot(snapshot(),"client");const p=model.panes.get('p1')!;
+ model.panes.set('p1',{...p,label:'Generated Parent',agent:{kind:'codex',instanceId:'i',name:'parent-agent',state:'idle',subagents:{count:2,countBasis:'alive',items:[{id:'c1',description:'Generated Child',startedAt:1,state:'unknown',model:'child-model',modelBasis:'turn',reasoningEffort:'medium',reasoningEffortBasis:'turn'},{id:'c2',description:'Other Child',startedAt:1,state:'idle'}]}} as NonNullable<typeof p.agent>});
+ const ui=new UiState(model),focus=vi.fn(),usage={status:'ready',data:{panes:{p1:{paneId:'p1',kind:'codex',model:'parent-model',tokens:{basis:'cumulative',total:12345},costUsd:7.25,source:'rollout',updatedAt:1}},accounts:[]}} as unknown as UsageModel,view=new UsageDashboard(model,ui,usage,focus);
+ const text=()=>{const grid=new Grid(140,35);view.render(grid,{x:0,y:0,w:140,h:35},new ThemeColors('dracula'));return Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join('\n');};expect(text()).not.toContain('Generated Child');expect(text()).toContain('▸2');view.handleKey({key:' '} as never);let display=text();expect(display).toContain('Generated Child');expect(display).toContain('child-model medium');expect(display).toContain('1 エージェント');expect(display.match(/12,345/g)).toHaveLength(1);expect(display.match(/7\.2500/g)).toHaveLength(1);
+ view.handleKey({key:'ArrowDown'} as never);view.handleKey({key:'Enter'} as never);expect(ui.dialogContext).toMatchObject({kind:'childConversation',paneId:'p1',agentId:'c1',instanceId:'i'});expect(focus).not.toHaveBeenCalled();
+});
+
+it("keeps expanded children navigable when their variable-height rows exceed the viewport and caps at 64",async()=>{
+ const {UsageDashboard}=await import('./UsageView.js'),model=new SessionModel();model.applySnapshot(snapshot(),"client");const p=model.panes.get('p1')!;
+ model.panes.set('p1',{...p,agent:{kind:'codex',instanceId:'i',state:'idle',subagents:{count:70,countBasis:'alive',items:Array.from({length:70},(_,i)=>({id:`c${i}`,description:`Generated child ${i}`,startedAt:1,state:'unknown' as const,model:'actual-model',modelBasis:'turn' as const}))}} as NonNullable<typeof p.agent>});const ui=new UiState(model),usage={status:'ready',data:{panes:{},accounts:[]}} as unknown as UsageModel,view=new UsageDashboard(model,ui,usage,vi.fn());
+ view.handleKey({key:' '} as never);for(let i=0;i<64;i++)view.handleKey({key:'ArrowDown'} as never);const grid=new Grid(100,25);view.render(grid,{x:0,y:0,w:100,h:25},new ThemeColors('dracula'));const text=Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join('\n');expect(text).toContain('Generated child 63');expect(text).not.toContain('Generated child 64');view.handleKey({key:'Enter'} as never);expect(ui.dialogContext).toMatchObject({agentId:'c63'});
+});

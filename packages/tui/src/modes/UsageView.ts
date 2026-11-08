@@ -1,8 +1,8 @@
 import { sectionRule, sectionSides } from "../render/chrome/page.js";
 import { ScrollBar } from "./ScrollBar.js";
 import { glyphFor, stateColor } from "../render/chrome/context.js";
-import {subagentCountLabel,subagentStateLabel,subagentModelLabel,subagentsMoreLabel,paneNameOf, type KeyInput } from "@sodashitsu/client-core";
-import { formatUsageCredits, shortId, type AgentUsage, type AccountCostResult } from "@sodashitsu/protocol";
+import {subagentCountLabel,subagentStateLabel,subagentModelLabel,subagentsMoreLabel,paneNameOf,observedAgentModel, type KeyInput } from "@sodashitsu/client-core";
+import { formatUsageCredits, shortId, type AgentUsage,type Pane,type SubagentInfo, type AccountCostResult } from "@sodashitsu/protocol";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
 import type { UsageModel } from "../model/UsageModel.js";
@@ -234,7 +234,9 @@ export class UsageDashboard {
   private readonly scrollbar = new ScrollBar();
   private selected = 0;
   private sort: "name" | "tokens" | "cost" | "context" = "name";
-  private hits: { y: number; paneId: string }[] = [];
+  private hits: { y: number; paneId: string;agentId?:string }[] = [];
+  private childToggles:{y:number;x:number;w:number;paneId:string}[]=[];
+  private readonly expandedChildren=new Set<string>();
   private accountHits: { y: number; key: string }[] = [];
   private area: Rect | null = null;
   constructor(
@@ -260,6 +262,13 @@ export class UsageDashboard {
           : (metric(b.id) ?? -1) - (metric(a.id) ?? -1) || a.id.localeCompare(b.id);
       });
   }
+  private expansionKey(p:Pane):string{return JSON.stringify([this.model.clientId,p.id,p.agent?.instanceId]);}
+  private toggleChildren(p:Pane):void{if(!p.agent?.subagents?.count)return;const key=this.expansionKey(p);if(this.expandedChildren.has(key))this.expandedChildren.delete(key);else this.expandedChildren.add(key);if(this.expandedChildren.size>256)this.expandedChildren.delete(this.expandedChildren.values().next().value!);}
+  private entries(){
+    const rows:Array<{kind:"parent"|"child"|"more";p:Pane;child?:SubagentInfo;more?:string}>=[];
+    for(const p of this.rows()){rows.push({kind:"parent",p});const sub=p.agent?.subagents;if(!sub||!sub.count||!this.expandedChildren.has(this.expansionKey(p)))continue;const items=sub.items.slice(0,64);for(const child of items)rows.push({kind:"child",p,child});const more=subagentsMoreLabel({...sub,items});if(more)rows.push({kind:"more",p,more});}return rows;
+  }
+  private openChild(p:Pane,agentId:string):void{if(p.agent?.subagents?.items.slice(0,64).some(child=>child.id===agentId))this.ui.openDialogWithContext({kind:"childConversation",paneId:p.id,agentId,instanceId:p.agent.instanceId});}
   handleKey(k: KeyInput): void {
     this.scrollbar.cancel();
     if (k.key === "h") {
@@ -270,7 +279,7 @@ export class UsageDashboard {
       this.ui.setScreen("base");
       return;
     }
-    const rows = this.rows();
+    const rows = this.entries();
     this.selected = Math.min(this.selected, Math.max(0, rows.length - 1));
     if (isDown(k)) this.selected = Math.min(rows.length - 1, this.selected + 1);
     else if (isUp(k)) this.selected = Math.max(0, this.selected - 1);
@@ -279,9 +288,9 @@ export class UsageDashboard {
       const sorts = ["name", "tokens", "cost", "context"] as const;
       this.sort = sorts[(sorts.indexOf(this.sort) + 1) % sorts.length]!;
       this.selected = 0;
-    } else if (isEnter(k) && rows[this.selected]) {
-      this.ui.setScreen("base");
-      this.focus(rows[this.selected]!.id);
+    } else if(k.key===" "&&rows[this.selected]?.kind==="parent")this.toggleChildren(rows[this.selected]!.p);
+    else if (isEnter(k) && rows[this.selected]) {
+      const row=rows[this.selected]!;if(row.kind==="child")this.openChild(row.p,row.child!.id);else if(row.kind==="parent"){this.ui.setScreen("base");this.focus(row.p.id);}
     }
   }
   handleMouse(ev: OverlayMouse): boolean {
@@ -290,7 +299,7 @@ export class UsageDashboard {
     if (ev.action === "wheel")
       this.selected = Math.max(
         0,
-        Math.min(this.rows().length - 1, this.selected + (ev.button === 65 ? 1 : -1)),
+        Math.min(this.entries().length - 1, this.selected + (ev.button === 65 ? 1 : -1)),
       );
     if (ev.action === "down" && ev.button === 0) {
       const account = this.accountHits.find((h) => h.y === ev.y);
@@ -298,10 +307,10 @@ export class UsageDashboard {
         this.ui.openDialogWithContext({ kind: "accountCost", accountKey: account.key });
         return true;
       }
+      const toggle=this.childToggles.find(h=>h.y===ev.y&&ev.x>=h.x&&ev.x<h.x+h.w);if(toggle){const p=this.model.panes.get(toggle.paneId);if(p)this.toggleChildren(p);return true;}
       const hit = this.hits.find((h) => h.y === ev.y);
       if (hit) {
-        this.ui.setScreen("base");
-        this.focus(hit.paneId);
+        const p=this.model.panes.get(hit.paneId);if(hit.agentId){if(p)this.openChild(p,hit.agentId);}else{this.ui.setScreen("base");this.focus(hit.paneId);}
       }
     }
     return true;
@@ -309,7 +318,7 @@ export class UsageDashboard {
   render(grid: Grid, area: Rect, theme: ThemeColors): void {
     this.area = area;
     this.hits = [];
-    this.accountHits = [];
+    this.accountHits = [];this.childToggles=[];
     const c = { ...dialogColors(theme), bg: theme.ground("--soda-menu-bg") };
     grid.fill(area, c.fg, c.bg);
     const put = (y: number, text: string, bg = c.bg) => {
@@ -321,7 +330,7 @@ export class UsageDashboard {
       y++,
       "利用状況 · s:並び順 " +
         this.sort +
-        " · a:アカウント · h:セッション履歴 · ↑↓ / Enter:ペインへ · Esc:基本",
+        " · a:アカウント · h:セッション履歴 · Space:子を展開 · ↑↓ / Enter:ペイン・子会話 · Esc:基本",
     );
     const status = statusText(this.usage);
     if (status) put(y++, status);
@@ -352,64 +361,34 @@ export class UsageDashboard {
     }
     if (!accountLines.length && area.h >= 8) put(y++, "利用枠の情報がありません（aで一覧）");
     section("エージェント");
-    const rows = this.rows();
+    const parents=this.rows(),rows = this.entries();
     this.selected = Math.max(0, Math.min(this.selected, rows.length - 1));
     const rowHeight = area.y + area.h - y - 2 < 3 ? 1 : 3;
-    const available = Math.max(0, Math.floor((area.y + area.h - y - 2) / rowHeight));
-    const start = Math.max(0, this.selected - available + 1);
+    const room=Math.max(0,area.y+area.h-y-2),height=(row:typeof rows[number])=>rowHeight===1?1:row.kind==="parent"?3:row.kind==="child"&&subagentModelLabel(row.child!)?2:1;
+    let start=this.selected,used=rows[start]?height(rows[start]!):0;while(start>0&&used+height(rows[start-1]!)<=room){start--;used+=height(rows[start]!);}
     if (!rows.length) put(y++, "エージェントがありません");
     const trackY = y;
-    for (const [i, p] of rows.slice(start, start + available).entries()) {
-      const tab = this.model.tabs.get(p.tabId),
-        ws = tab ? this.model.workspaces.get(tab.workspaceId) : undefined;
-      const bg = start + i === this.selected ? c.active : c.bg;
-      const state = this.model.displayStateOf(p);
-      const glyph = glyphFor(state, this.symbols());
-      put(
-        y,
-        `${glyph ? glyph + " " : ""}${paneNameOf(p)} · ${ws?.label ?? shortId(tab?.workspaceId ?? p.tabId)} / ${tab?.label ?? shortId(p.tabId)}`,
-        bg,
-      );
-      if (y < area.y + area.h)
-        grid.text(area.x + 1, y, glyph, stateColor(theme, state), bg, 0, Math.max(0, area.w - 3));
-      this.hits.push({ y, paneId: p.id });
-      y++;
-      if (rowHeight === 1) continue;
-      const u = this.usage.data.panes[p.id];
-      put(
-        y,
-        u
-          ? `${u.kind} · ${u.model ?? "—"} · ${basis[u.tokens.basis]} ${num(totalTokens(u))} · ${costText(u, 4)}${u.partial ? " · 一部" : ""}${u.scanning ? " · 読取中" : ""}${u.updatesStopped ? " · 更新停止" : ""}`
-          : "利用状況を取得できません",
-        bg,
-      );
-      this.hits.push({ y, paneId: p.id });
-      y++;
-      put(
-        y++,
-        u
-          ? "文脈 " +
-              usageGauge(contextPercent(u)) +
-              " · 更新 " +
-              new Date(u.updatedAt).toLocaleString("ja-JP")
-          : "",
-        bg,
-      );
+    for (let index=start;index<rows.length;index++) {
+      const row=rows[index]!,p=row.p,h=height(row);if(y+h>trackY+room)break;
+      const bg=index===this.selected?c.active:c.bg;
+      if(row.kind==="more"){put(y++,`  ${row.more??""}`,bg);continue;}
+      if(row.kind==="child"){
+        const child=row.child!,state=child.state??"working",glyph=glyphFor(state,this.symbols(),"subagent"),name=child.description?.trim()||child.type?.trim()||"サブエージェント",model=subagentModelLabel(child);
+        put(y,plainText(`  ${glyph?glyph+" ":""}${name}${rowHeight===1&&model?" · "+model:""}`),bg);if(glyph)grid.text(area.x+3,y,glyph,stateColor(theme,state),bg,0,Math.max(0,area.w-5));this.hits.push({y,paneId:p.id,agentId:child.id});y++;
+        if(h===2){put(y,plainText(`    ${model}`),bg);this.hits.push({y,paneId:p.id,agentId:child.id});y++;}continue;
+      }
+      const tab=this.model.tabs.get(p.tabId),ws=tab?this.model.workspaces.get(tab.workspaceId):undefined,state=this.model.displayStateOf(p),glyph=glyphFor(state,this.symbols());
+      put(y,`${glyph?glyph+" ":""}${paneNameOf(p)} · ${ws?.label??shortId(tab?.workspaceId??p.tabId)} / ${tab?.label??shortId(p.tabId)}`,bg);
+      if(y<area.y+area.h)grid.text(area.x+1,y,glyph,stateColor(theme,state),bg,0,Math.max(0,area.w-3));
+      const count=p.agent?.subagents?.count??0;if(count>0){const open=this.expandedChildren.has(this.expansionKey(p)),badge=open?"▾":`▸${count}`,w=stringWidth(badge),x=area.x+area.w-3-w;if(x>=area.x+1){grid.text(x,y,badge,c.fg,bg,0,w);this.childToggles.push({y,x,w,paneId:p.id});}}
+      this.hits.push({y,paneId:p.id});y++;if(rowHeight===1)continue;
+      const u=this.usage.data.panes[p.id],model=observedAgentModel(p,u);
+      put(y,u?`${u.kind} · ${model?.text??"—"} · ${basis[u.tokens.basis]} ${num(totalTokens(u))} · ${costText(u,4)}${u.partial?" · 一部":""}${u.scanning?" · 読取中":""}${u.updatesStopped?" · 更新停止":""}`:"利用状況を取得できません",bg);this.hits.push({y,paneId:p.id});y++;
+      put(y++,u?"文脈 "+usageGauge(contextPercent(u))+" · 更新 "+new Date(u.updatedAt).toLocaleString("ja-JP"):"",bg);
     }
-    this.scrollbar.render(
-      grid,
-      { ...area, y: trackY, h: available * rowHeight },
-      rows.length * rowHeight,
-      start * rowHeight,
-      c,
-      (offset) => {
-        this.selected = Math.min(rows.length - 1, Math.floor(offset / rowHeight) + available - 1);
-      },
-    );
-    put(
-      area.y + area.h - 1,
-      `${rows.length} エージェント · ${this.selected + Number(rows.length > 0)} / ${rows.length}`,
-    );
+    const offsets:number[]=[];let total=0;for(const row of rows){offsets.push(total);total+=height(row);}
+    this.scrollbar.render(grid,{...area,y:trackY,h:room},total,offsets[start]??0,c,offset=>{this.selected=Math.max(0,offsets.findIndex((n,i)=>n<=offset&&(offsets[i+1]??Infinity)>offset));});
+    put(area.y+area.h-1,`${parents.length} エージェント · ${this.selected+Number(rows.length>0)} / ${rows.length} 行`);
     const frame={...area,w:Math.max(0,area.w-1),h:Math.max(0,area.h-1)};
     const first=sectionHeads[0]?.y;
     if(first!==undefined&&first<area.y+area.h-2){

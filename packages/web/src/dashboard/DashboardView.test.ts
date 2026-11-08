@@ -288,5 +288,15 @@ it("opens an account cost window from its card and displays total, model and eff
 
 it("shows membership as membership rather than a working count",()=>{
  const {wrapper}=setup([pane("p1",agent({kind:"agy",subagents:{count:3,items:[],countBasis:"alive"}}))]);
- expect(wrapper.get('[data-dash-row="p1"] .dash-c-sub').text()).toContain('3件');wrapper.unmount();
+ expect(wrapper.get('[data-dash-row="p1"] .dash-child-toggle').attributes('aria-label')).toContain('3件');wrapper.unmount();
+});
+
+it("expands observed children without adding them to usage totals, and opens their own conversation",async()=>{
+ const a=agent({kind:"codex",name:"parent-agent",subagents:{count:2,countBasis:"alive",items:[{id:"child-1",description:"Generated child task",startedAt:1,state:"unknown",model:"actual-child-model",modelBasis:"turn",reasoningEffort:"medium",reasoningEffortBasis:"turn"},{id:"child-2",description:"Other child",startedAt:1,state:"idle"}]}});
+ const parent=pane("p1",a);parent.agentSession={kind:"codex",sessionId:"generated-session",reportedAt:1};const f=setup([parent]);useSessionStore(pinia).clientId="generated-client";f.view.onConnectionState("open");f.usage.setSnapshot({panes:{p1:usage("p1",{kind:"codex",tokens:{basis:"cumulative",total:12345},costUsd:7.25})},accounts:[]});await f.wrapper.vm.$nextTick();
+ const before={tokens:f.wrapper.get('[data-dash-tokens]').text(),cost:f.wrapper.get('[data-dash-cost]').text()};const toggle=f.wrapper.get('[data-dash-child-toggle="p1"]');expect(toggle.text()).toBe('▸2');await toggle.trigger('click');expect(toggle.text()).toBe('▾');expect(rowIds(f.wrapper)).toEqual(['p1']);expect(f.wrapper.get('[data-dash-count]').text()).toBe('1');
+ const child=f.wrapper.get('[data-dash-child="child-1"]');expect(child.get('.dash-child-line1').text()).toContain('Generated child task');expect(child.get('.dash-child-line1').text()).not.toContain('actual-child-model');expect(child.get('.dash-child-line2').text()).toBe('actual-child-model medium');expect(child.get('.state-icon').attributes('aria-label')).toBe('状態不明');
+ expect(f.wrapper.findAll('[data-dash-tokens]')).toHaveLength(1);expect(f.wrapper.get('[data-dash-tokens]').text()).toBe(before.tokens);expect(f.wrapper.get('[data-dash-cost]').text()).toBe(before.cost);
+ f.view.setScreen('dashboard');await child.trigger('click');expect(f.view.screen).toBe('dashboard');const {useChildConversationStore}=await import('../store/childConversation.js');expect(useChildConversationStore(pinia).target).toMatchObject({paneId:'p1',agentId:'child-1'});expect(f.requests.filter(([m])=>m==='pane.focus'||m==='agent.prompt_checked')).toEqual([]);
+ await toggle.trigger('click');expect(f.wrapper.find('[data-dash-child]').exists()).toBe(false);f.wrapper.unmount();
 });

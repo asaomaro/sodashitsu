@@ -6,7 +6,9 @@
  * 値が無いものは「—」（0 と書かない）。古い値は薄く、時刻つきで。形（表／カード）は画面の様式のトークンで替わる。
  */
 import { defineAsyncComponent, computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { paneNameOf, stateLabel } from "@sodashitsu/client-core";
+import {useChildConversationStore} from "../store/childConversation.js";
+import type {SubagentInfo} from "@sodashitsu/protocol";
+import { paneNameOf, stateLabel,subagentCountLabel,subagentStateLabel,subagentModelLabel,subagentsMoreLabel,observedAgentModel } from "@sodashitsu/client-core";
 import { analyticsSelected } from "./navigation.js";
 const UsageAnalytics = defineAsyncComponent(() => import("./UsageAnalytics.vue"));
 import StateIcon from "../components/StateIcon.vue";
@@ -52,6 +54,17 @@ const session = useSessionStore();
 const seen = useSeenStore();
 const usage = useUsageStore();
 const conn = inject(ConnectionKey, null);
+const childConversation=useChildConversationStore();
+const expandedChildren=ref(new Set<string>());
+const childAgent=(row:DashboardRow)=>session.panes.get(row.paneId)?.agent;
+const expansionKey=(row:DashboardRow)=>`${machines.selectedId}:${childAgent(row)?.instanceId??row.paneId}`;
+const childrenOpen=(row:DashboardRow)=>expandedChildren.value.has(expansionKey(row));
+function toggleChildren(row:DashboardRow):void {const next=new Set(expandedChildren.value),key=expansionKey(row);if(next.has(key))next.delete(key);else next.add(key);if(next.size>256)next.delete(next.values().next().value!);expandedChildren.value=next;}
+const children=(row:DashboardRow)=>childAgent(row)?.subagents?.items.slice(0,64)??[];
+const childName=(child:SubagentInfo)=>child.description?.trim()||child.type?.trim()||"サブエージェント";
+const childTitle=(child:SubagentInfo)=>[childName(child),subagentModelLabel(child),subagentStateLabel(child)].filter(Boolean).join(" · ");
+function openChild(row:DashboardRow,child:SubagentInfo):void{if(props.kind==="dialog")view.closeDashboard();childConversation.open(row.paneId,child.id);}
+function observedModel(row:DashboardRow){const pane=session.panes.get(row.paneId);return pane?observedAgentModel(pane,row.usage):undefined;}
 
 // --- 時計（「N 分前」・リセットまでの時間）。見えている間だけ 10 秒ごと ------------------------------------------------
 const now = ref(Date.now());
@@ -320,9 +333,8 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
           <span class="dash-c dash-c-ctx" role="columnheader">コンテキスト</span>
           <span class="dash-c dash-c-ago" role="columnheader">最後の動き</span>
         </div>
+        <template v-for="r in rows" :key="r.paneId">
         <div
-          v-for="r in rows"
-          :key="r.paneId"
           class="dash-row dash-row-body"
           :class="{ 'dash-stale': stale(r), 'dash-row-selected': r.paneId === view.focusedPaneId }"
           role="row"
@@ -337,13 +349,13 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
           <span class="dash-c dash-c-state" role="cell"><StateIcon :state="r.state" /></span>
           <span class="dash-c dash-c-kind" role="cell"><span class="dash-cell-label" aria-hidden="true">種類</span>{{ kindText(r.kind) }}</span>
           <span class="dash-c dash-c-name" role="cell" :title="r.name">{{ r.name }}</span>
-          <span class="dash-c dash-c-model" role="cell"><span class="dash-cell-label" aria-hidden="true">モデル</span>{{ r.usage?.model ?? NONE }}</span>
+          <span class="dash-c dash-c-model" role="cell" :title="observedModel(r)?.title"><span class="dash-cell-label" aria-hidden="true">モデル</span>{{ observedModel(r)?.text ?? NONE }}</span>
           <span class="dash-c dash-c-place" role="cell" :title="r.cwd">
             <span class="dash-place-ws">{{ placeText(r) }}</span>
             <span v-if="r.branch" class="dash-place-branch">（{{ r.branch }}）</span>
             <span class="dash-muted dash-place-cwd">{{ r.cwd }}</span>
           </span>
-          <span class="dash-c dash-c-sub" role="cell"><span class="dash-cell-label" aria-hidden="true">サブ</span>{{ subagentsText(r) }}</span>
+          <span class="dash-c dash-c-sub" role="cell"><span class="dash-cell-label" aria-hidden="true">サブ</span><button v-if="(childAgent(r)?.subagents?.count??0)>0" data-assistant-feature class="dash-child-toggle" :data-dash-child-toggle="r.paneId" :aria-label="`${subagentCountLabel(childAgent(r)?.subagents)}を${childrenOpen(r)?'折りたたむ':'展開'}`" :aria-expanded="childrenOpen(r)" :aria-controls="`dash-children-${r.paneId}`" @click.stop="toggleChildren(r)" @keydown.stop><span aria-hidden="true">{{ childrenOpen(r)?'▾':'▸' }}<span v-if="!childrenOpen(r)">{{ childAgent(r)?.subagents?.count }}</span></span></button><template v-else>{{ subagentsText(r) }}</template></span>
           <span class="dash-c dash-c-tokens" role="cell" data-dash-tokens>
             <span class="dash-cell-label" aria-hidden="true">トークン</span>
             <span class="dash-num">{{ tokensText(r) }}</span>
@@ -373,6 +385,11 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
           </span>
           <span class="dash-c dash-c-ago" role="cell" :title="new Date(r.since).toLocaleString()"><span class="dash-cell-label" aria-hidden="true">最後の動き</span>{{ formatAgo(r.since, now) }}</span>
         </div>
+        <div v-if="childrenOpen(r)&&(childAgent(r)?.subagents?.count??0)>0" :id="`dash-children-${r.paneId}`" class="dash-children" role="rowgroup" :aria-label="`${r.name}のサブエージェント`">
+          <div v-for="child in children(r)" :key="child.id" role="row"><div role="cell"><button class="dash-child-row" :data-dash-child="child.id" :title="childTitle(child)" :aria-label="`${childName(child)}の会話を開く`" @click.stop="openChild(r,child)" @keydown.stop><span class="dash-child-line1"><StateIcon :state="child.state??'working'" variant="subagent"/><span>{{ childName(child) }}</span></span><span v-if="subagentModelLabel(child)" class="dash-child-line2">{{ subagentModelLabel(child) }}</span></button></div></div>
+          <p v-if="subagentsMoreLabel({...childAgent(r)!.subagents!,items:children(r)})" class="dash-muted">{{ subagentsMoreLabel({...childAgent(r)!.subagents!,items:children(r)}) }}</p>
+        </div>
+        </template>
       </div>
     </section>
     </template>
@@ -380,6 +397,12 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
 </template>
 
 <style scoped>
+.dash-child-toggle{font:inherit;color:inherit;background:transparent;border:1px solid var(--soda-menu-border);border-radius:var(--soda-shape-radius-s,6px);cursor:pointer;padding:0 .3em;}
+.dash-children{padding:.3em 1.5em;max-height:50vh;overflow:auto;border-bottom:1px solid var(--soda-menu-border);}
+.dash-child-row{display:block;text-align:left;width:100%;font:inherit;color:inherit;background:transparent;border:0;border-radius:var(--soda-shape-radius-s,6px);padding:.3em .5em;cursor:pointer;}
+.dash-child-row:hover{background:var(--soda-menu-hover-bg);}.dash-child-row:focus-visible{outline:2px solid var(--soda-accent);outline-offset:-2px;}
+.dash-child-line1{display:flex;gap:.5em;align-items:center;}.dash-child-line2{display:block;padding-left:1.5em;font:inherit;opacity:.8;}
+
 .dash-state-overview{margin:16px 0 24px}.dash-state-strip{display:flex;gap:4px;height:10px;border-radius:8px;overflow:hidden}.dash-state-strip i{background:var(--soda-accent,#8197ec)}.dash-state-strip i[data-state="working"]{background:#62d8bd}.dash-state-strip i[data-state="waiting_input"],.dash-state-strip i[data-state="waiting_approval"]{background:#edbd6e}.dash-state-cards{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px}.dash-state-cards article{display:flex;align-items:center;gap:10px;border:1px solid var(--soda-border,#3c4c66);border-radius:12px;padding:12px 18px}.dash-state-cards strong{font-size:25px}
 
 .dash {
