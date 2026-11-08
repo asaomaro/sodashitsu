@@ -16,12 +16,15 @@ export function observeAFailure(value,protocol,out){try{
  else if(value?.type==='protected_desktop_failure'){const parsed=protocol.DesktopProtectedFailure.safeParse(value);out.errorClass=parsed.success?'protected_failure':'protected_failure_invalid';if(parsed.success)out.protectedFailureCode=parsed.data.code;}
  else if(value?.type==='microphone_status'){const parsed=protocol.DesktopMicrophoneResult.safeParse(value);if(parsed.success)out.microphoneState=parsed.data.state;}
  }catch{out.diagnosticUnavailable=true;}}
+// Formal viewer keepalive; never extends source/approval policy or sends input/PCM.
+export function keepViewerAlive(viewer,active,failed,timers={setInterval,clearInterval}){let stopped=false;const timer=timers.setInterval(()=>{if(stopped)return;try{if(active()&&viewer.readyState===1)viewer.send(JSON.stringify({type:'heartbeat'}));}catch{failed();}},1000);timer?.unref?.();return()=>{if(stopped)return;stopped=true;timers.clearInterval(timer);};}
 export async function runA(manifestPath){
  if(process.platform!=='win32')throw Error('approved-Windows-slot-required');
  const m=JSON.parse(await readFile(manifestPath,'utf8'));assertManifest(m);if(resolve(manifestPath)!==join(resolve(m.jobRoot),'manifest.json'))throw Error('exact-manifest-required');
  const root=await lstat(m.jobRoot);if(!root.isDirectory()||root.isSymbolicLink()||await realpath(m.jobRoot)!==resolve(m.jobRoot))throw Error('own-directory-required');
  await receipt(m.jobRoot,'claim.json',{jobId:m.jobId,controllerPid:process.pid});
  let stage='other',failureStage,failureClass;const failureEvidence={};
+ let stopViewerHeartbeat=()=>{};
  let server,closed,viewer,mic,rpc,clock,pump,streamId,receiverOwned=false,serverRetired=false,receiverRetired=false,actor,actorRetired=false,measurementPassed=false,settingsBefore,settingsAfter,receiver;const issues=[];let baseline,receiverResult,cadence,post,pre;let sent=0,acked=0,expectedAck=0;const sockets=[];
  const until=async(fn,ms,label)=>{const deadline=Date.now()+ms;while(true){if(Date.now()>=Date.parse(m.expiresAt)||issues.length)throw Error('fixture-retired');const value=await fn();if(value)return value;if(Date.now()>deadline)throw Error(label);await sleep(20);}};
  const phase=async name=>receipt(m.jobRoot,'phase-'+name+'.json',{phase:name,at:new Date().toISOString()});
@@ -55,7 +58,7 @@ export async function runA(manifestPath){
   await receipt(m.jobRoot,'receiver-manifest.json',{...m,controllerPid:process.pid,controllerStartedTicks:owner.owner.startedTicks,controllerExeSha256:owner.owner.exeSha256,receiverExeSha256:m.binarySha256['receiver.exe']});await phase('awaiting-elevated-receiver');
   stage='receiver_wait';receiver=await until(async()=>{const file=join(m.jobRoot,'receiver-armed.json');return await readPublishedAReceipt(file,failureEvidence);},90000,'elevated-receiver-not-armed');
   stage='receiver_identity';if(receiver.exeSha256!==m.binarySha256['receiver.exe']||!receiver.elevated||!receiver.sameScope)throw Error('receiver-identity');stage='receiver_native_probe';const receiverScope=await probe(m,'receiver',{receiverPid:receiver.pid,receiverStartedTicks:receiver.startedTicks,receiverExeSha256:receiver.exeSha256});stage='receiver_native_scope';if(!receiverScope.ok)throw Error('receiver-native-scope');receiverOwned=true;
-  stage='protected_source_connect';viewer=await connect('/desktop-share',[protocol.DESKTOP_MICROPHONE_PROTOCOL,protocol.DESKTOP_PROTECTED_PROTOCOL,protocol.desktopFeaturesProtocol(['protectedMicrophone'])]);stage='protected_source_start';const events=[];let frames=0;
+  stage='protected_source_connect';viewer=await connect('/desktop-share',[protocol.DESKTOP_MICROPHONE_PROTOCOL,protocol.DESKTOP_PROTECTED_PROTOCOL,protocol.desktopFeaturesProtocol(['protectedMicrophone'])]);stopViewerHeartbeat=keepViewerAlive(viewer,()=>Date.now()<Date.parse(m.expiresAt)&&issues.length===0,()=>issues.push('viewer-heartbeat'));stage='protected_source_start';const events=[];let frames=0;
   viewer.on('message',(raw,binary)=>{if(binary){try{const info=protocol.decodeDesktopFrame(new Uint8Array(raw)).info;frames++;viewer.send(JSON.stringify({type:'ack',seq:info.seq}));}catch{issues.push('image-protocol');}}else try{const v=JSON.parse(raw.toString());observeAFailure(v,protocol,failureEvidence);events.push(v);if(events.length>256)events.shift();if(v.type==='error'||v.type==='protected_desktop_failure')issues.push('desktop-protocol');}catch{issues.push('desktop-json');}});
   viewer.send(JSON.stringify({type:'start',machineId:'local',options:{width:640,fps:2,quality:30,features:true,elevatedDesktop:true,protectedMicrophone:true,microphone:true}}));
   stage='protected_source_ready';const native=await until(()=>events.find(v=>v.type==='ready'),60000,'native-source-timeout');stage='protected_source_schema';protocol.DesktopReady.parse(native);
@@ -76,7 +79,7 @@ export async function runA(manifestPath){
   stage='measurement_record';measurementPassed=receiverResult.ok===true&&cadence.ok===true&&issues.length===0;await receipt(m.jobRoot,'measurement.json',{ok:measurementPassed,source:{backend:native.backend,mode:native.protectedDesktop,secureDesktop:true,protectedMicrophone:true},actorModuleSha256:actor.actors[0].moduleSha256,receiver:receiverResult,cadence,frames,sent,acked,issues,rawAudioStored:false,physicalMicrophoneUsed:false,modelCalls:0});
  }catch(error){failureStage=failureStageA(stage);failureClass=failureClassA(error);issues.push('fixture-failed-closed');}
  finally{
-  if(pump)clearInterval(pump);if(clock)await clock.close();if(mic?.readyState===1&&streamId)mic.send(JSON.stringify({type:'microphone_stop',id:streamId}));if(viewer?.readyState===1)viewer.send(JSON.stringify({type:'stop'}));for(const socket of sockets)socket.close();
+  stopViewerHeartbeat();if(pump)clearInterval(pump);if(clock)await clock.close();if(mic?.readyState===1&&streamId)mic.send(JSON.stringify({type:'microphone_stop',id:streamId}));if(viewer?.readyState===1)viewer.send(JSON.stringify({type:'stop'}));for(const socket of sockets)socket.close();
   await writeFile(join(m.jobRoot,'stop'),'',{flag:'wx'}).catch(()=>{});
   // Normal controller cannot assume it can kill elevated receiver; its self-TTL/stop file is authoritative.
   if(receiverOwned){try{await until(async()=>{const retired=await probe(m,'retired',{ownedPid:receiver.pid,ownedStartedTicks:receiver.startedTicks});return retired.ok&&retired.retired;},5000,'receiver-still-alive');receiverRetired=(await readPublishedAReceipt(join(m.jobRoot,'receiver-result.json'),failureEvidence))?.physicalClosed===true;}catch{receiverRetired=false;}}
