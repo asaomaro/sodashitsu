@@ -1,0 +1,6 @@
+{
+  "scripts/remote-desktop/WindowsDesktopMicrophone.cs": "c01e817e71d7c5943df9f8258fdde21ccac0913323fdc82fe7ca33f9e8e36932",
+  "scripts/remote-desktop/WindowsMicrophoneRenderChecks.cs": "59e7d16e1530f16c532a3fabe957033c73c60e68638814713eaecca026ddd5a0",
+  "scripts/remote-desktop/validate-microphone-render.ps1": "74bb12156f5ea333c4c4cd6d78e94c32e7f8b9353f3ba046765b6606345f6307",
+  "scripts/remote-desktop/microphone-render-headroom.test.mjs": "81adee367f755561cc85deab79debf09e20d095b20a246d1d9fde5d43b1f713c"
+}

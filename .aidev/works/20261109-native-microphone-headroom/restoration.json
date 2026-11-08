@@ -1,0 +1,10 @@
+{
+  "base": "1006e82911d9dc6f5295ffef0cad0ca7c2735582",
+  "negativeExit": 1,
+  "positiveExit": 0,
+  "sourceSha256": "c01e817e71d7c5943df9f8258fdde21ccac0913323fdc82fe7ca33f9e8e36932",
+  "oldSourceSha256": "3b838cb7eb72c0b68a2a8441a0471ee1e485d14d8a318fadc5a9dce17c568581",
+  "byteExact": true,
+  "windowsExecuted": false,
+  "csharpCompileExecuted": false
+}

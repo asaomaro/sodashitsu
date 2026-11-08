@@ -11,6 +11,18 @@ using Microsoft.Win32.SafeHandles;
 public sealed class SodaDesktopMicrophone : IDisposable {
     public interface ISink : IDisposable { void Write(byte[] pcm,Func<bool> allowed); }
     public static readonly byte[] Hello={83,68,77,73,1,1,16,0,128,187,0,0,192,3,0,0};
+    // A packet is always 960 mono samples. Add only bounded silence when the
+    // observed queue is empty, without extending the existing 40ms maximum.
+    internal static uint RenderFrameCount(uint padding,uint capacity) {
+        if(capacity<960||capacity>48000||padding>capacity||padding>960||capacity-padding<960)throw new InvalidDataException("Microphone render plan");
+        return 960u+(padding==0?Math.Min(960u,capacity-960u):0u);
+    }
+    internal static int StageRender(byte[] pcm,byte[] scratch,uint frames) {
+        if(scratch==null||scratch.Length!=3840)throw new InvalidDataException("Microphone scratch");
+        Array.Clear(scratch,0,scratch.Length);
+        if(pcm==null||pcm.Length!=1920||frames<960||frames>1920)throw new InvalidDataException("Microphone render data");
+        Buffer.BlockCopy(pcm,0,scratch,checked((int)(frames-960)*2),pcm.Length);return checked((int)frames*2);
+    }
     readonly string name;readonly int clientPid;readonly Func<bool> allowed;readonly Func<ISink> factory;readonly Thread thread;readonly Func<int,bool> peerGuard;
     volatile bool stopping;NamedPipeServerStream pipe;
     public SodaDesktopMicrophone(string name,int clientPid,Func<bool> allowed,string endpoint)
@@ -95,7 +107,7 @@ public sealed class SodaDesktopMicrophone : IDisposable {
         static T Method<T>(IntPtr target,int slot)where T:class{return Marshal.GetDelegateForFunctionPointer(Marshal.ReadIntPtr(Marshal.ReadIntPtr(target),slot*IntPtr.Size),typeof(T))as T;}
         static void Check(int hr){if(hr<0)Marshal.ThrowExceptionForHR(hr);}
         static void Release(ref IntPtr value){if(value!=IntPtr.Zero){Marshal.Release(value);value=IntPtr.Zero;}}
-        IntPtr client,render;uint capacity;bool initialized,started,disposed;
+        IntPtr client,render;uint capacity;bool initialized,started,disposed;readonly byte[] scratch=new byte[3840];
         public Wasapi(string endpoint) {
             if(String.IsNullOrWhiteSpace(endpoint)||endpoint.Length>512||endpoint.IndexOf('\0')>=0||IntPtr.Size!=8)throw new ArgumentException("Explicit virtual endpoint required");
             IntPtr enumerator=IntPtr.Zero,device=IntPtr.Zero;
@@ -111,9 +123,10 @@ public sealed class SodaDesktopMicrophone : IDisposable {
         public void Write(byte[] pcm,Func<bool> allowed) {
             if(disposed||pcm.Length!=1920)throw new InvalidOperationException();var clock=Stopwatch.StartNew();uint padding;
             while(true){if(!allowed())return;Check(Method<Size>(client,6)(client,out padding));if(padding>capacity)throw new InvalidDataException();if(padding<=960&&capacity-padding>=960)break;if(clock.ElapsedMilliseconds>=60)throw new System.TimeoutException("Microphone render stalled");Thread.Sleep(2);}
-            if(!allowed())return;IntPtr buffer;Check(Method<Get>(render,3)(render,960,out buffer));
-            bool copied=false;try{if(allowed()){Marshal.Copy(pcm,0,buffer,pcm.Length);copied=true;}}finally{Check(Method<ReleaseBuffer>(render,4)(render,960,copied?0u:2u));}
+            uint frames=RenderFrameCount(padding,capacity);
+            if(!allowed())return;IntPtr buffer;Check(Method<Get>(render,3)(render,frames,out buffer));
+            bool copied=false;try{if(allowed()){int length=StageRender(pcm,scratch,frames);Marshal.Copy(scratch,0,buffer,length);copied=true;}}finally{Array.Clear(scratch,0,scratch.Length);Check(Method<ReleaseBuffer>(render,4)(render,frames,copied?0u:2u));}
         }
-        public void Dispose(){if(disposed)return;disposed=true;try{if(started)Method<Action>(client,11)(client);}finally{Release(ref render);Release(ref client);if(initialized)CoUninitialize();}}
+        public void Dispose(){if(disposed)return;disposed=true;try{if(started)Method<Action>(client,11)(client);}finally{Array.Clear(scratch,0,scratch.Length);Release(ref render);Release(ref client);if(initialized)CoUninitialize();}}
     }
 }
