@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-microphone-bounded-fifo
+
+
+ Test Files  3 passed (3)
+      Tests  27 passed (27)
+   Start at  06:00:58
+   Duration  1.55s (tests 53%, transform 35%, import 11%, worker 1%)
+

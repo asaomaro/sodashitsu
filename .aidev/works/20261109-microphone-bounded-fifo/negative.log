@@ -1,0 +1,39 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-microphone-bounded-fifo
+
+ ❯ packages/server/src/desktop/DesktopMicrophone.queue.test.ts (9 tests | 1 failed | 8 skipped) 11ms
+   × preserves a legal same-turn burst with an immediately completing real Writable 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/desktop/DesktopMicrophone.queue.test.ts > preserves a legal same-turn burst with an immediately completing real Writable
+AssertionError: expected [ 1, 6 ] to deeply equal [ 1, 2, 3, 4, 5, 6 ]
+
+- Expected
++ Received
+
+  [
+    1,
+-   2,
+-   3,
+-   4,
+-   5,
+    6,
+  ]
+
+ ❯ packages/server/src/desktop/DesktopMicrophone.queue.test.ts:20:20
+     18| it('preserves a legal same-turn burst with an immediately completing r…
+     19|  const f=fixture(true);for(let seq=1;seq<=6;seq++)f.send(seq);await ne…
+     20|  expect(f.written).toEqual([1,2,3,4,5,6]);expect(f.acked).toEqual([1,2…
+       |                    ^
+     21|  expect(f.copies.map(b=>b.readInt16LE(12))).toEqual([1,2,3,4,5,6]);
+     22|  expect(f.events.some(e=>e.state==='unavailable')).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 skipped (3)
+      Tests  1 failed | 26 skipped (27)
+   Start at  06:02:20
+   Duration  1.02s (transform 75%, import 23%, worker 1%, tests 1%)
+

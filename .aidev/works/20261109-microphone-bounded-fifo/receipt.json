@@ -1,0 +1,15 @@
+{
+  "sourceHead": "056b806a3fa5a6f1f91ee5d32bf40865bc0d3d5f",
+  "base": "0a102ae8825f6a6c6ba132f988670c4cbb7be623",
+  "node": "24.15.0",
+  "relatedTests": 27,
+  "relatedTestExit": 0,
+  "focusedTestInclusiveStrictTypeExit": 0,
+  "productionServerBuildExit": 0,
+  "buildCommand": "pnpm --filter @sodashitsu/server build",
+  "noCheck": false,
+  "nativeFixtureDiffFiles": [],
+  "actualWindows": false,
+  "actualMediaPassClaimed": false,
+  "builtDesktopMicrophoneSha256": "928be3bb01829a88668f6a75c41e02a04a344fb014c35f7b99aeaa1d0887ffb0"
+}

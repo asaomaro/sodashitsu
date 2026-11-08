@@ -1,0 +1,6 @@
+{
+  "packages/server/src/desktop/DesktopMicrophone.ts": "d801c351a73e5e1269371983db395e694bcb03c0b2bf6e889281905380243773",
+  "packages/server/src/desktop/DesktopMicrophone.test.ts": "cd8a3d1c9053ccbf17534b59f5e1e63b2728872e393bcf3530ac2db249227736",
+  "packages/server/src/desktop/DesktopMicrophone.queue.test.ts": "7a3dccd2a904b0bd99cfb7ec96c80d2d460d4edc1eec70ae7cde956d3217dd99",
+  "docs/remote-desktop.md": "a44c5ea7dad9cc74918720afcd04906d9820e03e163f6579c5a71554c23e4232"
+}
