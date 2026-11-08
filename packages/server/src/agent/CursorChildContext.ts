@@ -20,7 +20,7 @@ export function cursorChildContextFromRoot(bytes:Uint8Array):{used:number;max:nu
   if(details===undefined)return;
   let used:number|undefined,max:number|undefined;
   visit(details,(tag,wire,value)=>{if(tag!==1&&tag!==2)return;if(wire!==0||typeof value!=='bigint'||value>0xffffffffn)throw Error();if(tag===1){if(used!==undefined)throw Error();used=Number(value);}else{if(max!==undefined)throw Error();max=Number(value);}});
-  if(used===undefined||max===undefined||max===0||used>max)return;
+  if(used===undefined||max===undefined||max===0)return;
   return {used,max};
  }catch{return;}
 }
@@ -28,6 +28,6 @@ export interface CursorChildContext {rootId:string;used:number;max:number}
 export function cursorChildContextMetadata(value:unknown):CursorChildContext|undefined {
  if(!value||typeof value!=="object"||Array.isArray(value))return;
  const c=value as Record<string,unknown>;
- if(typeof c.rootId!=="string"||!/^[a-f0-9]{64}$/.test(c.rootId)||typeof c.used!=="number"||!Number.isSafeInteger(c.used)||c.used<0||typeof c.max!=="number"||!Number.isSafeInteger(c.max)||c.max<=0||c.used>c.max||c.max>0xffffffff)return;
+ if(typeof c.rootId!=="string"||!/^[a-f0-9]{64}$/.test(c.rootId)||typeof c.used!=="number"||!Number.isSafeInteger(c.used)||c.used<0||c.used>0xffffffff||typeof c.max!=="number"||!Number.isSafeInteger(c.max)||c.max<=0||c.max>0xffffffff)return;
  return {rootId:c.rootId,used:c.used,max:c.max};
 }

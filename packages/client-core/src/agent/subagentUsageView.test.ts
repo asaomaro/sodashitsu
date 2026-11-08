@@ -104,3 +104,5 @@ it("shows Cursor child DB context without inventing consumption or time",()=>{
 it("fails closed on an unknown source instead of showing unattributed numbers",()=>{
  const r=view({source:'future-provider' as never,consumptionScope:'self',contextTokens:999,tokens:{basis:'transcript',total:999}});expect(r.rows).toHaveLength(0);expect(r.contextPct).toBeUndefined();expect(r.notes.join(' ')).toContain('取得元を確認できない');
 });
+
+it("does not drop raw Cursor usage above its window when the provider clamps the graph",()=>{const r=view({source:'cursor-db',consumptionScope:'self',contextTokens:100,contextWindowTokens:50,contextUsedPct:100,partial:true});expect(r.rows).toContainEqual({label:'コンテキスト',value:'100'});expect(r.rows).toContainEqual({label:'コンテキスト上限',value:'50'});expect(r.contextPct).toBe(100);});

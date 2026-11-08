@@ -21,7 +21,7 @@ export function cursorTerminalBindings(observer:Pick<CursorChildObservations,"te
     try{
      const context=opened.context;
      if(allowed()&&current()&&opened.snapshotSeal===binding.snapshotSeal&&context&&context.rootId===binding.context?.rootId&&await opened.unchanged()&&allowed()&&current())
-      usage={source:"cursor-db",consumptionScope:"self",contextTokens:context.used,contextWindowTokens:context.max,contextUsedPct:context.used/context.max*100,partial:true};
+      usage={source:"cursor-db",consumptionScope:"self",contextTokens:context.used,contextWindowTokens:context.max,contextUsedPct:Math.min(100,Math.max(0,context.used/context.max*100)),partial:true};
     }finally{closed=await opened.fd.close().then(()=>true,()=>false);}
     if(!usage||!closed||!allowed()||!current()||!opened.metadataUnchanged)return;
     return await opened.metadataUnchanged()&&allowed()&&current()?usage:undefined;
