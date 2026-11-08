@@ -1,0 +1,49 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-lockcover-diagnostics
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts (4 tests | 2 failed) 354ms
+   × keeps physical helper metadata private and rejects epoch (shared=false) 76ms
+   × keeps physical helper metadata private and rejects epoch (shared=true) 60ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts > keeps physical helper metadata private and rejects epoch (shared=false)
+AssertionError: expected [ { stage: 'enter_selected' }, …(2) ] to have a length of 2 but got 3
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts:11:227
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts > keeps physical helper metadata private and rejects epoch (shared=true)
+AssertionError: expected [ { stage: 'enter_selected' }, …(3) ] to have a length of 3 but got 4
+
+- Expected
++ Received
+
+- 3
++ 4
+
+ ❯ src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts:11:227
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  2 failed | 22 passed (24)
+   Start at  23:04:41
+   Duration  1.41s (transform 52%, tests 34%, import 14%)
+

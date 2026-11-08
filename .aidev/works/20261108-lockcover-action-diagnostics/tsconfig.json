@@ -1,0 +1,22 @@
+{
+  "extends": "/workspaces/sodashitsu-lockcover-diagnostics/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "/workspaces/sodashitsu-lockcover-diagnostics/node_modules/@types"
+    ]
+  },
+  "include": [
+    "/workspaces/sodashitsu-lockcover-diagnostics/packages/server/src/composeServer.ts",
+    "/workspaces/sodashitsu-lockcover-diagnostics/packages/server/src/desktop/DesktopLockCoverDiagnostics.test.ts",
+    "/workspaces/sodashitsu-lockcover-diagnostics/packages/server/src/desktop/DesktopLockCoverDiagnostics.ts",
+    "/workspaces/sodashitsu-lockcover-diagnostics/packages/server/src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts",
+    "/workspaces/sodashitsu-lockcover-diagnostics/packages/server/src/desktop/DesktopProvider.ts",
+    "/workspaces/sodashitsu-lockcover-diagnostics/packages/server/src/desktop/LazyDesktopProvider.test.ts",
+    "/workspaces/sodashitsu-lockcover-diagnostics/packages/server/src/desktop/LazyDesktopProvider.ts"
+  ]
+}

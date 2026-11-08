@@ -1,0 +1,42 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-lockcover-diagnostics
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopLockCoverDiagnostics.test.ts (4 tests | 1 failed) 11ms
+   × only reports exact fixed stages/counts, handles stream splits and never falls back to raw helper text 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopLockCoverDiagnostics.test.ts > only reports exact fixed stages/counts, handles stream splits and never falls back to raw helper text
+AssertionError: expected [ …(3) ] to deeply equal [ …(2) ]
+
+- Expected
++ Received
+
+@@ -4,6 +4,9 @@
+      "stage": "enter_result",
+    },
+    {
+      "stage": "wake_selected",
+    },
++   {
++     "stage": "arbitrary_exception",
++   },
+  ]
+
+ ❯ src/desktop/DesktopLockCoverDiagnostics.test.ts:6:18
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 23 passed (24)
+   Start at  23:04:48
+   Duration  1.51s (transform 50%, tests 36%, import 14%)
+

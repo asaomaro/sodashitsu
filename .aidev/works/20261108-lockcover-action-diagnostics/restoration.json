@@ -1,0 +1,22 @@
+{
+  "codes": {
+    "old-wiring": 1,
+    "epoch": 1,
+    "config": 1,
+    "count": 1,
+    "enum": 1,
+    "bound": 1,
+    "restored": 0
+  },
+  "before": {
+    "packages/server/src/desktop/DesktopLockCoverDiagnostics.ts": "5d1ae297b6bcc34a413156465bc912f53fc21917f7abdadf71aa7fda3acb66be",
+    "packages/server/src/desktop/DesktopProvider.ts": "7354f0966252100c2209a0a65e89eaffc824c5ed3d3b70758242467dd9dc0afc",
+    "packages/server/src/desktop/LazyDesktopProvider.ts": "b1a8e1b0c98feb6be33b5e95afcd1edcab44c8fdc258c042fde73838e820a5ca"
+  },
+  "after": {
+    "packages/server/src/desktop/DesktopLockCoverDiagnostics.ts": "5d1ae297b6bcc34a413156465bc912f53fc21917f7abdadf71aa7fda3acb66be",
+    "packages/server/src/desktop/DesktopProvider.ts": "7354f0966252100c2209a0a65e89eaffc824c5ed3d3b70758242467dd9dc0afc",
+    "packages/server/src/desktop/LazyDesktopProvider.ts": "b1a8e1b0c98feb6be33b5e95afcd1edcab44c8fdc258c042fde73838e820a5ca"
+  },
+  "byteExact": true
+}

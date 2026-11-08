@@ -1,0 +1,28 @@
+{
+  "sourceHead": "437df4eaa29a20e7af1fab70f87e2c552917f447",
+  "gitObject": {
+    "packages/server/src/composeServer.ts": "a9c170a423b591b9d6699292875e98ac9b19f732bbe0ac31b29412d9b07c930b",
+    "packages/server/src/desktop/DesktopLockCoverDiagnostics.test.ts": "6374e7dc2ba163b372c0087bea0219300e8ccfac205ef1ae3a0671eb24676b95",
+    "packages/server/src/desktop/DesktopLockCoverDiagnostics.ts": "5d1ae297b6bcc34a413156465bc912f53fc21917f7abdadf71aa7fda3acb66be",
+    "packages/server/src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts": "55918fe7bbdad3a40ad0f8253491713d8f6742a5d7f6fc04794e24c7f6b856ad",
+    "packages/server/src/desktop/DesktopProvider.ts": "7354f0966252100c2209a0a65e89eaffc824c5ed3d3b70758242467dd9dc0afc",
+    "packages/server/src/desktop/LazyDesktopProvider.test.ts": "8e1ec336f77b67e3dd3d32f7a0b4709235d719c204d9febbb696959e165fc4f3",
+    "packages/server/src/desktop/LazyDesktopProvider.ts": "b1a8e1b0c98feb6be33b5e95afcd1edcab44c8fdc258c042fde73838e820a5ca",
+    "scripts/remote-desktop/WindowsDesktopHost.cs": "cf36d62d8bc80e29664269d6078ff5a8f50d3ffaadf7ab2120a9105d7efee815",
+    "scripts/remote-desktop/WindowsDesktopUnlock.cs": "3ec171e77e41bb5fdcbb1fa4b5db86cc34b4731cf4286385320b24da61750c0f",
+    "scripts/remote-desktop/WindowsLockCoverChecks.cs": "a54de3c4f86d2b6ce1aab12211e65259ed1817c4649a0170b9e116d080ca3e4a"
+  },
+  "afterRestoration": {
+    "packages/server/src/composeServer.ts": "a9c170a423b591b9d6699292875e98ac9b19f732bbe0ac31b29412d9b07c930b",
+    "packages/server/src/desktop/DesktopLockCoverDiagnostics.test.ts": "6374e7dc2ba163b372c0087bea0219300e8ccfac205ef1ae3a0671eb24676b95",
+    "packages/server/src/desktop/DesktopLockCoverDiagnostics.ts": "5d1ae297b6bcc34a413156465bc912f53fc21917f7abdadf71aa7fda3acb66be",
+    "packages/server/src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts": "55918fe7bbdad3a40ad0f8253491713d8f6742a5d7f6fc04794e24c7f6b856ad",
+    "packages/server/src/desktop/DesktopProvider.ts": "7354f0966252100c2209a0a65e89eaffc824c5ed3d3b70758242467dd9dc0afc",
+    "packages/server/src/desktop/LazyDesktopProvider.test.ts": "8e1ec336f77b67e3dd3d32f7a0b4709235d719c204d9febbb696959e165fc4f3",
+    "packages/server/src/desktop/LazyDesktopProvider.ts": "b1a8e1b0c98feb6be33b5e95afcd1edcab44c8fdc258c042fde73838e820a5ca",
+    "scripts/remote-desktop/WindowsDesktopHost.cs": "cf36d62d8bc80e29664269d6078ff5a8f50d3ffaadf7ab2120a9105d7efee815",
+    "scripts/remote-desktop/WindowsDesktopUnlock.cs": "3ec171e77e41bb5fdcbb1fa4b5db86cc34b4731cf4286385320b24da61750c0f",
+    "scripts/remote-desktop/WindowsLockCoverChecks.cs": "a54de3c4f86d2b6ce1aab12211e65259ed1817c4649a0170b9e116d080ca3e4a"
+  },
+  "byteExact": true
+}

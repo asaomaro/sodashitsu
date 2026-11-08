@@ -2,7 +2,7 @@
 
 Author has not executed Windows, C# compilation or these C# checks. Linux has no csc/mcs/dotnet. No third dismiss is requested by this file.
 
-Use the exact four inputs and hashes in csharp-input-sha256.json (raw git-blob bytes when checkout CRLF differs). In a fresh private stage, the fixed Framework64 csc.exe compiles them with:
+Use the exact four inputs and hashes in csharp-input-sha256.json. Resolve the three product inputs from the fixed 437df4ea Git blobs and the fixture runner from 9965f76f, first requiring every raw Git-blob SHA to match PINS. Copy those verified raw bytes directly into a new private stage; do not rewrite or normalize the checkout, change core.autocrlf, or compare LF seals to filtered working-tree bytes as if identical. The actual stage byte seals, repository logical revision, Windows filtered-source state and normal-role normalized source/binary seal are separate evidence. In this new private stage, the fixed Framework64 csc.exe compiles them with:
 
 ```text
 /nologo /target:winexe /platform:x64 /main:SodaLockCoverObservationChecks

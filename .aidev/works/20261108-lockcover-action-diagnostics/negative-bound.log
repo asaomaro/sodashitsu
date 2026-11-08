@@ -1,0 +1,39 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-lockcover-diagnostics
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopLockCoverDiagnostics.test.ts (4 tests | 1 failed) 8ms
+   × bounds metadata to eight records per helper and 128 per provider even if logger throws 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopLockCoverDiagnostics.test.ts > bounds metadata to eight records per helper and 128 per provider even if logger throws
+AssertionError: expected 20 to be 8 // Object.is equality
+
+- Expected
++ Received
+
+- 8
++ 20
+
+ ❯ src/desktop/DesktopLockCoverDiagnostics.test.ts:19:154
+     17| it('bounds metadata to eight records per helper and 128 per provider e…
+     18|  let calls=0;const logger=new DesktopLockCoverDiagnostics(()=>{calls++…
+     19|  const channel=logger.channel(()=>true);expect(()=>channel.push(Buffer…
+       |                                                                                                                                                          ^
+     20|  for(let n=0;n<30;n++)logger.channel(()=>true).push(Buffer.from('SODA_…
+     21| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 23 passed (24)
+   Start at  23:04:50
+   Duration  1.58s (transform 51%, tests 35%, import 14%)
+

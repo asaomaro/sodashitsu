@@ -1,0 +1,57 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-lockcover-diagnostics
+
+ ❯ |@sodashitsu/server| src/desktop/LazyDesktopProvider.test.ts (16 tests | 1 failed) 1520ms
+   × passes the private diagnostic sink only to the owned lazy factory, with no desktop start or new permission 1006ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts (4 tests | 4 failed) 4055ms
+   × keeps physical helper metadata private and rejects epoch (shared=false) 1029ms
+   × keeps physical helper metadata private and rejects config (shared=false) 1008ms
+   × keeps physical helper metadata private and rejects epoch (shared=true) 1010ms
+   × keeps physical helper metadata private and rejects config (shared=true) 1007ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts > keeps physical helper metadata private and rejects epoch (shared=false)
+ FAIL  |@sodashitsu/server| src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts > keeps physical helper metadata private and rejects config (shared=false)
+ FAIL  |@sodashitsu/server| src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts > keeps physical helper metadata private and rejects epoch (shared=true)
+ FAIL  |@sodashitsu/server| src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts > keeps physical helper metadata private and rejects config (shared=true)
+AssertionError: expected [] to deeply equal [ { stage: 'enter_selected' }, …(1) ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "stage": "enter_selected",
+-   },
+-   {
+-     "inserted": 2,
+-     "stage": "enter_result",
+-   },
+- ]
++ []
+
+ ❯ src/desktop/DesktopProvider.lockCoverDiagnostics.test.ts:8:74
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/LazyDesktopProvider.test.ts > passes the private diagnostic sink only to the owned lazy factory, with no desktop start or new permission
+AssertionError: expected undefined to be defined
+ ❯ src/desktop/LazyDesktopProvider.test.ts:96:125
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  5 failed | 19 passed (24)
+   Start at  23:04:36
+   Duration  5.18s (tests 75%, transform 20%, import 5%)
+
