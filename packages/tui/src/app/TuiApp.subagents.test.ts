@@ -147,6 +147,20 @@ describe("端末版のサブエージェントの表示", () => {
     await vi.waitFor(() => expect(h.app.ui.dialogContext).toBeNull());
   });
 
+  it("展開した子をクリックすると親paneへの入力やfocus移動なしで専用会話を開く",async()=>{
+    const h=await start({kind:"codex",subagents:{count:1,items:[sub("generated-child",{description:"Generated Child",hasTranscript:true})]}},{respond:{"agent.subagent_transcript":{status:"ok",entries:[{kind:"say",text:"GENERATED CHILD REPLY"}],offset:1,reset:false,omittedBefore:false,running:false,state:"unknown"}}});
+    const p=h.app.model.panes.get("p3")!;h.app.model.panes.set("p3",{...p,agentSession:{kind:"codex",sessionId:"generated-session",reportedAt:1}});
+    const badge=h.badge()!;h.io.type(down(badge.x!,badge.y)+up(badge.x!,badge.y));h.app.renderNow();
+    const child=h.hits().find(hit=>hit.kind==="childConversation")!;expect(child).toBeDefined();h.io.type(down(5,child.y)+up(5,child.y));
+    await vi.waitFor(()=>expect(h.app.ui.dialogContext).toMatchObject({kind:"childConversation",paneId:"p3",agentId:"generated-child"}));
+    await vi.waitFor(async()=>expect(await h.screen()).toContain("GENERATED CHILD REPLY"));expect(h.ws.requests("pane.focus")).toHaveLength(0);expect(h.ws.requests("agent.prompt_checked")).toHaveLength(0);
+    h.io.type("\x1b");await vi.waitFor(()=>expect(h.app.ui.dialogContext).toBeNull());
+  });
+
+  it("子一覧のTab/Enterでも子専用会話に移れる",async()=>{
+    const h=await start({subagents:subs(2)});dispatcherOf(h.app).showSubagentsOf("p3");h.app.renderNow();h.io.type("\t\r");await vi.waitFor(()=>expect(h.app.ui.dialogContext).toMatchObject({kind:"childConversation",paneId:"p3",agentId:"s1"}));
+  });
+
   it("操作 show_subagents（既定のキーは prefix+shift+s）: フォーカスしている pane のエージェントの一覧を開く。件数が 0・エージェントなしでは何もしない", async () => {
     const h = await start({ subagents: subs(2) });
     dispatcherOf(h.app).run({ type: "showSubagents" });
@@ -365,14 +379,11 @@ describe("端末版のサブエージェントの表示", () => {
     const h=await start({subagents:{count:1,items:[sub("c",{type:"child-role",model:"child-model",modelBasis:"turn",description:"child-session",reasoningEffort:"low",reasoningEffortBasis:"creation"})]}}),badge=h.badge()!;
     expect(h.hits().some(x=>x.kind==="info")).toBe(false);expect(badge.y).toBe(h.hits().find(x=>x.kind==="agent"&&x.paneId==="p3")!.y);dispatcherOf(h.app).showUsageOf("p3");h.app.renderNow();expect(h.app.ui.dialogContext).toMatchObject({kind:"usage",paneId:"p3"});const screen=await h.screen();expect(screen).toContain("child-session");expect(screen).toContain("child-model low");
   });
-  it("reads a proven child inside information, returns on Esc and never sends child input",async()=>{
-    const h=await start({kind:"codex",subagents:{count:2,items:[sub("readable",{description:"Generated child task",hasTranscript:true}),sub("unknown",{description:"Unproved child"})]}},{respond:{"agent.subagent_transcript":{status:"ok",entries:[{kind:"prompt",text:"Generated parent request"},{kind:"say",text:"Generated child reply"}],offset:2,reset:false,omittedBefore:false,running:false}}});
-    dispatcherOf(h.app).showUsageOf("p3");h.app.renderNow();h.io.type("\t");h.app.renderNow();expect(await h.screen()).toContain("[会話]");
-    h.io.type("\r");await vi.waitFor(()=>expect(h.ws.requests("agent.subagent_transcript")).toHaveLength(1));h.app.renderNow();
-    await vi.waitFor(async()=>{h.app.renderNow();expect(await h.screen()).toContain("Generated child reply")});let screen=await h.screen();expect(screen).toContain("読むだけ");expect(h.app.ui.dialogContext).toMatchObject({kind:"usage",paneId:"p3"});
-    expect(h.ws.requests("agent.prompt")).toHaveLength(0);expect(h.ws.requests("pane.input")).toHaveLength(0);
-    h.io.type("\x1b");await vi.waitFor(async()=>{h.app.renderNow();expect(await h.screen()).not.toContain("Generated child reply")});expect(h.app.ui.dialogContext).toMatchObject({kind:"usage",paneId:"p3"});
-    h.io.type("\x1b");await vi.waitFor(()=>expect(h.app.ui.dialogContext).toBeNull());h.app.renderNow();await new Promise(r=>setTimeout(r,1600));expect(h.ws.requests("agent.subagent_transcript")).toHaveLength(1);
+  it("keeps child metadata in information without a history entry",async()=>{
+    const h=await start({kind:"codex",subagents:{count:1,items:[sub("readable",{description:"Generated child task",hasTranscript:true})]}});
+    dispatcherOf(h.app).showUsageOf("p3");h.app.renderNow();h.io.type("\t\r");h.app.renderNow();const screen=await h.screen();
+    expect(screen).toContain("Generated child task");expect(screen).not.toContain("[会話]");expect(h.app.ui.dialogContext).toMatchObject({kind:"usage",paneId:"p3"});expect(h.ws.requests("agent.subagent_transcript")).toHaveLength(0);
+    h.io.type("\x1b");await vi.waitFor(()=>expect(h.app.ui.dialogContext).toBeNull());
   });
   it("keeps a single-row fallback and watches usage independently from disabled footer",async()=>{
     const h=await start({subagents:subs(1)});h.app.prefs.apply({statuslineSettings:loadStatuslineSettings({enabled:false}),sidebarRows:{spaces:null,agents:[[{token:"agent"}]]}},10000);h.app.renderNow();const badge=h.badge()!;expect(h.hits().some(x=>x.kind==="info")).toBe(false);expect(badge.y).toBe(h.hits().find(x=>x.kind==="agent"&&x.paneId==="p3")!.y);

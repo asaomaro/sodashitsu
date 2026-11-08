@@ -236,25 +236,10 @@ it.each(["agy", "bob"])("shows known token subtotals for %s and sorts by them", 
   expect(text.indexOf("zeta")).toBeLessThan(text.indexOf("alpha"));
 });
 
-it.each(["instance","refkind","session","proof","connection","close"])("stops same-dialog child history on %s change before a late response",async change=>{
- vi.useFakeTimers();
- let dialog:UsageDialog|undefined;
- try {
-  const model=new SessionModel();model.applySnapshot(snapshot(),"client");
-  const original=model.panes.get("p1")!,a={kind:"codex",instanceId:"parent",state:"idle",subagents:{count:1,items:[{id:"child",startedAt:1,description:"Generated task",hasTranscript:true}]}} as NonNullable<typeof original.agent>;
-  const parent={...original,agent:a,agentSession:{kind:"codex" as const,sessionId:"session",reportedAt:1}};model.panes.set("p1",parent);
-  const ui=new UiState(model),usage={status:"ready",data:{panes:{},accounts:[]}} as unknown as UsageModel;
-  let resolve!:(value:unknown)=>void,outer:string|null="connected";
-  const request=vi.fn(()=>new Promise(r=>{resolve=r}));
-  dialog=new UsageDialog("p1",model,ui,usage,{conn:{request} as unknown as import("../term/PaneRegistry.js").RequestPort,scope:()=>outer,redraw:vi.fn()});
-  const grid=new Grid(100,30),theme=new ThemeColors("dracula");
-  dialog.handleKey({key:"Tab"} as never);dialog.render({grid,theme});
-  const y=Array.from({length:grid.h},(_,i)=>i).find(y=>grid.rowText(y).includes("[会話]"))!;expect(y).toBeDefined();
-  dialog.handleMouse({action:"down",button:0,x:10,y});expect(request).toHaveBeenCalledTimes(1);
-  if(change==="close")dialog.dispose();else if(change==="connection")outer=null;
-  else model.panes.set("p1",{...parent,...(change==="refkind"?{agentSession:{...parent.agentSession,kind:"claude"}}:change==="session"?{agentSession:{...parent.agentSession,sessionId:"other"}}:{agent:{...a,...(change==="instance"?{instanceId:"new"}:{subagents:{count:1,items:[{id:"child",startedAt:1}]}})}})});
-  dialog.render({grid,theme});resolve({status:"ok",entries:[{kind:"say",text:"LATE GENERATED RESPONSE"}],offset:1,reset:false,omittedBefore:false,running:false});
-  await vi.advanceTimersByTimeAsync(4500);dialog.render({grid,theme});
-  expect(request).toHaveBeenCalledTimes(1);expect(Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join("\n")).not.toContain("LATE GENERATED RESPONSE");
- } finally {dialog?.dispose();vi.useRealTimers();}
+it("keeps child metadata in information without conversation controls",()=>{
+ const model=new SessionModel();model.applySnapshot(snapshot(),"client");const p=model.panes.get("p1")!;
+ model.panes.set("p1",{...p,agent:{kind:"codex",instanceId:"parent",state:"idle",subagents:{count:1,items:[{id:"child",description:"Generated Child",startedAt:1,hasTranscript:true,model:"observed-model",modelBasis:"turn",reasoningEffort:"medium",reasoningEffortBasis:"turn"}]}} as NonNullable<typeof p.agent>});
+ const ui=new UiState(model),usage={status:"ready",data:{panes:{},accounts:[]}} as unknown as UsageModel,dialog=new UsageDialog("p1",model,ui,usage),grid=new Grid(100,30);
+ dialog.handleKey({key:"Tab"} as never);dialog.handleKey({key:"Enter"} as never);dialog.render({grid,theme:new ThemeColors("dracula")});
+ const text=Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join("\n");expect(text).toContain("Generated Child");expect(text).toContain("observed-model medium");expect(text).not.toContain("[会話]");expect(text).not.toContain("Enter:会話");
 });

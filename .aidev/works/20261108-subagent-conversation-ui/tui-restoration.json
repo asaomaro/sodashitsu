@@ -1,0 +1,27 @@
+{
+  "negativeExit": 1,
+  "files": {
+    "packages/tui/src/app/TuiApp.ts": {
+      "before": "facb3c8429be2e517b554ef8db6ca8ef01ba936aa071b85fb489caa10a7ceb61",
+      "after": "facb3c8429be2e517b554ef8db6ca8ef01ba936aa071b85fb489caa10a7ceb61",
+      "byteExact": true
+    },
+    "packages/tui/src/modes/UsageView.ts": {
+      "before": "231a63a234b015e8dee3dc6189dfb27624b80470a56db164eba38f4906133435",
+      "after": "231a63a234b015e8dee3dc6189dfb27624b80470a56db164eba38f4906133435",
+      "byteExact": true
+    },
+    "packages/tui/src/render/chrome/sidebar.ts": {
+      "before": "12c67b82e4922a97e256daf0a8e80852430d3edd2e9e69a4c46ca8ae9367b517",
+      "after": "12c67b82e4922a97e256daf0a8e80852430d3edd2e9e69a4c46ca8ae9367b517",
+      "byteExact": true
+    },
+    "packages/tui/src/modes/SubagentList.ts": {
+      "before": "c4ba6f7e2355542541deffc319613869cb6345f9396d4202a0f062a6c28ace4f",
+      "after": "c4ba6f7e2355542541deffc319613869cb6345f9396d4202a0f062a6c28ace4f",
+      "byteExact": true
+    }
+  },
+  "restoredExit": 0,
+  "typecheckExit": 0
+}

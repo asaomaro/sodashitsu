@@ -19,6 +19,7 @@ import {
   hiddenCursor,
   inside,
   isDown,
+  isEnter,
   isEsc,
   isUp,
   type Overlay,
@@ -63,6 +64,7 @@ export class SubagentList implements Overlay {
   }
 
   private scroll = 0;
+  private selected=0;
   private rect: Rect | null = null;
   private visible = 0;
   private total = 0;
@@ -77,6 +79,10 @@ export class SubagentList implements Overlay {
   handleKey(k: KeyInput): void {
     this.scrollbar.cancel();
     if (isEsc(k)) return this.cancel();
+    const parent=this.model.panes.get(this.paneId),items=parent?.agent?.subagents?.items.slice(0,64)??[];
+    if(k.key==="Tab"){this.selected=(this.selected+1)%Math.max(1,items.length);this.scroll=Math.max(0,Math.min(this.selected,Math.max(this.scroll,this.selected-this.visible+1)));return;}
+    if(isEnter(k)){const child=items[this.selected];if(child&&parent?.agent)this.ui.openDialogWithContext({kind:"childConversation",paneId:this.paneId,agentId:child.id,instanceId:parent.agent.instanceId});return;}
+
     if (isDown(k) || k.key === "j") this.move(1);
     else if (isUp(k) || k.key === "k") this.move(-1);
     else if (k.key === "PageDown") this.move(Math.max(1, this.visible - 1));
@@ -107,7 +113,7 @@ export class SubagentList implements Overlay {
     const c = dialogColors(theme);
     const pane = this.model.panes.get(this.paneId);
     const subagents = pane?.agent?.subagents;
-    const items = subagents?.items ?? [];
+    const items = subagents?.items.slice(0,64) ?? [];
     const more = subagents ? subagentsMoreLabel(subagents) : null;
     const lines = items.length + (more ? 1 : 0);
     this.total = Math.max(1, lines);
@@ -140,7 +146,7 @@ export class SubagentList implements Overlay {
         ),
         room,
       );
-      const hw = grid.text(inner.x, y, head, c.fg, c.bg, ATTR.bold, room);
+      const hw = grid.text(inner.x, y, head, c.fg, index===this.selected?c.active:c.bg, ATTR.bold, room);
       if (item.description && room - hw > 2) {
         grid.text(
           inner.x + hw,
@@ -154,6 +160,7 @@ export class SubagentList implements Overlay {
       }
       grid.text(inner.x + cw - ew, y, elapsed, c.dim, c.bg, 0);
     }
+    grid.text(inner.x,inner.y+this.visible,"Tab:子を選択 · Enter:会話 · Esc:閉じる",c.dim,c.bg,0,inner.w);
     this.scrollbar.render(
       grid,
       { ...inner, h: this.visible },

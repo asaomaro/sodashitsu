@@ -1,0 +1,17 @@
+
+> @sodashitsu/tui@0.1.0 test /workspaces/sodashitsu-subagent-conversation-ui/packages/tui
+> vitest run src/modes/ChildConversationDialog.test.ts src/modes/UsageView.test.ts src/modes/SubagentTranscript.test.ts src/render/chrome/sidebar.test.ts src/input/mouse.r2.test.ts src/app/TuiApp.subagents.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-conversation-ui/packages/tui
+
+
+ Test Files  6 passed (6)
+      Tests  96 passed (96)
+   Start at  10:03:38
+   Duration  5.17s (transform 59%, tests 25%, import 16%)
+
+  Transform  transforming modules took 8.78s · 59% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

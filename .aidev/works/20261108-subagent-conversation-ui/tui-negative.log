@@ -1,0 +1,68 @@
+
+> @sodashitsu/tui@0.1.0 test /workspaces/sodashitsu-subagent-conversation-ui/packages/tui
+> vitest run src/modes/ChildConversationDialog.test.ts src/modes/UsageView.test.ts src/modes/SubagentTranscript.test.ts src/render/chrome/sidebar.test.ts src/input/mouse.r2.test.ts src/app/TuiApp.subagents.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-conversation-ui/packages/tui
+
+ ❯ src/app/TuiApp.subagents.test.ts (26 tests | 3 failed) 3303ms
+   ❯ 端末版のサブエージェントの表示 (26)
+     × 展開した子をクリックすると親paneへの入力やfocus移動なしで専用会話を開く 63ms
+     × 子一覧のTab/Enterでも子専用会話に移れる 1065ms
+     × keeps child metadata in information without a history entry 63ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > 展開した子をクリックすると親paneへの入力やfocus移動なしで専用会話を開く
+AssertionError: expected undefined to be defined
+ ❯ src/app/TuiApp.subagents.test.ts:154:83
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > 子一覧のTab/Enterでも子専用会話に移れる
+AssertionError: expected { kind: 'subagents', …(2) } to match object { kind: 'childConversation', …(2) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "agentId": "s1",
+-   "kind": "childConversation",
++   "kind": "subagents",
+    "paneId": "p3",
+  }
+
+ ❯ src/app/TuiApp.subagents.test.ts:161:176
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > keeps child metadata in information without a history entry
+AssertionError: expected [ { id: '14', …(2) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/app/TuiApp.subagents.test.ts:385:215
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed | 5 passed (6)
+      Tests  3 failed | 93 passed (96)
+   Start at  10:03:31
+   Duration  5.53s (transform 53%, tests 32%, import 14%)
+
+  Transform  transforming modules took 7.67s · 53% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+/workspaces/sodashitsu-subagent-conversation-ui/packages/tui:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/tui@0.1.0 test: `vitest run src/modes/ChildConversationDialog.test.ts src/modes/UsageView.test.ts src/modes/SubagentTranscript.test.ts src/render/chrome/sidebar.test.ts src/input/mouse.r2.test.ts src/app/TuiApp.subagents.test.ts`
+Exit status 1

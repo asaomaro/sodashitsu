@@ -1,0 +1,4 @@
+
+> @sodashitsu/tui@0.1.0 build /workspaces/sodashitsu-subagent-conversation-ui/packages/tui
+> tsc -b
+

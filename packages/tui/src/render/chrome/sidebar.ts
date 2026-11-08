@@ -60,6 +60,7 @@ export type SidebarTarget =
    */
   | { kind: "autoGroup"; repoKey: string; workspaceId: string; toggleX: number }
   | { kind: "agent"; paneId: string }
+  | {kind:"childConversation";paneId:string;agentId:string}
   /** 「＋」（新しい workspace。herdr の M14）。`x` の桁だけが当たり。 */
   | { kind: "newWorkspace"; x: number }
   | {
@@ -602,7 +603,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
         for(const child of items){
           const state=child.state??"working",glyph=glyphFor(state,prefs.statusSymbols,"subagent");
           const session=child.description?.trim()||child.type?.trim()||"サブエージェント",model=subagentModelLabel(child);
-          agentLines.push({indent:2,subIndent:stringWidth(glyph)+1,selected:false,rows:[[
+          agentLines.push({hit:{kind:"childConversation",paneId:id,agentId:child.id},indent:2,subIndent:stringWidth(glyph)+1,selected:false,rows:[[
             {text:glyph,fg:stateColor(ctx.theme,state)},
             {text:` ${plain(session)}${child.background?"（裏実行）":""}`},
           ],...(model?[[{text:plain(model)}]]:[])]});

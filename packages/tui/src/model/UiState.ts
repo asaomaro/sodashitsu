@@ -54,6 +54,7 @@ export type DialogContext =
   | { kind: "onboarding" }
   /** 端末版だけ：未処理の知らせの一覧（design「modes/」の「通知の一覧」）。 */
   | { kind: "notifications" }
+  | { kind: "childConversation"; paneId:string; agentId:string; instanceId:string }
   | { kind: "conversation"; paneId: string; mode: "messages" | "summary" }
   | { kind: "pastSessions" }
   | { kind: "agentFork"; paneId: string }

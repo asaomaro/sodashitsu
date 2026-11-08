@@ -1,0 +1,26 @@
+[
+  {
+    "theme": "sodashitsu-assistant",
+    "readable": true,
+    "parentDraft": true,
+    "sendCount": 0
+  },
+  {
+    "theme": "sodashitsu-assistant-dark",
+    "readable": true,
+    "parentDraft": true,
+    "sendCount": 0
+  },
+  {
+    "theme": "dracula",
+    "readable": true,
+    "parentDraft": true,
+    "sendCount": 0
+  },
+  {
+    "theme": "one-light",
+    "readable": true,
+    "parentDraft": true,
+    "sendCount": 0
+  }
+]

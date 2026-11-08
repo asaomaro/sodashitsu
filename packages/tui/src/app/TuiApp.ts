@@ -30,6 +30,7 @@ import { ConversationDialog } from "../modes/ConversationDialog.js";
 import { configuredAgentActions, headerActionsFor } from "@sodashitsu/protocol";
 import { AgentForkDialog } from "../modes/AgentForkDialog.js";
 import { UsageModel } from "../model/UsageModel.js";
+import { ChildConversationDialog } from "../modes/ChildConversationDialog.js";
 import { AccountCostDialog, UsageDialog, UsageDashboard } from "../modes/UsageView.js";
 import {
   CopyMode,
@@ -587,6 +588,7 @@ export class TuiApp {
             "workspaceView",
             "display",
             "conversation",
+            "childConversation",
             "pastSessions",
             "usage",
             "usageAccounts",
@@ -632,6 +634,10 @@ export class TuiApp {
       switchMachine: (id, target) => this.switchMachine(id, target),
       toggleMachine: (id) => this.machines.toggleCollapsed(id),
       toggleSidebarSection: (section) => this.toggleSidebarSection(section),
+      openChildConversation:(paneId,agentId)=>{
+        const p=this.model.panes.get(paneId);if(!p?.agent?.subagents?.items.slice(0,64).some(c=>c.id===agentId))return;
+        this.ui.openDialogWithContext({kind:"childConversation",paneId,agentId,instanceId:p.agent.instanceId});this.scheduleRender();
+      },
       toggleSidebarSubagents: (paneId) => {
         const agent=this.model.panes.get(paneId)?.agent;
         if(!agent||(agent.subagents?.count??0)<1)return;
@@ -1375,6 +1381,7 @@ export class TuiApp {
       );
     if (ctx.kind === "sessionTools")
       return new WindowOverlay(new SessionToolsDialog(ctx.mode,ctx.paneId,this.ui,this.rpc,()=>this.scheduleRender()), {w:110,h:32});
+    if(ctx.kind==="childConversation")return new ChildConversationDialog(ctx.paneId,ctx.agentId,ctx.instanceId,this.model,this.ui,this.rpc,()=>this.ended||this.connectionState!=="open"||this.ui.dialogContext!==ctx?null:JSON.stringify([this.machines.selectedId,this.model.clientId]),()=>this.scheduleRender());
     if (ctx.kind === "conversation" || ctx.kind === "pastSessions")
       return new ConversationDialog(
         ctx.kind === "pastSessions" ? "sessions" : ctx.mode,
@@ -1425,10 +1432,7 @@ export class TuiApp {
       });
     if (ctx.kind === "accountCost") return new WindowOverlay(new AccountCostDialog(ctx.accountKey, this.ui, this.usage), { w: 100, h: 30 });
     if (ctx.kind === "usageAccounts") return new UsageDialog(null, this.model, this.ui, this.usage);
-    if (ctx.kind === "usage") return new UsageDialog(ctx.paneId, this.model, this.ui, this.usage, {
-      conn:this.rpc,redraw:()=>this.scheduleRender(),
-      scope:()=>this.ended||this.connectionState!=="open"||this.ui.dialogContext!==ctx?null:JSON.stringify([this.machines.selectedId,this.model.clientId]),
-    });
+    if (ctx.kind === "usage") return new UsageDialog(ctx.paneId,this.model,this.ui,this.usage);
     if (ctx.kind === "notifications") return new NotificationList(this.ui, this.notify);
     if (ctx.kind === "graphTerminal")
       return (this.graphTerminal = new GraphTerminal(ctx.paneId, {

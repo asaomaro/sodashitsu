@@ -92,6 +92,7 @@ export interface MouseHost {
   /** マシンの見出しの畳み・広げ（M10）。 */
   toggleMachine?(id: string): void;
   /** サイドバーの区画（spaces・agents）の折りたたみの切り替え（見出し・区切りのクリック）。 */
+  openChildConversation?(paneId:string,agentId:string):void;
   toggleSidebarSubagents?(paneId:string):void;
   toggleSidebarSection?(section: "spaces" | "agents"): void;
   /** 今畳んでいる区画（畳んでいる間は区切りのドラッグで高さを変えない）。 */
@@ -390,6 +391,7 @@ export class MouseController {
           onClick: () => this.toggleHeading(hit),
         };
       } else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
+      else if(hit.kind === "childConversation")this.host.openChildConversation?.(hit.paneId,hit.agentId);
       else if (hit.kind === "subagents") this.host.toggleSidebarSubagents?.(hit.paneId);
       else if(hit.kind === "info")actions.showUsageOf(hit.paneId);
       else if (hit.kind === "control") {
