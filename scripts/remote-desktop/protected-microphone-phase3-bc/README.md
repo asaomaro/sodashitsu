@@ -54,3 +54,5 @@ stopfile→receiver self TTL/物理close＋owned child exit0→private server cl
 Aと同じ、既存sealed shared run-aのkeepaliveを使いviewer-open直後から1秒ごと正式heartbeatを送る。OPEN/approval期限/issuesを確認しcleanupでown timerを停止。frame ACKでprovider freshnessは更新されない。製品5秒guard/全期限/採点は不変、新job/source manifestが必要。
 
 mic ticket受信callbackでnative ready待ちより先にattachを開始し、native proof＋主viewer microphone_ready両方の後だけstartする。one-use pairの10秒期限を変えず、owned pending connectの退役/有界settlementをcleanupに含む。ACK/closure/BC receiptの追加parity単位が揃うまで実測は開始しない。
+
+ACK/schema/id/12pending/最古500msはA共有monitorで維持（Webのdropは実験ではfail）。閉鎖したB streamのmonitorは即退役し、tone開始後のown native-lock正式proofを最大1秒だけ待ってからexpected扱いにする。待機中PCM0、missing/old/future/nonlockedは拒否、scenarioだけでは認めない。Cはreceiver結果後の明示media送信停止からrootのown prompt解決に進み、physical actor退役は後続cleanupで別確認する。BC JSON receiptはSyntaxError/ENOENTだけ既存期限内で再読、他IO/不正proofは拒否する。既存のquiet/epoch/実wall/owner/期限は不変。

@@ -1,0 +1,28 @@
+✖ closed B stream cannot incur an ACK timeout while its bounded formal-lock proof is pending (8.496661ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 206.455901
+
+✖ failing tests:
+
+test at ../sodashitsu-phase3-client-parity-tests/scripts/remote-desktop/protected-microphone-phase3/microphone-client-parity.test.mjs:35:1
+✖ closed B stream cannot incur an ACK timeout while its bounded formal-lock proof is pending (8.496661ms)
+  AssertionError [ERR_ASSERTION]: closed stream must not fail its old pending ACK before lock proof settles
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-client-parity-tests/scripts/remote-desktop/protected-microphone-phase3/microphone-client-parity.test.mjs:35:372)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

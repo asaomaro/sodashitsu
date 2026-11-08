@@ -1,0 +1,20 @@
+✖ actual BC server-ready polling defers visible partial/missing receipt and keeps hard IO errors hard (11.072358ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 194.776048
+
+✖ failing tests:
+
+test at ../sodashitsu-phase3-client-parity-tests/scripts/remote-desktop/protected-microphone-phase3/microphone-client-parity.test.mjs:27:1
+✖ actual BC server-ready polling defers visible partial/missing receipt and keeps hard IO errors hard (11.072358ms)
+  SyntaxError [Error]: Unexpected end of JSON input
+      at JSON.parse (<anonymous>)
+      at json (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3-bc/session.mjs:9:46)
+      at async TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-client-parity-tests/scripts/remote-desktop/protected-microphone-phase3/microphone-client-parity.test.mjs:27:884)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

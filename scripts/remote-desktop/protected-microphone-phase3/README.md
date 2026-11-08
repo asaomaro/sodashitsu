@@ -61,3 +61,5 @@ receipt はCreateNew後のJSON書込み中にも存在し得るため、armed/ba
 viewer WS が開いたら正式 `heartbeat` を1秒ごとに送る（frame ACKはkeepaliveの代用にならない）。OPENかつapproval期限内・issues無しだけで送信し、owned cleanupで必ず停止する。Providerの既存5秒 freshness/Relay12秒期限を延ばさない。これはprotocol維持の修正で、過去のunavailable原因の確定ではない。
 
 microphone_ticket到着時に専用laneを即attachする（native ready待ちで10秒のone-use ticketを失効させない）。native ready/protected proofと主viewerの正式microphone_readyを両方満たしてからstartを送る。owned attach promiseはcleanupで退役・有界待機し、未確認は成功不可。旧job/ticketの再利用・固定sleep・TTL延長は無し。
+
+生成senderも実Web同様にDesktopMicrophoneResultのschema/id/pending ACK membershipを確認し、累積ACKで下位を解放、pending最大12・最古500msを維持する。Webがdropする場合、実験は完全6秒を偽らず失敗する。未要求close/stopped/unavailable後はPCM禁止、明示stopExpected/cleanupだけを区別する。monitorの所有timerをcleanupで退役する。
