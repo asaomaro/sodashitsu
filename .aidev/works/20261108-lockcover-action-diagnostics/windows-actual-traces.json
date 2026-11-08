@@ -1,0 +1,83 @@
+{
+  "kind": "sanitized-root-actual-lockcover-traces",
+  "attempts": [
+    {
+      "receipt": "windows-lockcover-third-trace.json",
+      "receiptSha256": "26d2f896bb353b0951042aca4fcdeb58b23139a7e6b3493fc74dc47cae92693e",
+      "scopeHead": "94d6596e0c0a346a66c278f2a7ce664750ecad7c",
+      "records": [
+        {
+          "ts": "2026-11-08T14:24:27.092Z",
+          "stage": "dismiss_authorized"
+        },
+        {
+          "ts": "2026-11-08T14:24:27.122Z",
+          "stage": "wake_selected"
+        },
+        {
+          "ts": "2026-11-08T14:24:27.124Z",
+          "stage": "wake_returned"
+        },
+        {
+          "ts": "2026-11-08T14:24:27.124Z",
+          "stage": "dismiss_returned"
+        }
+      ],
+      "clipped": false,
+      "logIdentityMatched": true,
+      "pinSent": false,
+      "wrapperExit": 0
+    },
+    {
+      "receipt": "windows-lockcover-fourth-trace.json",
+      "receiptSha256": "da6f39ffb81fd92758be1edaef7eb22440b8351bc5a7f19f62c86399b45309e8",
+      "scopeHead": "94d6596e0c0a346a66c278f2a7ce664750ecad7c",
+      "records": [
+        {
+          "ts": "2026-11-08T14:29:23.421Z",
+          "stage": "dismiss_authorized"
+        },
+        {
+          "ts": "2026-11-08T14:29:23.455Z",
+          "stage": "enter_selected"
+        },
+        {
+          "ts": "2026-11-08T14:29:23.516Z",
+          "stage": "enter_result",
+          "inserted": 2
+        },
+        {
+          "ts": "2026-11-08T14:29:23.516Z",
+          "stage": "dismiss_returned"
+        }
+      ],
+      "clipped": false,
+      "logIdentityMatched": true,
+      "pinSent": false,
+      "wrapperExit": 0
+    }
+  ],
+  "laterView": {
+    "receipt": "windows-lockcover-post-enter-view.json",
+    "receiptSha256": "aad1319247bd0e7cfef823b560e7cc38c11c3448953ab2a68ccd4039412faa79",
+    "frames": 0,
+    "ready": {
+      "backend": "windows-gdi",
+      "secureDesktop": true,
+      "lockScreenCover": true
+    },
+    "eventCount": 0,
+    "rootApproximateUtcMinute": "2026-11-08T14:35Z",
+    "delayApproxMinutes": 6,
+    "timeBasis": "Root-supplied approximate minute; receipt has no timestamp",
+    "immediatePostEnterObservation": false
+  },
+  "limits": {
+    "pinInputs": 0,
+    "arbitraryKeys": 0,
+    "inputInsertionImpliesUnlock": false,
+    "idleReturnCauseEstablished": false,
+    "authorWindowsOperations": 0,
+    "sourceChanges": 0
+  }
+}
