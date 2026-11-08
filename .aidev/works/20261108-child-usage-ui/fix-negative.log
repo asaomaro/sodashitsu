@@ -1,0 +1,78 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-usage-ui/packages/client-core
+
+ ❯ src/agent/subagentUsageView.test.ts (11 tests | 6 failed) 23ms
+   × ignores a malformed peer reason instead of throwing 0 3ms
+   × ignores a malformed peer reason instead of throwing 1 0ms
+   × ignores a malformed peer reason instead of throwing 2 3ms
+   × does not coerce a malformed source or basis into a known label 0 1ms
+   × does not coerce a malformed source or basis into a known label 1 1ms
+   × does not coerce a malformed source or basis into a known label 2 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/subagentUsageView.test.ts > ignores a malformed peer reason instead of throwing 0
+ FAIL  src/agent/subagentUsageView.test.ts > ignores a malformed peer reason instead of throwing 1
+TypeError: r.reason.slice is not a function
+ ❯ subagentUsageView src/agent/subagentUsageView.ts:30:43
+     28|   if (state.loading) view.notes.push("利用状況を取得中…");
+     29|   if (state.failed) view.notes.push("子の利用状況を取得できません。利用ゼロを意味しません。");
+     30|   if (r?.reason) view.notes.push(r.reason.slice(0, 1000));
+       |                                           ^
+     31|   if (!u) {
+     32|     if (!state.loading && !state.failed && !r?.reason)
+ ❯ src/agent/subagentUsageView.test.ts:81:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/agent/subagentUsageView.test.ts > ignores a malformed peer reason instead of throwing 2
+AssertionError: expected [ [] ] to deeply equal [ '子の利用状況は未取得です。' ]
+
+- Expected
++ Received
+
+  [
+-   "子の利用状況は未取得です。",
++   [],
+  ]
+
+ ❯ src/agent/subagentUsageView.test.ts:87:19
+     85|   });
+     86|   expect(v.rows).toEqual([]);
+     87|   expect(v.notes).toEqual(["子の利用状況は未取得です。"]);
+       |                   ^
+     88| });
+     89| it.each(["__proto__", "constructor", ["rollout"]])(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/agent/subagentUsageView.test.ts > does not coerce a malformed source or basis into a known label 0
+ FAIL  src/agent/subagentUsageView.test.ts > does not coerce a malformed source or basis into a known label 1
+ FAIL  src/agent/subagentUsageView.test.ts > does not coerce a malformed source or basis into a known label 2
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/agent/subagentUsageView.test.ts:97:51
+     95|       tokens: { basis: value, input: 3 },
+     96|     } as unknown as SubagentUsage);
+     97|     expect(v.rows.some((r) => r.label === "取得元")).toBe(false);
+       |                                                   ^
+     98|     expect(v.notes.some((n) => n.startsWith("トークン:"))).toBe(false);
+     99|   },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  6 failed | 11 passed (17)
+   Start at  12:10:40
+   Duration  729ms (transform 74%, import 21%, tests 4%, worker 1%)
+
+undefined
+/workspaces/sodashitsu-child-usage-ui/packages/client-core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/SubagentUsageReader.test.ts src/agent/subagentUsageView.test.ts

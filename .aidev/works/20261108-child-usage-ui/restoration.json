@@ -1,0 +1,33 @@
+{
+  "head": "521318e8d939eea6de8149a53eca14a713df7ae3",
+  "before": {
+    "packages/client-core/src/agent/SubagentUsageReader.ts": "d0d3511a9303f71f30a62dbf557d8cb35d41b9070aaa9fc96cd5e38254c90706",
+    "packages/client-core/src/agent/subagentUsageView.ts": "b35e41127cf602b8617bcb6e7826b42ea459f2c76dd1cdcc0302fc1e3b37e8a5",
+    "packages/web/src/dashboard/PaneInfoView.vue": "ec14525ba06cb451985ace8da6e74ccfc1671787862817f77eb36c57f7059bd3",
+    "packages/tui/src/modes/ChildConversationDialog.ts": "ecf3e97a06e9aa419b080c71ee64ae1037d50654798cfda36faf528f50fc5f3f",
+    "packages/tui/src/modes/UsageView.ts": "d062ccfafd54c1053c88e3f1ef7590f011de7e42101996b0765035a1a3c48d32"
+  },
+  "after": {
+    "packages/client-core/src/agent/SubagentUsageReader.ts": "d0d3511a9303f71f30a62dbf557d8cb35d41b9070aaa9fc96cd5e38254c90706",
+    "packages/client-core/src/agent/subagentUsageView.ts": "b35e41127cf602b8617bcb6e7826b42ea459f2c76dd1cdcc0302fc1e3b37e8a5",
+    "packages/web/src/dashboard/PaneInfoView.vue": "ec14525ba06cb451985ace8da6e74ccfc1671787862817f77eb36c57f7059bd3",
+    "packages/tui/src/modes/ChildConversationDialog.ts": "ecf3e97a06e9aa419b080c71ee64ae1037d50654798cfda36faf528f50fc5f3f",
+    "packages/tui/src/modes/UsageView.ts": "d062ccfafd54c1053c88e3f1ef7590f011de7e42101996b0765035a1a3c48d32"
+  },
+  "exact": {
+    "packages/client-core/src/agent/SubagentUsageReader.ts": true,
+    "packages/client-core/src/agent/subagentUsageView.ts": true,
+    "packages/web/src/dashboard/PaneInfoView.vue": true,
+    "packages/tui/src/modes/ChildConversationDialog.ts": true,
+    "packages/tui/src/modes/UsageView.ts": true
+  },
+  "negative-coreExit": 1,
+  "negative-webExit": 1,
+  "negative-tuiExit": 1,
+  "negative-browserExit": 1,
+  "coreBuildExit": 0,
+  "restored-coreExit": 0,
+  "restored-webExit": 0,
+  "restored-tuiExit": 0,
+  "restored-browserExit": 0
+}

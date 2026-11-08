@@ -1,0 +1,18 @@
+{
+  "initialSource": "521318e8",
+  "corePackageExit": 0,
+  "tuiPackageExit": 0,
+  "webInitialExit": 2,
+  "webInitialFailure": "optional boolean default:undefined under exactOptionalPropertyTypes",
+  "fixedSource": "e48b3220",
+  "coreFocusedExit": 0,
+  "coreBuildExit": 0,
+  "webPackageExit": 0,
+  "finalSource": "ee26d314",
+  "finalDifference": "CSS only: existing usage meter geometry and theme track; no TypeScript/interface changes",
+  "finalDOMExit": 0,
+  "finalWebTests": 52,
+  "finalCoreTests": 17,
+  "tuiTests": 46,
+  "wholeRepositoryChecksRepeated": false
+}

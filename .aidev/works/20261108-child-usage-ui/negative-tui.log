@@ -1,0 +1,244 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-usage-ui/packages/tui
+
+ ❯ src/modes/UsageView.test.ts (17 tests | 3 failed) 72ms
+   ❯ child usage inside information (3)
+     × selects one child with Tab/U and restores parent information with Esc without mixing totals 10ms
+     × opens numeric details from the rendered child row by mouse 5ms
+     × discards late child data after the parent connection changes 1ms
+ ❯ src/modes/ChildConversationDialog.test.ts (29 tests | 2 failed) 255ms
+   × shows child-only usage from U without requiring a transcript and stops it on return 7ms
+   × clears child numbers immediately when an observed child birth changes 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/ChildConversationDialog.test.ts > shows child-only usage from U without requiring a transcript and stops it on return
+AssertionError: expected '                                     …' to contain '入力: 42'
+
+- Expected
++ Received
+
+- 入力: 42
++                                                                                                               
++  ┌─ サブエージェントの会話 ─────────────────────────────────────────────────────────────────────────────────┐ 
++  │ 親: parent-agent · 子: Generated Child                                                                   │ 
++  │ 会話記録は未取得です                                                                                     │ 
++  │ この操舵室の接続経路では、子へ直接送信できません。親へ依頼できます。                                     │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │ P: 親への依頼を下書き · ↑↓: スクロール · Esc: 閉じる                                                     │ 
++  └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘ 
++                                                                                                               
+
+ ❯ src/modes/ChildConversationDialog.test.ts:392:22
+    390|   key(f, "u");
+    391|   await flush();
+    392|   expect(f.render()).toContain("入力: 42");
+       |                      ^
+    393|   expect(f.render()).toContain("出力: 0");
+    394|   expect(f.render()).toContain("一部取得");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/modes/ChildConversationDialog.test.ts > clears child numbers immediately when an observed child birth changes
+AssertionError: expected '                                     …' to contain '入力: 42'
+
+- Expected
++ Received
+
+- 入力: 42
++                                                                                                               
++  ┌─ サブエージェントの会話 ─────────────────────────────────────────────────────────────────────────────────┐ 
++  │ 親: parent-agent · 子: Generated Child                                                                   │ 
++  │ 会話記録は未取得です                                                                                     │ 
++  │ この操舵室の接続経路では、子へ直接送信できません。親へ依頼できます。                                     │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │ P: 親への依頼を下書き · ↑↓: スクロール · Esc: 閉じる                                                     │ 
++  └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘ 
++                                                                                                               
+
+ ❯ src/modes/ChildConversationDialog.test.ts:418:22
+    416|   key(f, "u");
+    417|   await flush();
+    418|   expect(f.render()).toContain("入力: 42");
+       |                      ^
+    419|   f.model.panes.set("p1", {
+    420|     ...f.p,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/modes/UsageView.test.ts > child usage inside information > selects one child with Tab/U and restores parent information with Esc without mixing totals
+AssertionError: expected '                                     …' to contain '子: Child B'
+
+- Expected
++ Received
+
+- 子: Child B
++                                                                                                               
++  ┌─ 利用状況 · p1 ──────────────────────────────────────────────────────────────────────────────────────────┐ 
++  │ ペイン pane p1 · codex · —                                                                               │ 
++  │ 作業フォルダ /                                                                                           │ 
++  │ 会話 s                                                                                                   │ 
++  │ 利用状況を取得できません（記録・会話ID・対応状況を確認してください）                                     │ 
++  │ サブエージェント 2件                                                                                     │ 
++  │ 実行中 · Child A                                                                                         │ 
++  │ 実行中 · Child B                                                                                         │ 
++  │ ↑↓ スクロール · Esc 閉じる                                                                               │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘ 
++                                                                                                               
+
+ ❯ src/modes/UsageView.test.ts:284:190
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/modes/UsageView.test.ts > child usage inside information > opens numeric details from the rendered child row by mouse
+AssertionError: expected '                                     …' to contain '子: Child A'
+
+- Expected
++ Received
+
+- 子: Child A
++                                                                                                               
++  ┌─ 利用状況 · p1 ──────────────────────────────────────────────────────────────────────────────────────────┐ 
++  │ ペイン pane p1 · codex · —                                                                               │ 
++  │ 作業フォルダ /                                                                                           │ 
++  │ 会話 s                                                                                                   │ 
++  │ 利用状況を取得できません（記録・会話ID・対応状況を確認してください）                                     │ 
++  │ サブエージェント 2件                                                                                     │ 
++  │ 実行中 · Child A                                                                                         │ 
++  │ 実行中 · Child B                                                                                         │ 
++  │ ↑↓ スクロール · Esc 閉じる                                                                               │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘ 
++                                                                                                               
+
+ ❯ src/modes/UsageView.test.ts:287:222
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/modes/UsageView.test.ts > child usage inside information > discards late child data after the parent connection changes
+TypeError: finish is not a function
+ ❯ src/modes/UsageView.test.ts:290:139
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed | 41 passed (46)
+   Start at  12:03:19
+   Duration  1.69s (transform 73%, import 16%, tests 11%)
+
+  Transform  transforming modules took 2.20s · 73% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-child-usage-ui/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/ChildConversationDialog.test.ts src/modes/UsageView.test.ts

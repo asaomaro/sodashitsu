@@ -1,0 +1,16 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+page.goto: Timeout 3000ms exceeded.
+Call log:
+[2m  - navigating to "http://127.0.0.1:34705/generated-child", waiting until "load"[22m
+
+    at /workspaces/sodashitsu-child-usage-ui/.aidev/works/20261108-child-usage-ui/browser.mjs:23:260 {
+  log: [
+    '  - navigating to "http://127.0.0.1:34705/generated-child", waiting until "load"'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.15.0

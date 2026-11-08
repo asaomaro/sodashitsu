@@ -1,0 +1,10 @@
+
+> @sodashitsu/web@0.1.0 typecheck /workspaces/sodashitsu-child-usage-ui/packages/web
+> vue-tsc --noEmit -p tsconfig.typecheck.json
+
+src/components/SubagentUsagePanel.vue(19,3): error TS2379: Argument of type '{ active: true; initialOpen: false; open: undefined; }' is not assignable to parameter of type 'InferDefaults<LooseRequired<__VLS_Props>>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'open' are incompatible.
+    Type 'undefined' is not assignable to type 'boolean | ((props: LooseRequired<__VLS_Props>) => boolean)'.
+/workspaces/sodashitsu-child-usage-ui/packages/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/web@0.1.0 typecheck: `vue-tsc --noEmit -p tsconfig.typecheck.json`
+Exit status 2

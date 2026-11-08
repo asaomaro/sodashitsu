@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-usage-ui/packages/client-core
+
+
+ Test Files  2 passed (2)
+      Tests  17 passed (17)
+   Start at  12:10:41
+   Duration  646ms (transform 73%, import 22%, tests 4%, worker 1%)
+

@@ -1,0 +1,7 @@
+- [x] 専用契約と共通numeric reader/formatter
+- [x] Web子会話/情報内の1子lazy表示
+- [x] TUI子会話/情報内切替・子行click
+- [x] 関連意味テスト/guard負例・旧wiring負例/永続byteExact復元
+- [x] 固定sourceの対象型と最終DOM/画像
+- [ ] 別コンテキストによる差分全体の独立レビュー（必須）
+- [ ] 終了子履歴一覧の専用会話への入口/接続（次単位。Infoへ戻さない）

@@ -1,0 +1,12 @@
+{
+  "extends": "/workspaces/sodashitsu-child-usage-ui/packages/client-core/tsconfig.typecheck.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "include": [
+    "/workspaces/sodashitsu-child-usage-ui/packages/client-core/src/agent/SubagentUsageReader.ts",
+    "/workspaces/sodashitsu-child-usage-ui/packages/client-core/src/agent/SubagentUsageReader.test.ts",
+    "/workspaces/sodashitsu-child-usage-ui/packages/client-core/src/agent/subagentUsageView.ts",
+    "/workspaces/sodashitsu-child-usage-ui/packages/client-core/src/agent/subagentUsageView.test.ts"
+  ]
+}

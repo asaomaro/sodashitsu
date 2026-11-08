@@ -1,0 +1,13 @@
+# 子自身の利用状況
+
+正式な `agent.subagent_usage` の専用 projection だけを表示する。親の `AgentUsage` を子へ流用せず、入力/出力/キャッシュの一部だけから合計を作らない。USDと製品クレジットは異なる単位で表示し、単価から価格を作らない。取得できないfieldは省略し、未取得を0としない。正式な0は表示する。非常に小さい正のUSDは0へ丸めず `<$0.0001` とする。
+
+source・実observedAt・消費範囲self/subtree・token basis・cost basis/asOf・partial/scanning・result.reasonを保持する。観測日時をpoll日時へ置き換えない。履歴grantの理由はそのまま文字として出し、現在の子runを取得したと断定しない。数値の取得は会話本文の許可や直接入力の能力と独立する。
+
+共通readerは同時1件・10秒間隔。取得前後に同じ親instance/kind/ref/session/machine/client/connection/verifiedを各hostのscope getterで照合し、子idと既知の出生が変わった場合も古い数値を捨てる。scope失効後にstateを読む場合も即座に消去する。終了後に開いていた読みを継続できるかはサーバの30分/64件grantの再証明へ委ね、UIが新たな親子対応を作らない。
+
+Webは情報ウィンドウの子一覧で1子だけ展開し、新しい子の利用状況を選ぶと以前のpollを止める。子専用会話画面にも同じ利用状況部品を置く。初期は閉じ、明示展開時だけ取得する。情報画面へ会話履歴や会話表示ボタンは戻さない。
+
+TUIは子専用会話でUによる利用状況/会話の切替、親の情報画面でTabによる子選択とU、または子行クリックで同じ窓内に数値を表示する。Escで情報/会話へ戻しpollを止める。アカウント画面の従来Tab/Enterは変えない。親の数字やダッシュボード集計へ子を加算しない。
+
+製品source固定は521318e8。protocol依存3b39f195はbackendのab519991と同一で統合時の重複pickは不要。backend実装は60850ec1→3112b8f4（別担当、別レビュー）。この検証は生成metadataのみで、実モデル・通常利用者セッション・Windows操作を行わない。

@@ -1,0 +1,119 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-usage-ui/packages/client-core
+
+ ❯ src/agent/SubagentUsageReader.test.ts (6 tests | 3 failed) 15ms
+   × rejects a late numeric reply after scope changes 5ms
+   × never starts a read from a stale scope or an inactive view and stops periodic reads on close 3ms
+   × clears an already displayed value as soon as its scope is invalidated 1ms
+ ❯ src/agent/subagentUsageView.test.ts (5 tests | 1 failed) 19ms
+   × only displays reported child fields, including real zero, and does not sum partial counters 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/SubagentUsageReader.test.ts > rejects a late numeric reply after scope changes
+AssertionError: expected { status: 'ok', usage: { …(3) } } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "status": "ok",
+  "usage": {
+    "consumptionScope": "self",
+    "source": "rollout",
+    "tokens": {
+      "basis": "transcript",
+      "total": 123,
+    },
+  },
+}
+
+ ❯ src/agent/SubagentUsageReader.test.ts:71:33
+     69|   finish(response);
+     70|   await read;
+     71|   expect(f.reader.state.result).toBeNull();
+       |                                 ^
+     72|   await vi.advanceTimersByTimeAsync(30000);
+     73|   expect(f.request).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/agent/SubagentUsageReader.test.ts > never starts a read from a stale scope or an inactive view and stops periodic reads on close
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      "agent.subagent_usage",
+      Object {
+        "agentId": "child",
+        "paneId": "parent",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/agent/SubagentUsageReader.test.ts:90:29
+     88|   stale.invalidate();
+     89|   await stale.reader.refresh();
+     90|   expect(stale.request).not.toHaveBeenCalled();
+       |                             ^
+     91| });
+     92| it("clears a successful value after failure and represents an old meth…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/agent/SubagentUsageReader.test.ts > clears an already displayed value as soon as its scope is invalidated
+AssertionError: expected { status: 'ok', usage: { …(3) } } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "status": "ok",
+  "usage": {
+    "consumptionScope": "self",
+    "source": "rollout",
+    "tokens": {
+      "basis": "transcript",
+      "total": 123,
+    },
+  },
+}
+
+ ❯ src/agent/SubagentUsageReader.test.ts:110:33
+    108|   expect(f.reader.state.result).toEqual(response);
+    109|   f.invalidate();
+    110|   expect(f.reader.state.result).toBeNull();
+       |                                 ^
+    111|   expect(f.request).toHaveBeenCalledTimes(1);
+    112| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/agent/subagentUsageView.test.ts > only displays reported child fields, including real zero, and does not sum partial counters
+AssertionError: expected [ Array(6) ] to not include '合計'
+ ❯ src/agent/subagentUsageView.test.ts:17:42
+     15|   });
+     16|   expect(v.rows).toContainEqual({ label: "出力", value: "0" });
+     17|   expect(v.rows.map((r) => r.label)).not.toContain("合計");
+       |                                          ^
+     18|   expect(v.rows.map((r) => r.label)).not.toContain("コスト (USD)");
+     19|   expect(v.rows.map((r) => r.label)).not.toContain("実観測時刻");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 7 passed (11)
+   Start at  12:03:15
+   Duration  828ms (transform 74%, import 21%, tests 4%, worker 1%)
+
+undefined
+/workspaces/sodashitsu-child-usage-ui/packages/client-core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/SubagentUsageReader.test.ts src/agent/subagentUsageView.test.ts

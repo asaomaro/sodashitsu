@@ -1,0 +1,40 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-usage-ui/packages/web
+
+ ❯ src/components/SubagentUsagePanel.test.ts (12 tests | 1 failed) 130ms
+   × uses one expanded child in the parent information window and keeps its conversation route absent 25ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/SubagentUsagePanel.test.ts > uses one expanded child in the parent information window and keeps its conversation route absent
+AssertionError: expected [] to have a length of 2 but got +0
+
+- Expected
++ Received
+
+- 2
++ 0
+
+ ❯ src/components/SubagentUsagePanel.test.ts:168:19
+    166|   expect(f.request).not.toHaveBeenCalled();
+    167|   const buttons = f.wrapper.findAll(".child-usage>button");
+    168|   expect(buttons).toHaveLength(2);
+       |                   ^
+    169|   await buttons[0]!.trigger("click");
+    170|   await flush();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 51 passed (52)
+   Start at  12:03:17
+   Duration  2.35s (transform 71%, import 14%, tests 8%, environment 8%)
+
+  Transform  transforming modules took 4.65s · 71% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-child-usage-ui/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/SubagentUsagePanel.test.ts src/components/ChildConversationWindow.test.ts src/dashboard/PaneInfoView.test.ts

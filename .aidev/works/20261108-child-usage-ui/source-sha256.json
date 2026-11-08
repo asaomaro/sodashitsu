@@ -1,0 +1,20 @@
+{
+  "head": "521318e8d939eea6de8149a53eca14a713df7ae3",
+  "sha256": {
+    "packages/client-core/src/agent/SubagentUsageReader.test.ts": "c03383620874c56a962b361b7bc2fcba6768e0ead7c5cefb1077c798ea122a64",
+    "packages/client-core/src/agent/SubagentUsageReader.ts": "d0d3511a9303f71f30a62dbf557d8cb35d41b9070aaa9fc96cd5e38254c90706",
+    "packages/client-core/src/agent/subagentUsageView.test.ts": "13ac5439c92512a9b832a39d917eb42eb3cdb7924a8d3e98fec8e125a976bbea",
+    "packages/client-core/src/agent/subagentUsageView.ts": "b35e41127cf602b8617bcb6e7826b42ea459f2c76dd1cdcc0302fc1e3b37e8a5",
+    "packages/client-core/src/index.ts": "04282476566ad69a33ead6b0e467d3c664d6e3bc88c18d42401c86db46d26bb8",
+    "packages/tui/src/app/TuiApp.ts": "77f504629347b8be8253a96224ef95daac48892bdb6faa06dce86f1439d46da2",
+    "packages/tui/src/modes/ChildConversationDialog.test.ts": "2b06305e870c76c157207ae24ddad2a675f77ac6dae0a55e3808f2798d75a3c7",
+    "packages/tui/src/modes/ChildConversationDialog.ts": "ecf3e97a06e9aa419b080c71ee64ae1037d50654798cfda36faf528f50fc5f3f",
+    "packages/tui/src/modes/UsageView.test.ts": "665ef4c4e699309b2296fdda49e7c4055761018fcbee97ab24f2b8d23e9d4525",
+    "packages/tui/src/modes/UsageView.ts": "d062ccfafd54c1053c88e3f1ef7590f011de7e42101996b0765035a1a3c48d32",
+    "packages/web/src/components/ChildConversationWindow.vue": "ad2423dd8507ecb8502ea22a20351fb767832f921e8f483bb134052dc2a5b99f",
+    "packages/web/src/components/SubagentList.vue": "9e0518bdee468d40a616e529d0bd947ca8f4362ab8de87b724f99d474bd2f01b",
+    "packages/web/src/components/SubagentUsagePanel.test.ts": "2309c9f15fb6651ebb2e90d2d7b102747101b409a7a614952cdc27cf8edb50f1",
+    "packages/web/src/components/SubagentUsagePanel.vue": "1f8788efa6c403fd23cccfc0bdc3452ee1d5c98fc5dfb948fda27ed2409d2501",
+    "packages/web/src/dashboard/PaneInfoView.vue": "ec14525ba06cb451985ace8da6e74ccfc1671787862817f77eb36c57f7059bd3"
+  }
+}
