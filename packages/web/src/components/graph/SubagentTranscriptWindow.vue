@@ -16,6 +16,7 @@ import { ConnectionKey } from "../../injection.js";
 const props = defineProps<{
   inline?: boolean;
   bare?: boolean;
+  historyEntryId?:string;
   paneId: string;
   agentId: string;
   /** 見出しに出す名前（親の pane の呼び名）。 */
@@ -95,15 +96,14 @@ async function poll(): Promise<void> {
   if (typeof document !== "undefined" && document.visibilityState === "hidden") return; // 見えていない間は読まない
   inflight = true;
   try {
-    const r = await conn.request("agent.subagent_transcript", {
-      paneId: props.paneId,
-      agentId: props.agentId,
-      ...(offset !== undefined ? { offset } : {}),
-    });
+    const selection={paneId:props.paneId,agentId:props.agentId,...(offset!==undefined?{offset}:{})};
+    const r = props.historyEntryId!==undefined
+      ? await conn.request("agent.subagent_history_transcript",{...selection,entryId:props.historyEntryId})
+      : await conn.request("agent.subagent_transcript",selection);
     if (!stopped) apply(r);
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
-    if (code === "not_found") {
+    if (code === "not_found" || props.historyEntryId!==undefined&&(code==="method_not_found"||code==="unknown_method")) {
       // 居なくなった（エージェントが入れ替わった・許可が切れた・知らない id）。今までの表示は残し、読むのを止める。
       status.value = "gone";
       stopped = true;

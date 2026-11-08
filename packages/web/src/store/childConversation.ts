@@ -1,5 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
+import type { SubagentHistoryItem } from "@sodashitsu/protocol";
+import { safeSubagentHistoryItem } from "@sodashitsu/client-core";
 import { useSessionStore } from "./session.js";
 import { useMachinesStore } from "./machines.js";
 import { useViewStore } from "./view.js";
@@ -12,6 +14,7 @@ export const useChildConversationStore = defineStore("childConversation", () => 
     parentName: string;
     childName: string;
     readable: boolean;
+    historical?: SubagentHistoryItem;
   } | null>(null);
   const session = useSessionStore(),
     machines = useMachinesStore(),
@@ -55,8 +58,23 @@ export const useChildConversationStore = defineStore("childConversation", () => 
       childName: child.description?.trim() || child.type?.trim() || "サブエージェント",
     };
   }
+  function openHistorical(paneId: string, item: SubagentHistoryItem): void {
+    const p = session.panes.get(paneId),
+      s = scope(paneId),
+      row = safeSubagentHistoryItem(item);
+    if (s === null || !p?.agent || !row) return;
+    target.value = {
+      paneId,
+      agentId: row.id,
+      scope: s,
+      parentName: p.agent.name || p.label || p.agent.label,
+      childName: row.description?.trim() || row.type?.trim() || "サブエージェント",
+      readable: row.hasTranscript === true,
+      historical: row,
+    };
+  }
   function close(): void {
     target.value = null;
   }
-  return { target, scope, open, close };
+  return { target, scope, open, openHistorical, close };
 });

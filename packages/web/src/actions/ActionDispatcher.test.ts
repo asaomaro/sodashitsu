@@ -3022,19 +3022,11 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
       expect(conn.requests).toEqual([]);
     });
 
-    it("0 件・分からない（項目なし）・エージェントが居ない・フォーカスが無いときは何もしない", () => {
-      for (const agent of [makeAgent({ subagents: subs(0) }), makeAgent(), null]) {
-        pinia = createPinia();
-        const { view } = setup(agent);
-        const { dispatcher } = makeDispatcher(makeConnection());
-        dispatcher.run({ type: "showSubagents" });
-        expect(view.dialogContext).toBeNull();
+    it("0件や未取得でも終了履歴への入口を開き、エージェント/フォーカス不在では開かない",()=>{
+      for(const agent of [makeAgent({subagents:subs(0)}),makeAgent()]){
+        pinia=createPinia();const {view}=setup(agent);const conn=makeConnection();const {dispatcher}=makeDispatcher(conn);dispatcher.run({type:"showSubagents"});expect(view.dialogContext).toMatchObject({kind:"subagents",paneId:"p1"});expect(conn.requests).toEqual([]);
       }
-      pinia = createPinia();
-      const view = useViewStore(pinia);
-      const { dispatcher } = makeDispatcher(makeConnection());
-      dispatcher.run({ type: "showSubagents" });
-      expect(view.dialogContext).toBeNull();
+      for(const noAgent of [true,false]){pinia=createPinia();const {view}=setup(null);if(!noAgent)view.focusedPaneId=null;const {dispatcher}=makeDispatcher(makeConnection());dispatcher.run({type:"showSubagents"});expect(view.dialogContext).toBeNull();}
     });
 
     it("別のマシンを選んでいれば、そのマシンの対象として開く", () => {

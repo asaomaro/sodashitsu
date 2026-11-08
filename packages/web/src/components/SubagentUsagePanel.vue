@@ -12,6 +12,7 @@ const props = withDefaults(
   defineProps<{
     paneId: string;
     agentId: string;
+    historyEntryId?: string;
     active?: boolean;
     initialOpen?: boolean;
     open?: boolean | null;
@@ -37,6 +38,8 @@ const initialBirth = session.panes
 const identity = computed(() => {
   const parent = parents.scope(props.paneId);
   if (parent === null) return null;
+  if (props.historyEntryId !== undefined)
+    return JSON.stringify([parent, props.agentId, props.historyEntryId]);
   const child = session.panes
     .get(props.paneId)
     ?.agent?.subagents?.items.find((c) => c.id === props.agentId);
@@ -59,7 +62,11 @@ watch(
     if (!open || !active || scope === null || !conn) return;
     reader = new SubagentUsageReader(
       conn,
-      { paneId: props.paneId, agentId: props.agentId },
+      {
+        paneId: props.paneId,
+        agentId: props.agentId,
+        ...(props.historyEntryId !== undefined ? { entryId: props.historyEntryId } : {}),
+      },
       () => identity.value,
       (value) => {
         if (g === generation) state.value = value;

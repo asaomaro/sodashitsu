@@ -44,6 +44,7 @@ defineExpose({ focus: () => listEl.value?.focus() });
       </div>
       <div v-if="item.description" class="subagent-list-desc">{{ item.description }}</div>
       <slot name="usage" :item="item" />
+      <slot name="selection" :item="item" />
     </div>
     <p v-if="more" class="subagent-list-more">{{ more }}</p>
   </div>

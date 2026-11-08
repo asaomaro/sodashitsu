@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia, getActivePinia } from "pinia";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
-import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
+import type { SubagentHistoryItem, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
 import { useMachinesStore } from "../store/machines.js";
@@ -33,6 +33,7 @@ function fixture(
     mode: "parent-draft",
     reason: "transport-unavailable",
   }),
+  historical?: SubagentHistoryItem,
 ) {
   const session = useSessionStore(),
     view = useViewStore(),
@@ -59,7 +60,8 @@ function fixture(
     agentSession: { kind: "codex", sessionId: "s", reportedAt: 1 },
   } as Pane;
   session.paneUpserted(pane);
-  store.open("p", "c");
+  if (historical) store.openHistorical("p", historical);
+  else store.open("p", "c");
   const rpc = vi.fn(async (method: string, params: unknown) =>
     method === "agent.subagent_control" ? control() : request(method, params),
   );
@@ -334,3 +336,84 @@ it.each(["scope", "draft", "close"])(
     f.wrapper.unmount();
   },
 );
+
+const historicalRow: SubagentHistoryItem = {
+  id: "c",
+  entryId: "99999999-9999-4999-8999-999999999999",
+  terminalStatus: "completed",
+  description: "Finished generated child",
+  model: "history-model",
+  modelBasis: "turn",
+  hasTranscript: true,
+};
+it("uses only exact history methods for a historical selection, even with a same-id current child", async () => {
+  const request = vi.fn(async (method: string) =>
+    method === "agent.subagent_history_transcript"
+      ? {
+          status: "ok",
+          entries: [{ kind: "say", text: "EXACT GENERATED HISTORY" }],
+          offset: 1,
+          reset: false,
+          omittedBefore: false,
+          running: false,
+          terminalStatus: "completed",
+        }
+      : method === "agent.subagent_history_usage"
+        ? {
+            status: "ok",
+            usage: {
+              source: "rollout",
+              consumptionScope: "self",
+              tokens: { basis: "transcript", input: 7 },
+              partial: true,
+            },
+          }
+        : {},
+  );
+  const f = fixture(
+    false,
+    request as never,
+    () => {
+      throw Error("historical control must not be queried");
+    },
+    historicalRow,
+  );
+  await flush();
+  expect(f.wrapper.text()).toContain("EXACT GENERATED HISTORY");
+  expect(f.wrapper.text()).toContain("終了履歴 · 完了");
+  expect(f.wrapper.find('[aria-label="子へのメッセージ"]').exists()).toBe(false);
+  await f.wrapper.get(".child-usage>button").trigger("click");
+  await flush();
+  expect(f.request.mock.calls.map((c) => c[0])).toEqual([
+    "agent.subagent_history_transcript",
+    "agent.subagent_history_usage",
+  ]);
+  for (const call of f.request.mock.calls)
+    expect(call[1]).toMatchObject({ entryId: historicalRow.entryId });
+  expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control")).toBe(false);
+  await f.wrapper.get("footer>button").trigger("click");
+  await f.wrapper
+    .get('[aria-label="親への依頼の下書き"]')
+    .setValue("Generated explicit parent request");
+  expect(f.request).toHaveBeenCalledTimes(2);
+  await f.wrapper.get("form").trigger("submit");
+  await flush();
+  expect(f.request.mock.calls.at(-1)?.[0]).toBe("agent.prompt_checked");
+  f.wrapper.unmount();
+});
+it("never retries an unavailable historical transcript through the current child route", async () => {
+  const f = fixture(
+    false,
+    vi.fn(async () => {
+      throw { code: "method_not_found" };
+    }) as never,
+    undefined,
+    historicalRow,
+  );
+  await flush();
+  await vi.advanceTimersByTimeAsync(6000);
+  expect(f.request).toHaveBeenCalledTimes(1);
+  expect(f.request.mock.calls[0]?.[0]).toBe("agent.subagent_history_transcript");
+  expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control")).toBe(false);
+  f.wrapper.unmount();
+});

@@ -314,17 +314,16 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         this.view.togglePaneInfo(paneId);
         return;
       }
-      // 20261004-subagent-display。フォーカスしている pane のエージェントの一覧を開く。件数が 0・分からない（報告を受けていない）・
-      // エージェントが居ないときは何もしない（開いても見るものが無い。サイドバーの件数のボタンが 1 件以上のときだけ出るのと同じ）。
+      // Active count does not include completed history; keep the existing entry available for an agent with zero current children.
       case "showSubagents": {
-        const paneId = this.view.focusedPaneId;
-        if (!paneId) return;
-        const count = this.session.panes.get(paneId)?.agent?.subagents?.count ?? 0;
-        if (count < 1) return;
-        this.view.openDialogWithContext({ kind: "subagents", machineId: this.machines.selectedId, paneId });
-        return;
+        const paneId=this.view.focusedPaneId;if(paneId)this.showSubagentsOf(paneId);return;
       }
     }
+  }
+
+  showSubagentsOf(paneId:string):void{
+    if(!this.session.panes.get(paneId)?.agent)return;
+    this.view.openDialogWithContext({kind:"subagents",machineId:this.machines.selectedId,paneId});
   }
 
   /** pane の右クリックのメニュー・グラフのノードのメニューの「利用状況…」（20261010-agent-usage PR4）。エージェントの居る pane だけ。 */

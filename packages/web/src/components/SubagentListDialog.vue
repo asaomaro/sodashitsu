@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, ref, watch } from "vue";
+import type { SubagentHistoryItem } from "@sodashitsu/protocol";
+import { useChildConversationStore } from "../store/childConversation.js";
+import { useMachinesStore } from "../store/machines.js";
+import SubagentHistoryList from "./SubagentHistoryList.vue";
 import { TerminalRegistryKey } from "../injection.js";
 import { useViewStore } from "../store/view.js";
 import { lookupAgent, lookupPaneName } from "../store/subagents.js";
@@ -12,6 +16,9 @@ import SubagentList from "./SubagentList.vue";
  * 短い説明などはエージェントが書いた文なので、文字として出す（HTML として解釈しない）。
  */
 const view = useViewStore();
+const conversations = useChildConversationStore(),
+  machines = useMachinesStore(),
+  historyOpen = ref(false);
 const registry = inject(TerminalRegistryKey, null);
 
 const dialogEl = ref<HTMLDialogElement | null>(null);
@@ -37,6 +44,7 @@ const title = computed(() =>
 watch(
   target,
   (t) => {
+    historyOpen.value = false;
     if (t) {
       const opened = lookupAgent(t);
       if (!opened) {
@@ -76,7 +84,9 @@ function close(): void {
     if (wasButton && paneId !== undefined) {
       // agents を畳んでいる（行は `display: none`）ときは、見出しのボタンへ戻す（20261004-ui-interaction-polish）。
       if (view.sectionsCollapsed.agents && !view.sidebarCollapsed) {
-        const toggle = document.querySelector<HTMLElement>(".sidebar-agents .sidebar-section-toggle");
+        const toggle = document.querySelector<HTMLElement>(
+          ".sidebar-agents .sidebar-section-toggle",
+        );
         if (toggle) {
           toggle.focus();
           return;
@@ -95,6 +105,18 @@ function close(): void {
   });
 }
 
+function openChild(id: string): void {
+  const t = target.value;
+  if (!t || t.machineId !== machines.selectedId) return;
+  view.closeDialog();
+  conversations.open(t.paneId, id);
+}
+function openHistorical(item: SubagentHistoryItem): void {
+  const t = target.value;
+  if (!t || t.machineId !== machines.selectedId) return;
+  view.closeDialog();
+  conversations.openHistorical(t.paneId, item);
+}
 function onNativeCancel(ev: Event): void {
   ev.preventDefault();
   close();
@@ -110,7 +132,32 @@ function onNativeCancel(ev: Event): void {
     @click.self="close"
   >
     <h2 id="subagent-dialog-title" class="subagent-dialog-title">{{ title }}</h2>
-    <SubagentList v-if="target" ref="listRef" :subagents="subagents" />
+    <SubagentList v-if="target" ref="listRef" :subagents="subagents"
+      ><template #selection="{ item }"
+        ><button
+          data-assistant-feature
+          :disabled="target.machineId !== machines.selectedId"
+          @click="openChild(item.id)"
+        >
+          会話を開く
+        </button></template
+      ></SubagentList
+    >
+    <button
+      v-if="target"
+      type="button"
+      data-assistant-feature
+      :aria-expanded="historyOpen"
+      @click="historyOpen = !historyOpen"
+    >
+      終了した子
+    </button>
+    <SubagentHistoryList
+      v-if="target && historyOpen"
+      :pane-id="target.paneId"
+      :machine-id="target.machineId"
+      @select="openHistorical"
+    />
     <div class="subagent-dialog-actions">
       <button data-assistant-action type="button" @click="close">閉じる</button>
     </div>
