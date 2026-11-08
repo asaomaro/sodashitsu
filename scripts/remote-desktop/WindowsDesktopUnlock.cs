@@ -247,12 +247,23 @@ public static class SodaDesktopUnlock {
     static void WakeLockScreen() {
         Require(PendingUserLockScreen());Require(SetThreadExecutionState(2)!=0);
     }
+    static int LockCoverObservationCount;
+    internal static void RecordLockCover(string stage,int inserted=-1) {
+        // Fixed private metadata only; diagnostics never authorize or alter an action.
+        try {
+            bool count=stage=="enter_result";
+            if(count?(inserted<0||inserted>2):inserted!=-1)return;
+            if(!count&&Array.IndexOf(new[]{"dismiss_authorized","guard_changed_before","wake_selected","wake_returned","enter_selected","enter_guard_rejected","enter_result_invalid","dismiss_returned","guard_changed_after_error","dismiss_failed_guard_current","cover_changed_without_dismiss"},stage)<0)return;
+            if(Interlocked.Increment(ref LockCoverObservationCount)>8)return;
+            Console.Error.WriteLine("\nSODA_LOCK_COVER "+stage+(count?" "+inserted.ToString(System.Globalization.CultureInfo.InvariantCulture):""));Console.Error.Flush();
+        }catch{ /* No diagnostic failure may change guard, input or cleanup. */ }
+    }
     static void PrepareUserLockScreen(Func<bool> visible,Func<bool> pending,Action wake,Action enter) {
         // Wake never chains a key. Reconnect with control revoked; advancing
         // after wake requires another explicit human action on the new session.
-        if(!visible()){Require(pending());wake();return;}
+        if(!visible()){Require(pending());RecordLockCover("wake_selected");wake();RecordLockCover("wake_returned");return;}
         // Enter still requires the original foreground/identity/path guard.
-        enter();
+        RecordLockCover("enter_selected");enter();
     }
     static bool SecureDesktopCandidate() {
         // Access denial is only a routing hint. The SYSTEM worker independently
@@ -308,16 +319,17 @@ public static class SodaDesktopUnlock {
                 else if(type=="resource_fence"){Guid id;string value=message.ContainsKey("id")?message["id"]as string:null;Require(resourceMode&&cleanupKnown&&message.Count==4&&(string)message["resource"]=="control"&&Guid.TryParseExact(value,"D",out id)&&id!=Guid.Empty&&id.ToString("D")==value);if((string)message["epoch"]==resourceEpoch){control=false;resourceReleased=true;output.WriteLine(json.Serialize(new{type="resource_fence_ack",id=value}));output.Flush();}}
                 else if(type=="control")control=allowed&&(!resourceMode||resourceEpoch!=null&&!resourceReleased)&&(bool)message["enabled"];
                 else if(type=="dismiss_lock_screen") {
-                    Require(control&&!dismissed&&Now-last<5000);
-                    if(!guard()){output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
-                    try{cleanupKnown=false;dismiss();cleanupKnown=true;dismissed=true;}
-                    catch{if(guard())throw;output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
+                    Require(control&&!dismissed&&Now-last<5000);RecordLockCover("dismiss_authorized");
+                    if(!guard()){RecordLockCover("guard_changed_before");output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
+                    try{cleanupKnown=false;dismiss();cleanupKnown=true;dismissed=true;RecordLockCover("dismiss_returned");}
+                    catch{if(guard()){RecordLockCover("dismiss_failed_guard_current");throw;}RecordLockCover("guard_changed_after_error");output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
                 }else if(type=="stop")return;
                 else if(type!="release"&&type!="keyframe")throw new InvalidOperationException();
             }
             Thread.Sleep(25);
         }
         if(Volatile.Read(ref closed)!=0||Now-last>=8000)return;
+        if(!dismissed)RecordLockCover("cover_changed_without_dismiss");
         int state=lockState();
         if(state==0)output.WriteLine("{\"type\":\"lock_screen_changed\"}");
         else if(state==1)output.WriteLine("{\"type\":\"session_unlocked\"}");

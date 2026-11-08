@@ -187,10 +187,17 @@ public static class SodaDesktopHost {
     }
     public static void DismissLockScreen(Func<bool> guard) {
         // Human-requested fixed Enter only. PIN/text input belongs to Winlogon.
-        if(System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem||!guard())throw new InvalidOperationException("Lock screen unavailable");
-        var down=new INPUT();down.type=1;down.data.key.vk=13;
-        var up=down;up.data.key.flags=2;
-        if(SendInput(2,new[]{down,up},Marshal.SizeOf(typeof(INPUT)))!=2)throw new InvalidOperationException("Lock screen input denied");
+        DismissLockScreenCore(System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem,guard,()=>{
+            var down=new INPUT();down.type=1;down.data.key.vk=13;
+            var up=down;up.data.key.flags=2;
+            return SendInput(2,new[]{down,up},Marshal.SizeOf(typeof(INPUT)));
+        });
+    }
+    static void DismissLockScreenCore(bool system,Func<bool> guard,Func<uint> send) {
+        if(system||!guard()){SodaDesktopUnlock.RecordLockCover("enter_guard_rejected");throw new InvalidOperationException("Lock screen unavailable");}
+        uint inserted=send();
+        if(inserted<=2)SodaDesktopUnlock.RecordLockCover("enter_result",(int)inserted);else SodaDesktopUnlock.RecordLockCover("enter_result_invalid");
+        if(inserted!=2)throw new InvalidOperationException("Lock screen input denied");
     }
     static bool DefaultDesktop() {
         IntPtr h=OpenInputDesktop(0,false,1);

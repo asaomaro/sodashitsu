@@ -1,3 +1,4 @@
+import {DesktopLockCoverDiagnostics,type DesktopLockCoverSink} from "./DesktopLockCoverDiagnostics.js";
 import {DesktopProtectedMicrophone,protectedMicrophoneAvailable} from './DesktopProtectedMicrophone.js';
 import {DesktopNativeAudio} from "./DesktopNativeAudio.js";
 import {DesktopNativeMonitorRestore,DesktopNativeMonitorRestores} from "./DesktopNativeMonitorRestore.js";
@@ -130,6 +131,7 @@ type Share = {
 
 /** Opt-in B-side provider. Executable and input ceiling are local settings, never RPC arguments. */
 export class DesktopProvider {
+  private readonly lockCoverDiagnostics:DesktopLockCoverDiagnostics;
   private endpointOnly=false;
   private sourceEpoch=0;
   private nativeMonitorRestores=new DesktopNativeMonitorRestores();
@@ -222,7 +224,8 @@ export class DesktopProvider {
   private audioPipes=new DesktopAudioPipes();
   private nativePcmPaths=new DesktopNativePcmPaths();
   private readonly nativeMicrophones=new DesktopNativeMicrophoneHost(this.nativePcmPaths);
-  constructor(private config: DesktopProviderConfig | undefined, companion?:DesktopCompanionHub) {
+  constructor(private config: DesktopProviderConfig | undefined, companion?:DesktopCompanionHub,diagnostic:DesktopLockCoverSink=()=>{}) {
+    this.lockCoverDiagnostics=new DesktopLockCoverDiagnostics(diagnostic);
     this.companion = companion ?? new DesktopCompanionHub(config?.allowMedia === true, config?.iceServers ?? []);
   }
   configure(config: DesktopProviderConfig | undefined): void {
@@ -649,6 +652,10 @@ export class DesktopProvider {
       if(cfg.nativePlatform){
         let exited=false;const closed=new Promise<void>(resolve=>raw.once("close",()=>{exited=true;resolve();}));
         child.nativePcm={paths:this.nativePcmPaths,owner:{closed,exited:()=>exited||raw.exitCode!==null||raw.signalCode!==null}};
+      }
+      if(cfg.allowUnlock===true&&!cfg.nativePlatform&&!options.elevatedDesktop&&!options.virtualDisplay){
+        let ended=false;const channel=this.lockCoverDiagnostics.channel(()=>!ended&&raw.exitCode===null&&raw.signalCode===null&&this.config===cfg&&this.sourceEpoch===sourceEpoch);
+        raw.stderr.on("data",(bytes:Buffer)=>channel.push(bytes));raw.once("close",()=>{ended=true;channel.close();});
       }
       this.physicalHelpers.add(child);child.once("close",()=>{this.physicalHelpers.delete(child);this.resetResourcesIfDrained();queueMicrotask(()=>this.pruneSources());});return child;
     };

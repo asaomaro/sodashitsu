@@ -90,3 +90,8 @@ it('keeps a failed invalidation blocked instead of authorizing a later successfu
  await expect(provider.invalidateSavedTransfers()).rejects.toThrow();await expect(provider.bindSavedTransfers()).rejects.toThrow();expect(files.bind).not.toHaveBeenCalled();expect(folders.bind).not.toHaveBeenCalled();
  folders.invalidate.mockResolvedValue();await provider.invalidateSavedTransfers();await provider.bindSavedTransfers();expect(files.bind).toHaveBeenCalledOnce();expect(folders.bind).toHaveBeenCalledOnce();await provider.suspendSavedTransfers();provider.dispose(true);
 });
+it('passes the private diagnostic sink only to the owned lazy factory, with no desktop start or new permission',async()=>{
+ const {provider:core}=fake(),records:unknown[]=[];let sink:((record:{stage:'wake_selected'})=>void)|undefined;
+ const provider=new LazyDesktopProvider(undefined,async()=>(_cfg,_companion,diagnostic)=>{sink=diagnostic;return core;},undefined,r=>records.push(r));
+ provider.configure({...config,allowUnlock:true,unlockLeaseCommand:['generated-unlock']});await vi.waitFor(()=>expect(sink).toBeDefined());sink!({stage:'wake_selected'});expect(records).toEqual([{stage:'wake_selected'}]);expect(core.start).not.toHaveBeenCalled();provider.dispose();
+});

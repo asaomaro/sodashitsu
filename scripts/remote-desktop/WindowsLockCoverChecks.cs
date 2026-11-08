@@ -44,7 +44,43 @@ namespace SodaDesktopTests {
                 }finally{input.Dispose();thread.Join(3000);}
             }
         }
+        sealed class BrokenDiagnostics:TextWriter {
+            public override Encoding Encoding {get{return Encoding.UTF8;}}
+            public override void WriteLine(string value){throw new IOException("generated diagnostic failure");}
+        }
+        static void ObservationChecks() {
+            var field=typeof(SodaDesktopUnlock).GetField("LockCoverObservationCount",BindingFlags.NonPublic|BindingFlags.Static);
+            var record=typeof(SodaDesktopUnlock).GetMethod("RecordLockCover",BindingFlags.NonPublic|BindingFlags.Static);
+            var core=typeof(SodaDesktopHost).GetMethod("DismissLockScreenCore",BindingFlags.NonPublic|BindingFlags.Static);
+            var prepare=typeof(SodaDesktopUnlock).GetMethod("PrepareUserLockScreen",BindingFlags.NonPublic|BindingFlags.Static);
+            var old=Console.Error;object previous=field.GetValue(null);
+            try{
+                foreach(uint inserted in new uint[]{0,1,2,3}) {
+                    field.SetValue(null,0);using(var output=new StringWriter()) {
+                        Console.SetError(output);int guards=0,sends=0;bool failed=false;
+                        try{core.Invoke(null,new object[]{false,new Func<bool>(()=>{guards++;return true;}),new Func<uint>(()=>{sends++;return inserted;})});}catch(TargetInvocationException){failed=true;}
+                        Check(guards==1&&sends==1&&failed==(inserted!=2),"Observation changed send count or result");
+                        Check(output.ToString().Contains(inserted<=2?"SODA_LOCK_COVER enter_result "+inserted:"SODA_LOCK_COVER enter_result_invalid"),"Actual inserted count diagnostic missing");
+                    }
+                }
+                foreach(bool system in new[]{false,true}) {
+                    field.SetValue(null,0);using(var output=new StringWriter()){
+                        Console.SetError(output);int guards=0,sends=0;bool failed=false;
+                        try{core.Invoke(null,new object[]{system,new Func<bool>(()=>{guards++;return false;}),new Func<uint>(()=>{sends++;return 2;})});}catch(TargetInvocationException){failed=true;}
+                        Check(failed&&sends==0&&guards==(system?0:1),"Metadata bypassed enter guard");Check(output.ToString().Contains("enter_guard_rejected"),"Guard rejection diagnostic missing");
+                    }
+                }
+                field.SetValue(null,0);Console.SetError(new BrokenDiagnostics());int calls=0;
+                core.Invoke(null,new object[]{false,new Func<bool>(()=>true),new Func<uint>(()=>{calls++;return 2;})});Check(calls==1,"Diagnostic failure changed input");
+                int wakes=0,keys=0;prepare.Invoke(null,new object[]{new Func<bool>(()=>false),new Func<bool>(()=>true),new Action(()=>wakes++),new Action(()=>keys++)});Check(wakes==1&&keys==0,"Diagnostic failure chained input after wake");
+                field.SetValue(null,0);using(var output=new StringWriter()){
+                    Console.SetError(output);for(int n=0;n<20;n++)record.Invoke(null,new object[]{"enter_result",2});record.Invoke(null,new object[]{"private exception",-1});
+                    Check(output.ToString().Split(new[]{"SODA_LOCK_COVER"},StringSplitOptions.None).Length-1==8&&!output.ToString().Contains("private"),"Native diagnostic bound or whitelist changed");
+                }
+            }finally{Console.SetError(old);field.SetValue(null,previous);}
+        }
         public static void Run() {
+            ObservationChecks();
             var worker=typeof(SodaDesktopUnlock).GetMethod("RunSecureWorker",BindingFlags.NonPublic|BindingFlags.Static);
             foreach(bool throws in new[]{false,true})foreach(string after in new[]{"worker_input_desktop_default","worker_session_unlocked","worker_identity","worker_input_desktop_other",null})using(var output=new StringWriter()) {
                 int checks=0,runs=0;
