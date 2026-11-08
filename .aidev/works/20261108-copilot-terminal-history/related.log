@@ -1,0 +1,31 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-copilot-terminal-history
+
+{"ts":"2026-11-08T08:48:04.103Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T08:48:04.104Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T08:48:04.105Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T08:48:04.105Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T08:48:04.105Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T08:48:04.106Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T08:48:04.107Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T08:48:04.107Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T08:48:04.107Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-copilot-terminal-public-X2joIm/state/commands.json","count":0}
+{"ts":"2026-11-08T08:48:04.109Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-muse-terminal-public-EaR0DI/state/commands.json","count":0}
+{"ts":"2026-11-08T08:48:04.111Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T08:48:04.112Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T08:48:04.113Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T08:48:04.113Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T08:48:04.115Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-codex-terminal-public-n51zrp/state/commands.json","count":0}
+{"ts":"2026-11-08T08:48:04.698Z","level":"info","msg":"agent session attached","paneId":"db314c15-1b7a-4351-af78-526176c9fc9c","kind":"copilot","session":"84017ff1","source":"hook"}
+{"ts":"2026-11-08T08:48:04.750Z","level":"info","msg":"agent session attached","paneId":"95287cc7-cde6-4e88-87d2-89f2fbf825b3","kind":"muse","session":"01a1b40b","source":"hook"}
+{"ts":"2026-11-08T08:48:04.757Z","level":"info","msg":"agent session attached","paneId":"76f0d1f0-ef2a-47a9-8f57-09c55da8d10d","kind":"codex","session":"67e8b88e","source":"hook"}
+
+ Test Files  12 passed (12)
+      Tests  123 passed (123)
+   Start at  17:47:59
+   Duration  10.81s (tests 53%, transform 37%, import 10%)
+
+  Transform  transforming modules took 17.03s · 37% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

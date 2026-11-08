@@ -1,0 +1,10 @@
+{
+  "sourceHead": "9c1c1b5da6c31f898099f1d106ab121e76d86c65",
+  "node": "24.22.2",
+  "maxOldSpaceMiB": 8192,
+  "command": "node --max-old-space-size=8192 node_modules/typescript/bin/tsc -p .aidev/works/20261108-copilot-terminal-history/tsconfig.json",
+  "exitCode": 0,
+  "scope": "changed9production/test files and actual compose transitive graph; no emit; not global repository test-inclusive CI",
+  "log": "typecheck.log",
+  "ownDependencyBootstrapExitCode": 0
+}

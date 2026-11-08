@@ -1,0 +1,76 @@
+{
+  "sourceHead": "9c1c1b5da6c31f898099f1d106ab121e76d86c65",
+  "negative": [
+    {
+      "name": "old-compose",
+      "kind": "actual previous source",
+      "source": "packages/server/src/composeServer.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "private-limit-poisons-current",
+      "kind": "targeted guard fault",
+      "source": "packages/server/src/agent/NativeSubagentRecords.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "no-unknown-proof-clear",
+      "kind": "targeted guard fault",
+      "source": "packages/server/src/agent/NativeSubagentRecords.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "no-rewrite-reset",
+      "kind": "targeted guard fault",
+      "source": "packages/server/src/agent/NativeSubagentReader.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "no-post-close-current",
+      "kind": "targeted guard fault",
+      "source": "packages/server/src/agent/NativeSubagentReader.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "no-history-owner-seal",
+      "kind": "targeted guard fault",
+      "source": "packages/server/src/agent/NativeSubagentReader.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "false-body-capability",
+      "kind": "targeted guard fault",
+      "source": "packages/server/src/agent/CopilotTerminalBindings.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    }
+  ],
+  "restored": {
+    "packages/server/src/composeServer.ts": {
+      "sha256": "1254767221fe7bb4153a4401fc814cdd3009925c56a59dd8241ffd0fe64e0a98",
+      "actualSha256": "1254767221fe7bb4153a4401fc814cdd3009925c56a59dd8241ffd0fe64e0a98",
+      "byteExact": true
+    },
+    "packages/server/src/agent/NativeSubagentReader.ts": {
+      "sha256": "047ffc973e2ed5f6097510a27d3ededb3479ee300da3d8ba10655173ec41de87",
+      "actualSha256": "047ffc973e2ed5f6097510a27d3ededb3479ee300da3d8ba10655173ec41de87",
+      "byteExact": true
+    },
+    "packages/server/src/agent/NativeSubagentRecords.ts": {
+      "sha256": "418e21a3b125453c69ace3ccf2e3ba8e80e952d7a7cc50f182b2ff4f74a1c9d8",
+      "actualSha256": "418e21a3b125453c69ace3ccf2e3ba8e80e952d7a7cc50f182b2ff4f74a1c9d8",
+      "byteExact": true
+    },
+    "packages/server/src/agent/CopilotTerminalBindings.ts": {
+      "sha256": "2fa152c44f2b889df675ebb1bcaea2bf934ea4b1e5aba075726239f509166e04",
+      "actualSha256": "2fa152c44f2b889df675ebb1bcaea2bf934ea4b1e5aba075726239f509166e04",
+      "byteExact": true
+    }
+  }
+}

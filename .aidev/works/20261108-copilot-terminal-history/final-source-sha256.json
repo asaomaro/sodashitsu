@@ -1,0 +1,42 @@
+{
+  "sourceHead": "9c1c1b5da6c31f898099f1d106ab121e76d86c65",
+  "files": {
+    "packages/server/src/agent/CopilotTerminalBindings.ts": {
+      "sha256": "2fa152c44f2b889df675ebb1bcaea2bf934ea4b1e5aba075726239f509166e04",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/CopilotTerminalHistory.test.ts": {
+      "sha256": "9e305a22970a320bbb8140f0ba9f24159148a9ca2776da251403bff7ba91e44a",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/NativeSubagentReader.ts": {
+      "sha256": "047ffc973e2ed5f6097510a27d3ededb3479ee300da3d8ba10655173ec41de87",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/NativeSubagentRecords.ts": {
+      "sha256": "418e21a3b125453c69ace3ccf2e3ba8e80e952d7a7cc50f182b2ff4f74a1c9d8",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/NativeSubagentService.ts": {
+      "sha256": "46da6e53f73fd83f1780f521cdadb3ff309e32716fe26b9e43b52ad8433678da",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/SubagentHistoryService.ts": {
+      "sha256": "76ed750dd5e6201773765d41897e0b90da324e12158de084f3ad3df23d75e29f",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/SubagentTerminalBinding.ts": {
+      "sha256": "6afea8528160bf3a224f26b498f9855b608bfc764de0c3a38b0a3c55e3cbf2d7",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/composeServer.copilotTerminalHistory.integration.test.ts": {
+      "sha256": "5194d64a806d6c18576c6169c59b3c9227c36775b8d625e1780691a6a8d81764",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/composeServer.ts": {
+      "sha256": "1254767221fe7bb4153a4401fc814cdd3009925c56a59dd8241ffd0fe64e0a98",
+      "matchesFixedCommit": true
+    }
+  },
+  "allMatch": true
+}

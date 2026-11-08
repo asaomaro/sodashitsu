@@ -1,0 +1,63 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-copilot-terminal-history
+
+ ❯ packages/server/src/agent/CopilotTerminalHistory.test.ts (10 tests | 2 failed | 8 skipped) 25ms
+   × accepts owned custom_agent completed/failed only, without terminal-only or selector inference 17ms
+   × accepts owned subagent completed/failed only, without terminal-only or selector inference 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/CopilotTerminalHistory.test.ts > accepts owned custom_agent completed/failed only, without terminal-only or selector inference
+AssertionError: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "description": "Generated Copilot child",
++     "endedAt": 1794096002000,
++     "eventId": "[\"80377858-2ebb-4989-8956-0803c3f18041\",\"adb4277f-550d-4d43-9109-c399ce445a8d\",\"custom_agent.completed\",1794096002000]",
++     "id": "tool_59e7ab07-c285-4027-94bf-c7d07edee806",
++     "startedAt": 1794096000000,
++     "terminalStatus": "completed",
++     "type": "explore",
++   },
++ ]
+
+ ❯ packages/server/src/agent/CopilotTerminalHistory.test.ts:25:156
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/server/src/agent/CopilotTerminalHistory.test.ts > accepts owned subagent completed/failed only, without terminal-only or selector inference
+AssertionError: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "description": "Generated Copilot child",
++     "endedAt": 1794096002000,
++     "eventId": "[\"9c722418-eddf-4cdf-a6ed-06027f076f72\",\"93774068-ad08-4b3c-8157-f14a4fb5819e\",\"subagent.completed\",1794096002000]",
++     "id": "tool_c932f843-b420-4499-ada3-bbc9a6a9fb34",
++     "startedAt": 1794096000000,
++     "terminalStatus": "completed",
++     "type": "explore",
++   },
++ ]
+
+ ❯ packages/server/src/agent/CopilotTerminalHistory.test.ts:25:156
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 skipped (10)
+   Start at  17:54:22
+   Duration  861ms (transform 76%, import 20%, tests 3%)
+

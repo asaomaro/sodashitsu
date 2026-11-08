@@ -1,0 +1,25 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-copilot-terminal-history
+
+{"ts":"2026-11-08T08:46:10.401Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T08:46:10.403Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T08:46:10.403Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T08:46:10.403Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T08:46:10.403Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T08:46:10.404Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T08:46:10.405Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T08:46:10.405Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T08:46:10.406Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-muse-terminal-public-jx7HJc/state/commands.json","count":0}
+{"ts":"2026-11-08T08:46:10.407Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-codex-terminal-public-KMefd2/state/commands.json","count":0}
+{"ts":"2026-11-08T08:46:11.045Z","level":"info","msg":"agent session attached","paneId":"80c9a3cf-c5f8-4f9c-995b-fe041d1b8640","kind":"codex","session":"c2e10bb0","source":"hook"}
+{"ts":"2026-11-08T08:46:11.045Z","level":"info","msg":"agent session attached","paneId":"a81eb25b-ab23-467b-a39f-f3a79587c059","kind":"muse","session":"01a1b40b","source":"hook"}
+
+ Test Files  11 passed (11)
+      Tests  121 passed (121)
+   Start at  17:46:06
+   Duration  10.73s (tests 51%, transform 39%, import 10%)
+
+  Transform  transforming modules took 13.61s · 39% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

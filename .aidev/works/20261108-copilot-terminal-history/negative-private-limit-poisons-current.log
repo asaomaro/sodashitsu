@@ -1,0 +1,31 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-copilot-terminal-history
+
+ ❯ packages/server/src/agent/CopilotTerminalHistory.test.ts (10 tests | 1 failed | 9 skipped) 25ms
+   × bounds private terminal ownership without poisoning existing sequential current counts 24ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/CopilotTerminalHistory.test.ts > bounds private terminal ownership without poisoning existing sequential current counts
+AssertionError: expected undefined to deeply equal { count: +0, items: [] }
+
+- Expected:
+{
+  "count": 0,
+  "items": [],
+}
+
++ Received:
+undefined
+
+ ❯ packages/server/src/agent/CopilotTerminalHistory.test.ts:54:226
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 skipped (10)
+   Start at  17:54:21
+   Duration  967ms (transform 77%, import 20%, tests 3%)
+

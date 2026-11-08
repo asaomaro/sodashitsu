@@ -1,0 +1,31 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-copilot-terminal-history
+
+{"ts":"2026-11-08T08:55:44.905Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T08:55:44.906Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T08:55:44.907Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T08:55:44.908Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T08:55:44.908Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T08:55:44.908Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T08:55:44.909Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T08:55:44.909Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T08:55:44.910Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-codex-terminal-public-e8RLiR/state/commands.json","count":0}
+{"ts":"2026-11-08T08:55:44.911Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T08:55:44.911Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-muse-terminal-public-kHuy7q/state/commands.json","count":0}
+{"ts":"2026-11-08T08:55:44.912Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T08:55:44.913Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T08:55:44.913Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T08:55:44.915Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-copilot-terminal-public-r9BHYM/state/commands.json","count":0}
+{"ts":"2026-11-08T08:55:45.549Z","level":"info","msg":"agent session attached","paneId":"730c1f54-ee01-4014-9227-b11db8ad7f46","kind":"muse","session":"01a1b40b","source":"hook"}
+{"ts":"2026-11-08T08:55:45.552Z","level":"info","msg":"agent session attached","paneId":"466ff8c9-ad97-4c5e-8c5f-a8fda9df16ff","kind":"codex","session":"985110fa","source":"hook"}
+{"ts":"2026-11-08T08:55:45.555Z","level":"info","msg":"agent session attached","paneId":"2e52f4c9-6a9a-4495-9b88-8d1da453b3cc","kind":"copilot","session":"02c2d0de","source":"hook"}
+
+ Test Files  12 passed (12)
+      Tests  123 passed (123)
+   Start at  17:55:41
+   Duration  10.37s (tests 55%, transform 35%, import 10%)
+
+  Transform  transforming modules took 15.44s · 35% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
