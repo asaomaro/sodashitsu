@@ -6,5 +6,5 @@
 - [x] 生成関連16tests/2theme実DOMとoldsource負例→3SHA完全復元
 - [x] 生成HTTPS親→actualLocalPreviewProbe old/new実Chrome（両PASS、原因証明ではない）
 - [x] Web最終test-inclusive型+Vite
-- [ ] 最終独立review（必須）
+- [x] 最終独立review（review_audio_integration、ad4b80baまで追加must/should無し）
 - [ ] 実利用者ブラウザの失敗段階確認/根本原因確定（root診断/反映後。生成成功と区別）
