@@ -1,4 +1,5 @@
 import { AgentSubagentControlParams, AgentSubagentSendParams } from "@sodashitsu/protocol";
+import {registerSubagentUsage} from "./subagentUsage.js";
 import {createAssistantModelLister} from "../../agent/assistantModels.js";
 import {AssistantModelCatalogParams} from "@sodashitsu/protocol";
 import {usageWorkContext} from "../../conversation/UsageWorkContext.js";
@@ -98,6 +99,7 @@ function blockedError(paneId: string): RpcError {
 }
 
 export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps): void {
+  registerSubagentUsage(surface,deps.subagentUsage);
   surface.register("agent.prompt", {
     schema: AgentPromptParams,
     handler: async (ctx, params) => {

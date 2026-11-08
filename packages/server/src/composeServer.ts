@@ -1,4 +1,6 @@
 import { SubagentControlService } from "./agent/SubagentControlService.js";
+import {SubagentUsageService} from "./usage/SubagentUsageService.js";
+import {createSubagentUsageResolver} from "./usage/SubagentUsageResolver.js";
 import {AssistantRetirements} from "./assistant/AssistantRetirements.js";
 import {AssistantPersonaPrompts} from "./assistant/AssistantPersonaPrompts.js";
 import { VoiceHost } from "./voice/VoiceHost.js";
@@ -680,6 +682,7 @@ export async function composeServer(
   });
   const claudeChildObservations = new ClaudeChildObservations({session,tracker:subagents});
   const nativeSubagents = new NativeSubagentService({ session, bus, observeClaude: source => claudeChildObservations.read(source) });
+  const subagentUsage=new SubagentUsageService({resolve:createSubagentUsageResolver({session,tracker:subagents,museChildSession:(pane,child)=>nativeSubagents.museChildSession(pane,child)})});
   // サブエージェントの記録を、読むだけで追う（20261008-graph-first の PR6c）。場所は、上の数え上げが持つ報告から、サーバが組み立てる。
   const subagentControl=new SubagentControlService({session});
   const subagentTranscripts = new SubagentTranscriptReader({
@@ -871,6 +874,7 @@ export async function composeServer(
     assistantAudio,
     agentFork,
     subagentTranscripts,subagentControl,
+    subagentUsage,
     usage,
     usageInsights:new UsageInsightsReader({stateDir:join(options.stateDir,"usage-insights"),workspaces:()=>session.snapshot().workspaces}),
     usageWatch,
@@ -1354,7 +1358,7 @@ export async function composeServer(
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
         usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();
-        usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
+        subagentUsage.close();usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         assistantIdleStops.dispose(); assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
@@ -1412,7 +1416,7 @@ export async function composeServer(
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
         usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();
-        usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
+        subagentUsage.close();usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         assistantIdleStops.dispose(); assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
@@ -1458,7 +1462,7 @@ export async function composeServer(
           // Worker復旧では同じスレッドで旧コードを再構成する。保存失敗でも
           // 旧待ち受け・周期処理を残して新サーバと競合させない。
           graphEngine.stop();lineage.close();builtinViews.close();summarySub.dispose();summaries.close();await scheduler.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
-          usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();nativeSubagents.close();subagentControl.close();
+          usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();subagentUsage.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();nativeSubagents.close();subagentControl.close();
           remoteLinks.closeAll();await machines.stop().catch(()=>undefined);
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();
           await graph.close().catch(()=>undefined);
