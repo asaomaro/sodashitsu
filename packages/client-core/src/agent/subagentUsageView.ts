@@ -16,6 +16,7 @@ const sources: Record<UsageSource, string> = {
   "muse-events": "Muse記録",
   "agy-transcript": "AGY記録",
   "grok-usage": "Grok利用記録",
+  "cursor-db": "Cursor子DB",
 };
 const number = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
 const amount = (v: number) => v.toLocaleString("ja-JP", { maximumFractionDigits: 4 });
@@ -31,6 +32,10 @@ export function subagentUsageView(state: SubagentUsageState): ChildUsageView {
   if (reason) view.notes.push(reason);
   if (!u) {
     if (!state.loading && !state.failed && !reason) view.notes.push("子の利用状況は未取得です。");
+    return view;
+  }
+  if (typeof u.source!=="string" || !Object.hasOwn(sources,u.source)) {
+    view.notes.push("取得元を確認できないため、子の利用状況は未取得です。利用ゼロを意味しません。");
     return view;
   }
   view.rows.push({

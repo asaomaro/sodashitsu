@@ -98,3 +98,9 @@ it.each(["__proto__", "constructor", ["rollout"]])(
     expect(v.notes.some((n) => n.startsWith("トークン:"))).toBe(false);
   },
 );
+it("shows Cursor child DB context without inventing consumption or time",()=>{
+ const r=view({source:'cursor-db',consumptionScope:'self',contextTokens:25,contextWindowTokens:100,contextUsedPct:25,partial:true});expect(r.rows).toContainEqual({label:'取得元',value:'Cursor子DB'});expect(r.contextPct).toBe(25);expect(r.rows.some(r=>['入力','合計','コスト (USD)','実観測時刻'].includes(r.label))).toBe(false);
+});
+it("fails closed on an unknown source instead of showing unattributed numbers",()=>{
+ const r=view({source:'future-provider' as never,consumptionScope:'self',contextTokens:999,tokens:{basis:'transcript',total:999}});expect(r.rows).toHaveLength(0);expect(r.contextPct).toBeUndefined();expect(r.notes.join(' ')).toContain('取得元を確認できない');
+});

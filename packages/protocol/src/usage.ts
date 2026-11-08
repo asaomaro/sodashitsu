@@ -47,7 +47,9 @@ export type UsageSource =
   | "muse-events"
   | "agy-transcript"
   /** Grok CLI persisted session usage.json ledger (already includes its reported child usage). */
-  | "grok-usage";
+  | "grok-usage"
+  /** Cursor child-specific SQLite conversation-state projection. */
+  | "cursor-db";
 
 /**
  * USD でない、エージェントの製品のクレジット（20261016-agent-usage-bob-copilot）。**USD に換算しない**（換算の率を製品は持たない）。
