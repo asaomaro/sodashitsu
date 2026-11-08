@@ -1,0 +1,9 @@
+# 同一終了履歴の再listで既grantを退役しない
+
+独立review P2: 同event+同publicmetadataでもEntryを交換すると、別clientの単なる再listがasync本文read/発行済grantを失効する。
+
+修正ba2b59b6: 既存proofがcurrentで同event/publicmetadataの時はEntryと元safe verifier/targetをそのまま保持する。新callbackへ既grantの参照先を移さない。既存proofが失効済みなら同labelでも新Entry/new entryId、別event/metadata/source/明示forgetも従来どおり失効。
+
+既grant・private target参照維持とasyncpage再list成功、metadata置換/失効proof交換/source retirementを回帰。旧044 Collectorで新回帰1fail→元source SHA/byteExact復元→7suites66PASS。実source+2関連fixtureのstrict型exit0。実モデル/Windows/production操作0。元productionbuildは044の境界までで、この修正後は対象strict型と選択回帰の結果。
+
+独立差分再reviewはbackendへ提出。Cursor/Grok/API/UI残件を勝手に完了扱いしない。

@@ -1,0 +1,39 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-terminal-proof
+
+ ❯ |@sodashitsu/server| src/agent/SubagentTerminalHistory.test.ts (15 tests | 1 failed | 14 skipped) 12ms
+   × keeps existing grants and asynchronous pages valid across identical formal re-listing 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentTerminalHistory.test.ts > keeps existing grants and asynchronous pages valid across identical formal re-listing
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:112:27
+    110|  pause=true;const reading=f.history.read({paneId});
+    111|  f.history.note(f.source,item(),"same-event",async()=>true,{target:{re…
+    112|  expect(grant?.current()).toBe(true);expect(grant?.proof?.target).toBe…
+       |                           ^
+    113|  expect(await reading).toMatchObject({status:"ok",items:[{entryId:sele…
+    114|  pause=false;expect((await f.history.read({paneId})).items[0]?.entryId…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  14:09:10
+   Duration  292ms (transform 68%, import 18%, tests 9%, worker 5%)
+
