@@ -1,0 +1,184 @@
+✖ actual pipeline ready fails at fixed protected_source_ready (2.292777ms)
+✖ actual pipeline schema fails at fixed protected_source_schema (0.852559ms)
+✖ actual pipeline proof fails at fixed protected_source_proof (0.763982ms)
+✖ actual pipeline ticket fails at fixed microphone_ticket_wait (0.724647ms)
+✖ actual pipeline ticket_proof fails at fixed microphone_ticket_proof (0.809057ms)
+✖ actual pipeline lane fails at fixed microphone_lane_connect (0.867618ms)
+✖ actual pipeline start fails at fixed microphone_start_send (0.829635ms)
+✖ actual pipeline running fails at fixed microphone_running_wait (0.935726ms)
+✔ generated successful pipeline is unchanged (1.007011ms)
+✖ diagnostic evidence adopts only schema parsed fields; generic error code/message never copied (0.966763ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 1
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 67.916357
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:319
+✖ actual pipeline ready fails at fixed protected_source_ready (2.292777ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'protected_source_ready'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:390)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'protected_source_ready',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:319
+✖ actual pipeline schema fails at fixed protected_source_schema (0.852559ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'protected_source_schema'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:390)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'protected_source_schema',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:319
+✖ actual pipeline proof fails at fixed protected_source_proof (0.763982ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'protected_source_proof'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:390)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'protected_source_proof',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:319
+✖ actual pipeline ticket fails at fixed microphone_ticket_wait (0.724647ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'microphone_ticket_wait'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:390)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'microphone_ticket_wait',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:319
+✖ actual pipeline ticket_proof fails at fixed microphone_ticket_proof (0.809057ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'microphone_ticket_proof'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:390)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'microphone_ticket_proof',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:319
+✖ actual pipeline lane fails at fixed microphone_lane_connect (0.867618ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'microphone_lane_connect'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:390)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'microphone_lane_connect',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:319
+✖ actual pipeline start fails at fixed microphone_start_send (0.829635ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'microphone_start_send'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:390)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'microphone_start_send',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:319
+✖ actual pipeline running fails at fixed microphone_running_wait (0.935726ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'microphone_running_wait'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:6:390)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'microphone_running_wait',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:9:1
+✖ diagnostic evidence adopts only schema parsed fields; generic error code/message never copied (0.966763ms)
+  TypeError [Error]: runtime.observeAFailure is not a function
+      at observeAFailure (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:8:42)
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs:9:417)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

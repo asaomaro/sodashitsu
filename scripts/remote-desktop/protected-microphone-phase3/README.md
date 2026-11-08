@@ -50,4 +50,6 @@ B/Cの前には既存のfresh unlock復旧が使えることをrootが確認す�
 
 ### 受信器の取り付き診断
 
-失敗時 `result.json.failureStage` は `receiver_wait` / `receiver_identity` / `receiver_native_probe` / `receiver_native_scope` / `protected_source_connect` / `other` / `unknown` の固定値のみ。元の `fixture-failed-closed` は維持し、例外本文は保存しない。これは停止箇所の識別であり token access 等の原因確定ではない。JS更新後は新jobとmanifestをprepareし直し、旧approval/expiry/goを再利用しない。
+失敗時 `result.json.failureStage` は receiver取り付き、protected source ready/schema/proof、mic ticket/lane/running、actor、baseline/cadence/result/stopの固定段階（`A_FAILURE_STAGES`）、`other` / `unknown` のみ。元の `fixture-failed-closed` は維持し、例外本文は保存しない。これは停止箇所の識別であり token access 等の原因確定ではない。JS更新後は新jobとmanifestをprepareし直し、旧approval/expiry/goを再利用しない。
+
+失敗時の `failureEvidence` はschema検証済み ready のbackend enum/保護・mic bool、正式protected failure code、正式mic state enumのみを保存する。一般 `error` はcode enum未定義のため `desktop_error_unclassified` とし、message/code本文を保存しない。観測をguardへ転用せず、元の生値に対する検証とTTLを維持する。
