@@ -1,0 +1,111 @@
+✖ actual intake wait failure yields only fixed stage (3.623307ms)
+✖ actual intake identity failure yields only fixed stage (1.137599ms)
+✖ actual intake native_probe failure yields only fixed stage (0.954383ms)
+✖ actual intake native_scope failure yields only fixed stage (1.689395ms)
+✖ actual intake source_connect failure yields only fixed stage (1.655275ms)
+✔ successful generated intake preserves ownership (0.9417ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 1
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 58.499687
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:250
+✖ actual intake wait failure yields only fixed stage (3.623307ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'receiver_wait'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:358)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'receiver_wait',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:250
+✖ actual intake identity failure yields only fixed stage (1.137599ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'receiver_identity'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:358)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'receiver_identity',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:250
+✖ actual intake native_probe failure yields only fixed stage (0.954383ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'receiver_native_probe'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:358)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'receiver_native_probe',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:250
+✖ actual intake native_scope failure yields only fixed stage (1.689395ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'receiver_native_scope'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:358)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'receiver_native_scope',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:250
+✖ actual intake source_connect failure yields only fixed stage (1.655275ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'other'
+  - 'protected_source_connect'
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:7:358)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'other',
+    expected: 'protected_source_connect',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

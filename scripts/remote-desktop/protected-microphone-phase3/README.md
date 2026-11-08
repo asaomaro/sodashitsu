@@ -47,3 +47,7 @@ B/Cの前には既存のfresh unlock復旧が使えることをrootが確認す�
 ### 保護マイクの接続宣言
 
 制御側の接続は `DESKTOP_MICROPHONE_PROTOCOL` に加え `DESKTOP_PROTECTED_PROTOCOL` と `protectedMicrophone` feature を提示する。`features:true` / `elevatedDesktop:true` だけでは Relay の `elevatedRequested` が成立しない。音声専用 lane は従来どおり microphone protocol 1個のみ。入力許可用 protocol はこの測定には追加しない。MJS 更新後は新しい job/source manifest を作り直す。C# source は変更していないため、この修正だけでは再コンパイル不要だが既存 source/binary seal の再確認は必要。
+
+### 受信器の取り付き診断
+
+失敗時 `result.json.failureStage` は `receiver_wait` / `receiver_identity` / `receiver_native_probe` / `receiver_native_scope` / `protected_source_connect` / `other` / `unknown` の固定値のみ。元の `fixture-failed-closed` は維持し、例外本文は保存しない。これは停止箇所の識別であり token access 等の原因確定ではない。JS更新後は新jobとmanifestをprepareし直し、旧approval/expiry/goを再利用しない。
