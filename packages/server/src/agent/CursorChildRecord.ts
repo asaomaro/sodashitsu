@@ -13,7 +13,7 @@ const UUID=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const DB_MAX=32*1024*1024,WAL_MAX=8*1024*1024,TRANSCRIPT_MAX=512*1024*1024;
 const same=(a:Stats,b:Stats)=>a.dev===b.dev&&a.ino===b.ino&&a.size===b.size&&a.mtimeMs===b.mtimeMs&&a.ctimeMs===b.ctimeMs;
 export interface CursorChildRoots extends ExtraRoots { cursorConfigHome?:string }
-export interface CursorChildRecord extends OpenedFile {snapshotSeal?:string;context?:CursorChildContext;lineage:CursorChildLineage;terminal?:CursorChildStop["status"];unchanged():Promise<boolean>}
+export interface CursorChildRecord extends OpenedFile {snapshotSeal?:string;context?:CursorChildContext;metadataUnchanged?():Promise<boolean>;lineage:CursorChildLineage;terminal?:CursorChildStop["status"];unchanged():Promise<boolean>}
 interface Proof extends OpenedFile {path:string;unchanged():Promise<boolean>}
 async function directory(path:string):Promise<boolean>{const s=await lstat(path).catch(()=>undefined);return !!s&&s.isDirectory()&&!s.isSymbolicLink()&&await realpath(path).catch(()=>undefined)===path;}
 async function proof(path:string,max=TRANSCRIPT_MAX):Promise<Proof|undefined>{
@@ -105,6 +105,13 @@ export class CursorChildRecords {
     for(const stamp of nsStamps){const now=await lstat(stamp.path,{bigint:true}).catch(()=>undefined);if(!now||!now.isFile()||now.isSymbolicLink()||now.nlink!==1n||identity(now)!==stamp.id||await realpath(stamp.path).catch(()=>undefined)!==stamp.path)return false;}
     return current();
    };
+   const proofNs=await Promise.all(opened.map(async f=>({path:f.path,id:identity(await f.fd.stat({bigint:true}))})));
+   // Metadata-only revalidation remains usable after the retained transcript FD closes.
+   const metadataUnchanged=async()=>{
+    if(!current()||!await sameSnapshot()||!(await Promise.all(dirs.map(directory))).every(Boolean))return false;
+    for(const stamp of proofNs){const now=await lstat(stamp.path,{bigint:true}).catch(()=>undefined);if(!now||!now.isFile()||now.isSymbolicLink()||now.nlink!==1n||identity(now)!==stamp.id||await realpath(stamp.path).catch(()=>undefined)!==stamp.path)return false;}
+    return current();
+   };
    const signature=createHash("sha256").update(JSON.stringify([nsStamps,walMissing])).digest("hex");
    const key=JSON.stringify([parent,child]),cached=this.cache.get(key);
    let lineage=cached?.signature===signature?{...cached.lineage}:undefined;
@@ -138,7 +145,7 @@ export class CursorChildRecords {
     for(const f of stamps){const s=await lstat(f.path).catch(()=>undefined);if(!s||!s.isFile()||s.isSymbolicLink()||s.nlink!==1||!same(s,f.st)||await realpath(f.path).catch(()=>undefined)!==f.path)return false;}
     return current();
    };
-   retained={fd:childTranscript.fd,st:childTranscript.st,lineage,snapshotSeal:signature,...(context?{context:{...context}}:{}),...(terminal?{terminal}:{}),unchanged};return retained;
+   retained={fd:childTranscript.fd,st:childTranscript.st,lineage,snapshotSeal:signature,metadataUnchanged,...(context?{context:{...context}}:{}),...(terminal?{terminal}:{}),unchanged};return retained;
   }catch{return;}finally{
    await Promise.all(opened.filter(f=>f.fd!==retained?.fd).map(f=>f.fd.close().catch(()=>undefined)));
    if(temp)await rm(temp,{recursive:true,force:true}).catch(()=>undefined);

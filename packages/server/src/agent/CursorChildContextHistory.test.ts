@@ -25,3 +25,8 @@ it.each([false,true])('never captures a later latest-root for an old entry, even
 it('does not return sealed context after the history service closes',async()=>{
  const f=await fixture();f.history.close();expect(await f.history.usageRead(f.selection)).toMatchObject({status:'unavailable'});
 });
+it('rejects a DB-only new root written while the numeric record FD is closing',async()=>{
+ const f=await fixture(),original=CursorChildRecords.prototype.open;let opens=0,entered=false,release!:()=>void;const gate=new Promise<void>(r=>{release=r;});
+ vi.spyOn(CursorChildRecords.prototype,'open').mockImplementation(async function(this:CursorChildRecords,...args:Parameters<CursorChildRecords['open']>){const record=await original.apply(this,args);if(record&&++opens===2){const close=record.fd.close.bind(record.fd);record.fd.close=async()=>{entered=true;await gate;await close();};}return record;});
+ const reading=f.history.usageRead(f.selection);await vi.waitFor(()=>expect(entered).toBe(true));f.setRoot(50);release();expect(await reading).toMatchObject({status:'unavailable'});
+});
