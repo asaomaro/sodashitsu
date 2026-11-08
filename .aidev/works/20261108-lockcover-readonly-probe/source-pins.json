@@ -1,0 +1,5 @@
+{
+  "scripts/remote-desktop/WindowsDesktopUnlock.cs": "44a7a537234c7c183e8a089da8154a29cf351c6952bc6533b6af41056ef03c2c",
+  "scripts/remote-desktop/WindowsDesktopHost.cs": "0c42d61014ddfa7d2021d18bae3503e08db20227a2f2994fccece1449163a5e3",
+  ".aidev/works/20261108-lockcover-readonly-probe/LockCoverProbe.cs": "71442c317fafa10f9df7c29e5129227045d56ed70a0e0e156639433b6693eced"
+}

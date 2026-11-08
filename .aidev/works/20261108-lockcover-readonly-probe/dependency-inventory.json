@@ -1,0 +1,22 @@
+{
+  "kind": "lexical_crosscheck_not_csharp_compile",
+  "productDefinitions": [
+    "SodaDesktopAgentRegions",
+    "SodaDesktopCommandQueue",
+    "SodaDesktopCursor",
+    "SodaDesktopDisplay",
+    "SodaDesktopDxgi",
+    "SodaDesktopFramePreparation",
+    "SodaDesktopH264",
+    "SodaDesktopHost",
+    "SodaDesktopMonitorLayout",
+    "SodaDesktopUnlock",
+    "SodaDesktopVideoBitstream",
+    "SodaDesktopVideoDelay",
+    "SodaDesktopVideoProfile",
+    "SodaDesktopVideoRate",
+    "SodaDesktopVideoWindow"
+  ],
+  "unresolvedSodaIdentifiers": [],
+  "actualCompileRequired": true
+}

@@ -1,0 +1,13 @@
+✔ fixed source hashes and compiler argv, no fixture execution (17.006976ms)
+✔ compile failure diagnostics kept privately with a bounded public receipt (9.744116ms)
+✔ source mismatch rejected before compiler call and output creation (7.017818ms)
+✔ existing output cannot be reused (3.832567ms)
+✔ product routing definitions are not copied and fixture invokes only fixed readonly methods (0.796383ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 89.757745

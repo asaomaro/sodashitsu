@@ -1,0 +1,25 @@
+{
+  "executable": "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe",
+  "args": [
+    "/nologo",
+    "/target:winexe",
+    "/platform:x64",
+    "/main:SodaLockCoverProbe",
+    "/out:<FRESH_PRIVATE_STAGE>\\LockCoverProbe.exe",
+    "/r:System.dll",
+    "/r:System.Core.dll",
+    "/r:System.Drawing.dll",
+    "/r:System.Windows.Forms.dll",
+    "/r:System.Web.Extensions.dll",
+    "/r:System.ServiceProcess.dll",
+    "<FRESH_PRIVATE_STAGE>\\WindowsDesktopUnlock.cs",
+    "<FRESH_PRIVATE_STAGE>\\WindowsDesktopHost.cs",
+    "<FRESH_PRIVATE_STAGE>\\LockCoverProbe.cs"
+  ],
+  "shell": false,
+  "windowsHide": true,
+  "stdin": "closed",
+  "timeoutMs": 45000,
+  "maxBufferBytesPerLane": 65536,
+  "executeProbe": false
+}
