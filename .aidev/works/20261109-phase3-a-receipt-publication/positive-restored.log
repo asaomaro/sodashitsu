@@ -1,0 +1,48 @@
+✔ B requires native lock while generating, exact epoch retirement, measured quiet and restored old-stream rejection (2.411119ms)
+✔ C requires actual UAC mode and own request/recovery, not Default or only ACK (0.33897ms)
+✔ only fixture B receiver may observe locked same scope; C stays unlocked; no SYSTEM/elevated/foreign identity (0.315135ms)
+✔ observer preserves begin return/arguments and only reports exact accepted microphone epoch (1.368583ms)
+✔ unreported or malformed measurement fields do not become zero/known success (0.387502ms)
+✔ observer bounds physical channels and refuses replacement epoch instead of transferring proof (0.500325ms)
+✔ native ready rejects synthetic true or malformed markers even with a windows-gdi label (0.468515ms)
+✔ original socket closure/rejection is independent from one-use ticket rejection; no reply remains unknown (0.404574ms)
+✔ actual intake wait failure yields only fixed stage (3.873069ms)
+✔ actual intake identity failure yields only fixed stage (1.393028ms)
+✔ actual intake native_probe failure yields only fixed stage (1.52826ms)
+✔ actual intake native_scope failure yields only fixed stage (1.471287ms)
+✔ actual intake source_connect failure yields only fixed stage (1.587986ms)
+✔ successful generated intake preserves ownership (1.267299ms)
+✔ operator receiver-arm budget is90s inside unchanged overall expiry (1.882298ms)
+✔ actual pipeline ready fails at fixed protected_source_ready (2.642075ms)
+✔ actual pipeline schema fails at fixed protected_source_schema (1.298413ms)
+✔ actual pipeline proof fails at fixed protected_source_proof (1.45034ms)
+✔ actual pipeline ticket fails at fixed microphone_ticket_wait (1.639626ms)
+✔ actual pipeline ticket_proof fails at fixed microphone_ticket_proof (1.585962ms)
+✔ actual pipeline lane fails at fixed microphone_lane_connect (1.305514ms)
+✔ actual pipeline start fails at fixed microphone_start_send (2.378158ms)
+✔ actual pipeline running fails at fixed microphone_running_wait (1.975129ms)
+✔ generated successful pipeline is unchanged (2.025136ms)
+✔ diagnostic evidence adopts only schema parsed fields; generic error code/message never copied (1.909414ms)
+✔ protected-microphone-phase3/run-a.mjs: viewer offers elevated+protected PCM prerequisites while lane stays microphone-only (9.5092ms)
+✔ protected-microphone-phase3-bc/session.mjs: viewer offers elevated+protected PCM prerequisites while lane stays microphone-only (6.884808ms)
+✔ generated997Hz calibrated amplitude and energy, no real audio (32.843943ms)
+✔ same streak frames+wall required; baseline contamination/gaps/discontinuity/condensed delivery fail (207.898409ms)
+✔ absolute100 silent ticks, synchronous delivery and bounded worker cleanup (2075.007278ms)
+✔ async or blocking sender is a diagnostic failure, never a successful cadence (252.772139ms)
+✔ full300 generated tone cadence retains all frames over6sec, main event loop remains live (6072.598648ms)
+✔ long wall and long frame streaks cannot be combined across different intervals (51.910916ms)
+✔ approval/default endpoints/expiry remain failclosed and child environment excludes preload/history (1.233949ms)
+✔ private child cannot inherit custom desktop commands or change parent environment (0.118944ms)
+✔ actual receiver-armed.json callback waits for complete publication and ENOENT (13.404978ms)
+✔ actual baseline-ready.json callback waits for complete publication and ENOENT (7.14652ms)
+✔ actual receiver-result.json callback waits for complete publication and ENOENT (5.213091ms)
+✔ only SyntaxError/ENOENT retry; access/busy/other failures remain hard errors with fixed classes (0.681046ms)
+✔ complete foreign armed identity still fails actual guard, never skipped to accepted ownership (1.246432ms)
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8782.739806

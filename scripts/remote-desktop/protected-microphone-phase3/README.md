@@ -55,3 +55,5 @@ B/Cの前には既存のfresh unlock復旧が使えることをrootが確認す�
 失敗時の `failureEvidence` はschema検証済み ready のbackend enum/保護・mic bool、正式protected failure code、正式mic state enumのみを保存する。一般 `error` はcode enum未定義のため `desktop_error_unclassified` とし、message/code本文を保存しない。観測をguardへ転用せず、元の生値に対する検証とTTLを維持する。
 
 受信器の `receiver-armed.json` 待ちは90秒（rootの画像確認/UAC承諾往復用）。全体の承認期限は最大240秒のまま、各待機pollで期限・問題を確認する。期限延長や旧job再利用は行わず、他のidentity/media/採点条件は変えない。
+
+receipt はCreateNew後のJSON書込み中にも存在し得るため、armed/baseline/result/server-readyのpollはSyntaxErrorとENOENTだけ既存期限内で再読する。完全JSONは元のidentity/proof guardにそのまま渡し、access/busy/その他IOエラーは即拒否。`failureClass` は `syntax_error/io_missing/io_access/io_busy/other`、`failureEvidence.receiptLastErrorClass` は過去の読取エラー分類（最終原因の断定ではない）。C#と期限は変えず、新job/source manifestが必要。

@@ -1,0 +1,40 @@
+✖ actual receiver-armed.json callback waits for complete publication and ENOENT (5.014425ms)
+✖ actual baseline-ready.json callback waits for complete publication and ENOENT (3.286334ms)
+✖ actual receiver-result.json callback waits for complete publication and ENOENT (2.735845ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 59.789356
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/receipt-publication.test.mjs:4:156
+✖ actual receiver-armed.json callback waits for complete publication and ENOENT (5.014425ms)
+  SyntaxError [Error]: Unexpected end of JSON input
+      at JSON.parse (<anonymous>)
+      at evalmachine.<anonymous>:1:92
+      at async TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/receipt-publication.test.mjs:4:788)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at scripts/remote-desktop/protected-microphone-phase3/receipt-publication.test.mjs:4:156
+✖ actual baseline-ready.json callback waits for complete publication and ENOENT (3.286334ms)
+  SyntaxError [Error]: Unexpected end of JSON input
+      at JSON.parse (<anonymous>)
+      at evalmachine.<anonymous>:1:68
+      at async TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/receipt-publication.test.mjs:4:788)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at scripts/remote-desktop/protected-microphone-phase3/receipt-publication.test.mjs:4:156
+✖ actual receiver-result.json callback waits for complete publication and ENOENT (2.735845ms)
+  SyntaxError [Error]: Unexpected end of JSON input
+      at JSON.parse (<anonymous>)
+      at evalmachine.<anonymous>:1:69
+      at async TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/receipt-publication.test.mjs:4:788)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
