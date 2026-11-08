@@ -180,7 +180,12 @@ export class SubagentHistoryReader {
         this.set({ ...empty(), status: "unavailable" });
         return;
       }
-      if ((more && same && page.offset < offset) || (!page.reset && page.offset > offset + 64))
+      if (
+        (more && !same && !page.reset) ||
+        (page.reset && page.offset > 64) ||
+        (more && same && page.offset < offset) ||
+        (!page.reset && page.offset > offset + 64)
+      )
         throw Error("Invalid history offset");
       const first = this.chunks[0];
       if (more && same) {

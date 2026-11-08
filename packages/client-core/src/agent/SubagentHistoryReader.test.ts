@@ -205,3 +205,21 @@ it("serializes refresh and paging, and stops idle/old-peer polling", async () =>
   expect(old.reader.state.status).toBe("unsupported");
   expect(subagentHistoryMessage(old.reader.state)).toContain("この操舵室の接続経路");
 });
+it.each(["missing-reset", "oversized-reset"])(
+  "does not treat a changed next-page collection as a valid first page: %s",
+  async (why) => {
+    const f = fixture((p) =>
+      (p as { offset: number }).offset === 0
+        ? page([row(1)], { offset: 1, more: true })
+        : page([row(2)], {
+            revision: uuid(2000),
+            reset: why !== "missing-reset",
+            offset: why === "oversized-reset" ? 128 : 2,
+          }),
+    );
+    await f.reader.refresh();
+    await f.reader.more();
+    expect(f.reader.state.status).toBe("failed");
+    expect(f.reader.state.items).toHaveLength(0);
+  },
+);

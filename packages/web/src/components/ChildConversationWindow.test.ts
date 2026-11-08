@@ -417,3 +417,45 @@ it("never retries an unavailable historical transcript through the current child
   expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control")).toBe(false);
   f.wrapper.unmount();
 });
+it.each(["unreadable", "not_found"])(
+  "clears displayed history when its exact entry becomes %s",
+  async (why) => {
+    let reads = 0;
+    const f = fixture(
+      false,
+      vi.fn(async () => {
+        if (++reads === 1)
+          return {
+            status: "ok",
+            entries: [{ kind: "say", text: "REVOKED GENERATED HISTORY" }],
+            offset: 1,
+            reset: false,
+            omittedBefore: false,
+            running: false,
+          };
+        if (why === "not_found") throw { code: "not_found" };
+        return {
+          status: "unreadable",
+          entries: [],
+          offset: 1,
+          reset: false,
+          omittedBefore: false,
+          running: false,
+        };
+      }) as never,
+      undefined,
+      historicalRow,
+    );
+    await flush();
+    expect(f.wrapper.text()).toContain("REVOKED GENERATED HISTORY");
+    await vi.advanceTimersByTimeAsync(1500);
+    await flush();
+    expect(f.wrapper.text()).not.toContain("REVOKED GENERATED HISTORY");
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(f.request).toHaveBeenCalledTimes(2);
+    expect(f.request.mock.calls.every((c) => c[0] === "agent.subagent_history_transcript")).toBe(
+      true,
+    );
+    f.wrapper.unmount();
+  },
+);

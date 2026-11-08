@@ -54,9 +54,24 @@ function fixture(reply: (params: unknown) => unknown | Promise<unknown> = () => 
   const pane = {
     id: "p",
     tabId: "t",
+    label: "Generated parent",
+    cwd: "/generated",
+    shell: "/bin/sh",
+    cols: 80,
+    rows: 24,
+    status: "running",
+    failure: null,
+    busy: false,
+    title: "",
+    rightClick: "herdr",
     agent: {
       instanceId: "i",
       kind: "codex",
+      label: "Codex",
+      completionSeq: 0,
+      serverSeenSeq: 0,
+      verified: true,
+      since: 1,
       name: "generated-parent",
       state: "idle",
       subagents: { count: 0, items: [] },
@@ -135,7 +150,10 @@ it("replaces pages rather than mixing a new revision", async () => {
       : page([row(2)], { offset: 1, revision: uuid(998), reset: true }),
   );
   await flush();
-  await f.wrapper.findAll("button").find(b=>b.text()==="さらに表示")!.trigger("click");
+  await f.wrapper
+    .findAll("button")
+    .find((b) => b.text() === "さらに表示")!
+    .trigger("click");
   await flush();
   expect(f.wrapper.text()).toContain("Generated finished 2");
   expect(f.wrapper.text()).not.toContain("Generated finished 1");
@@ -153,4 +171,14 @@ it("reports old peer/pending as unavailable or pending instead of zero, and neve
   await flush();
   expect(waiting.wrapper.text()).toContain("確認しています");
   expect(waiting.wrapper.text()).not.toContain("ありません");
+});
+it("rejects an old row click after its source scope changes", async () => {
+  const f = fixture();
+  await flush();
+  const old = f.wrapper.get("[data-history-entry]");
+  f.session.clientId = "replacement";
+  await old.trigger("click");
+  await flush();
+  expect(f.wrapper.emitted("select")).toBeUndefined();
+  expect(f.request).toHaveBeenCalledTimes(1);
 });

@@ -62,6 +62,23 @@ watch(
   },
   { immediate: true, flush: "sync" },
 );
+function select(item: SubagentHistoryItem): void {
+  if (
+    props.active &&
+    scope.value === openedScope &&
+    reader?.state.items.some((row) => row.entryId === item.entryId)
+  )
+    emit("select", item);
+}
+function refreshHistory(): void {
+  void reader?.refresh(true);
+}
+function loadMore(): void {
+  void reader?.more();
+}
+function canRefresh(): boolean {
+  return reader !== null;
+}
 function visible(): void {
   if (document.visibilityState !== "hidden") void reader?.refresh();
 }
@@ -82,8 +99,8 @@ function date(value: number | undefined): string | undefined {
       ><button
         type="button"
         data-assistant-feature
-        :disabled="state.loading || !reader"
-        @click="reader?.refresh(true)"
+        :disabled="state.loading || !canRefresh()"
+        @click="refreshHistory"
       >
         更新
       </button>
@@ -98,7 +115,7 @@ function date(value: number | undefined): string | undefined {
           class="history-child"
           :data-history-entry="item.entryId"
           :aria-label="`${item.description || item.type || 'サブエージェント'}の会話を開く`"
-          @click="emit('select', item)"
+          @click="select(item)"
         >
           <span
             >{{ subagentTerminalLabel(item.terminalStatus) }} ·
@@ -117,7 +134,7 @@ function date(value: number | undefined): string | undefined {
       type="button"
       data-assistant-feature
       :disabled="state.loading"
-      @click="reader?.more()"
+      @click="loadMore"
     >
       さらに表示
     </button>

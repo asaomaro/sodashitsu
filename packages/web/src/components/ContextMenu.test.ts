@@ -19,6 +19,7 @@ beforeEach(() => {
 
 function makeActions() {
   return {
+    showSubagentsOf:vi.fn(),
     renamePaneById: vi.fn(),
     clearPaneName: vi.fn(),
     splitPane: vi.fn(),
@@ -709,4 +710,8 @@ describe("ContextMenu — 表示の面（20261008-display-layout）", () => {
     // happy-dom は箱を測らない（0）。測れない環境では位置を変えない
     expect((w.get("ul").element as HTMLElement).style.top).toBe(`${window.innerHeight - 2}px`);
   });
+});
+
+it("keeps a zero-current history entry in the target pane menu, independent of the focused pane",async()=>{
+ const session=useSessionStore(pinia),view=useViewStore(pinia);session.paneUpserted(makePane("p1"));session.paneUpserted(makePane("p2",{agent:{instanceId:"a",kind:"codex",label:"Codex",name:"Generated parent",state:"idle",since:1,completionSeq:0,serverSeenSeq:0,subagents:{count:0,items:[]}}}));view.focusPane("p1");view.openContextMenu({kind:"pane",paneId:"p2"},{x:0,y:0});const actions=makeActions(),wrapper=mountMenu(actions),entry=wrapper.findAll("li").find(li=>li.text()==="サブエージェントの一覧");expect(entry).toBeDefined();await entry!.trigger("click");expect(actions.showSubagentsOf).toHaveBeenCalledWith("p2");wrapper.unmount();
 });

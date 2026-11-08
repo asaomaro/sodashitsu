@@ -100,11 +100,15 @@ async function poll(): Promise<void> {
     const r = props.historyEntryId!==undefined
       ? await conn.request("agent.subagent_history_transcript",{...selection,entryId:props.historyEntryId})
       : await conn.request("agent.subagent_transcript",selection);
+    if(!stopped&&props.historyEntryId!==undefined&&r.status==="unreadable"){
+      rows.value=[];omittedBefore.value=false;clipped.value=false;status.value="unreadable";reason.value=r.reason??"履歴の記録を読めません";stopped=true;stop();return;
+    }
     if (!stopped) apply(r);
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
     if (code === "not_found" || props.historyEntryId!==undefined&&(code==="method_not_found"||code==="unknown_method")) {
       // 居なくなった（エージェントが入れ替わった・許可が切れた・知らない id）。今までの表示は残し、読むのを止める。
+      if(props.historyEntryId!==undefined){rows.value=[];omittedBefore.value=false;clipped.value=false;}
       status.value = "gone";
       stopped = true;
       stop();
