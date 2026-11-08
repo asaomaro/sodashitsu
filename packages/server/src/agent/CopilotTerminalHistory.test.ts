@@ -72,3 +72,20 @@ it.skipIf(!process.geteuid)("does not grant metadata from a foreign-owned parent
   expect(await f.reader.read(f.source)).toEqual({count:0,items:[]});expect(f.bindings().bindings).toHaveLength(0);expect(f.bindings().status).toBe("unavailable");
  }finally{f.history.close();f.reader.close();}
 });
+it("reads only formally observed public child rows through history entry while usage remains unavailable",async()=>{
+ const f=await setup("custom_agent");try{
+  const msg=(text:string,child=f.child,id=randomUUID())=>({id,type:"assistant.message",timestamp:born,data:{messageId:randomUUID(),parentToolCallId:child,content:text}});
+  const old=msg("OLD_RUN"),publicRow=msg("PUBLIC"),start=f.event("started"),endRow=f.event("completed");
+  await writeFile(f.file,f.lines([f.header,f.event("started"),old,f.event("completed"),start,msg("FOREIGN","foreign"),publicRow,{...msg("HIDDEN"),ephemeral:true},{...msg("PARENT"),data:{content:"PARENT",messageId:randomUUID()}},endRow,msg("AFTER")]));
+  expect(await f.reader.read(f.source)).toEqual({count:0,items:[]});const item=(await f.history.read({paneId:f.source.paneId})).items[0]!;expect(item.hasTranscript).toBe(true);const selection={paneId:f.source.paneId,agentId:f.child,entryId:item.entryId};
+  expect(await f.history.transcript(selection)).toMatchObject({status:"ok",entries:[{kind:"say",text:"PUBLIC"}],terminalStatus:"completed"});expect(await f.history.usageRead(selection)).toMatchObject({status:"unavailable"});
+  const binding=f.bindings().bindings[0]!;expect(await binding.openRecord("usage",()=>true)).toBeUndefined();const opened=await binding.openRecord("transcript",()=>true);expect(opened).toBeDefined();await appendFile(f.file,f.lines([msg("NEW")]));expect(await opened!.unchanged()).toBe(false);await opened!.fd.close();expect((await f.history.transcript(selection)).status).toBe("unreadable");
+ }finally{f.history.close();f.reader.close();}
+});
+it("marks bounded public-message omission and holds all four physical slots until close",async()=>{
+ const f=await setup();try{
+  const rows=Array.from({length:65},(_,n)=>({id:randomUUID(),type:"assistant.message",timestamp:born,data:{parentToolCallId:f.child,messageId:randomUUID(),content:"PUBLIC_"+n}}));await writeFile(f.file,f.lines([f.header,f.event("started"),...rows,f.event("completed")]));await f.reader.read(f.source);
+  const item=(await f.history.read({paneId:f.source.paneId})).items[0]!,selection={paneId:f.source.paneId,agentId:f.child,entryId:item.entryId};expect(await f.history.transcript(selection)).toMatchObject({status:"ok",omittedBefore:true,entries:expect.any(Array)});
+  const binding=f.bindings().bindings[0]!,opened=await Promise.all(Array.from({length:4},()=>binding.openRecord("transcript",()=>true)));expect(opened.every(Boolean)).toBe(true);expect(await binding.openRecord("transcript",()=>true)).toBeUndefined();expect(await binding.verify(()=>true)).toBe(false);await Promise.all(opened.map(value=>value!.fd.close()));expect(await binding.verify(()=>true)).toBe(true);
+ }finally{f.history.close();f.reader.close();}
+});

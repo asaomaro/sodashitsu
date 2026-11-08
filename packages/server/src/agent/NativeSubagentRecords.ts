@@ -1,10 +1,11 @@
+import {copilotPublicMessage} from "./CopilotPublicEntries.js";
 import {isAbsolute} from "node:path";
 import { ASSISTANT_EFFORTS } from "@sodashitsu/protocol";
 import type { SubagentInfo } from "@sodashitsu/protocol";
 import type { Subagents } from "./SubagentTracker.js";
 
 export type NativeSubagentKind = "codex" | "muse" | "copilot";
-export interface CopilotTerminalFact {id:string;startedAt:number;endedAt:number;eventId:string;terminalStatus:"completed"|"error";description?:string;type?:string}
+export interface CopilotTerminalFact {id:string;startedAt:number;endedAt:number;eventId:string;terminalStatus:"completed"|"error";publicMessages?:readonly string[];publicOmitted?:boolean;description?:string;type?:string}
 export interface MuseTerminalFact {id:string;childSession:string;startedAt:number;endedAt:number;eventId:string;description?:string;type?:string}
 export interface CodexTerminalFact {id:string;startedAt:number;endedAt:number;eventId:string;terminalStatus:"completed"|"aborted";description?:string;type?:string}
 const ID = /^[A-Za-z0-9_:.-]{1,128}$/;
@@ -42,11 +43,12 @@ export class NativeSubagentRecords {
   private readonly codexEnds = new Map<string,CodexTerminalFact>();
   private codexMalformed = false;
   private copilotMalformed = false;
-  private readonly copilotStarts = new Map<string,{item:SubagentInfo;eventId:string}>();
+  private readonly copilotStarts = new Map<string,{item:SubagentInfo;eventId:string;publicMessages:string[];publicOmitted:boolean}>();
+  private copilotPublicCount=0;
   private readonly copilotEnds = new Map<string,CopilotTerminalFact>();
   copilotTerminals():readonly CopilotTerminalFact[]|undefined {
     if(this.kind!=="copilot"||!this.seen||this.limited||this.copilotMalformed||this.uncertain.size)return;
-    return [...this.copilotEnds.values()].map(value=>({...value}));
+    return [...this.copilotEnds.values()].map(value=>({...value,...(value.publicMessages?{publicMessages:[...value.publicMessages]}:{})}));
   }
   private seen = false;
   private limited = false;
@@ -214,6 +216,10 @@ export class NativeSubagentRecords {
   }
 
   private copilot(row: Record<string, any>): void {
+    const message=copilotPublicMessage(row);
+    if(message){const start=this.copilotStarts.get(message.child);if(start&&!this.copilotEnds.has(message.child)&&!start.publicMessages.includes(message.fingerprint)){
+      if(start.publicMessages.length<64&&this.copilotPublicCount<4096){start.publicMessages.push(message.fingerprint);this.copilotPublicCount++;}else start.publicOmitted=true;
+    }}
     if (typeof row.type !== "string" || !/^(?:custom_agent|subagent)\./.test(row.type)) return;
     // Selecting the main custom agent is not a child execution lifecycle.
     if (["subagent.selected", "subagent.deselected"].includes(row.type)) return;
@@ -228,12 +234,13 @@ export class NativeSubagentRecords {
     const id=data.toolCallId;
     this.copilotEnds.delete(id);
     if(phase==="started"){
-      if(!this.copilotStarts.has(id)&&this.copilotStarts.size>=MAX){const oldest=this.copilotStarts.keys().next().value!;this.copilotStarts.delete(oldest);this.copilotEnds.delete(oldest);}
-      this.copilotStarts.set(id,{item:{id,startedAt:at,depth:1,...(type?{type}:{}),...(description?{description}:{})},eventId:row.id});
+      if(!this.copilotStarts.has(id)&&this.copilotStarts.size>=MAX){const oldest=this.copilotStarts.keys().next().value!;this.copilotPublicCount-=this.copilotStarts.get(oldest)!.publicMessages.length;this.copilotStarts.delete(oldest);this.copilotEnds.delete(oldest);}
+      this.copilotPublicCount-=this.copilotStarts.get(id)?.publicMessages.length??0;
+      this.copilotStarts.set(id,{publicMessages:[],publicOmitted:false,item:{id,startedAt:at,depth:1,...(type?{type}:{}),...(description?{description}:{})},eventId:row.id});
     }else if(phase==="completed"||phase==="failed"){
       const start=this.copilotStarts.get(id);
-      if(start&&at>=start.item.startedAt)this.copilotEnds.set(id,{id,startedAt:start.item.startedAt,endedAt:at,eventId:JSON.stringify([start.eventId,row.id,row.type,at]),terminalStatus:phase==="completed"?"completed":"error",...(start.item.type?{type:start.item.type}:{}),...(start.item.description?{description:start.item.description}:{})});
-    }else this.copilotStarts.delete(id);
+      if(start&&at>=start.item.startedAt)this.copilotEnds.set(id,{id,startedAt:start.item.startedAt,endedAt:at,eventId:JSON.stringify([start.eventId,row.id,row.type,at]),terminalStatus:phase==="completed"?"completed":"error",publicMessages:[...start.publicMessages],...(start.publicOmitted?{publicOmitted:true}:{}),...(start.item.type?{type:start.item.type}:{}),...(start.item.description?{description:start.item.description}:{})});
+    }else {this.copilotPublicCount-=this.copilotStarts.get(id)?.publicMessages.length??0;this.copilotStarts.delete(id);}
     this.apply(data.toolCallId, phase === "started" ? "active" : ["completed", "failed"].includes(phase) ? "terminal" : "unknown", at, { ...(type ? { type } : {}), ...(description ? { description } : {}) });
   }
 }

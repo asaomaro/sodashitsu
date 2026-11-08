@@ -53,7 +53,7 @@ export class SubagentHistoryService {
     if(!owned()||process.geteuid&&opened.st.uid!==process.geteuid())return unreadable();
     const page=await readTranscriptHandle(opened,params.offset,target.entries);
     if(!owned()||!await opened.unchanged()||!owned())return unreadable();
-    return{...page,running:false,state:"unknown",terminalStatus:grant.item.terminalStatus};
+    return{...page,omittedBefore:page.omittedBefore||target.transcriptOmittedBefore===true,running:false,state:"unknown",terminalStatus:grant.item.terminalStatus};
    }finally{await opened.fd.close().catch(()=>undefined);}
   });
  }

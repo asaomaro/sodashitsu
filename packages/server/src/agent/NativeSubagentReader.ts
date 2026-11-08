@@ -129,7 +129,19 @@ export class NativeSubagentReader {
       }catch{return false;}finally{await opened?.fd.close().catch(()=>undefined);this.terminalChecks--;}
       return accepted&&allowed()&&current(fact)&&state.copilotEOF!==undefined&&exactRevision(revision,state.copilotEOF);
     };
-    return copilotTerminalBindings({source:{...source,kind:"copilot"},namespace,facts,current,verify});
+    const open=async(fact:CopilotTerminalFact,allowed:()=>boolean)=>{
+      if(!allowed()||!current(fact)||this.terminalChecks>=4)return;this.terminalChecks++;
+      let opened:OpenedFile|null=null,transferred=false;const revision=state.copilotEOF!;
+      try{opened=await this.open(source);if(!opened)return;
+        const before=await opened.fd.stat({bigint:true});
+        if(process.geteuid&&before.uid!==BigInt(process.geteuid())||!allowed()||!current(fact)||!exactRevision(revision,before)||!await this.sameRecordPath(source,revision)||!allowed()||!current(fact))return;
+        const handle=opened,close=handle.fd.close.bind(handle.fd);let released=false;
+        handle.fd.close=async()=>{try{await close();}finally{if(!released){released=true;this.terminalChecks--;}}};
+        transferred=true;
+        return{...handle,unchanged:async()=>!released&&allowed()&&current(fact)&&exactRevision(revision,await handle.fd.stat({bigint:true}))&&await this.sameRecordPath(source,revision)&&allowed()&&current(fact)};
+      }catch{return;}finally{if(!transferred){await opened?.fd.close().catch(()=>undefined);this.terminalChecks--;}}
+    };
+    return copilotTerminalBindings({source:{...source,kind:"copilot"},namespace,facts,current,verify,open});
   }
 
   private async sameRecordPath(source:NativeSubagentSource,revision:BigIntStats):Promise<boolean>{

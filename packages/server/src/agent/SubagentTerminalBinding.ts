@@ -14,6 +14,7 @@ export interface SubagentTerminalBinding {
  /** Provider birth precision for numeric filtering; independent of public millisecond display. */
  usageStartedAt?:number;
  transcriptUnavailableReason?:string;
+ transcriptOmittedBefore?:boolean;
  current():boolean;
  verify(allowed:()=>boolean):Promise<boolean>;
  /** Optional provider-owned numeric projection, still bound to this exact historical proof. */
