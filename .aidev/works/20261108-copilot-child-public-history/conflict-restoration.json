@@ -1,0 +1,13 @@
+{
+  "negativeExit": 1,
+  "restoredExit": 0,
+  "before": {
+    "packages/server/src/agent/CopilotPublicEntries.ts": "7fc5f8da76ec916f41d003da61eeca0e0eb9bd86ae408149788e300f90d2770f",
+    "packages/server/src/agent/NativeSubagentRecords.ts": "a9f75fe691797c693aeb42f79e63c8e6e01fe672f6dd771f541415f9b9a2f44e"
+  },
+  "after": {
+    "packages/server/src/agent/CopilotPublicEntries.ts": "7fc5f8da76ec916f41d003da61eeca0e0eb9bd86ae408149788e300f90d2770f",
+    "packages/server/src/agent/NativeSubagentRecords.ts": "a9f75fe691797c693aeb42f79e63c8e6e01fe672f6dd771f541415f9b9a2f44e"
+  },
+  "byteExact": true
+}

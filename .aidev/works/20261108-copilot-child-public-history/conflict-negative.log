@@ -1,0 +1,46 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-copilot-child-public-history
+
+ ❯ |@sodashitsu/server| src/agent/CopilotPublicEntries.test.ts (5 tests | 1 failed) 37ms
+   × rejects conflicting duplicate event IDs within a run without changing terminal counts; identical replay is deduplicated 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CopilotPublicEntries.test.ts > rejects conflicting duplicate event IDs within a run without changing terminal counts; identical replay is deduplicated
+AssertionError: expected { id: 'call:1', …(6) } to match object { publicMessages: [], …(1) }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "publicMessages": [],
+-   "publicOmitted": true,
++   "publicMessages": [
++     "2da43f80f30adc14f729e11fd128ae0ef09e6e37df26458b4f032efe27fa9f60",
++     "b372594a635561e15de8092745fd697120efb1e92cf9b265d2fead224df8aad1",
++     "e836bf9520d327a3cd9e4057384923f604c7d40c4732bf6c22e9c4458073104b",
++   ],
+  }
+
+ ❯ src/agent/CopilotPublicEntries.test.ts:28:272
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 69 passed (70)
+   Start at  21:54:50
+   Duration  3.26s (transform 53%, tests 29%, import 17%)
+
+  Transform  |@sodashitsu/server| transforming modules took 4.37s · 53% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
