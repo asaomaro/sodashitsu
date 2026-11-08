@@ -1,0 +1,66 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-subagent-conversation-ui/packages/web
+> vitest run src/components/Sidebar.test.ts src/dashboard/PaneInfoView.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-conversation-ui/packages/web
+
+ ❯ src/dashboard/PaneInfoView.test.ts (18 tests | 2 failed) 205ms
+   × keeps claude child information without a conversation entry or transcript RPC 10ms
+   × keeps codex child information without a conversation entry or transcript RPC 5ms
+ ❯ src/components/Sidebar.test.ts (207 tests | 1 failed) 2306ms
+   ❯ Sidebar — サブエージェントの件数のボタン (21)
+     × 子の行を選ぶと親paneを操作せず専用会話を開く 27ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > 子の行を選ぶと親paneを操作せず専用会話を開く
+AssertionError: expected null to match object { paneId: 'p1', agentId: 's0' }
+
+- Expected:
+{
+  "agentId": "s0",
+  "paneId": "p1",
+}
+
++ Received:
+null
+
+ ❯ src/components/Sidebar.test.ts:677:32
+    675|     const conn=makeConnection(),w=mountSidebar(conn);await btn(w).trig…
+    676|     const row=w.get(".sidebar-subagent-row");await row.trigger("keydow…
+    677|     expect(childWindow.target).toMatchObject({paneId:"p1",agentId:subs…
+       |                                ^
+    678|     childWindow.close();await row.trigger("click");expect(childWindow.…
+    679|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/dashboard/PaneInfoView.test.ts > keeps claude child information without a conversation entry or transcript RPC
+ FAIL  src/dashboard/PaneInfoView.test.ts > keeps codex child information without a conversation entry or transcript RPC
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/dashboard/PaneInfoView.test.ts:229:61
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 222 passed (225)
+   Start at  09:52:05
+   Duration  7.12s (transform 60%, tests 27%, import 9%, environment 4%)
+
+  Transform  transforming modules took 5.69s · 60% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+/workspaces/sodashitsu-subagent-conversation-ui/packages/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/web@0.1.0 test: `vitest run src/components/Sidebar.test.ts src/dashboard/PaneInfoView.test.ts`
+Exit status 1

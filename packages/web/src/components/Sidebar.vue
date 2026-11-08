@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {useChildConversationStore} from "../store/childConversation.js";
 import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { AgentInfo, ItemTarget, SubagentInfo, Workspace } from "@sodashitsu/protocol";
@@ -40,6 +41,7 @@ import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
  * 取り消し）をそのまま踏襲する。
  */
 const session = useNormalSessionStore();
+const childConversation=useChildConversationStore();
 const usage = useUsageStore();
 const seen = useSeenStore();
 const view = useViewStore();
@@ -1116,7 +1118,7 @@ watchDragInterrupt(view, () => {
         </template>
       </div>
       <div v-if="!view.sidebarCollapsed && subagentCount(agent)>0 && subagentsExpanded(agent)" :id="`sidebar-subagents-${pane.id}`" class="sidebar-subagents" role="group" :aria-label="`${agent.label} のサブエージェント`">
-        <div v-for="child in agent.subagents!.items.slice(0,64)" :key="child.id" class="sidebar-row sidebar-subagent-row" :data-subagent-id="child.id" :title="childTitle(child)">
+        <div v-for="child in agent.subagents!.items.slice(0,64)" :key="child.id" class="sidebar-row sidebar-subagent-row" :data-subagent-id="child.id" :title="childTitle(child)" role="button" tabindex="0" :aria-label="`${childSession(child)}の会話を開く`" @click.stop="childConversation.open(pane.id,child.id)" @keydown.enter.stop.prevent="childConversation.open(pane.id,child.id)" @keydown.space.stop.prevent="childConversation.open(pane.id,child.id)">
           <div class="sidebar-row-line1"><StateIcon class="sidebar-state-icon sidebar-subagent-status" variant="subagent" :state="child.state ?? 'working'" /><span class="sidebar-label">{{ childSession(child) }}{{ child.background ? '（バックグラウンド）' : '' }}</span></div>
           <div v-if="childModel(child)" class="sidebar-row-line2 sidebar-label">{{ childModel(child) }}</div>
         </div>

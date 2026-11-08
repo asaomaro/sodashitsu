@@ -668,6 +668,16 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     expect(view.focusedPaneId).not.toBe("p1");
   });
 
+  it("子の行を選ぶと親paneを操作せず専用会話を開く",async()=>{
+    const model=setup(makeAgent({subagents:subs(2)}));model.clientId="generated-client";useViewStore(pinia).onConnectionState("open");
+    const p=model.panes.get("p1")!;model.paneUpserted({...p,agentSession:{kind:p.agent!.kind,sessionId:"generated-session",reportedAt:1}});
+    const {useChildConversationStore}=await import("../store/childConversation.js");const childWindow=useChildConversationStore(pinia);
+    const conn=makeConnection(),w=mountSidebar(conn);await btn(w).trigger("click");
+    const row=w.get(".sidebar-subagent-row");await row.trigger("keydown",{key:"Enter"});
+    expect(childWindow.target).toMatchObject({paneId:"p1",agentId:subs(2).items[0]!.id});expect(conn.requests).toEqual([]);
+    childWindow.close();await row.trigger("click");expect(childWindow.target?.agentId).toBe(subs(2).items[0]!.id);w.unmount();
+  });
+
   it("別のマシンを選んでいるときは、そのマシンの対象として開く（machineId は選んでいるマシンの ID）", async () => {
     const M2 = "c".repeat(32);
     setup(makeAgent({ subagents: subs(2) }));

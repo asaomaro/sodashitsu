@@ -1,0 +1,17 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-subagent-conversation-ui/packages/web
+> vitest run src/components/ChildConversationWindow.test.ts src/components/Sidebar.test.ts src/dashboard/PaneInfoView.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-conversation-ui/packages/web
+
+
+ Test Files  3 passed (3)
+      Tests  236 passed (236)
+   Start at  09:52:21
+   Duration  6.81s (transform 63%, tests 22%, import 10%, environment 5%)
+
+  Transform  transforming modules took 6.99s · 63% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

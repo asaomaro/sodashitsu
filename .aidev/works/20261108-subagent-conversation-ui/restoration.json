@@ -1,0 +1,18 @@
+{
+  "negativeExit": 1,
+  "negativeBrowserExit": 1,
+  "files": {
+    "packages/web/src/components/Sidebar.vue": {
+      "before": "7da14298e1ae3eda51a2e63fc504ae4a05ce0f937542335a840359e40766e613",
+      "after": "7da14298e1ae3eda51a2e63fc504ae4a05ce0f937542335a840359e40766e613",
+      "byteExact": true
+    },
+    "packages/web/src/dashboard/PaneInfoView.vue": {
+      "before": "b35499aba18341551ec5585fd888ec46e7f45aa8039cac9218dc798a00566b05",
+      "after": "b35499aba18341551ec5585fd888ec46e7f45aa8039cac9218dc798a00566b05",
+      "byteExact": true
+    }
+  },
+  "restoredExit": 0,
+  "restoredBrowserExit": 0
+}
