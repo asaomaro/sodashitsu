@@ -53,3 +53,31 @@ it("preserves durable model when optional view ignores its deadline longer than 
  const result=await observer.readMany(parent,[{id:subagent,startedAt:0}],()=>child,()=>true);
  expect(query).toHaveBeenCalledOnce();expect(result.get(subagent)).toEqual({model:"durable-model",modelBasis:"turn",hasTranscript:true});
 });
+
+it("keeps last formal Muse child-session proof private across terminal/resume and retires it on a new spawn",async()=>{
+ const home=await mkdtemp(join(tmpdir(),"soda-muse-child-resume-"));dirs.push(home);
+ const dataHome=join(home,"data"),dir=join(dataHome,"muse","sessions","2026","11","07",parent);await mkdir(dir,{recursive:true});
+ const nested=join(dir,"subagent",child);await mkdir(nested,{recursive:true});const childFile=join(nested,"session.jsonl");await writeFile(childFile,configured("previous-turn-model"));
+ const file=join(dir,"session.jsonl"),rows=(await readFile(new URL("./fixtures/native-subagents/muse.jsonl",import.meta.url),"utf8")).trim().split("\n").map(line=>JSON.parse(line));
+ Object.assign(rows[3].payload.record,{child_session_id:child,schema_version:1,storage_layout:"nested_session_v1"});
+ const end=rows.findIndex(r=>r.payload_type==="subagent.control.result_ready");await writeFile(file,rows.slice(0,end).map(r=>JSON.stringify(r)).join("\n")+"\n");
+ let seq=0;const event=(phase:string,extra:Record<string,unknown>={})=>({...rows[0],id:"resume-generated-"+seq++,recorded_at:1794022025000000+seq*1000,payload_type:"subagent.control."+phase,payload:{kind:"subagent_control",record:{kind:phase,parent_session_id:parent,subagent_id:subagent,...extra}}});
+ const append=async(row:unknown)=>{await appendFile(file,JSON.stringify(row)+"\n");};
+ const observer=new MuseChildObservations({dataHome},async()=>({events:[]}));
+ const reader=new NativeSubagentReader({dataHome},undefined,observer);
+ const source={paneId:"p",instanceId:"instance",kind:"muse" as const,sessionId:parent};
+ try{
+  expect((await reader.read(source))?.items[0]?.model).toBe("previous-turn-model");
+  await append(event("result_ready"));expect(await reader.read(source)).toEqual({count:0,items:[]});expect(reader.museChildSession(source,subagent)).toBeUndefined();
+  await append(event("resume_context_recorded",{objective:"Generated followup"}));expect(await reader.read(source)).toEqual({count:0,items:[]});
+  await append(event("status_updated",{control_status:"running"}));expect(await reader.read(source)).toMatchObject({count:1});expect(reader.museChildSession(source,subagent)).toBe(child);
+  expect((await reader.read(source))?.items[0]).not.toHaveProperty("model"); // A preserved relation does not make the previous run's model current.
+  await appendFile(childFile,configured("resumed-turn-model").replace("1794022023400000","1794022029000000"));await append(event("runtime_observed"));expect((await reader.read(source))?.items[0]?.model).toBe("resumed-turn-model");
+  await append(event("spawn_accepted"));expect((await reader.read(source))?.items[0]).not.toHaveProperty("model");expect(reader.museChildSession(source,subagent)).toBeUndefined();
+  await append(event("child_session_bound",{child_session_id:child,schema_version:1,storage_layout:"nested_session_v1",parent_session_id:"foreign-parent"}));await reader.read(source);expect(reader.museChildSession(source,subagent)).toBeUndefined();
+  await append(event("child_session_bound",{child_session_id:child,schema_version:1,storage_layout:"nested_session_v1"}));expect((await reader.read(source))?.items[0]?.model).toBe("resumed-turn-model");
+  await append(event("child_session_bound",{child_session_id:child,schema_version:1,storage_layout:"future-layout"}));await reader.read(source);expect(reader.museChildSession(source,subagent)).toBeUndefined();
+  expect(reader.museChildSession({...source,instanceId:"replacement"},subagent)).toBeUndefined();
+  reader.forget(source.paneId);await writeFile(file,JSON.stringify(event("status_updated",{control_status:"running"}))+"\n");expect((await reader.read({...source,instanceId:"replacement"}))?.items[0]).not.toHaveProperty("model");
+ }finally{reader.close();}
+});

@@ -62,7 +62,10 @@ export class NativeSubagentRecords {
     if (typeof id !== "string" || !ID.test(id)) return;
     this.seen = true;
     if (status === "terminal") {
-      this.items.delete(id); this.metadata.delete(id); this.uncertain.delete(id); this.museBindings.delete(id); this.museInputs.delete(id); return;
+      this.items.delete(id); this.metadata.delete(id); this.uncertain.delete(id); this.museInputs.delete(id);
+      // A terminal turn does not erase Muse's last formally bound durable child session.
+      // Only a current member may use it; a new spawn or explicit binding replaces it.
+      return;
     }
     if (!this.metadata.has(id) && this.metadata.size >= MAX) { this.limited = true; return; }
     this.metadata.set(id, { ...this.metadata.get(id), ...meta });
