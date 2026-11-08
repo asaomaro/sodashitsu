@@ -33,3 +33,7 @@ The output directory must not exist; its parent must already be private to the o
 - Node syntax check:0. No product build/type/test repeated.
 - Product/source pin listing and compiler staging read-only semantics require final independent review before Windows execution.
 - Actual C# compile, C# --self-test and --observe have not been executed by this author. Windows work belongs to root only.
+
+## Root-owned execution results
+
+Root subsequently completed Windows compile, C# synthetic self-test and read-only observation. See [sanitized Windows verification](windows-verification.md) for the fixed binary SHA, three observed samples and runtime-deployment scope. These results do not turn the observation into an input authorization or claim Windows strict typecheck/unlock success.

@@ -1,0 +1,182 @@
+{
+  "kind": "sanitized-root-windows-verification",
+  "productHead": "e15a32972888a5f1da26c09749d9c5fdb3aace6a",
+  "probe": {
+    "fixtureSource": "51617b5f",
+    "compileExit": 0,
+    "binarySha256": "3dc3160cd030fec2b0ec791413659ea09b11a40b706f47720f4da4bd9c2ca50a",
+    "rawGitRestored": 3,
+    "selfTest": {
+      "fixture": "lockcover-readonly",
+      "synthetic": true,
+      "passed": true
+    },
+    "observed": {
+      "fixture": "lockcover-readonly",
+      "normalActor": true,
+      "activeConsole": true,
+      "samples": [
+        {
+          "lockState": 0,
+          "UserLockScreen": true,
+          "PendingUserLockScreen": false,
+          "InputIsDefault": true,
+          "PendingShellLockScreen": false,
+          "SecureDesktopCandidate": false,
+          "source": "cover",
+          "foregroundZero": false,
+          "elapsedMs": 281
+        },
+        {
+          "lockState": 0,
+          "UserLockScreen": true,
+          "PendingUserLockScreen": false,
+          "InputIsDefault": true,
+          "PendingShellLockScreen": false,
+          "SecureDesktopCandidate": false,
+          "source": "cover",
+          "foregroundZero": false,
+          "elapsedMs": 807
+        },
+        {
+          "lockState": 0,
+          "UserLockScreen": true,
+          "PendingUserLockScreen": false,
+          "InputIsDefault": true,
+          "PendingShellLockScreen": false,
+          "SecureDesktopCandidate": false,
+          "source": "cover",
+          "foregroundZero": false,
+          "elapsedMs": 1317
+        }
+      ],
+      "authorization": false
+    },
+    "receipt": "windows-lockcover-probe.json",
+    "sha256": "57a5ce437633f8ce9389e7b353c414c839612b4ea6fc57ae1fab325c9abbf6e5",
+    "status": "exited",
+    "exitCode": 0,
+    "timedOut": false,
+    "before": 2,
+    "after": 2,
+    "missing": 0
+  },
+  "productionStage": {
+    "ok": true,
+    "head": "e15a32972888a5f1da26c09749d9c5fdb3aace6a",
+    "verifiedFiles": 3395,
+    "changedFiles": 440,
+    "backupCreated": true,
+    "sourceClean": true
+  },
+  "handoff": {
+    "head": "e15a32972888a5f1da26c09749d9c5fdb3aace6a",
+    "newHandoffObserved": true,
+    "adopted": 1,
+    "dropped": 0,
+    "at": "2026-11-08T13:30:04.322Z",
+    "sourceClean": true
+  },
+  "paneIdentityPreservation": {
+    "before": 2,
+    "after": 2,
+    "missing": 0
+  },
+  "nativeRuntimeSmoke": {
+    "ok": true,
+    "stage": "windows-native-isolated-smoke",
+    "hostManifestEntries": 41,
+    "webIndexExact": true,
+    "authenticatedRpc": true,
+    "nodePtyEcho": true,
+    "ownStateRemoved": true,
+    "modelCalls": 0,
+    "windowsTypecheckPassed": false
+  },
+  "receipts": [
+    {
+      "receipt": "windows-stage-production-e15.json",
+      "sha256": "ab215b4973b4991d3ba18e40359507a4de3433a5a0901e619ec98f96fe4fca07",
+      "status": "exited",
+      "exitCode": 0,
+      "timedOut": false,
+      "before": 2,
+      "after": 2,
+      "missing": 0
+    },
+    {
+      "receipt": "windows-server-e15-retry.json",
+      "sha256": "e5b52af9251d835e0dcea94e5c778f128c68e47ca4ee26facd2551f95aac4c65",
+      "status": "exited",
+      "exitCode": 1,
+      "timedOut": true,
+      "before": 2,
+      "after": 2,
+      "missing": 0
+    },
+    {
+      "receipt": "windows-runtime-emit-e15.json",
+      "sha256": "d15b16fde5af35622d61b4c4496e69eb7e91f3e184f984e2e1e20274bfd9b42e",
+      "status": "exited",
+      "exitCode": 0,
+      "timedOut": false,
+      "before": 2,
+      "after": 2,
+      "missing": 0
+    },
+    {
+      "receipt": "windows-host-vite-e15.json",
+      "sha256": "74a633cfdb71fb7eb337bc1923b00e35b39720a5b7e681f33e61b6d9dd450e16",
+      "status": "exited",
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "receipt": "windows-handoff-e15.json",
+      "sha256": "35c30ef392854eeb7c0844132ee38c6bc3e455eacd640da9f1d95580e84bc2df",
+      "before": 2,
+      "after": 2,
+      "missing": 0
+    },
+    {
+      "receipt": "windows-production-success-e15.json",
+      "sha256": "824b5257cd5cb9351922c6d7f2f8fef67ea8fbd0babac1e1a5343c97001563c1",
+      "status": "exited",
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "receipt": "windows-native-smoke-e15-retry.json",
+      "sha256": "63e8076b9f0609ee08ccb4fc4e64216fbc14d61118462f986f8b96880064e6fd",
+      "status": "exited",
+      "exitCode": 0,
+      "timedOut": false,
+      "before": 2,
+      "after": 2,
+      "missing": 0
+    }
+  ],
+  "subsequentRootSecondDismiss": {
+    "source": "root-supplied metadata",
+    "freshReadyControl": true,
+    "explicitSecondDismissRequests": 1,
+    "event": "lock_screen_changed",
+    "nextViewer": {
+      "secureDesktop": true,
+      "lockScreenCover": true,
+      "images": 0
+    },
+    "pinInputs": 0,
+    "arbitraryKeys": 0,
+    "thirdDismissRequests": 0,
+    "sendInputExecutionConfirmed": false,
+    "rootStopped": true
+  },
+  "sourceOnlyInterpretation": {
+    "actualBranchRetrospectivelyKnown": false,
+    "sendInputReturnLogged": false,
+    "ordinaryInputAckAppliesToCoverDismiss": false,
+    "additionalDiagnosticImplemented": false,
+    "additionalWindowsActionByAuthor": false
+  }
+}
