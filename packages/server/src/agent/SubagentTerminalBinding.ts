@@ -11,6 +11,8 @@ export interface SubagentTerminalBinding {
  key:string;
  kind:VerifiedSubagentTarget["kind"];
  recordId:string;
+ /** Provider birth precision for numeric filtering; independent of public millisecond display. */
+ usageStartedAt?:number;
  current():boolean;
  verify(allowed:()=>boolean):Promise<boolean>;
  openRecord(purpose:"transcript"|"usage",allowed:()=>boolean):Promise<TerminalRecord|undefined>;

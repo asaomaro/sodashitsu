@@ -4,9 +4,11 @@ import type { SubagentInfo } from "@sodashitsu/protocol";
 import type { Subagents } from "./SubagentTracker.js";
 
 export type NativeSubagentKind = "codex" | "muse" | "copilot";
+export interface MuseTerminalFact {id:string;childSession:string;startedAt:number;endedAt:number;eventId:string;description?:string;type?:string}
 export interface CodexTerminalFact {id:string;startedAt:number;endedAt:number;eventId:string;terminalStatus:"completed"|"aborted";description?:string;type?:string}
 const ID = /^[A-Za-z0-9_:.-]{1,128}$/;
 const MAX = 256;
+const MUSE_HISTORY_VERSIONS:Record<string,number>={spawn_accepted:4,resume_context_recorded:1,child_session_bound:1,start_attested:1,status_updated:1,attempt_admitted:1,runtime_observed:2,result_ready:2};
 const label = (v: unknown, max: number): string | undefined =>
   typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, max) || undefined : undefined;
 const object = (v: unknown): Record<string, any> | undefined =>
@@ -17,6 +19,12 @@ export class NativeSubagentRecords {
   private readonly museInputs = new Map<string,{text:string;truncated:boolean}>();
   museChildInput(id:string): {text:string;truncated:boolean}|undefined { const input=this.museInputs.get(id);return input?{...input}:undefined; }
   private readonly museBindings = new Map<string, string>();
+  private readonly museStarts = new Map<string,{item:SubagentInfo;eventId:string}>();
+  private readonly museEnds = new Map<string,MuseTerminalFact>();
+  museTerminals():readonly MuseTerminalFact[]|undefined {
+    if(this.kind!=="muse"||!this.seen||this.limited)return;
+    return [...this.museEnds.values()].map(value=>({...value}));
+  }
   museChildSession(id: string): string | undefined { return this.museBindings.get(id); }
   private readonly items = new Map<string, SubagentInfo>();
   private readonly metadata = new Map<string, Partial<SubagentInfo>>();
@@ -144,16 +152,25 @@ export class NativeSubagentRecords {
     if (record.parent_session_id !== undefined && record.parent_session_id !== this.sessionId) return;
     const type = row.payload_type, id = record.subagent_id;
     if (typeof type !== "string" || !type.startsWith("subagent.control.") || typeof id !== "string" || !ID.test(id)) return;
-    if (typeof row.id !== "string" || !ID.test(row.id) || !this.admit(`m:${row.id}`)) return;
+    if(typeof row.id!=="string"||!ID.test(row.id)){this.museEnds.delete(id);this.museStarts.delete(id);return;}
+    if(!this.admit(`m:${row.id}`))return;
     const at = Number(row.recorded_at) / 1000;
-    if (!Number.isFinite(at) || at < 0) return;
+    if (!Number.isFinite(at) || at < 0){this.museEnds.delete(id);this.museStarts.delete(id);return;}
+    // History uses durable provider evidence only; it does not change active folding.
+    const historyValid=row.record_type==="event"&&row.durability==="durable"&&Number.isSafeInteger(row.recorded_at)&&row.recorded_at>=0&&record.kind===type.slice("subagent.control.".length)&&
+      Object.hasOwn(MUSE_HISTORY_VERSIONS,record.kind)&&row.payload_schema_version===MUSE_HISTORY_VERSIONS[record.kind];
+    if(!historyValid){this.museEnds.delete(id);this.museStarts.delete(id);}
     if (type === "subagent.control.child_session_bound") {
       const child=record.child_session_id;
+      this.museEnds.delete(id);
+      // A replacement or invalid binding cannot reuse a previous attested start.
+      if(this.museBindings.has(id)||!historyValid)this.museStarts.delete(id);
       if(record.kind==="child_session_bound"&&record.schema_version===1&&record.storage_layout==="nested_session_v1"&&typeof child==="string"&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(child)&&child!==this.sessionId&&(this.museBindings.has(id)||this.museBindings.size<MAX))this.museBindings.set(id,child);
-      else this.museBindings.delete(id);
+      else {this.museBindings.delete(id);this.museStarts.delete(id);}
       return;
     }
     if (["subagent.control.spawn_accepted", "subagent.control.resume_context_recorded"].includes(type)) {
+      this.museEnds.delete(id);this.museStarts.delete(id);
       if (!this.metadata.has(id) && this.metadata.size >= MAX) { this.limited = true; return; }
       {
         if(type==="subagent.control.spawn_accepted")this.museBindings.delete(id);
@@ -166,6 +183,19 @@ export class NativeSubagentRecords {
       const role = label(record.role, 64), description = label(record.objective, 200);
       this.metadata.set(id, { ...this.metadata.get(id), ...(role ? { type: role } : {}), ...(description ? { description } : {}), ...(Number.isInteger(record.depth) && record.depth >= 1 && record.depth <= 16 ? { depth: record.depth } : {}) });
       return;
+    }
+    if(type==="subagent.control.attempt_admitted"){this.museEnds.delete(id);this.museStarts.delete(id);}
+    if(type==="subagent.control.start_attested"){
+      this.museEnds.delete(id);
+      if(historyValid&&(this.museStarts.has(id)||this.museStarts.size<MAX))this.museStarts.set(id,{item:{id,startedAt:at,depth:1,...this.metadata.get(id)},eventId:row.id});
+    }else if(type==="subagent.control.result_ready"&&historyValid){
+      const start=this.museStarts.get(id),child=this.museBindings.get(id);
+      if(start&&child&&at>=start.item.startedAt)this.museEnds.set(id,{id,childSession:child,startedAt:start.item.startedAt,endedAt:at,eventId:JSON.stringify([start.eventId,row.id,row.recorded_at]),...(start.item.description?{description:start.item.description}:{}),...(start.item.type?{type:start.item.type}:{})});
+    }else if(type==="subagent.control.status_updated"){
+      if(["running","starting"].includes(record.control_status)){if(this.museEnds.has(id))this.museStarts.delete(id);this.museEnds.delete(id);}
+      else if(!["result_ready","resultReady","closing","closed"].includes(record.control_status)){this.museEnds.delete(id);this.museStarts.delete(id);}
+    }else if(!["subagent.control.attempt_admitted","subagent.control.runtime_observed"].includes(type)){
+      this.museEnds.delete(id);this.museStarts.delete(id);
     }
     if (type === "subagent.control.start_attested") this.apply(id, "active", at);
     else if (type === "subagent.control.status_updated") this.apply(id, ["running", "starting"].includes(record.control_status) ? "active" : ["result_ready", "resultReady", "closing", "closed"].includes(record.control_status) ? "terminal" : "unknown", at);

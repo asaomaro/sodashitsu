@@ -1,7 +1,8 @@
 import type {BigIntStats} from "node:fs";
 import {randomUUID} from "node:crypto";
+import {museTerminalBindings} from "./MuseTerminalBindings.js";
 import {codexTerminalBindings} from "./CodexTerminalBindings.js";
-import type {CodexTerminalFact} from "./NativeSubagentRecords.js";
+import type {CodexTerminalFact,MuseTerminalFact} from "./NativeSubagentRecords.js";
 import type {SubagentTerminalCollection} from "./SubagentTerminalBinding.js";
 import { readCodexControlStatus, type CodexControlTarget, type CodexObservedState } from "./CodexControlStatus.js";
 import { MuseChildObservations } from "./MuseChildObservations.js";
@@ -28,6 +29,7 @@ interface State {
   namespace:string;
   inputRevision?:BigIntStats;
   codexEOF?:BigIntStats;
+  museEOF?:BigIntStats;
   key: string;
   fold: NativeSubagentRecords;
   offset: number;
@@ -80,7 +82,7 @@ export class NativeSubagentReader {
       let opened:OpenedFile|null=null,accepted=false;const revision=state.codexEOF!;
       try{opened=await this.open(source);if(!opened)return false;
         const fd=await opened.fd.stat({bigint:true});
-        if(!allowed()||!current(fact)||!exactRevision(revision,fd)||state.codexEOF===undefined||!exactRevision(revision,state.codexEOF)||!await this.sameCodexPath(source,revision)||!allowed()||!current(fact))return false;
+        if(!allowed()||!current(fact)||!exactRevision(revision,fd)||state.codexEOF===undefined||!exactRevision(revision,state.codexEOF)||!await this.sameRecordPath(source,revision)||!allowed()||!current(fact))return false;
         const after=await opened.fd.stat({bigint:true});accepted=allowed()&&current(fact)&&exactRevision(revision,after)&&state.codexEOF!==undefined&&exactRevision(revision,state.codexEOF);
       }catch{return false;}finally{await opened?.fd.close().catch(()=>undefined);this.terminalChecks--;}
       return accepted&&allowed()&&current(fact)&&state.codexEOF!==undefined&&exactRevision(revision,state.codexEOF);
@@ -88,7 +90,27 @@ export class NativeSubagentReader {
     return codexTerminalBindings({source:{...source,kind:"codex"},home:this.roots.codexHome??process.env.CODEX_HOME??join(homedir(),".codex"),namespace,facts,current,verify});
   }
 
-  private async sameCodexPath(source:NativeSubagentSource,revision:BigIntStats):Promise<boolean>{
+  museTerminals(source:NativeSubagentSource,verified:()=>boolean):SubagentTerminalCollection {
+    const state=this.states.get(source.paneId),key=JSON.stringify([source.instanceId,source.kind,source.sessionId]);
+    const unavailable=():SubagentTerminalCollection=>({status:"unavailable",bindings:[],incomplete:true});
+    if(this.closed||source.kind!=="muse"||!verified()||!state||state.key!==key)return unavailable();
+    const facts=state.fold.museTerminals();if(!facts||!state.museEOF)return{status:state.pending?"pending":"unavailable",bindings:[],incomplete:true};
+    const namespace=state.namespace;
+    const current=(fact:MuseTerminalFact)=>!this.closed&&verified()&&this.states.get(source.paneId)===state&&state.key===key&&state.namespace===namespace&&!state.abort.signal.aborted&&!state.invalid&&!state.pending&&state.museEOF!==undefined&&state.offset===Number(state.museEOF.size)&&state.fold.museTerminals()?.some(now=>now.id===fact.id&&now.childSession===fact.childSession&&now.eventId===fact.eventId&&now.startedAt===fact.startedAt&&now.endedAt===fact.endedAt)===true;
+    const verify=async(fact:MuseTerminalFact,allowed:()=>boolean)=>{
+      if(!allowed()||!current(fact)||this.terminalChecks>=4)return false;this.terminalChecks++;
+      let opened:OpenedFile|null=null,accepted=false;const revision=state.museEOF!;
+      try{opened=await this.open(source);if(!opened)return false;
+        const before=await opened.fd.stat({bigint:true});
+        if(!allowed()||!current(fact)||!exactRevision(revision,before)||state.museEOF===undefined||!exactRevision(revision,state.museEOF)||!await this.sameRecordPath(source,revision)||!allowed()||!current(fact))return false;
+        const after=await opened.fd.stat({bigint:true});accepted=allowed()&&current(fact)&&exactRevision(revision,after)&&state.museEOF!==undefined&&exactRevision(revision,state.museEOF);
+      }catch{return false;}finally{await opened?.fd.close().catch(()=>undefined);this.terminalChecks--;}
+      return accepted&&allowed()&&current(fact)&&state.museEOF!==undefined&&exactRevision(revision,state.museEOF);
+    };
+    return museTerminalBindings({source:{...source,kind:"muse"},roots:this.roots,namespace,facts,current,verify});
+  }
+
+  private async sameRecordPath(source:NativeSubagentSource,revision:BigIntStats):Promise<boolean>{
     const opened=await this.open(source);if(!opened)return false;
     try{return exactRevision(revision,await opened.fd.stat({bigint:true}));}finally{await opened.fd.close().catch(()=>undefined);}
   }
@@ -172,11 +194,11 @@ export class NativeSubagentReader {
       const { fd, st } = opened;
       const live=()=>!this.closed&&this.states.get(source.paneId)===state&&!state.abort.signal.aborted;
       if(!live())return undefined;
-      const scanRevision=source.kind==="codex"?await fd.stat({bigint:true}):undefined;
+      const scanRevision=source.kind==="codex"||source.kind==="muse"?await fd.stat({bigint:true}):undefined;
       if(!live()||scanRevision&&scanRevision.size!==BigInt(st.size))return undefined;
       const rewritten=scanRevision&&state.inputRevision&&scanRevision.size===state.inputRevision.size&&!exactRevision(scanRevision,state.inputRevision);
       if (state.dev !== st.dev || state.ino !== st.ino || st.size < state.offset || rewritten) {
-        state.namespace=randomUUID();delete state.codexEOF;delete state.inputRevision;
+        state.namespace=randomUUID();delete state.codexEOF;delete state.museEOF;delete state.inputRevision;
         state.generation++; this.museObservations.forget();
         state.offset = 0; state.fold = new NativeSubagentRecords(source.kind as NativeSubagentKind, source.sessionId); state.invalid = false;
         delete state.codex;
@@ -184,8 +206,8 @@ export class NativeSubagentReader {
       state.dev = st.dev; state.ino = st.ino;
       if (state.invalid || st.size > MAX_BYTES) return undefined;
       const bytes = await readRange(fd, state.offset, Math.min(CHUNK, st.size - state.offset));
+      if(scanRevision){if(bytes.length){delete state.codexEOF;delete state.museEOF;}state.inputRevision=scanRevision;}
       if (source.kind === "codex") {
-        if(bytes.length)delete state.codexEOF;state.inputRevision=scanRevision!;
         state.codex ??= new CodexSubagentStream();
         state.codex.consume(bytes, state.fold);
         state.offset += bytes.length;
@@ -195,7 +217,7 @@ export class NativeSubagentReader {
         if (state.invalid || state.offset < st.size || state.codex.partial) return undefined;
         const revision = await fd.stat({ bigint: true });
         if(!live())return undefined;
-        if (!exactRevision(scanRevision!,revision)||!await this.sameCodexPath(source,revision)||!live()) { state.pending = live(); return undefined; }
+        if (!exactRevision(scanRevision!,revision)||!await this.sameRecordPath(source,revision)||!live()) { state.pending = live(); return undefined; }
         const sealAfter=await fd.stat({bigint:true});if(!live()||!exactRevision(revision,sealAfter)){state.pending=live();return undefined;}
         state.codexEOF=revision;
         const members = state.fold.snapshot();
@@ -247,6 +269,12 @@ export class NativeSubagentReader {
       // Do not show a historical prefix as current activity until the full available record was folded.
       if (state.invalid || scanning) return undefined;
       const members=state.fold.snapshot();
+      if(source.kind==="muse"&&state.offset===st.size){
+        const seal=await fd.stat({bigint:true});
+        if(!live()||!exactRevision(scanRevision!,seal)||!await this.sameRecordPath(source,seal)||!live())return undefined;
+        const afterSeal=await fd.stat({bigint:true});if(!live()||!exactRevision(seal,afterSeal))return undefined;
+        state.museEOF=seal;
+      }
       if(source.kind!=="muse"||!members?.items.length)return members;
       const revision=await fd.stat({bigint:true});
       if(revision.size!==BigInt(st.size))return undefined;

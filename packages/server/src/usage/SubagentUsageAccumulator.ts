@@ -49,7 +49,10 @@ export class SubagentUsageAccumulator {
    if(read&&write&&count(tokens)&&(!this.context||at>=this.context.at))this.context={tokens,at};
   }else{
    const usage=extraUsage(row,this.kind,this.recordId);
-   if(!usage||usage.at<this.startedAt)return;
+   // Muse durable timestamps are integer microseconds. Do not floor the birth
+   // comparison to display milliseconds or mix adjacent runs within that millisecond.
+   const birthTime=this.kind==="muse"?(Number.isSafeInteger(row.recorded_at)&&row.recorded_at>=0?row.recorded_at/1000:NaN):usage?.at;
+   if(!usage||birthTime===undefined||!Number.isFinite(birthTime)||birthTime<this.startedAt)return;
    const cached=this.kind==="muse"?row.payload?.event?.record?.quantity?.cached_tokens:row.cache_read_tokens;
    if(!count(cached))this.partial=true;
    this.add(usage.id,{...(this.kind!=="muse"||count(cached)?{input:usage.input}:{}),output:usage.output,...(count(cached)?{cacheRead:usage.cacheRead}:{})},usage.at);

@@ -15,9 +15,10 @@ export class SubagentHistoryService {
   this.history=new SubagentTerminalHistory(deps.session);
   this.usage=new SubagentUsageService({resolve:async(pane,entryId)=>{
    const grant=await this.history.grantEntry(pane,entryId,()=>!this.closed),target=grant?.proof?.target;
-   if(!grant||!target||grant.item.startedAt===undefined)return;
+   const startedAt=target?.usageStartedAt??grant?.item.startedAt;
+   if(!grant||!target||typeof startedAt!=="number"||!Number.isFinite(startedAt)||startedAt<0)return;
    const current=()=>!this.closed&&grant.current()&&target.current();
-   return{key:JSON.stringify([entryId,target.key]),kind:target.kind,recordId:target.recordId,startedAt:grant.item.startedAt,current,
+   return{key:JSON.stringify([entryId,target.key]),kind:target.kind,recordId:target.recordId,startedAt,current,
     openRecord:async()=>current()?target.openRecord("usage",current):undefined};
   }});
  }
