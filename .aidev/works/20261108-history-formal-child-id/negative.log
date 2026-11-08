@@ -1,0 +1,72 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-history-formal-child-id
+
+ ❯ |@sodashitsu/protocol| src/subagentHistory.test.ts (3 tests | 1 failed) 10ms
+   × keeps formal tool call IDs opaque while requiring exact history selectors 3ms
+ ❯ |@sodashitsu/client-core| src/agent/SubagentHistoryReader.test.ts (17 tests | 1 failed) 24ms
+   × retains formally accepted colon/dot tool IDs without changing their exact entry selector 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/protocol| src/subagentHistory.test.ts > keeps formal tool call IDs opaque while requiring exact history selectors
+ZodError: [
+  {
+    "origin": "string",
+    "code": "invalid_format",
+    "format": "regex",
+    "pattern": "/^[A-Za-z0-9_-]{1,128}$/",
+    "path": [
+      "agentId"
+    ],
+    "message": "Invalid string: must match pattern /^[A-Za-z0-9_-]{1,128}$/"
+  }
+]
+ ❯ src/subagentHistory.test.ts:17:85
+     15|  const entryId="12345678-1234-4234-8234-123456789013";
+     16|  for(const schema of [AgentSubagentHistoryTranscriptParams,AgentSubage…
+     17|   for(const agentId of ['call:1','call.part:1','call_1-2',':event.1'])…
+       |                                                                                     ^
+     18|   for(const agentId of ['../child','child/1','child\\1','child%2F1','c…
+     19|   expect(schema.safeParse({paneId,agentId:'call:1'}).success).toBe(fal…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/client-core| src/agent/SubagentHistoryReader.test.ts > retains formally accepted colon/dot tool IDs without changing their exact entry selector
+AssertionError: expected [] to deeply equal [ [ 'call:1', …(1) ], …(2) ]
+
+- Expected
++ Received
+
+- [
+-   [
+-     "call:1",
+-     "00000000-0000-4000-8000-000000000001",
+-   ],
+-   [
+-     "call.part:1",
+-     "00000000-0000-4000-8000-000000000002",
+-   ],
+-   [
+-     ":event.1",
+-     "00000000-0000-4000-8000-000000000003",
+-   ],
+- ]
++ []
+
+ ❯ src/agent/SubagentHistoryReader.test.ts:229:56
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 18 passed (20)
+   Start at  20:21:44
+   Duration  844ms (transform 70%, import 25%, tests 4%, worker 1%)
+

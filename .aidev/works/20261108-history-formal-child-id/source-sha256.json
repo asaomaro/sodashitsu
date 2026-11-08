@@ -1,0 +1,9 @@
+{
+  "sourceHead": "242296be9e6268444be1b6dc78de8a20031ec36e",
+  "files": {
+    "packages/client-core/src/agent/SubagentHistoryReader.test.ts": "ce8e1ddd9a711b17b3a1578c7e4a9988ad531614f27455aa9d4e1110ffc28795",
+    "packages/client-core/src/agent/SubagentHistoryReader.ts": "aa0a628b3bd72d76b6f474f82c104dfbc61c6fe2f272abe4c492359cb393b1a9",
+    "packages/protocol/src/subagentHistory.test.ts": "b8c165f56fb499d872ce0d9ced122688cc5d1481e4ced24ae59c80e25cce4a16",
+    "packages/protocol/src/subagentHistory.ts": "3906580c3e3f1463e3e34cd62b3d3b4dccb2c6ef5ecee0260558bbcba9f70608"
+  }
+}

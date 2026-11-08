@@ -1,0 +1,13 @@
+{
+  "negativeExit": 1,
+  "restoredExit": 0,
+  "before": {
+    "packages/protocol/src/subagentHistory.ts": "3906580c3e3f1463e3e34cd62b3d3b4dccb2c6ef5ecee0260558bbcba9f70608",
+    "packages/client-core/src/agent/SubagentHistoryReader.ts": "aa0a628b3bd72d76b6f474f82c104dfbc61c6fe2f272abe4c492359cb393b1a9"
+  },
+  "after": {
+    "packages/protocol/src/subagentHistory.ts": "3906580c3e3f1463e3e34cd62b3d3b4dccb2c6ef5ecee0260558bbcba9f70608",
+    "packages/client-core/src/agent/SubagentHistoryReader.ts": "aa0a628b3bd72d76b6f474f82c104dfbc61c6fe2f272abe4c492359cb393b1a9"
+  },
+  "byteExact": true
+}
