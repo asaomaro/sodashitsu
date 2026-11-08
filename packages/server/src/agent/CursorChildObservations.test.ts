@@ -78,8 +78,19 @@ it("does not let an older asynchronous observation overwrite the newer child set
  const c=new CursorChildObservations({session:f.session,records});
  try{
   c.offer(f.observation());c.offer(f.observation({generationId:"newer",model:"newer-observed"}));
-  await vi.waitFor(()=>expect(c.binding(f.pane.id,f.child)?.settings.model).toBe("newer-observed"));finish(fakeRecord(f,()=>closed++));
+  expect(calls).toBe(1);finish(fakeRecord(f,()=>closed++));
+  await vi.waitFor(()=>expect(c.binding(f.pane.id,f.child)?.settings.model).toBe("newer-observed"));
   await vi.waitFor(()=>expect(closed).toBe(2));expect(c.binding(f.pane.id,f.child)?.settings.model).toBe("newer-observed");
+ }finally{c.close();}
+});
+it("serializes an immediate same-child Stop after its slow AAR proof without losing observed settings",async()=>{
+ const f=owner();let finish!:(record:CursorChildRecord)=>void,calls=0;
+ const records={open:()=>++calls===1?new Promise<CursorChildRecord>(resolve=>finish=resolve):Promise.resolve(fakeRecord(f,()=>{},"completed")),close:()=>{}};
+ const c=new CursorChildObservations({session:f.session,records});
+ try{
+  c.offer(f.observation());c.offer(f.stop());for(let i=0;i<20;i++)await Promise.resolve();
+  finish(fakeRecord(f,()=>{},"completed"));await vi.waitFor(()=>expect(c.terminals(f.pane.id).items).toHaveLength(1));
+  expect(c.terminals(f.pane.id).items[0]?.settings).toEqual({model:"child-observed",modelBasis:"session",reasoningEffort:"high",reasoningEffortBasis:"session"});
  }finally{c.close();}
 });
 it("bounds deduplication to fixed digests and becomes incomplete instead of evicting IDs into a replay window",async()=>{

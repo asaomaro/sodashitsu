@@ -1,0 +1,64 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-intake
+
+ ❯ |@sodashitsu/server| src/agent/CursorChildObservations.test.ts (15 tests | 2 failed) 1617ms
+   × does not let an older asynchronous observation overwrite the newer child settings 7ms
+   × serializes an immediate same-child Stop after its slow AAR proof without losing observed settings 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildObservations.test.ts > does not let an older asynchronous observation overwrite the newer child settings
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ src/agent/CursorChildObservations.test.ts:81:17
+     79|  try{
+     80|   c.offer(f.observation());c.offer(f.observation({generationId:"newer"…
+     81|   expect(calls).toBe(1);finish(fakeRecord(f,()=>closed++));
+       |                 ^
+     82|   await vi.waitFor(()=>expect(c.binding(f.pane.id,f.child)?.settings.m…
+     83|   await vi.waitFor(()=>expect(closed).toBe(2));expect(c.binding(f.pane…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildObservations.test.ts > serializes an immediate same-child Stop after its slow AAR proof without losing observed settings
+AssertionError: expected {} to deeply equal { model: 'child-observed', …(3) }
+
+- Expected
++ Received
+
+- {
+-   "model": "child-observed",
+-   "modelBasis": "session",
+-   "reasoningEffort": "high",
+-   "reasoningEffortBasis": "session",
+- }
++ {}
+
+ ❯ src/agent/CursorChildObservations.test.ts:93:53
+     91|   c.offer(f.observation());c.offer(f.stop());for(let i=0;i<20;i++)awai…
+     92|   finish(fakeRecord(f,()=>{},"completed"));await vi.waitFor(()=>expect…
+     93|   expect(c.terminals(f.pane.id).items[0]?.settings).toEqual({model:"ch…
+       |                                                     ^
+     94|  }finally{c.close();}
+     95| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 13 passed (15)
+   Start at  11:39:22
+   Duration  1.90s (tests 90%, transform 8%, import 2%)
+

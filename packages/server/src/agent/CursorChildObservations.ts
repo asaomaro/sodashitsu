@@ -12,9 +12,9 @@ interface Session {
 }
 interface Source {key:string;paneId:string;instanceId:string;parentId:string;current():boolean}
 interface Binding {source:Source;lineage:CursorChildLineage;settings:Settings;fileRevision:string;terminal?:"completed"|"aborted"|"error"}
-interface Slot {observation:number;stop:number;binding?:Binding;conflict:boolean}
+interface Slot {binding?:Binding;conflict:boolean}
 interface State {source:Source;slots:Map<string,Slot>;events:Map<string,{hash:string;conflict:boolean}>;incomplete:boolean;exhausted:boolean}
-interface Job {source:Source;state:State;slot:Slot;report:CursorChildReport;sequence:number;expires:number}
+interface Job {source:Source;state:State;slot:Slot;report:CursorChildReport;expires:number}
 export interface CursorChildBinding {
  source:{paneId:string;instanceId:string;kind:"cursor";sessionId:string};
  childId:string;lineage:CursorChildLineage;settings:Settings;terminal?:"completed"|"aborted"|"error";incomplete:boolean;
@@ -34,7 +34,8 @@ export class CursorChildObservations {
  private readonly states=new Map<string,State>();
  private readonly queue:Job[]=[];
  private readonly records;
- private active=0;private sequence=0;private closed=false;
+ private readonly runningKeys=new Set<string>();
+ private active=0;private closed=false;
  constructor(private readonly deps:{session:Session;records?:Pick<CursorChildRecords,"open"|"close">;now?:()=>number}){this.records=deps.records??new CursorChildRecords();}
  private now(){return(this.deps.now??(()=>performance.now()))();}
  private source(paneId:string,pid:number|undefined):Source|undefined {
@@ -59,16 +60,19 @@ export class CursorChildObservations {
    while(this.states.size>64)this.forget(this.states.keys().next().value!);
   }
   let slot=state.slots.get(report.childId);
-  if(!slot){if(state.slots.size>=64){state.incomplete=true;return;}slot={observation:0,stop:0,conflict:false};state.slots.set(report.childId,slot);}
-  const sequence=++this.sequence;slot[report.phase=== "stop"?"stop":"observation"]=sequence;
+  if(!slot){if(state.slots.size>=64){state.incomplete=true;return;}slot={conflict:false};state.slots.set(report.childId,slot);}
   if(this.queue.length>=64){state.incomplete=true;return;}
-  this.queue.push({source,state,slot,report,sequence,expires:this.now()+5000});this.pump();
+  this.queue.push({source,state,slot,report,expires:this.now()+5000});this.pump();
  }
  private current(job:Job):boolean{return !this.closed&&this.now()<job.expires&&job.source.current()&&this.states.get(job.source.paneId)===job.state&&job.state.slots.get(job.report.childId)===job.slot;}
  private pump():void {
   while(!this.closed&&this.active<2&&this.queue.length){
-   const job=this.queue.shift()!;if(!this.current(job))continue;this.active++;
-   void this.process(job).catch(()=>{if(this.current(job))job.state.incomplete=true;}).finally(()=>{this.active--;this.pump();});
+   for(let i=this.queue.length-1;i>=0;i--)if(!this.current(this.queue[i]!))this.queue.splice(i,1);
+   const key=(j:Job)=>JSON.stringify([j.source.key,j.report.childId]);
+   const at=this.queue.findIndex(j=>!this.runningKeys.has(key(j)));if(at<0)return;
+   const job=this.queue.splice(at,1)[0]!,owned=key(job);this.active++;this.runningKeys.add(owned);
+   // Same-child AAR and Stop follow receipt order. Other children still use two bounded workers.
+   void this.process(job).catch(()=>{if(this.current(job))job.state.incomplete=true;}).finally(()=>{this.runningKeys.delete(owned);this.active--;this.pump();});
   }
  }
  private async process(job:Job):Promise<void>{
@@ -87,9 +91,8 @@ export class CursorChildObservations {
    if(old&&digest(old.lineage)!==digest(opened.lineage)){delete slot.binding;slot.conflict=true;state.incomplete=true;return;}
    if(slot.conflict)return;
    if(report.phase==="observation"){
-    if(slot.observation!==job.sequence||old?.terminal||state.exhausted)return;
+    if(old?.terminal||state.exhausted)return;
    }else{
-    if(slot.stop!==job.sequence)return;
     if(!cursorChildStopMatches({parentId:report.parentId,childId:report.childId,logicalId:report.logicalId,type:report.childType,status:report.status,settings:{}},opened.lineage,opened.terminal)){
      // A just-received formal Stop may precede its final transcript flush.
      // Retry only missing terminal data, at most four read-only opens within this job's lease.
