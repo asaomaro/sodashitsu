@@ -7,11 +7,11 @@ export function observedAgentModel(pane:Pane,usage:AgentUsage|null|undefined):{t
  if(!model&&!effort)return undefined;
  return {text:[model,model?effort?.text.replace(/^effort /,''):effort?.text].filter(Boolean).join(' '),title:[model,effort?.title].filter(Boolean).join(' · ')};
 }
-export function subagentEffortLabel(child:SubagentInfo):{text:string;title:string}|undefined {
+export function subagentEffortLabel(child:Pick<SubagentInfo,"reasoningEffort"|"reasoningEffortBasis">):{text:string;title:string}|undefined {
  const value=child.reasoningEffort?.trim(),basis=child.reasoningEffortBasis;
  if(!value||!(/^[^\x00-\x1f\x7f-\x9f]{1,128}$/).test(value)||!['creation','turn','session'].includes(basis??''))return undefined;
  return {text:value,title:`effort ${value}`};
 }
-export function subagentModelLabel(child:SubagentInfo):string|undefined {
+export function subagentModelLabel(child:Pick<SubagentInfo,"model"|"modelBasis"|"reasoningEffort"|"reasoningEffortBasis">):string|undefined {
  const model=['turn','creation','session'].includes(child.modelBasis??'')?child.model?.trim():undefined,effort=subagentEffortLabel(child);return model?[model,effort?.text].filter(Boolean).join(' '):effort?`effort ${effort.text}`:undefined;
 }

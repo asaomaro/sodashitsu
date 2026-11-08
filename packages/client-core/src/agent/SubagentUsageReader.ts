@@ -14,7 +14,7 @@ export class SubagentUsageReader {
   private value: SubagentUsageState = { result: null, loading: false, failed: false };
   constructor(
     private readonly port: Pick<ConnectionPort, "request">,
-    private readonly target: Readonly<{ paneId: string; agentId: string }>,
+    private readonly target: Readonly<{ paneId: string; agentId: string; entryId?: string }>,
     private readonly scope: () => string | null,
     private readonly changed: (state: SubagentUsageState) => void,
     private readonly active: () => boolean = () => true,
@@ -46,7 +46,17 @@ export class SubagentUsageReader {
     this.inflight = true;
     this.set({ ...this.value, loading: true, failed: false });
     try {
-      const raw = await this.port.request("agent.subagent_usage", this.target);
+      const raw =
+        this.target.entryId !== undefined
+          ? await this.port.request("agent.subagent_history_usage", {
+              paneId: this.target.paneId,
+              agentId: this.target.agentId,
+              entryId: this.target.entryId,
+            })
+          : await this.port.request("agent.subagent_usage", {
+              paneId: this.target.paneId,
+              agentId: this.target.agentId,
+            });
       if (!this.valid()) {
         this.dispose();
         return;

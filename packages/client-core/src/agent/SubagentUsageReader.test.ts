@@ -110,3 +110,25 @@ it("clears an already displayed value as soon as its scope is invalidated", asyn
   expect(f.reader.state.result).toBeNull();
   expect(f.request).toHaveBeenCalledTimes(1);
 });
+it.each(["00000000-0000-4000-8000-000000000001", ""])(
+  "never falls back to current usage for a historical selector %#",
+  async (entryId) => {
+    const request = vi.fn(async () => {
+      throw { code: "method_not_found" };
+    });
+    const reader = new SubagentUsageReader(
+      { request } as unknown as Pick<ConnectionPort, "request">,
+      { paneId: "parent", agentId: "child", entryId },
+      () => "same-parent",
+      vi.fn(),
+    );
+    await reader.refresh();
+    expect(request.mock.calls[0]).toEqual([
+      "agent.subagent_history_usage",
+      { paneId: "parent", agentId: "child", entryId },
+    ]);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(reader.state.failed).toBe(true);
+    reader.dispose();
+  },
+);
