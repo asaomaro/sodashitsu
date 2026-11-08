@@ -14,7 +14,9 @@ Museも現在一覧と同じ増分親記録の完全なEOF・namespace・FD/パ�
 
 Copilotは正式な`custom_agent.*`／`subagent.*`の、同じtoolCallIdに対する`started`から`completed`・`failed`への通知を終了一覧へ載せます。`failed`はエラーとして区別します。親の検証済みsessionの`events.jsonl`を完全なEOFまで読み、イベントIDで重複を除きます。新しい開始・未知の状態・親instanceや記録の世代の変更では旧選択を拒否します。`selected`・`deselected`は子の開始や終了には使いません。親のidleや経過時間から終了を推測しません。
 
-CopilotのtoolCallIdは子session UUIDではありません。子自身の本文・数値を帰属確認できる記録はまだ未接続なので、この終了一覧に本文・利用量・親モデル・effortを代入しません。未取得を空の会話や0消費として扱わず、閲覧だけのmetadataと未接続理由を返します。親記録は1回4MiB・512MiB・1行256KiBまで、履歴用の正式開始対応は直近256件までです。この私有枠を超えても現在の件数foldを別の状態へ変えません。検証は導入SDKと公式SDKの定義から作った生成記録・模擬CLIを使ったもので、実Copilotの子の起動・終了を行った実証ではありません。
+CopilotのtoolCallIdは子session UUIDではありません。既存の検証済み親記録で、正式な開始・終了のイベントIDに挟まれた、同じ`data.parentToolCallId`の非一時`assistant.message`公開本文を実際に観測した子だけ、終了履歴からその本文を読めます。時刻の近似ではなく、イベントID・messageId・日時・全文hashの私有集合と照合するため、同じミリ秒に同じ子IDで再実行しても旧本文を混ぜません。親・他の子・推論・ツールの入力や結果は表示せず、モデル・effort・数値も親から代入しません。公開行がない対象は会話未取得、数値は引き続き未接続です。
+
+公開行の照合情報は1回の子runにつき64件・全体4096件まで保持し、上限で省いた場合は一部省略を表示します。親記録は1回4MiB・512MiB・1行256KiBまで、履歴用の正式開始対応は直近256件までです。この私有枠を超えても現在の件数foldを別の状態へ変えません。根拠は導入済みWindows版0.0.362のSDK型と公開イベントを保存する実装です。Linux導入版1.0.105の実managed子で同じemit・保存経路が到達するかは未実測で、上流最新版の`subagent.completed.totalTokens`等をこの版の取得実績とは扱いません。検証は正式形式から作った生成記録によるもので、実Copilotの子起動・終了・本文取得を行った実証ではありません。
 
 Antigravityは、正式な`invoke_subagent`の結果とdescriptorのexact UUID・spawnStepIndexを照合し、明示的な`SUBAGENT_STATE_KILLED`だけを停止（`aborted`）として収集します。`ALIVE`・idle・親や子の`DONE`から終了を推測しません。正式な終了時刻は得られないため`endedAt`を省略し、ファイルの更新日時や取得時刻で埋めません。親・descriptor・子の記録は通常ファイル・nofollow・owner・namespaceを検証し、workspaceUris/logAbsoluteUriを子のパスとして使いません。
 

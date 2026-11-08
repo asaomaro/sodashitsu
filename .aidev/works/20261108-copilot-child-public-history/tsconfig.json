@@ -1,0 +1,23 @@
+{
+  "extends": "/workspaces/sodashitsu-copilot-child-public-history/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "/workspaces/sodashitsu-copilot-child-public-history/node_modules/@types"
+    ]
+  },
+  "include": [
+    "/workspaces/sodashitsu-copilot-child-public-history/packages/server/src/agent/CopilotPublicEntries.ts",
+    "/workspaces/sodashitsu-copilot-child-public-history/packages/server/src/agent/CopilotPublicEntries.test.ts",
+    "/workspaces/sodashitsu-copilot-child-public-history/packages/server/src/agent/CopilotTerminalBindings.ts",
+    "/workspaces/sodashitsu-copilot-child-public-history/packages/server/src/agent/CopilotTerminalHistory.test.ts",
+    "/workspaces/sodashitsu-copilot-child-public-history/packages/server/src/agent/NativeSubagentRecords.ts",
+    "/workspaces/sodashitsu-copilot-child-public-history/packages/server/src/agent/NativeSubagentReader.ts",
+    "/workspaces/sodashitsu-copilot-child-public-history/packages/server/src/agent/SubagentHistoryService.ts",
+    "/workspaces/sodashitsu-copilot-child-public-history/packages/server/src/agent/SubagentTerminalBinding.ts"
+  ]
+}

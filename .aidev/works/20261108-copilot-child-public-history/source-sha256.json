@@ -1,0 +1,24 @@
+{
+  "sourceHead": "4e2c1736a73063b249e7348e7c506ae87950aef5",
+  "gitObject": {
+    "packages/server/src/agent/CopilotPublicEntries.test.ts": "8acdce9e3a32707adb270da6f5f7bf66977b2487529aeebb18829a6d930964a6",
+    "packages/server/src/agent/CopilotPublicEntries.ts": "6daf15521040fcd84e2f6ae6a5c13035dcedb6eed9a74397bf074e028c1d6599",
+    "packages/server/src/agent/CopilotTerminalBindings.ts": "0b6d5d14af20a8bdb04d7bc9ff59e2b9b45375bde760eab567c6f6c0d02d4beb",
+    "packages/server/src/agent/CopilotTerminalHistory.test.ts": "9a70289f475bda96a80a739078ad56af87950b05d1b1396d19038ea80a6a8145",
+    "packages/server/src/agent/NativeSubagentReader.ts": "a315bd361b02cca8ff3ea0435e420dea796909b07081c205e8e1ab32f453907a",
+    "packages/server/src/agent/NativeSubagentRecords.ts": "85777f9a0e0ff021803c309a80e4b92a13a41581164c776c455949e0a7e26ba7",
+    "packages/server/src/agent/SubagentHistoryService.ts": "8e5116e967d596aab55e7e61d9b7c9574b4a9e9205d741f71b501a9539486cc4",
+    "packages/server/src/agent/SubagentTerminalBinding.ts": "1e946fd02099f6c0c1224a5e5fc3d07f41798bfd75d8e9bbe6c44db32f29b1a3"
+  },
+  "afterDOM": {
+    "packages/server/src/agent/CopilotPublicEntries.test.ts": "8acdce9e3a32707adb270da6f5f7bf66977b2487529aeebb18829a6d930964a6",
+    "packages/server/src/agent/CopilotPublicEntries.ts": "6daf15521040fcd84e2f6ae6a5c13035dcedb6eed9a74397bf074e028c1d6599",
+    "packages/server/src/agent/CopilotTerminalBindings.ts": "0b6d5d14af20a8bdb04d7bc9ff59e2b9b45375bde760eab567c6f6c0d02d4beb",
+    "packages/server/src/agent/CopilotTerminalHistory.test.ts": "9a70289f475bda96a80a739078ad56af87950b05d1b1396d19038ea80a6a8145",
+    "packages/server/src/agent/NativeSubagentReader.ts": "a315bd361b02cca8ff3ea0435e420dea796909b07081c205e8e1ab32f453907a",
+    "packages/server/src/agent/NativeSubagentRecords.ts": "85777f9a0e0ff021803c309a80e4b92a13a41581164c776c455949e0a7e26ba7",
+    "packages/server/src/agent/SubagentHistoryService.ts": "8e5116e967d596aab55e7e61d9b7c9574b4a9e9205d741f71b501a9539486cc4",
+    "packages/server/src/agent/SubagentTerminalBinding.ts": "1e946fd02099f6c0c1224a5e5fc3d07f41798bfd75d8e9bbe6c44db32f29b1a3"
+  },
+  "byteExact": true
+}

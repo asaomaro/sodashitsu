@@ -1,0 +1,10 @@
+{
+  "Custom agent event received without parentToolCallId": 9386315,
+  "parentToolCallId:j,messageId": 9386605,
+  "case\"model_call_failure\":case\"model_call_success\"": 9323498,
+  "emitInternal(e,n,l=!1)": 9377129,
+  "this.emit(\"custom_agent.completed\",{toolCallId:Dt,agentName:Gt.name})": 9386168,
+  "this.unsubscribe=this.session.on(\"*\",": 9401950,
+  "await p3.append(e,this.session.sessionId)": 9402898,
+  "p3=LMt(wpn.parse,\"session\")": 9400882
+}

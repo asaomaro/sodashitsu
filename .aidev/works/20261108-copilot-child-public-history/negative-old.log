@@ -1,0 +1,107 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-copilot-child-public-history
+
+ ❯ |@sodashitsu/server| src/agent/CopilotPublicEntries.test.ts (4 tests | 3 failed) 22ms
+   × captures exact event-bounded public rows independently of equal millisecond timestamps and reused tool IDs 8ms
+   × rejects parent/foreign/missing/nontext/private/ephemeral/tool and numeric-only payloads 4ms
+   × bounds retained fingerprints to 64 per run and 4096 globally without inventing current work or numbers 8ms
+ ❯ |@sodashitsu/server| src/agent/CopilotTerminalHistory.test.ts (12 tests | 2 failed) 280ms
+   × reads only formally observed public child rows through history entry while usage remains unavailable 16ms
+   × marks bounded public-message omission and holds all four physical slots until close 19ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CopilotPublicEntries.test.ts > captures exact event-bounded public rows independently of equal millisecond timestamps and reused tool IDs
+AssertionError: expected undefined to deeply equal [ Array(1) ]
+
+- Expected:
+[
+  "2da43f80f30adc14f729e11fd128ae0ef09e6e37df26458b4f032efe27fa9f60",
+]
+
++ Received:
+undefined
+
+ ❯ src/agent/CopilotPublicEntries.test.ts:11:31
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CopilotPublicEntries.test.ts > rejects parent/foreign/missing/nontext/private/ephemeral/tool and numeric-only payloads
+AssertionError: expected undefined to deeply equal []
+
+- Expected:
+[]
+
++ Received:
+undefined
+
+ ❯ src/agent/CopilotPublicEntries.test.ts:17:222
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CopilotPublicEntries.test.ts > bounds retained fingerprints to 64 per run and 4096 globally without inventing current work or numbers
+AssertionError: expected +0 to be 4096 // Object.is equality
+
+- Expected
++ Received
+
+- 4096
++ 0
+
+ ❯ src/agent/CopilotPublicEntries.test.ts:22:102
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CopilotTerminalHistory.test.ts > reads only formally observed public child rows through history entry while usage remains unavailable
+AssertionError: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ src/agent/CopilotTerminalHistory.test.ts:80:166
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CopilotTerminalHistory.test.ts > marks bounded public-message omission and holds all four physical slots until close
+AssertionError: expected { status: 'unreadable', …(7) } to match object { status: 'ok', …(2) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "entries": [],
+-   "omittedBefore": true,
+-   "status": "ok",
++   "omittedBefore": false,
++   "status": "unreadable",
+  }
+
+ ❯ src/agent/CopilotTerminalHistory.test.ts:88:191
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed | 3 passed (5)
+      Tests  5 failed | 64 passed (69)
+   Start at  21:46:27
+   Duration  2.65s (transform 52%, tests 30%, import 17%)
+
+  Transform  |@sodashitsu/server| transforming modules took 3.39s · 52% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

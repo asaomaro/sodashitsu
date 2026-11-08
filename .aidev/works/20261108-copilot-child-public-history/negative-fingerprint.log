@@ -1,0 +1,80 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-copilot-child-public-history
+
+ ❯ |@sodashitsu/server| src/agent/CopilotPublicEntries.test.ts (4 tests | 1 failed) 24ms
+   × captures exact event-bounded public rows independently of equal millisecond timestamps and reused tool IDs 9ms
+ ❯ |@sodashitsu/server| src/agent/CopilotTerminalHistory.test.ts (12 tests | 1 failed) 346ms
+   × reads only formally observed public child rows through history entry while usage remains unavailable 36ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CopilotPublicEntries.test.ts > captures exact event-bounded public rows independently of equal millisecond timestamps and reused tool IDs
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "at": "2026-11-08T00:00:00Z",
++     "kind": "say",
++     "text": "first",
++   },
++ ]
+
+ ❯ src/agent/CopilotPublicEntries.test.ts:13:90
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CopilotTerminalHistory.test.ts > reads only formally observed public child rows through history entry while usage remains unavailable
+AssertionError: expected { status: 'ok', …(7) } to match object { status: 'ok', …(2) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "entries": [
+      {
++       "at": "2026-11-08T00:00:00Z",
+        "kind": "say",
++       "text": "OLD_RUN",
++     },
++     {
++       "at": "2026-11-08T00:00:00Z",
++       "kind": "say",
+        "text": "PUBLIC",
++     },
++     {
++       "at": "2026-11-08T00:00:00Z",
++       "kind": "say",
++       "text": "AFTER",
+      },
+    ],
+    "status": "ok",
+    "terminalStatus": "completed",
+  }
+
+ ❯ src/agent/CopilotTerminalHistory.test.ts:81:49
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 3 passed (5)
+      Tests  2 failed | 67 passed (69)
+   Start at  21:46:31
+   Duration  2.79s (transform 53%, tests 31%, import 16%)
+
+  Transform  |@sodashitsu/server| transforming modules took 3.64s · 53% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

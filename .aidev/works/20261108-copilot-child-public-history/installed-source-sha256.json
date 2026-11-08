@@ -1,0 +1,30 @@
+{
+  "/mnt/c/Users/makku/AppData/Roaming/npm/node_modules/@github/copilot/package.json": {
+    "bytes": 984,
+    "sha256": "35d172afc4962264e4eb035854d09f2dc7cab5468275768f5d3c1f9419cbc698"
+  },
+  "/mnt/c/Users/makku/AppData/Roaming/npm/node_modules/@github/copilot/index.js": {
+    "bytes": 13772034,
+    "sha256": "465bebf607f71ee4eab3ffcf337bd3464825e34b57469067539c903bc3d1c93c"
+  },
+  "/mnt/c/Users/makku/AppData/Roaming/npm/node_modules/@github/copilot/sdk/index.d.ts": {
+    "bytes": 294821,
+    "sha256": "cc21ed836dd846544b3b987e51405d15e92464a1d21566d64d6971bf60d03446"
+  },
+  "/home/asaomaro/.local/share/fnm/node-versions/v24.15.0/installation/lib/node_modules/@github/copilot/package.json": {
+    "bytes": 1100,
+    "sha256": "1fc97e7220cb6c13cc4639d64f124d9b3d3c5e6fd3fd828b58d8cdc63e4cd318"
+  },
+  "/home/asaomaro/.local/share/fnm/node-versions/v24.15.0/installation/lib/node_modules/@github/copilot/npm-loader.js": {
+    "bytes": 1154,
+    "sha256": "9164c999c36e12cc95881d7f366696f8ca38d5e6fc3da0353f9e6b27c9981b26"
+  },
+  "/home/asaomaro/.local/share/fnm/node-versions/v24.15.0/installation/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64/package.json": {
+    "bytes": 681,
+    "sha256": "c3e8d4e0f5d701834a0441d598889699193926cd7718cf7d21c95af9343e1258"
+  },
+  "/home/asaomaro/.local/share/fnm/node-versions/v24.15.0/installation/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64/copilot": {
+    "bytes": 198511424,
+    "sha256": "3bd8bdc75670d7b4ec445725f6a5b9af66ee7ec49e6194646e4a40a0bc09091c"
+  }
+}
