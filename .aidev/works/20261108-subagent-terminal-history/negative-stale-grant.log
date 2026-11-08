@@ -1,0 +1,72 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-terminal-history
+
+ ❯ |@sodashitsu/server| src/agent/SubagentTerminalHistory.test.ts (12 tests | 2 failed) 51ms
+   × retires grants when the same child ID is replaced, even if the formal event label and public metadata stay equal 8ms
+   × does not publish an old entry whose proof is replaced during asynchronous validation 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentTerminalHistory.test.ts > retires grants when the same child ID is replaced, even if the formal event label and public metadata stay equal
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:78:86
+     76|  const f=fixture();f.history.note(f.source,item(),"same-event",async()…
+     77|  const first=await f.history.grant(paneId,"child");expect(first?.curre…
+     78|  f.history.note(f.source,item(),"same-event",async()=>true);expect(fir…
+       |                                                                                      ^
+     79|  const next=await f.history.grant(paneId,"child");expect(next?.current…
+     80|  f.history.note(f.source,{...item(),startedAt:2000},"new-attempt",asyn…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentTerminalHistory.test.ts > does not publish an old entry whose proof is replaced during asynchronous validation
+AssertionError: expected { status: 'ok', …(7) } to match object { status: 'pending', items: [], …(1) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "incomplete": true,
+-   "items": [],
+-   "status": "pending",
++   "items": [
++     {
++       "hasTranscript": true,
++       "id": "child",
++       "startedAt": 1000,
++       "terminalStatus": "completed",
++     },
++   ],
++   "status": "ok",
+  }
+
+ ❯ src/agent/SubagentTerminalHistory.test.ts:86:24
+     84|  const f=fixture();let finish!:(value:boolean)=>void;f.history.note(f.…
+     85|  const reading=f.history.read({paneId});f.history.note(f.source,item()…
+     86|  expect(await reading).toMatchObject({status:"pending",items:[],incomp…
+       |                        ^
+     87| });
+     88|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 10 passed (12)
+   Start at  12:45:10
+   Duration  346ms (transform 50%, tests 30%, import 16%, worker 4%)
+

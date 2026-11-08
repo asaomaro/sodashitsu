@@ -18,3 +18,9 @@ The collector uses current exact pane/instance/kind/session plus fresh verified 
 ## Remaining separate units
 
 After the root's top-priority Codex fix is fixed/integrated: rebase and register Grok native reader while preserving its new Codex observer; add bounded Cursor Stop/child-self AAR intake without parent usage/count attribution or blocking IPC acknowledgment; connect formal terminal sources to this collector and read-only authenticated RPC; then same-window Web/TUI completed-child UI and transcript grants. No automatic global hook/config mutation. Existing explicit integration update/install flow only.
+
+## 最新baseとstale grant修正
+
+86192d93へ既存2checkpointをrebase（7785881b/b882025f）し、control/usage exportsを保持。2adae5faでgrantの現entry identityを必須化し、同じformal event/public metadataでもverify callback差替えは不変Entry置換にする。page proof中のentry差替えも公開しない。旧collectorだけで新2回帰が失敗（negative-stale-grant.log）、byteExact復元（grant-restoration.json）→collector12+protocol1=13PASS（restored-grant.log）。Node24、strict exactOptional/noUnchecked/NodeNext collector+test型exit0（grant-types.log）。ここではRPC/provider配線はまだ未対応。
+
+UIとの後続契約点検で、historical agentIdだけでcurrent transcript/usageへfallbackするのは禁止と合意。別birth/attemptを旧歴史と誤表示しないため、server発行entryIdとoptional historyEntryId selectorを追加する計画。historical direct control/sendは未対応・親下書きとし、active countへ混ぜない。
