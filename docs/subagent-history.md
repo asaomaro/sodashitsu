@@ -2,7 +2,7 @@
 
 終了履歴は、現在の子の件数・一覧とは別に確認します。終了した子を稼働件数やフッターへ足しません。親が現在の会話・instanceとして検証でき、正式な親子関係と終了記録が照合できた項目だけを返します。未取得は0件成功として扱いません。
 
-サーバの終了collectionはCodex・Muse・Cursor・Grokに対応します。Cursorは[子自身の設定と終了報告](cursor-child-observations.md)のフックを明示的に導入・更新し、サーバが受け取った正式Stopと直属の子記録が一致したものを保持します。履歴は一時的な収集なので、全過去会話を検索した一覧ではありません。親を替えた場合やサーバ再起動では再取得が必要です。ほかの種類の終了collectionは別の対応として記録しています。終了履歴はWeb・TUIの子会話画面内で切り替え、全終了後も既存のサブエージェントメニューから開けます。
+サーバの終了collectionはCodex・Muse・Copilot・Cursor・Grokに対応します。Cursorは[子自身の設定と終了報告](cursor-child-observations.md)のフックを明示的に導入・更新し、サーバが受け取った正式Stopと直属の子記録が一致したものを保持します。履歴は一時的な収集なので、全過去会話を検索した一覧ではありません。親を替えた場合やサーバ再起動では再取得が必要です。ほかの種類の終了collectionは別の対応として記録しています。終了履歴はWeb・TUIの子会話画面内で切り替え、全終了後も既存のサブエージェントメニューから開けます。
 
 Codexは、同じ親の正式な`SubAgentActivity.started`から`completed`または`interrupted`へ至った子だけを収集します。`interrupted`は中断（`aborted`）で、正常完了とは区別します。後の`interacted`・新しい開始・未知の状態は旧終了proofを失効させます。親の先頭`session_meta`の会話ID・cwd、現在のinstanceとfresh proof、完全なEOFとファイル世代を照合し、直属の子rolloutの`session_meta.source.subagent.thread_spawn.parent_thread_id`も照合します。開始・終了時刻は正式な行の時刻のみで、走査した時刻では補いません。履歴行のモデル・effortは現段階では省略し、開始設定や親の設定を現在値として流用しません。
 
@@ -12,10 +12,14 @@ Museは、同じ親streamのdurableな`start_attested`と正式な`child_session
 
 Museも現在一覧と同じ増分親記録の完全なEOF・namespace・FD/パス世代を再検証し、直属のnested child sessionだけを安全に開きます。本文は公開された`workflow_child_result_submitted`だけで、内部の計画や任意のassistant風イベントを表示しません。数値は子自身のusage記録だけです。正式時刻はμsから画面用msへ切り捨て表示しますが、数値の出生比較には元の精度を保持し、同じmsに属する出生前の値を取り込みません。モデル・effortの履歴行への転用は行いません。
 
+Copilotは正式な`custom_agent.*`／`subagent.*`の、同じtoolCallIdに対する`started`から`completed`・`failed`への通知を終了一覧へ載せます。`failed`はエラーとして区別します。親の検証済みsessionの`events.jsonl`を完全なEOFまで読み、イベントIDで重複を除きます。新しい開始・未知の状態・親instanceや記録の世代の変更では旧選択を拒否します。`selected`・`deselected`は子の開始や終了には使いません。親のidleや経過時間から終了を推測しません。
+
+CopilotのtoolCallIdは子session UUIDではありません。子自身の本文・数値を帰属確認できる記録はまだ未接続なので、この終了一覧に本文・利用量・親モデル・effortを代入しません。未取得を空の会話や0消費として扱わず、閲覧だけのmetadataと未接続理由を返します。親記録は1回4MiB・512MiB・1行256KiBまで、履歴用の正式開始対応は直近256件までです。この私有枠を超えても現在の件数foldを別の状態へ変えません。検証は導入SDKと公式SDKの定義から作った生成記録・模擬CLIを使ったもので、実Copilotの子の起動・終了を行った実証ではありません。
+
 Grokは正式なspawn/finishedの親・子・attemptを、親記録の全EOFと現在の世代で再検証します。別attemptの開始、親記録の追加・置換・切り詰め、親の検証失効では旧選択を拒否します。子自身の`chat_history.jsonl`と`usage.json`だけを安全に開き、親の数値を使いません。モデルが載る場合は正式に解決された観測値で、現在のモデルを保証する表示ではありません。
 
 認証済みAPIの`agent.subagent_history`は最大256件の収集から64件ずつ返します。`incomplete`は収集・検証が部分的、`omittedBefore`は上限で古い項目が省かれたことを表します。`pending`/`unavailable`を「終了した子が無い」とは解釈しません。開始・終了時刻、モデル・effortは正式に分かった項目だけを載せます。
 
 各行の`entryId`は履歴の選択用です。本文は`agent.subagent_history_transcript`、数値は`agent.subagent_history_usage`へ親pane・子ID・entryIdを渡して読みます。ファイルの場所は受け取りません。子が同じIDで再開しても古い選択を新しい実行へ切り替えず、未対応の旧接続先でも現在の子へのAPIへ戻りません。Cursorの子の数値は未取得のままで、親の数値を代わりに表示しません。履歴からの直接送信は行いません。
 
-これらはログイン済みの読取り口だけです。利用者のフックを黙って更新せず、CLI/モデルの新規起動やWindowsへの操作は行いません。現段階の結合検証は生成CLI/記録を使ったもので、実Codex/Muse/Cursor/Grokの子の再開や実機での検証成功を表すものではありません。
+これらはログイン済みの読取り口だけです。利用者のフックを黙って更新せず、CLI/モデルの新規起動やWindowsへの操作は行いません。現段階の結合検証は生成CLI/記録を使ったもので、実Codex/Muse/Copilot/Cursor/Grokの子の再開や実機での検証成功を表すものではありません。

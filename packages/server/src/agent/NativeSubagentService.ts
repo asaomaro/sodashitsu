@@ -10,7 +10,7 @@ interface Deps {
   observeClaude?: (source:ClaudeChildSource)=>Promise<Subagents|undefined>;
   session: { snapshot(): { panes: Pane[] }; getPane(id: string): Pane | undefined; setAgentSubagents(id: string, value: Subagents | undefined): boolean; hasVerifiedAgentSession(paneId: string, instanceId: string, sessionId: string): boolean };
   bus: Pick<EventBus, "subscribe">;
-  reader?: Pick<NativeSubagentReader, "read" | "forget" | "close"> & Partial<Pick<NativeSubagentReader,"progress"|"museChildSession"|"museChildInput"|"grokTerminals"|"codexTerminals"|"museTerminals">>;
+  reader?: Pick<NativeSubagentReader, "read" | "forget" | "close"> & Partial<Pick<NativeSubagentReader,"progress"|"museChildSession"|"museChildInput"|"grokTerminals"|"codexTerminals"|"museTerminals"|"copilotTerminals">>;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (timer: unknown) => void;
@@ -125,6 +125,13 @@ export class NativeSubagentService {
     if(this.closed||source?.kind!=="muse"||!cwd||!same(source,this.known.get(paneId))||!this.verified(source))return unavailable();
     const current=()=>!this.closed&&this.deps.session.getPane(paneId)?.cwd===cwd&&same(source,sourceOf(this.deps.session.getPane(paneId)))&&same(source,this.known.get(paneId))&&this.verified(source);
     return this.reader.museTerminals?.(source,current)??unavailable();
+  }
+  copilotTerminals(paneId:string):SubagentTerminalCollection {
+    const pane=this.deps.session.getPane(paneId),source=sourceOf(pane),cwd=pane?.cwd;
+    const unavailable=():SubagentTerminalCollection=>({status:"unavailable",bindings:[],incomplete:true});
+    if(this.closed||source?.kind!=="copilot"||!cwd||!same(source,this.known.get(paneId))||!this.verified(source))return unavailable();
+    const current=()=>!this.closed&&this.deps.session.getPane(paneId)?.cwd===cwd&&same(source,sourceOf(this.deps.session.getPane(paneId)))&&same(source,this.known.get(paneId))&&this.verified(source);
+    return this.reader.copilotTerminals?.(source,current)??unavailable();
   }
   museChildSession(paneId:string,child:string):string|undefined {
     const source=sourceOf(this.deps.session.getPane(paneId));

@@ -48,7 +48,7 @@ export class SubagentHistoryService {
  transcript(params:AgentSubagentHistoryTranscriptParams,allowed:()=>boolean=()=>true):Promise<AgentSubagentHistoryTranscriptResult>{
   return this.bounded(unreadable,allowed,async current=>{
    const grant=await this.history.grant(params.paneId,params.agentId,current,params.entryId),target=grant?.proof?.target;if(!grant||!target)return unreadable();
-   const owned=()=>current()&&grant.current()&&target.current();const opened=await target.openRecord("transcript",owned);if(!opened)return unreadable();
+   const owned=()=>current()&&grant.current()&&target.current();const opened=await target.openRecord("transcript",owned);if(!opened)return target.transcriptUnavailableReason&&owned()?{...unreadable(),reason:target.transcriptUnavailableReason}:unreadable();
    try{
     if(!owned()||process.geteuid&&opened.st.uid!==process.geteuid())return unreadable();
     const page=await readTranscriptHandle(opened,params.offset,target.entries);

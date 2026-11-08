@@ -1,8 +1,9 @@
 import type {BigIntStats} from "node:fs";
 import {randomUUID} from "node:crypto";
+import {copilotTerminalBindings} from "./CopilotTerminalBindings.js";
 import {museTerminalBindings} from "./MuseTerminalBindings.js";
 import {codexTerminalBindings} from "./CodexTerminalBindings.js";
-import type {CodexTerminalFact,MuseTerminalFact} from "./NativeSubagentRecords.js";
+import type {CodexTerminalFact,MuseTerminalFact,CopilotTerminalFact} from "./NativeSubagentRecords.js";
 import type {SubagentTerminalCollection} from "./SubagentTerminalBinding.js";
 import { readCodexControlStatus, type CodexControlTarget, type CodexObservedState } from "./CodexControlStatus.js";
 import { MuseChildObservations } from "./MuseChildObservations.js";
@@ -30,6 +31,7 @@ interface State {
   inputRevision?:BigIntStats;
   codexEOF?:BigIntStats;
   museEOF?:BigIntStats;
+  copilotEOF?:BigIntStats;
   key: string;
   fold: NativeSubagentRecords;
   offset: number;
@@ -108,6 +110,26 @@ export class NativeSubagentReader {
       return accepted&&allowed()&&current(fact)&&state.museEOF!==undefined&&exactRevision(revision,state.museEOF);
     };
     return museTerminalBindings({source:{...source,kind:"muse"},roots:this.roots,namespace,facts,current,verify});
+  }
+
+  copilotTerminals(source:NativeSubagentSource,verified:()=>boolean):SubagentTerminalCollection {
+    const state=this.states.get(source.paneId),key=JSON.stringify([source.instanceId,source.kind,source.sessionId]);
+    const unavailable=():SubagentTerminalCollection=>({status:"unavailable",bindings:[],incomplete:true});
+    if(this.closed||source.kind!=="copilot"||!verified()||!state||state.key!==key)return unavailable();
+    const facts=state.fold.copilotTerminals();if(!facts||!state.copilotEOF)return{status:state.pending?"pending":"unavailable",bindings:[],incomplete:true};
+    const namespace=state.namespace;
+    const current=(fact:CopilotTerminalFact)=>!this.closed&&verified()&&this.states.get(source.paneId)===state&&state.key===key&&state.namespace===namespace&&!state.abort.signal.aborted&&!state.invalid&&!state.pending&&state.copilotEOF!==undefined&&state.offset===Number(state.copilotEOF.size)&&state.fold.copilotTerminals()?.some(now=>now.id===fact.id&&now.eventId===fact.eventId&&now.startedAt===fact.startedAt&&now.endedAt===fact.endedAt)===true;
+    const verify=async(fact:CopilotTerminalFact,allowed:()=>boolean)=>{
+      if(!allowed()||!current(fact)||this.terminalChecks>=4)return false;this.terminalChecks++;
+      let opened:OpenedFile|null=null,accepted=false;const revision=state.copilotEOF!;
+      try{opened=await this.open(source);if(!opened)return false;
+        const before=await opened.fd.stat({bigint:true});
+        if(process.geteuid&&before.uid!==BigInt(process.geteuid())||!allowed()||!current(fact)||!exactRevision(revision,before)||state.copilotEOF===undefined||!exactRevision(revision,state.copilotEOF)||!await this.sameRecordPath(source,revision)||!allowed()||!current(fact))return false;
+        const after=await opened.fd.stat({bigint:true});accepted=allowed()&&current(fact)&&exactRevision(revision,after)&&state.copilotEOF!==undefined&&exactRevision(revision,state.copilotEOF);
+      }catch{return false;}finally{await opened?.fd.close().catch(()=>undefined);this.terminalChecks--;}
+      return accepted&&allowed()&&current(fact)&&state.copilotEOF!==undefined&&exactRevision(revision,state.copilotEOF);
+    };
+    return copilotTerminalBindings({source:{...source,kind:"copilot"},namespace,facts,current,verify});
   }
 
   private async sameRecordPath(source:NativeSubagentSource,revision:BigIntStats):Promise<boolean>{
@@ -194,11 +216,11 @@ export class NativeSubagentReader {
       const { fd, st } = opened;
       const live=()=>!this.closed&&this.states.get(source.paneId)===state&&!state.abort.signal.aborted;
       if(!live())return undefined;
-      const scanRevision=source.kind==="codex"||source.kind==="muse"?await fd.stat({bigint:true}):undefined;
+      const scanRevision=await fd.stat({bigint:true});
       if(!live()||scanRevision&&scanRevision.size!==BigInt(st.size))return undefined;
       const rewritten=scanRevision&&state.inputRevision&&scanRevision.size===state.inputRevision.size&&!exactRevision(scanRevision,state.inputRevision);
       if (state.dev !== st.dev || state.ino !== st.ino || st.size < state.offset || rewritten) {
-        state.namespace=randomUUID();delete state.codexEOF;delete state.museEOF;delete state.inputRevision;
+        state.namespace=randomUUID();delete state.codexEOF;delete state.museEOF;delete state.copilotEOF;delete state.inputRevision;
         state.generation++; this.museObservations.forget();
         state.offset = 0; state.fold = new NativeSubagentRecords(source.kind as NativeSubagentKind, source.sessionId); state.invalid = false;
         delete state.codex;
@@ -206,7 +228,7 @@ export class NativeSubagentReader {
       state.dev = st.dev; state.ino = st.ino;
       if (state.invalid || st.size > MAX_BYTES) return undefined;
       const bytes = await readRange(fd, state.offset, Math.min(CHUNK, st.size - state.offset));
-      if(scanRevision){if(bytes.length){delete state.codexEOF;delete state.museEOF;}state.inputRevision=scanRevision;}
+      if(scanRevision){if(bytes.length){delete state.codexEOF;delete state.museEOF;delete state.copilotEOF;}state.inputRevision=scanRevision;}
       if (source.kind === "codex") {
         state.codex ??= new CodexSubagentStream();
         state.codex.consume(bytes, state.fold);
@@ -251,7 +273,7 @@ export class NativeSubagentReader {
         if (bytes.length > MAX_LINE) state.invalid = true;
         // Muse child settings can change while its parent record stays at EOF.
         // Reuse the existing revision/current checks below for an empty EOF read.
-        if (state.invalid || source.kind !== "muse" || bytes.length !== 0 || state.offset !== st.size) return state.invalid ? undefined : state.fold.snapshot();
+        if (state.invalid || (source.kind !== "muse"&&source.kind!=="copilot") || bytes.length !== 0 || state.offset !== st.size) return state.invalid ? undefined : state.fold.snapshot();
       }
       let start = 0;
       while (start <= end) {
@@ -269,11 +291,12 @@ export class NativeSubagentReader {
       // Do not show a historical prefix as current activity until the full available record was folded.
       if (state.invalid || scanning) return undefined;
       const members=state.fold.snapshot();
-      if(source.kind==="muse"&&state.offset===st.size){
+      if((source.kind==="muse"||source.kind==="copilot")&&state.offset===st.size){
         const seal=await fd.stat({bigint:true});
+        if(source.kind==="copilot"&&process.geteuid&&seal.uid!==BigInt(process.geteuid())){delete state.copilotEOF;return members;}
         if(!live()||!exactRevision(scanRevision!,seal)||!await this.sameRecordPath(source,seal)||!live())return undefined;
         const afterSeal=await fd.stat({bigint:true});if(!live()||!exactRevision(seal,afterSeal))return undefined;
-        state.museEOF=seal;
+        state[source.kind==="muse"?"museEOF":"copilotEOF"]=seal;
       }
       if(source.kind!=="muse"||!members?.items.length)return members;
       const revision=await fd.stat({bigint:true});

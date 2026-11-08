@@ -1,0 +1,21 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "../../.."
+  },
+  "files": [
+    "../../../packages/server/src/agent/NativeSubagentRecords.ts",
+    "../../../packages/server/src/agent/NativeSubagentReader.ts",
+    "../../../packages/server/src/agent/NativeSubagentService.ts",
+    "../../../packages/server/src/agent/CopilotTerminalBindings.ts",
+    "../../../packages/server/src/agent/CopilotTerminalHistory.test.ts",
+    "../../../packages/server/src/agent/SubagentTerminalBinding.ts",
+    "../../../packages/server/src/agent/SubagentHistoryService.ts",
+    "../../../packages/server/src/composeServer.ts",
+    "../../../packages/server/src/composeServer.copilotTerminalHistory.integration.test.ts"
+  ],
+  "include": [],
+  "exclude": []
+}

@@ -4,6 +4,7 @@ import type { SubagentInfo } from "@sodashitsu/protocol";
 import type { Subagents } from "./SubagentTracker.js";
 
 export type NativeSubagentKind = "codex" | "muse" | "copilot";
+export interface CopilotTerminalFact {id:string;startedAt:number;endedAt:number;eventId:string;terminalStatus:"completed"|"error";description?:string;type?:string}
 export interface MuseTerminalFact {id:string;childSession:string;startedAt:number;endedAt:number;eventId:string;description?:string;type?:string}
 export interface CodexTerminalFact {id:string;startedAt:number;endedAt:number;eventId:string;terminalStatus:"completed"|"aborted";description?:string;type?:string}
 const ID = /^[A-Za-z0-9_:.-]{1,128}$/;
@@ -41,6 +42,12 @@ export class NativeSubagentRecords {
   private readonly codexEnds = new Map<string,CodexTerminalFact>();
   private codexMalformed = false;
   private copilotMalformed = false;
+  private readonly copilotStarts = new Map<string,{item:SubagentInfo;eventId:string}>();
+  private readonly copilotEnds = new Map<string,CopilotTerminalFact>();
+  copilotTerminals():readonly CopilotTerminalFact[]|undefined {
+    if(this.kind!=="copilot"||!this.seen||this.limited||this.copilotMalformed||this.uncertain.size)return;
+    return [...this.copilotEnds.values()].map(value=>({...value}));
+  }
   private seen = false;
   private limited = false;
   constructor(readonly kind: NativeSubagentKind, readonly sessionId: string) {}
@@ -218,6 +225,15 @@ export class NativeSubagentRecords {
     if (!this.admit(`p:${row.id}`)) return;
     const type = label(data.agentName, 64), description = label(data.agentDescription, 200);
     const phase = row.type.slice(row.type.indexOf(".") + 1);
+    const id=data.toolCallId;
+    this.copilotEnds.delete(id);
+    if(phase==="started"){
+      if(!this.copilotStarts.has(id)&&this.copilotStarts.size>=MAX){const oldest=this.copilotStarts.keys().next().value!;this.copilotStarts.delete(oldest);this.copilotEnds.delete(oldest);}
+      this.copilotStarts.set(id,{item:{id,startedAt:at,depth:1,...(type?{type}:{}),...(description?{description}:{})},eventId:row.id});
+    }else if(phase==="completed"||phase==="failed"){
+      const start=this.copilotStarts.get(id);
+      if(start&&at>=start.item.startedAt)this.copilotEnds.set(id,{id,startedAt:start.item.startedAt,endedAt:at,eventId:JSON.stringify([start.eventId,row.id,row.type,at]),terminalStatus:phase==="completed"?"completed":"error",...(start.item.type?{type:start.item.type}:{}),...(start.item.description?{description:start.item.description}:{})});
+    }else this.copilotStarts.delete(id);
     this.apply(data.toolCallId, phase === "started" ? "active" : ["completed", "failed"].includes(phase) ? "terminal" : "unknown", at, { ...(type ? { type } : {}), ...(description ? { description } : {}) });
   }
 }

@@ -13,6 +13,7 @@ export interface SubagentTerminalBinding {
  recordId:string;
  /** Provider birth precision for numeric filtering; independent of public millisecond display. */
  usageStartedAt?:number;
+ transcriptUnavailableReason?:string;
  current():boolean;
  verify(allowed:()=>boolean):Promise<boolean>;
  openRecord(purpose:"transcript"|"usage",allowed:()=>boolean):Promise<TerminalRecord|undefined>;
