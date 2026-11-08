@@ -1,0 +1,234 @@
+✖ actual clock rejects with immutable generated worker_late telemetry (13.559047ms)
+✖ actual clock rejects with immutable generated delivery_late telemetry (3.146155ms)
+✖ actual clock rejects with immutable generated delivery_order telemetry (1.698193ms)
+✖ actual clock rejects with immutable generated callback_late telemetry (5.59253ms)
+✖ actual clock rejects with immutable generated callback_async telemetry (3.481598ms)
+✖ actual clock rejects with immutable generated callback_ui_budget telemetry (3.929523ms)
+✖ actual clock rejects with immutable generated callback_send_not_live telemetry (4.931302ms)
+✖ actual clock rejects with immutable generated callback_other telemetry (4.365486ms)
+✖ actual clock rejects with immutable generated worker_error telemetry (2.677951ms)
+✖ actual clock rejects with immutable generated worker_exit telemetry (3.904946ms)
+✖ actual clock rejects with immutable generated timeout telemetry (2.389668ms)
+✖ actual clock rejects with immutable generated missing_frame telemetry (3.014276ms)
+✖ exact observed values bounded and rounded; zero received is not sent evidence (0.941416ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 0
+ℹ fail 13
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 636.633364
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated worker_late telemetry (13.559047ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated delivery_late telemetry (3.146155ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated delivery_order telemetry (1.698193ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated callback_late telemetry (5.59253ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated callback_async telemetry (3.481598ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated callback_ui_budget telemetry (3.929523ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated callback_send_not_live telemetry (4.931302ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated callback_other telemetry (4.365486ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated worker_error telemetry (2.677951ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated worker_exit telemetry (3.904946ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated timeout telemetry (2.389668ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:218
+✖ actual clock rejects with immutable generated missing_frame telemetry (3.014276ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(evidence)
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:7:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:8:1
+✖ exact observed values bounded and rounded; zero received is not sent evidence (0.941416ms)
+  TypeError [Error]: Cannot read properties of undefined (reading 'maxWorkerLatenessMs')
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:8:146)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

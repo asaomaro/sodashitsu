@@ -1,0 +1,22 @@
+{
+  "negative": [
+    {
+      "name": "negative-old-clock.log",
+      "exit": 1
+    },
+    {
+      "name": "negative-old-intake.log",
+      "exit": 1
+    }
+  ],
+  "restored": {
+    "scripts/remote-desktop/protected-microphone-phase3/absolute-pcm.mjs": {
+      "sha256": "3e5836b8979878a6bb69d44a30d2c0233183abbdee7963f1953e9a84bf8cb4b8",
+      "byteExact": true
+    },
+    "scripts/remote-desktop/protected-microphone-phase3/run-a.mjs": {
+      "sha256": "64b348e75154ace1963e14c0886e15ad1ed8d99373140a3cf2d97be75b881dac",
+      "byteExact": true
+    }
+  }
+}

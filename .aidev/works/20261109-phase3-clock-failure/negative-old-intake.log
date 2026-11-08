@@ -1,0 +1,18 @@
+✖ foreign errors cannot invent telemetry and actual A catch attaches only branded cadence (13.693861ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 131.131144
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:9:1
+✖ foreign errors cannot invent telemetry and actual A catch attaches only branded cadence (13.693861ms)
+  TypeError [Error]: Cannot read properties of undefined (reading 'code')
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-clock-failure/scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs:9:916)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

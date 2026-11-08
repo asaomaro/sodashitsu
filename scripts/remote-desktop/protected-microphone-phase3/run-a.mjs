@@ -1,7 +1,7 @@
 // New phase3 A fixture. This is not a product command or an automatic elevation/unlock tool.
 import {readFile,writeFile,mkdir,lstat,rm,access,realpath} from 'node:fs/promises';import {resolve,dirname,join} from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';import {fork} from 'node:child_process';import {createRequire} from 'node:module';import {randomUUID} from 'node:crypto';
 import {FIXTURE_FILES} from './prepare.mjs';
-import {AbsolutePcm,generatedFrame} from './absolute-pcm.mjs';import {assertManifest,checkedFile,receipt,ownEnv,bounded,probe,sha} from './safety.mjs';
+import {AbsolutePcm,generatedFrame,clockFailureEvidence} from './absolute-pcm.mjs';import {assertManifest,checkedFile,receipt,ownEnv,bounded,probe,sha} from './safety.mjs';
 const exists=p=>access(p).then(()=>true,()=>false),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 export const A_FAILURE_STAGES=Object.freeze(['other','receiver_wait','receiver_identity','receiver_native_probe','receiver_native_scope','protected_source_connect','protected_source_start','protected_source_ready','protected_source_schema','protected_source_proof','microphone_ticket_wait','microphone_ticket_proof','microphone_lane_connect','microphone_lane_ready_wait','microphone_start_send','microphone_running_wait','silence_pump_start','actor_probe','actor_scope','receiver_go','baseline_wait','baseline_proof','tone_cadence','post_tone_silence','receiver_result_wait','microphone_stop_send','microphone_stop_wait','settings_after','measurement_record','unknown']);
 export function failureStageA(value){return A_FAILURE_STAGES.includes(value)?value:'unknown';}
@@ -92,7 +92,7 @@ export async function runA(manifestPath){
   stage='microphone_stop_send';stopExpected=true;mic.send(JSON.stringify({type:'microphone_stop',id:streamId}));stage='microphone_stop_wait';await until(()=>micEvents.some(v=>v.type==='microphone_status'&&v.id===streamId&&v.state==='stopped'),5000,'actor-stop-unknown');
   stage='settings_after';settingsAfter=await call('desktop.settings.get',{});if(JSON.stringify(settingsAfter.permissions)!==JSON.stringify(settingsBefore.permissions))issues.push('private-settings-changed');
   stage='measurement_record';measurementPassed=receiverResult.ok===true&&cadence.ok===true&&issues.length===0;await receipt(m.jobRoot,'measurement.json',{ok:measurementPassed,source:{backend:native.backend,mode:native.protectedDesktop,secureDesktop:true,protectedMicrophone:true},actorModuleSha256:actor.actors[0].moduleSha256,receiver:receiverResult,cadence,frames,sent,acked,issues,rawAudioStored:false,physicalMicrophoneUsed:false,modelCalls:0});
- }catch(error){failureStage=failureStageA(stage);failureClass=failureClassA(error);issues.push('fixture-failed-closed');}
+ }catch(error){if(stage==='tone_cadence'){const observedCadence=clockFailureEvidence(error);if(observedCadence)failureEvidence.cadence=observedCadence;}failureStage=failureStageA(stage);failureClass=failureClassA(error);issues.push('fixture-failed-closed');}
  finally{
   retiring=true;stopViewerHeartbeat();if(pump)clearInterval(pump);monitor?.close();if(clock)await clock.close();if(mic?.readyState===1&&streamId)mic.send(JSON.stringify({type:'microphone_stop',id:streamId}));if(viewer?.readyState===1)viewer.send(JSON.stringify({type:'stop'}));const attachRetirement=attachment?.retire();for(const socket of sockets)socket.close();if(attachRetirement)attachmentRetired=await Promise.race([attachRetirement.then(()=>true),sleep(3500).then(()=>false)]);
   await writeFile(join(m.jobRoot,'stop'),'',{flag:'wx'}).catch(()=>{});
