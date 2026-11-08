@@ -1,6 +1,7 @@
 import { lstat, realpath, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import WebSocket from "ws";
+import { createHash } from "node:crypto";
 import { openVerified } from "./safeFile.js";
 const object = (value: unknown): Record<string, unknown> | undefined => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 async function smallFile(path: string): Promise<string> {
@@ -40,7 +41,7 @@ async function ownedSocket(homeInput: string, check: () => void) {
     };
     const generation = await identity(); check();
 
-    return { home, socket, unchanged: async () => { try { check();
+    return { home, socket, identity:createHash("sha256").update(JSON.stringify([pidText,generation,socketStat.dev,socketStat.ino])).digest("hex"), unchanged: async () => { try { check();
     const afterSocket = await lstat(socket);
     return await realpath(link) === socket && afterSocket.dev === socketStat.dev && afterSocket.ino === socketStat.ino && afterSocket.uid === socketStat.uid && !(afterSocket.mode & 0o077) && await smallFile(pidPath) === pidText && await identity() === generation;
     } catch { return false; } } };
@@ -56,6 +57,8 @@ export interface CodexChannelTarget {
   owned?: Set<Promise<void>>;
 }
 export interface CodexControlChannel<M extends string> {
+  /** Opaque daemon/socket generation; optional for legacy injected channels. */
+  readonly identity?: string;
   request(method: M, params: object): Promise<unknown>;
   initialized(): void;
   unchanged(): Promise<boolean>;
@@ -110,6 +113,7 @@ export async function openCodexControl<M extends string>(target: CodexChannelTar
     await new Promise<void>((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); ws.once("close", () => reject(Error("Control closed"))); }); live();
   } catch (error) { await close(); throw error; }
   return {
+    identity:lease.identity,
     request: (method, params) => {
       live(); if (failure) throw failure;
       if (!allowed.includes(method) || next >= target.maxRequests || closed || ws.readyState !== WebSocket.OPEN) throw Error("Control method/budget unavailable");

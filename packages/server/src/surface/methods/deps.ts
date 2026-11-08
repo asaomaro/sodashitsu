@@ -69,6 +69,7 @@ export interface MethodDeps {
   agentFork?: AgentForkRunner;
   /** サブエージェントの記録を読む（20261008-graph-first の PR6c）。無ければ `agent.subagent_transcript` を登録しない。 */
   subagentTranscripts?: Pick<SubagentTranscriptReader, "read">;
+  subagentControl?: Pick<import("../../agent/SubagentControlService.js").SubagentControlService,"control"|"send">;
   /** エージェントの利用状況（20261010-agent-usage）。無ければ `agent.usage` を登録しない。 */
   usage?: Pick<UsageService, "get" | "accountCost">;
   usageInsights?: Pick<import("../../usage/UsageInsights.js").UsageInsightsReader,"read">;

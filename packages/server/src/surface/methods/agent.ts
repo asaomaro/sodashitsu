@@ -1,3 +1,4 @@
+import { AgentSubagentControlParams, AgentSubagentSendParams } from "@sodashitsu/protocol";
 import {createAssistantModelLister} from "../../agent/assistantModels.js";
 import {AssistantModelCatalogParams} from "@sodashitsu/protocol";
 import {usageWorkContext} from "../../conversation/UsageWorkContext.js";
@@ -188,6 +189,12 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
 
   // サブエージェントの記録を、読むだけで追う（20261008-graph-first の PR6c）。ログイン済みの `/ws` の方式だけ（`pane.sock` には載せない）。
   // 読み方・安全の作りは `agent/SubagentTranscript.ts`。`sodactl`（external）からも、`agent read` と同じ扱いで呼べる（認証を通った接続は、pane の出力もファイルも読める）。
+  const control=deps.subagentControl;
+  if(control){
+    const context=(ctx:MethodContext)=>({owner:ctx.connection??ctx.sink,current:()=>ctx.connectionAuthorized?.()!==false&&!ctx.signal?.aborted,...(ctx.signal?{signal:ctx.signal}:{})});
+    surface.register("agent.subagent_control",{schema:AgentSubagentControlParams,handler:(ctx,p)=>control.control(p.paneId,p.agentId,context(ctx))});
+    surface.register("agent.subagent_send",{schema:AgentSubagentSendParams,handler:(ctx,p)=>control.send(p,context(ctx))});
+  }
   const transcripts = deps.subagentTranscripts;
   if (transcripts) {
     surface.register("agent.subagent_transcript", {
