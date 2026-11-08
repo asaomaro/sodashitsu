@@ -1,0 +1,25 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agy-terminal-history
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts (15 tests | 1 failed | 14 skipped) 82ms
+   × caches unchanged parent parsing, preserves grants only after an unrelated append reaches complete EOF 81ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/AntigravityTerminalHistory.test.ts > caches unchanged parent parsing, preserves grants only after an unrelated append reaches complete EOF
+AssertionError: expected 'ok' to be 'unavailable' // Object.is equality
+
+Expected: "unavailable"
+Received: "ok"
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts:47:263
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  20:56:13
+   Duration  1.34s (transform 74%, import 19%, tests 7%)
+

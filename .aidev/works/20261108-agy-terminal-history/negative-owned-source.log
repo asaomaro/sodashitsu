@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agy-terminal-history
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts (15 tests | 1 failed | 14 skipped) 100ms
+   × keeps physical slots through parent FD close and rejects late results after source proof retires 99ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/AntigravityTerminalHistory.test.ts > keeps physical slots through parent FD close and rejects late results after source proof retires
+AssertionError: expected [ true, true, true, true ] to deeply equal [ false, false, false, false ]
+
+- Expected
++ Received
+
+  [
+-   false,
+-   false,
+-   false,
+-   false,
++   true,
++   true,
++   true,
++   true,
+  ]
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts:76:218
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  20:56:16
+   Duration  1.20s (transform 72%, import 19%, tests 9%)
+

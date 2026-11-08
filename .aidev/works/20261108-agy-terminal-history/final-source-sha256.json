@@ -1,0 +1,46 @@
+{
+  "sourceHead": "c200d38d7869e852fe3f7bfbb9c8acf096053e0a",
+  "files": [
+    {
+      "file": "packages/server/src/agent/AntigravityChildRecord.ts",
+      "sha256": "a8139eec85d2df865b4cd992679c39d381f579c7565e80a570e30188c4019d31",
+      "fixedCommitMatches": true
+    },
+    {
+      "file": "packages/server/src/agent/AntigravitySubagentReader.ts",
+      "sha256": "39689e3b3f611df864762693cdea6cd78a844abe79a68a0be2e642bbfe2589da",
+      "fixedCommitMatches": true
+    },
+    {
+      "file": "packages/server/src/agent/AntigravityTerminalHistory.test.ts",
+      "sha256": "091d6854de4ff3fd3e2c849ea4c425d643ad1b9e85ded02c75b62902cfc72bf3",
+      "fixedCommitMatches": true
+    },
+    {
+      "file": "packages/server/src/agent/AntigravityTerminalHistory.ts",
+      "sha256": "02b86f54688cc4b1a06b1a3b03cf3c89adb535355bc95ea881e6f7b413e41612",
+      "fixedCommitMatches": true
+    },
+    {
+      "file": "packages/server/src/agent/AntigravityTerminalSnapshot.ts",
+      "sha256": "88c3ef1d75a6afd9c90cca48eb33228aa9e35c21ffbee73dd3ed42a6752a1ce9",
+      "fixedCommitMatches": true
+    },
+    {
+      "file": "packages/server/src/agent/NativeSubagentService.ts",
+      "sha256": "35c53485da950c777a2055a24e1d5454bbac6984859c1adb6d3ef5e3e1809f01",
+      "fixedCommitMatches": true
+    },
+    {
+      "file": "packages/server/src/composeServer.agyTerminalHistory.integration.test.ts",
+      "sha256": "d144e387f1163661a6f994c8d6ef72a04cae1a2c1d1788f9ffea1cef7d02356a",
+      "fixedCommitMatches": true
+    },
+    {
+      "file": "packages/server/src/composeServer.ts",
+      "sha256": "6264503096fbd6d7f2b098e766e566a0227a3d04cdc61bdc568c9b8c08d81c79",
+      "fixedCommitMatches": true
+    }
+  ],
+  "allMatch": true
+}

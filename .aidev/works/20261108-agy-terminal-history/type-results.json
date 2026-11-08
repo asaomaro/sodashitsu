@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "sourceHead": "c200d38d7869e852fe3f7bfbb9c8acf096053e0a",
+  "command": "Node24.22.2 --max-old-space-size=8192 tsc -p local tsconfig.json",
+  "scope": "6 runtime and 2 changed fixture entrypoints with strict transitive dependencies",
+  "earlierRun": "log empty and process completed; original exit receipt unavailable after context loss, not used as final proof"
+}

@@ -1,0 +1,31 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agy-terminal-history
+
+{"ts":"2026-11-08T11:36:51.783Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T11:36:51.785Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T11:36:51.786Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T11:36:51.786Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T11:36:51.787Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T11:36:51.788Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T11:36:51.789Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T11:36:51.789Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-copilot-terminal-public-evtAC4/state/commands.json","count":0}
+{"ts":"2026-11-08T11:36:51.789Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T11:36:51.790Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T11:36:51.790Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T11:36:51.791Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T11:36:51.791Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T11:36:51.793Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-codex-terminal-public-N85Bhr/state/commands.json","count":0}
+{"ts":"2026-11-08T11:36:51.793Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-muse-terminal-public-pCulfv/state/commands.json","count":0}
+{"ts":"2026-11-08T11:36:52.439Z","level":"info","msg":"agent session attached","paneId":"7874a211-893e-4a3c-9c32-115257fc5ebf","kind":"copilot","session":"beb2cf21","source":"hook"}
+{"ts":"2026-11-08T11:36:52.439Z","level":"info","msg":"agent session attached","paneId":"34483571-8806-4733-bf0f-2c8090bf0052","kind":"muse","session":"01a1b40b","source":"hook"}
+{"ts":"2026-11-08T11:36:52.448Z","level":"info","msg":"agent session attached","paneId":"7f198dec-e9f6-4775-9247-cf4493584f25","kind":"codex","session":"68bb0425","source":"hook"}
+
+ Test Files  14 passed (14)
+      Tests  158 passed (158)
+   Start at  20:36:46
+   Duration  11.83s (tests 46%, transform 37%, import 17%)
+
+  Transform  transforming modules took 21.79s · 37% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

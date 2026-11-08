@@ -1,0 +1,153 @@
+{
+  "sourceHead": "c200d38d7869e852fe3f7bfbb9c8acf096053e0a",
+  "controls": [
+    {
+      "name": "old-compose",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        ".aidev/works/20261108-agy-terminal-history/vitest.config.mjs",
+        "--maxWorkers",
+        "1",
+        "packages/server/src/composeServer.agyTerminalHistory.integration.test.ts"
+      ],
+      "kind": "old-base-runtime"
+    },
+    {
+      "name": "alive-not-terminal",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        ".aidev/works/20261108-agy-terminal-history/vitest.config.mjs",
+        "--maxWorkers",
+        "1",
+        "packages/server/src/agent/AntigravityTerminalHistory.test.ts",
+        "-t",
+        "never infers termination"
+      ],
+      "kind": "targeted-guard-fault"
+    },
+    {
+      "name": "full-eof",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        ".aidev/works/20261108-agy-terminal-history/vitest.config.mjs",
+        "--maxWorkers",
+        "1",
+        "packages/server/src/agent/AntigravityTerminalHistory.test.ts",
+        "-t",
+        "caches unchanged"
+      ],
+      "kind": "targeted-guard-fault"
+    },
+    {
+      "name": "namespace-rewrite",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        ".aidev/works/20261108-agy-terminal-history/vitest.config.mjs",
+        "--maxWorkers",
+        "1",
+        "packages/server/src/agent/AntigravityTerminalHistory.test.ts",
+        "-t",
+        "retires namespace"
+      ],
+      "kind": "targeted-guard-fault"
+    },
+    {
+      "name": "owned-source",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        ".aidev/works/20261108-agy-terminal-history/vitest.config.mjs",
+        "--maxWorkers",
+        "1",
+        "packages/server/src/agent/AntigravityTerminalHistory.test.ts",
+        "-t",
+        "keeps physical slots"
+      ],
+      "kind": "targeted-guard-fault"
+    },
+    {
+      "name": "physical-quota",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        ".aidev/works/20261108-agy-terminal-history/vitest.config.mjs",
+        "--maxWorkers",
+        "1",
+        "packages/server/src/agent/AntigravityTerminalHistory.test.ts",
+        "-t",
+        "keeps physical slots"
+      ],
+      "kind": "targeted-guard-fault"
+    },
+    {
+      "name": "unchanged-cache",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        ".aidev/works/20261108-agy-terminal-history/vitest.config.mjs",
+        "--maxWorkers",
+        "1",
+        "packages/server/src/agent/AntigravityTerminalHistory.test.ts",
+        "-t",
+        "caches unchanged"
+      ],
+      "kind": "targeted-guard-fault"
+    },
+    {
+      "name": "descriptor-generation",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        ".aidev/works/20261108-agy-terminal-history/vitest.config.mjs",
+        "--maxWorkers",
+        "1",
+        "packages/server/src/agent/AntigravityTerminalHistory.test.ts",
+        "-t",
+        "rejects old entry"
+      ],
+      "kind": "targeted-guard-fault"
+    }
+  ],
+  "restoration": {
+    "packages/server/src/composeServer.ts": {
+      "sha256": "6264503096fbd6d7f2b098e766e566a0227a3d04cdc61bdc568c9b8c08d81c79",
+      "byteExact": true
+    },
+    "packages/server/src/agent/AntigravityTerminalSnapshot.ts": {
+      "sha256": "88c3ef1d75a6afd9c90cca48eb33228aa9e35c21ffbee73dd3ed42a6752a1ce9",
+      "byteExact": true
+    },
+    "packages/server/src/agent/AntigravityTerminalHistory.ts": {
+      "sha256": "02b86f54688cc4b1a06b1a3b03cf3c89adb535355bc95ea881e6f7b413e41612",
+      "byteExact": true
+    }
+  }
+}

@@ -1,0 +1,21 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agy-terminal-history
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts (15 tests | 1 failed | 14 skipped) 120ms
+   × rejects old entry before/after revival and does not switch it to a later KILLED generation 118ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/AntigravityTerminalHistory.test.ts > rejects old entry before/after revival and does not switch it to a later KILLED generation
+TypeError: Cannot read properties of undefined (reading 'entryId')
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts:41:138
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  20:56:21
+   Duration  1.47s (transform 73%, import 18%, tests 9%)
+

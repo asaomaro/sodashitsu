@@ -1,0 +1,60 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agy-terminal-history
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts (15 tests | 1 failed | 14 skipped) 45ms
+   × never infers termination from ALIVE, idle-like parent DONE or missing/unknown descriptor 44ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/AntigravityTerminalHistory.test.ts > never infers termination from ALIVE, idle-like parent DONE or missing/unknown descriptor
+AssertionError: expected [ { …(10) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "description": "Generated child",
++     "file": "/tmp/soda-agy-terminal-ElTZy8/.gemini/antigravity-cli/brain/11111111-1111-4111-8111-111111111111/.system_generated/subagents/22222222-2222-4222-8222-222222222222.json",
++     "hasTranscript": true,
++     "id": "22222222-2222-4222-8222-222222222222",
++     "key": "4ad9e7d949aaba271fbd03f7d9d21ffe9faa5bd49829a53e90ac7422f81e4732",
++     "revision": BigIntStats {
++       "atimeMs": 1794138973168n,
++       "atimeNs": 1794138973168443123n,
++       "birthtimeMs": 1794138973168n,
++       "birthtimeNs": 1794138973168443123n,
++       "blksize": 4096n,
++       "blocks": 8n,
++       "ctimeMs": 1794138973168n,
++       "ctimeNs": 1794138973168443123n,
++       "dev": 2096n,
++       "gid": 1000n,
++       "ino": 1626679n,
++       "mode": 33188n,
++       "mtimeMs": 1794138973168n,
++       "mtimeNs": 1794138973168443123n,
++       "nlink": 1n,
++       "rdev": 0n,
++       "size": 175n,
++       "uid": 1000n,
++     },
++     "spawnStepIndex": 2,
++     "startedAt": 1794024683000,
++     "state": "SUBAGENT_STATE_ALIVE",
++     "type": "worker",
++   },
++ ]
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts:33:110
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  20:56:11
+   Duration  1.25s (transform 76%, import 20%, tests 4%)
+

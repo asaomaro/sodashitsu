@@ -1,0 +1,28 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agy-terminal-history
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts (15 tests | 1 failed | 14 skipped) 71ms
+   × retires namespace on same-size parent rewrite/truncate and requires fresh source after forget/close 69ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/AntigravityTerminalHistory.test.ts > retires namespace on same-size parent rewrite/truncate and requires fresh source after forget/close
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts:53:368
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  20:56:15
+   Duration  1.20s (transform 74%, import 19%, tests 6%)
+

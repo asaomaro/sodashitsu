@@ -1,0 +1,33 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agy-terminal-history
+
+{"ts":"2026-11-08T11:56:44.645Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:44.646Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:44.647Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:44.647Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T11:56:44.648Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:44.650Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-muse-terminal-public-8RxISd/state/commands.json","count":0}
+{"ts":"2026-11-08T11:56:44.650Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:44.650Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:44.650Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T11:56:44.653Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-agy-terminal-public-wASDfM/state/commands.json","count":0}
+{"ts":"2026-11-08T11:56:45.260Z","level":"info","msg":"agent session attached","paneId":"47bc850c-b65d-4c46-b35a-3a51283fb983","kind":"muse","session":"01a1b40b","source":"hook"}
+{"ts":"2026-11-08T11:56:45.315Z","level":"info","msg":"agent session attached","paneId":"09cab981-65f7-4985-8848-3f430888fc8c","kind":"agy","session":"11111111","source":"hook"}
+{"ts":"2026-11-08T11:56:51.695Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:51.696Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:51.697Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:51.697Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T11:56:51.701Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-copilot-terminal-public-BIdVFv/state/commands.json","count":0}
+{"ts":"2026-11-08T11:56:51.746Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:51.747Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:51.748Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T11:56:51.748Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T11:56:51.751Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-codex-terminal-public-vgRKGW/state/commands.json","count":0}
+{"ts":"2026-11-08T11:56:52.355Z","level":"info","msg":"agent session attached","paneId":"c380cafb-7224-43a2-91aa-782be23770a4","kind":"copilot","session":"29de3cac","source":"hook"}
+{"ts":"2026-11-08T11:56:52.405Z","level":"info","msg":"agent session attached","paneId":"ae786bba-39d1-457a-80b5-5cb313d3a787","kind":"codex","session":"17ab31e8","source":"hook"}
+
+ Test Files  16 passed (16)
+      Tests  169 passed (169)
+   Start at  20:56:40
+   Duration  22.34s (tests 78%, transform 13%, import 9%)
+

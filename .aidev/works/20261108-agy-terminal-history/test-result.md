@@ -1,0 +1,14 @@
+# AGY terminal history: fixed-source evidence
+
+Fixed product: c200d38d (base b54a4942); 6 runtime and 2 fixture TypeScript files. No shared Binding/HistoryService/usage/IDdomain or Cursor edits.
+
+- Node24.22.2, pnpm9.15.9. Strict configured runtime+changed-test entrypoints and transitive imports: exit0, `typecheck-final.log` / `type-results.json`. An earlier run completed with empty log but its tool exit receipt was unavailable after context loss; it is not used as final proof.
+- 16 related suites / 169 tests PASS after restoration (`restored-related.log`). Initial 158/169 runs are background checks, final is exact restored source.
+- Eight controlled negatives each failed (`negative-*.log`): literal old b54 compose dispatcher; KILLED-only filtering; complete-LF EOF; same-size namespace rewrite; fresh source ownership; physical quota through close; unchanged-parent no body scan; descriptor generation. Old compose is actual pre-change code; other seven deliberately disable one safety/performance guard, not claims about old public behavior. Descriptor-generation negative loses the fresh selected entry (TypeError at expected entryId), rather than demonstrating a production success.
+- Three temporarily changed runtime files restored byte-exact against durable git-common-dir recovery copies, SHA matches `restoration.json`; all eight source/test blobs match fixed commit (`final-source-sha256.json`). Source bytes were not edited during strict typecheck; negative mutations occurred only after it completed.
+
+Generated private composition uses authenticated websocket APIs, own fake agy process and isolated temporary HOME/cwd/state. The formal format is based on sanitized self-probe AGY1.4.12 invoke/descriptor fixtures; this unit does not execute a real installed AGY/KILLED operation or model. It confirms count1 ALIVE -> count0 KILLED, terminal aborted row, no guessed endedAt/model/effort; child public parent-directed request only (not delivery evidence), self input100/output20/cache30 and no parent999999 or synthetic total. After ALIVE revival old strict body/usage reject; current ALIVE count recovers without history resurrection.
+
+Unchanged polling does no parent readRange. Partial/unparsed append blocks old body/usage; unrelated complete append preserves same fact only after formal rescan. KILLED/newdescriptor/rewrite/truncate/scope/forget/close retire prior proofs; physical slots remain held through FD close. Invalid or missing descriptors, wrong UUID/spawnStep, unknown state and symlinks fail closed. Parent <=4MiB/20k rows/256KiB line, descriptor <=32KiB/256 entries, cache64 and physical4. Oversize/unknown is unavailable, not known zero.
+
+No real model calls, Windows or user pane/record/viewer changes. Production server build follows separately once, with own workspace output directories and source hash equality.

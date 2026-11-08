@@ -1,0 +1,6 @@
+{
+  "exitCode": 0,
+  "sourceHead": "c200d38d7869e852fe3f7bfbb9c8acf096053e0a",
+  "command": "Node24.22.2 vitest run --config local/vitest.config.mjs --maxWorkers 2",
+  "scope": "16 related suites, original five provider/current regressions + generated AGY private composition"
+}

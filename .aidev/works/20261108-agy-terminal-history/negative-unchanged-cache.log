@@ -1,0 +1,84 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-agy-terminal-history
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts (15 tests | 1 failed | 14 skipped) 73ms
+   × caches unchanged parent parsing, preserves grants only after an unrelated append reaches complete EOF 72ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/AntigravityTerminalHistory.test.ts > caches unchanged parent parsing, preserves grants only after an unrelated append reaches complete EOF
+AssertionError: expected "readRange" to not be called at all, but actually been called 3 times
+
+Received:
+
+  1st readRange call:
+
+    Array [
+      FileHandle {
+        "_events": Object {},
+        "_eventsCount": 0,
+        "_maxListeners": undefined,
+        "close": [Function close],
+        Symbol(shapeMode): false,
+        Symbol(kCapture): false,
+        Symbol(kHandle): FileHandle {},
+        Symbol(kFd): -1,
+        Symbol(kRefs): 0,
+        Symbol(kClosePromise): undefined,
+      },
+      5871,
+      1,
+    ]
+
+  2nd readRange call:
+
+    Array [
+      FileHandle {
+        "_events": Object {},
+        "_eventsCount": 0,
+        "_maxListeners": undefined,
+        "close": [Function close],
+        Symbol(shapeMode): false,
+        Symbol(kCapture): false,
+        Symbol(kHandle): FileHandle {},
+        Symbol(kFd): -1,
+        Symbol(kRefs): 0,
+        Symbol(kClosePromise): undefined,
+      },
+      0,
+      5872,
+    ]
+
+  3rd readRange call:
+
+    Array [
+      FileHandle {
+        "_events": Object {},
+        "_eventsCount": 0,
+        "_maxListeners": undefined,
+        "close": [Function close],
+        Symbol(shapeMode): false,
+        Symbol(kCapture): false,
+        Symbol(kHandle): FileHandle {},
+        Symbol(kFd): -1,
+        Symbol(kRefs): 0,
+        Symbol(kClosePromise): undefined,
+      },
+      0,
+      176,
+    ]
+
+
+Number of calls: 3
+
+ ❯ packages/server/src/agent/AntigravityTerminalHistory.test.ts:46:225
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  20:56:19
+   Duration  1.28s (transform 75%, import 19%, tests 6%)
+
