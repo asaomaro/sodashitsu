@@ -8,5 +8,5 @@
 - [x] 生成4テーマ実DOMとGrid/マウス/thumb末尾
 - [x] core対象型/TUI全型・corebuild
 - [x] Web最終全型と固定検証証跡
-- [ ] 実装者以外による差分全体の独立レビュー（必須）
+- [x] 実装者以外による差分全体の独立レビュー（agent_audio_backend、12c74ba5まで追加must/should無し）
 - [ ] backend各providerの正式history実配線/実測（別担当。UIの生成fixture成功と区別）

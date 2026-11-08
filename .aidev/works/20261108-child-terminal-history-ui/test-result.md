@@ -17,4 +17,4 @@ negative.pyは自作sourceのみをgit-common-dir recoveryへbytes/SHA保存しf
 
 ## 範囲・残件
 
-これは生成fixtureによるUI/route/scope検証で、各CLIの実終了記録を取得した主張ではない。provider正式binding/collector/RPC配線・実測はAPI担当の別単位、非提供provider/旧peerはunavailable。終了履歴はactive/footerへ加算せず、Infoへ会話を戻さない。履歴からの子直接入力は提供せず、親へのchecked下書きのみ。最終独立レビューは別担当/rootの結果待ち。
+これは生成fixtureによるUI/route/scope検証で、各CLIの実終了記録を取得した主張ではない。provider正式binding/collector/RPC配線・実測はAPI担当の別単位、非提供provider/旧peerはunavailable。終了履歴はactive/footerへ加算せず、Infoへ会話を戻さない。履歴からの子直接入力は提供せず、親へのchecked下書きのみ。最終独立レビューはagent_audio_backendが12c74ba5まで照合し、追加must/should無しで完了。
