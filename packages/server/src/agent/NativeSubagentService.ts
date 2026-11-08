@@ -1,3 +1,4 @@
+import type {SubagentTerminalCollection} from "./SubagentTerminalBinding.js";
 import type { ClaudeChildSource } from "./ClaudeChildObservations.js";
 import type { Pane } from "@sodashitsu/protocol";
 import type { EventBus } from "../bus/EventBus.js";
@@ -9,7 +10,7 @@ interface Deps {
   observeClaude?: (source:ClaudeChildSource)=>Promise<Subagents|undefined>;
   session: { snapshot(): { panes: Pane[] }; getPane(id: string): Pane | undefined; setAgentSubagents(id: string, value: Subagents | undefined): boolean; hasVerifiedAgentSession(paneId: string, instanceId: string, sessionId: string): boolean };
   bus: Pick<EventBus, "subscribe">;
-  reader?: Pick<NativeSubagentReader, "read" | "forget" | "close"> & Partial<Pick<NativeSubagentReader,"progress"|"museChildSession"|"museChildInput">>;
+  reader?: Pick<NativeSubagentReader, "read" | "forget" | "close"> & Partial<Pick<NativeSubagentReader,"progress"|"museChildSession"|"museChildInput"|"grokTerminals">>;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (timer: unknown) => void;
@@ -102,6 +103,14 @@ export class NativeSubagentService {
   }
   private verified(source: Source): boolean {
     return this.deps.session.hasVerifiedAgentSession(source.paneId, source.instanceId, source.sessionId);
+  }
+  grokTerminals(paneId:string):SubagentTerminalCollection {
+    const source=sourceOf(this.deps.session.getPane(paneId));
+    const unavailable=():SubagentTerminalCollection=>({status:"unavailable",bindings:[],incomplete:true});
+    if(this.closed||source?.kind!=="grok"||!same(source,this.known.get(paneId))||!this.verified(source))return unavailable();
+    // This closure is parent ownership, never a completed API request's lease.
+    const current=()=>!this.closed&&same(source,sourceOf(this.deps.session.getPane(paneId)))&&same(source,this.known.get(paneId))&&this.verified(source);
+    return this.reader.grokTerminals?.(source,current)??unavailable();
   }
   museChildSession(paneId:string,child:string):string|undefined {
     const source=sourceOf(this.deps.session.getPane(paneId));

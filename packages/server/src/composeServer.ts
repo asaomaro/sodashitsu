@@ -685,8 +685,9 @@ export async function composeServer(
   });
   const claudeChildObservations = new ClaudeChildObservations({session,tracker:subagents});
   const cursorChildObservations = new CursorChildObservations({session});
-  const subagentHistory = new SubagentHistoryService({session,collect:source=>cursorTerminalBindings(cursorChildObservations,source)});
+
   const nativeSubagents = new NativeSubagentService({ session, bus, observeClaude: source => claudeChildObservations.read(source) });
+  const subagentHistory = new SubagentHistoryService({session,collect:source=>source.kind==="grok"?nativeSubagents.grokTerminals(source.paneId):cursorTerminalBindings(cursorChildObservations,source)});
   const subagentUsage=new SubagentUsageService({resolve:createSubagentUsageResolver({session,tracker:subagents,museChildSession:(pane,child)=>nativeSubagents.museChildSession(pane,child)})});
   // サブエージェントの記録を、読むだけで追う（20261008-graph-first の PR6c）。場所は、上の数え上げが持つ報告から、サーバが組み立てる。
   const subagentControl=new SubagentControlService({session});

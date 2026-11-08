@@ -1,3 +1,4 @@
+import type {SubagentTerminalCollection} from "./SubagentTerminalBinding.js";
 import { readCodexControlStatus, type CodexControlTarget, type CodexObservedState } from "./CodexControlStatus.js";
 import { MuseChildObservations } from "./MuseChildObservations.js";
 import { CodexChildObservationCache } from "./CodexChildObservationCache.js";
@@ -50,6 +51,11 @@ export class NativeSubagentReader {
 
   forget(paneId: string): void { this.grokReader.forget(paneId); this.codexObservations.forget(paneId); this.museObservations.forget(); this.states.get(paneId)?.abort.abort(); this.states.delete(paneId); this.agyStates.delete(paneId); }
   close(): void { this.closed = true; for (const state of this.states.values()) state.abort.abort(); this.states.clear(); this.agyStates.clear(); this.museObservations.forget(); this.codexObservations.close(); this.grokReader.close(); }
+
+  grokTerminals(source:NativeSubagentSource,current:()=>boolean):SubagentTerminalCollection {
+    if(this.closed||source.kind!=="grok"||!current())return{status:"unavailable",bindings:[],incomplete:true};
+    return this.grokReader.terminals(source,current);
+  }
 
   /** Internal provider-owned relation, never a client path or a guessed child UUID. */
   museChildSession(source:NativeSubagentSource,child:string):string|undefined {
