@@ -11,7 +11,7 @@ The fix inserts up to 960 zero samples before the unchanged 960 user samples onl
 - `restoration.json`: durable recovery snapshot,old/new SHA and exit status.
 - Node syntax check and git diff check passed.
 - `WindowsMicrophoneRenderChecks.cs` is a real C# pure arithmetic/staging validator. `validate-microphone-render.ps1` compiles production PipeKernel/Microphone plus this check using Add-Type; it creates no COM/sink/pipe/token/endpoint. It has NOT been compiled or executed here. Linux has no C# compiler. Root Windows compile/pure is the next gate, not claimed passed.
-- Independent review pending at source freeze; no Windows/live/model/audio execution by author.
+- Independent review of b432b5f4/1961d922 completed by review_audio_integration: no must/should findings;4 fixed/current SHA and old2FAIL→byteExact5PASS independently verified. Reviewer performed no duplicate tests or Windows execution. No Windows/live/model/audio execution by author.
 
 ## Deployment and actual actor
 
