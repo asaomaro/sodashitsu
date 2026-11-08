@@ -1,0 +1,52 @@
+{
+  "sourceHead": "300c14f9735a429d0e9f80e5c2875776fcf6e250",
+  "controls": [
+    {
+      "name": "wall",
+      "kind": "targeted fixture guard fault; no missing old source equivalence claimed",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=same streak",
+        "scripts/remote-desktop/protected-microphone-phase3/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "approval",
+      "kind": "targeted fixture guard fault; no missing old source equivalence claimed",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=approval/default",
+        "scripts/remote-desktop/protected-microphone-phase3/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "async-sender",
+      "kind": "targeted fixture guard fault; no missing old source equivalence claimed",
+      "exitCode": 1,
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=async or blocking",
+        "scripts/remote-desktop/protected-microphone-phase3/pure-checks.test.mjs"
+      ]
+    }
+  ],
+  "restoration": {
+    "scripts/remote-desktop/protected-microphone-phase3/detector.mjs": {
+      "byteExact": true,
+      "sha256": "59da8dbf8ddb832aca8f0d873d28c461bfdacc6c6f9be8882c73b26fcc339c14"
+    },
+    "scripts/remote-desktop/protected-microphone-phase3/safety.mjs": {
+      "byteExact": true,
+      "sha256": "1a52d1bc22ea90c13d79a63b6fad385e6f5418f399607c388aabf8ec3d8f5dec"
+    },
+    "scripts/remote-desktop/protected-microphone-phase3/absolute-pcm.mjs": {
+      "byteExact": true,
+      "sha256": "47acafa913479d12b10ec799329a496724759c31fa221e0def39fd1755f35774"
+    }
+  }
+}

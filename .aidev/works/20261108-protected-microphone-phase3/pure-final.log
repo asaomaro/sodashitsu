@@ -1,0 +1,15 @@
+✔ generated997Hz calibrated amplitude and energy, no real audio (28.498446ms)
+✔ same streak frames+wall required; baseline contamination/gaps/discontinuity/condensed delivery fail (196.200498ms)
+✔ absolute100 silent ticks, synchronous delivery and bounded worker cleanup (2090.398174ms)
+✔ async or blocking sender is a diagnostic failure, never a successful cadence (210.577165ms)
+✔ full300 generated tone cadence retains all frames over6sec, main event loop remains live (6077.973225ms)
+✔ long wall and long frame streaks cannot be combined across different intervals (43.024235ms)
+✔ approval/default endpoints/expiry remain failclosed and child environment excludes preload/history (1.495804ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8707.62854

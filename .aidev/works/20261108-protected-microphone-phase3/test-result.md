@@ -1,0 +1,9 @@
+# phase3 A source-stage evidence
+
+Fixed source300c14f9, baseb54a4942. Product source unchanged. All new MJS Node24.22.2 syntax checks exit0. Pure Node8 tests PASS after restoration: generated997Hz spectra; zero100ticks/2sec; memory-only300frames/6sec with main heartbeat; same-streak/wall; baseline/non-tone/gap/discontinuity/condensed-arrival rejection; async/blocking callback rejection; default-deny/expiry/endpoint manifest; isolated child environment.
+
+Memory-only100zero calibration: 2000.085148ms/maximum worker lateness0.036228ms/main delivery0.499523ms/callback0.750646ms, RMS0/magnitude0/clip0. This is Linux local scheduling evidence, not Windows cadence or received audio. Oldphase2 source SHA is not reused or claimed reproduced.
+
+Three targeted fixture fault controls failed: dropping wall+continuous requirement accepts compressed fast frames; removing approved guard accepts unapproved manifest; removing async sender guard accepts Promise callback. Logs keep raw assertion failures. These are deliberately faulty new fixture variants; unavailable oldsource is not called an equivalent control. Three temporarily mutated sources were durably copied under git-common-dir recovery, restored byte-exact/SHA (`restoration.json`), then all8 tests passed (`pure-restored.log`). All15 committed source/design files match fixed blob (`source-sha256.json`).
+
+Windows C# compile/GeneratedChecks/nativeToken/COM/endpoint enumeration/WASAPI/UAC/lock/media are **not executed** in this stage. C# source requires separate compile/purechecks once root has the Windows slot, and independent taskcheck is pending. Node reference-detector success does not prove Receiver.cs execution. No normal product/fullsuite build needed for fixture-only source, none run. No auth/PIN/model/userpane changes. B/C recipes are not implemented or validated by A.

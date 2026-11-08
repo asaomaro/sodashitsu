@@ -1,0 +1,25 @@
+✖ async or blocking sender is a diagnostic failure, never a successful cadence (115.222888ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 164.852681
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/pure-checks.test.mjs:11:1
+✖ async or blocking sender is a diagnostic failure, never a successful cadence (115.222888ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///workspaces/sodashitsu-protected-microphone-phase3/scripts/remote-desktop/protected-microphone-phase3/pure-checks.test.mjs:11:168)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }

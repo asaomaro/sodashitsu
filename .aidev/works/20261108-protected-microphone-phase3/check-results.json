@@ -1,0 +1,11 @@
+{
+  "sourceHead": "300c14f9735a429d0e9f80e5c2875776fcf6e250",
+  "pureNodeTestsExitCode": 0,
+  "syntax": "all mjs Node24 --check exit0",
+  "node": "24.22.2",
+  "scope": "pure generation and reference detector only; no endpoints/native runtime",
+  "windowsCompile": "not executed",
+  "windowsNativeProbe": "not executed",
+  "WASAPICapture": "not executed",
+  "UACLock": "not executed"
+}

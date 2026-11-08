@@ -1,0 +1,12 @@
+✔ generated997Hz calibrated amplitude and energy, no real audio (29.896937ms)
+✔ same streak frames+wall required; baseline contamination/gaps/discontinuity/condensed delivery fail (199.908485ms)
+✔ absolute100 silent ticks, synchronous delivery and bounded worker cleanup (2150.938103ms)
+✔ async or blocking sender is a diagnostic failure, never a successful cadence (217.923596ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2659.109956
