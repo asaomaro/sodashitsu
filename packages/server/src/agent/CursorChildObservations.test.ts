@@ -52,6 +52,7 @@ it("retires an old terminal proof when a new child-file revision has a fresh sel
  expect(old.current()).toBe(false);expect(f.controller.terminals(f.pane.id).items).toEqual([]);expect(f.pane.agent).not.toHaveProperty("subagents");
  f.controller.offer(f.stop());await vi.waitFor(()=>expect(f.controller.terminals(f.pane.id).items).toHaveLength(1),{timeout:3000});
  expect(f.controller.terminals(f.pane.id).items[0]?.settings).toEqual({model:"new-self-model",modelBasis:"session"});
+ expect(f.controller.terminals(f.pane.id).items[0]?.key).not.toBe(old.key);
 });
 it.each(["parent","refkind","instance","verified","pid"])("rejects changed %s owner before private data is returned",async change=>{
  const f=await fixture();f.controller.offer(f.observation());await vi.waitFor(()=>expect(f.controller.binding(f.pane.id,f.child)).toBeDefined(),{timeout:3000});const b=f.controller.binding(f.pane.id,f.child)!;

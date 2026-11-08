@@ -16,6 +16,8 @@ interface Slot {binding?:Binding;conflict:boolean}
 interface State {source:Source;slots:Map<string,Slot>;events:Map<string,{hash:string;conflict:boolean}>;incomplete:boolean;exhausted:boolean}
 interface Job {source:Source;state:State;slot:Slot;report:CursorChildReport;expires:number}
 export interface CursorChildBinding {
+ /** Private record/owner revision, never a client path or public child ID. */
+ key:string;
  source:{paneId:string;instanceId:string;kind:"cursor";sessionId:string};
  childId:string;lineage:CursorChildLineage;settings:Settings;terminal?:"completed"|"aborted"|"error";incomplete:boolean;
  /** Private metadata only: a consumer MUST additionally open/revalidate before publishing or reading. */
@@ -125,7 +127,7 @@ export class CursorChildObservations {
   if(!state||!slot||!binding||slot.conflict)return;
   if(!binding.source.current()){this.forget(paneId);return;}
   const current=()=>!this.closed&&binding.source.current()&&this.states.get(paneId)===state&&state.slots.get(childId)===slot&&slot.binding===binding&&!slot.conflict;
-  return {source:{paneId,instanceId:binding.source.instanceId,kind:"cursor",sessionId:binding.source.parentId},childId,lineage:{...binding.lineage},settings:{...binding.settings},incomplete:state.incomplete,...(binding.terminal?{terminal:binding.terminal}:{}),current,
+  return {key:digest([state.source.key,childId,binding.fileRevision,binding.lineage,binding.terminal]),source:{paneId,instanceId:binding.source.instanceId,kind:"cursor",sessionId:binding.source.parentId},childId,lineage:{...binding.lineage},settings:{...binding.settings},incomplete:state.incomplete,...(binding.terminal?{terminal:binding.terminal}:{}),current,
    openRecord:async(allowed=()=>true)=>{
     const readable=()=>current()&&allowed();if(!readable())return;
     const opened=await this.records.open(binding.source.parentId,childId,readable);if(!opened)return;
