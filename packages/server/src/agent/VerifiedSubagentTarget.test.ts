@@ -9,5 +9,6 @@ it("separates current verified membership from transcript/usage permission and p
  verified=false;expect(target?.current()).toBe(false);expect(resolveVerifiedSubagentTarget(session,"p","child")).toBeUndefined();verified=true;
  p.agentSession!.kind="claude";expect(target?.current()).toBe(false);p.agentSession!.kind="muse";
  p.agent!.instanceId="new";expect(target?.current()).toBe(false);p.agent!.instanceId="instance";
+ p.agent!.subagents!.items![0]!.startedAt=18;expect(target?.current()).toBe(false);
  p.agent!.subagents!.items=[];expect(target?.current()).toBe(false);
 });

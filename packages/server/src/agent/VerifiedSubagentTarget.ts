@@ -23,9 +23,9 @@ export function resolveVerifiedSubagentTarget(session: SubagentTargetSession, pa
   if(!["codex","claude","muse","agy","grok","copilot","cursor"].includes(a.kind))return;
   const item=a.subagents?.items?.find(item=>item.id===child);
   if(!item)return;
-  const kind=a.kind as VerifiedSubagentTarget["kind"], instanceId=a.instanceId, parentId=ref.sessionId;
-  return {key:JSON.stringify([paneId,kind,instanceId,parentId,child]),paneId,kind,instanceId,parentId,recordId:child,item:{...item},startedAt:item.startedAt,current:()=>{
+  const kind=a.kind as VerifiedSubagentTarget["kind"], instanceId=a.instanceId, parentId=ref.sessionId, startedAt=item.startedAt;
+  return {key:JSON.stringify([paneId,kind,instanceId,parentId,child,startedAt]),paneId,kind,instanceId,parentId,recordId:child,item:{...item},startedAt,current:()=>{
     const now=session.getPane(paneId);
-    return now?.agent?.kind===kind&&now.agent.instanceId===instanceId&&now.agentSession?.kind===kind&&now.agentSession.sessionId===parentId&&session.hasVerifiedAgentSession(paneId,instanceId,parentId)&&now.agent.subagents?.items?.some(item=>item.id===child)===true;
+    return now?.agent?.kind===kind&&now.agent.instanceId===instanceId&&now.agentSession?.kind===kind&&now.agentSession.sessionId===parentId&&session.hasVerifiedAgentSession(paneId,instanceId,parentId)&&now.agent.subagents?.items?.some(item=>item.id===child&&item.startedAt===startedAt)===true;
   }};
 }
