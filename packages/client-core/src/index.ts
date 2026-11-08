@@ -65,3 +65,5 @@ export * from "./sidebar/observedAgentModel.js";
 export * from "./layout/normalSession.js";
 
 export * from "./layout/normalSummary.js";
+
+export * from "./agent/SubagentConversationControl.js";
