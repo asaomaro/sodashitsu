@@ -1,0 +1,13 @@
+# 自動WebPreview helperの診断と再試行
+
+利用者はWindows my-notePC上のブラウザでHTTPSからWSLの操舵室を使用し、helperの手動案内が毎回出ると報告。公開HTTPSとlocalhostのbundle一致、CLIのpreview.viewers0だけでは同じserver/生きたwatchの証明にならず、期限切れを断定しない。
+
+source調査ではWebPreview.enableのhelper_start全例外catchが理由を捨て、明示再試行も無かった。storeはunauthorizedの場合だけ操作元から選択先viewerをprobeし、実localhost iframeのpostMessageが一致した時だけattachする。ManagedHelpers/PreviewServiceに外部viewerを隠すfilterはない。pollの正式not_foundはそのclient/viewIdに表示許可が無いことを示すが、一般probeのnot_foundは別machine/server経路でも起こり得る。
+
+root承認の修正はWebのみ。stage/canonical RPC codeに基づく固定理由（peer任意messageを出さない）、同viewerの明示retry、scope/late失効を維持する。pollnotfoundだけ古いviewer/commandをresetし明示再許可を求める。手動CLIは表示origin専用のログインを案内、cookieを別originへ流用しない。
+
+LNA互換としてvalidated probe.originだけへiframe allowのlegacy/local-network/loopback-networkを指定する。本人拒否・browser/OS policyを変更せず、旧combined permission queryも使わない。server秘密/probe Host/peerIP/CSP/one-use/TTLは不変。
+
+実測と仮説を分ける。rootがWindows curl→既存7780/own動的p*.localhostへの200・exactHost/peer127を確認した。これはbrowser LNAの証明ではない。自作証明書HTTPS親→actual LocalPreviewProbe→postMessageの新own Chrome153試験はold/new双方PASS。親はloopback HTTPSのためpublic-address LNAは再現しておらず、allow欠測を今回の根本原因とは主張しない。現修正は可観測性/再試行と互換で、実利用者browserの失敗段階は反映後の表示等で確認する必要がある。
+
+独立レビューはreview_audio_integration。Web関連4file/実DOM、旧3runtime負例→durable bytes/SHA完全復元、対象Web build/型を確認。新モデル/実Windows/既存cookie・OS設定変更は0、rootのread-only network診断とは区別。

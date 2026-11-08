@@ -1,0 +1,10 @@
+- [x] Web/store/ManagedHelpers/PreviewServiceと手動CLI認証をread-only調査
+- [x] 原因未確定とserver/URL/viewer経路をroot/backendへ共有
+- [x] 固定stage理由・scope付き同viewer retry・pollnotfound限定reset
+- [x] 表示origin専用CLI認証案内/秘密の非表示
+- [x] validated probe.origin限定のiframe許可委譲・本人拒否非迂回
+- [x] 生成関連16tests/2theme実DOMとoldsource負例→3SHA完全復元
+- [x] 生成HTTPS親→actualLocalPreviewProbe old/new実Chrome（両PASS、原因証明ではない）
+- [x] Web最終test-inclusive型+Vite
+- [ ] 最終独立review（必須）
+- [ ] 実利用者ブラウザの失敗段階確認/根本原因確定（root診断/反映後。生成成功と区別）

@@ -1,0 +1,14 @@
+{
+  "generated": true,
+  "safeReasonVisible": true,
+  "noPeerSecretDisplayed": true,
+  "noUnprovenExpiryClaim": true,
+  "originSpecificLoginShown": true,
+  "sameViewerExplicitRetry": true,
+  "pollNotFoundClearsStaleCommand": true,
+  "freshPermissionOnlyAfterClick": true,
+  "themeCount": 2,
+  "pageErrors": [],
+  "realModelCalls": 0,
+  "windowsOperations": 0
+}

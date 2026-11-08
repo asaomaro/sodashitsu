@@ -1,0 +1,17 @@
+{
+  "negativeExit": 1,
+  "browserNegativeExit": 1,
+  "restoredExit": 0,
+  "browserRestoredExit": 0,
+  "before": {
+    "packages/web/src/components/WebPreview.vue": "7aa443bf8e43106485622ec46cf885f86e8aa2baf1b5b47941b7d10f05afbf3d",
+    "packages/web/src/store/viewerTabs.ts": "beb643905ce5c93da329ad3ad7b6d56f1f6cff35a23e0d896bc1408ff0dfa7f3",
+    "packages/web/src/preview/helperProbe.ts": "a918c16aa70688e065ba686be943087c98819bda6838f88a05494cef6b95ef21"
+  },
+  "after": {
+    "packages/web/src/components/WebPreview.vue": "7aa443bf8e43106485622ec46cf885f86e8aa2baf1b5b47941b7d10f05afbf3d",
+    "packages/web/src/store/viewerTabs.ts": "beb643905ce5c93da329ad3ad7b6d56f1f6cff35a23e0d896bc1408ff0dfa7f3",
+    "packages/web/src/preview/helperProbe.ts": "a918c16aa70688e065ba686be943087c98819bda6838f88a05494cef6b95ef21"
+  },
+  "byteExact": true
+}

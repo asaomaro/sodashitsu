@@ -1,0 +1,9 @@
+
+> @sodashitsu/web@0.1.0 build /workspaces/sodashitsu-preview-helper-diagnostics/packages/web
+> vue-tsc --noEmit -p tsconfig.typecheck.json && vite build
+
+src/components/WebPreview.test.ts(69,100): error TS2322: Type 'Promise<void>' is not assignable to type 'Promise<{}>'.
+  Type 'void' is not assignable to type '{}'.
+/workspaces/sodashitsu-preview-helper-diagnostics/packages/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/web@0.1.0 build: `vue-tsc --noEmit -p tsconfig.typecheck.json && vite build`
+Exit status 2

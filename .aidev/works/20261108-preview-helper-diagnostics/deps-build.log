@@ -1,0 +1,4 @@
+
+> @sodashitsu/client-core@0.1.0 build /workspaces/sodashitsu-preview-helper-diagnostics/packages/client-core
+> tsc -b
+

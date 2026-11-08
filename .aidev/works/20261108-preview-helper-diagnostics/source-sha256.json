@@ -1,0 +1,13 @@
+{
+  "sourceHead": "1f9e13a94ae259fb23b75250aaf1a8332f6ee825",
+  "files": {
+    "packages/web/src/components/WebPreview.test.ts": "cbbadf5dc19a016e11b9acaadde7c4ea4821631bb1aa6b927d6319e287b4a16c",
+    "packages/web/src/components/WebPreview.vue": "7aa443bf8e43106485622ec46cf885f86e8aa2baf1b5b47941b7d10f05afbf3d",
+    "packages/web/src/preview/helperProbe.test.ts": "aa67c50ca545c96133094313b0e78394c608d0526fd0b19f77a320f779690bc1",
+    "packages/web/src/preview/helperProbe.ts": "a918c16aa70688e065ba686be943087c98819bda6838f88a05494cef6b95ef21",
+    "packages/web/src/preview/helperStartError.test.ts": "4ab2de9b2b47bb6caf7e5c2d79bcf026a10d6793c44c941f16ae970c529b294a",
+    "packages/web/src/preview/helperStartError.ts": "57e5830ee5a885247da6e217ca6635a419c7fc6bcbd45962fa459ed835e82e18",
+    "packages/web/src/store/viewerTabs.test.ts": "a196907c2ead3d20375709a25c2ddb73721d9907ecb3e8b9483e20e05488bf59",
+    "packages/web/src/store/viewerTabs.ts": "beb643905ce5c93da329ad3ad7b6d56f1f6cff35a23e0d896bc1408ff0dfa7f3"
+  }
+}
