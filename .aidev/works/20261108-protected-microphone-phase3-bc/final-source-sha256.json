@@ -1,0 +1,160 @@
+{
+  "sourceHead": "313f6d4acceaf88b37c215b9bfea54af78fd387d",
+  "base": "e15a3297",
+  "files": [
+    {
+      "file": ".aidev/works/20261108-protected-microphone-phase3-bc/design.md",
+      "sha256": "b62afb22cc9d551d08be31f40e65081889330c15b54183a4d2eb4ab196b047cf",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/GeneratedChecksBC.cs",
+      "sha256": "8da656d44cb6702168ec8b0a21467a8c3a9dab591d0ce68fe97790954d6c243d",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/OperatorBC.cs",
+      "sha256": "3d8c773a929d85b1936bd3f53283d61be95196dc2765dd1cf06e7188a720c9fc",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/ProbeBC.cs",
+      "sha256": "c0bfaceefc40318da89dd9db36359300711917d77b2f9a108d49a2d0185bd520",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/README.md",
+      "sha256": "48269302cb8ae248428dfbc48b7cd56e2e7dc944df3bddb3a1bf2321610d2bfb",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/ReceiverBC.cs",
+      "sha256": "d55073e7abe6a28dcf7185bd249e3a06ef13ef0d458d2c756cc6639a51706095",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/build-fixture.mjs",
+      "sha256": "7ecbdb878b2b44a838d9846c7aa8f1b308b241c0f058071f4233c273b7c6abc8",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/native-source.mjs",
+      "sha256": "c1c7827044ff7bb9220e7829176da95c88e45557d8cf0e1f53daabb5a7913391",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/observations.mjs",
+      "sha256": "730ad1e8c63aec8483737ec4d44bbfd036c4e9b4b6c66ec156fb035529abd55b",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/old-stream-probe.mjs",
+      "sha256": "86ac93488d614a835e4db659b4e6f46338ad7bb046de079b7dab1726a314b355",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/prepare.mjs",
+      "sha256": "70512588ffd6452b66eefbd4b7943c5529c36f47e126cf147861ae2dd023242a",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/private-server.mjs",
+      "sha256": "7944e776899644badbd3e2a5e5491fd1e88288539c95439a85fa502e5c2eeb15",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs",
+      "sha256": "4f48a16732e491c77da84d7776155cbb32cb3f458c9c68c169f3b76879375fd7",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/resource-observer.mjs",
+      "sha256": "8ecb10b0137f6344aad79d41793a7686ee2d3251e657d56876d256148878e5c1",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/run-bc.mjs",
+      "sha256": "944959a51bee65341b863526c48e91003ccfe393a6ada7b6cb02e88fd5ee5a8c",
+      "fixedMatches": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3-bc/session.mjs",
+      "sha256": "11848a6c3d5cdb3a129249c399385aabafeb0303263fa57aa462491f65570a98",
+      "fixedMatches": true
+    }
+  ],
+  "allMatch": true,
+  "sharedA": [
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/DetectorChecks.cs",
+      "sha256": "36e585670394cb11c193db6dd13eacb0c6f87dd322216996623040cb4c9361c9",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/Endpoint.cs",
+      "sha256": "494b3307e0f981c7b5b29e73aa150117e1fe3574a462ea5f2ab5346c660a4ad1",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/Probe.cs",
+      "sha256": "bc15f0f39b59a3069354a7ac012d5e59dea20e5b007ffc0bb2b7393bbb1a090c",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/README.md",
+      "sha256": "c088e5b7177f1b7301b5be8f9fc879165d2d311b74061563d8cc40358a84a5ba",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/Receiver.cs",
+      "sha256": "2d7fb64bbea2ed869046d28e78b35589d0b84988604b017a2852e7b491dba53c",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/absolute-pcm.mjs",
+      "sha256": "47acafa913479d12b10ec799329a496724759c31fa221e0def39fd1755f35774",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/build-fixture.mjs",
+      "sha256": "4cc09fff9dfad9ba44b0122b7ac0be6faf50a8ee37bac5aed561b44e3a34bbe2",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/calibrate.mjs",
+      "sha256": "4383d2542f7fb35302df148de0ee11fca5e9e582e0f2b8f50bbc16fe49951341",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/detector.mjs",
+      "sha256": "59da8dbf8ddb832aca8f0d873d28c461bfdacc6c6f9be8882c73b26fcc339c14",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/prepare.mjs",
+      "sha256": "bc3e1de8b8d18e2b4d8ecf9539fc6ec9be566adf2a16960cacbd944b68e5de72",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/private-server.mjs",
+      "sha256": "f31ad5ee7c921e511906f4cc832e5d05e4270900ca9d8b322ab29d78606c9132",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/pure-checks.test.mjs",
+      "sha256": "b632cf7517aa0f36332422f25f6e69a048cca731b5ca905e323e990cfb076cf0",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/run-a.mjs",
+      "sha256": "cddfcd05d197f608dfd8b3a719da1da3e7a808446aafce975dfbd5215a2221ec",
+      "Aunchanged": true
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/safety.mjs",
+      "sha256": "1a52d1bc22ea90c13d79a63b6fad385e6f5418f399607c388aabf8ec3d8f5dec",
+      "Aunchanged": true
+    }
+  ],
+  "allAUnchanged": true
+}

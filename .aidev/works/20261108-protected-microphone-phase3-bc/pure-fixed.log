@@ -1,0 +1,14 @@
+✔ B requires native lock while generating, exact epoch retirement, measured quiet and restored old-stream rejection (1.399412ms)
+✔ C requires actual UAC mode and own request/recovery, not Default or only ACK (0.18535ms)
+✔ only fixture B receiver may observe locked same scope; C stays unlocked; no SYSTEM/elevated/foreign identity (0.186412ms)
+✔ observer preserves begin return/arguments and only reports exact accepted microphone epoch (0.631122ms)
+✔ unreported or malformed measurement fields do not become zero/known success (0.185139ms)
+✔ observer bounds physical channels and refuses replacement epoch instead of transferring proof (0.286411ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 53.268909

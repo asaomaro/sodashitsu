@@ -1,0 +1,59 @@
+{
+  "sourceHead": "5dca45eb97264db2f00fd6341ceed230330a8206",
+  "controls": [
+    {
+      "name": "B-epoch",
+      "exitCode": 1,
+      "kind": "targeted new fixture fault, no old fixture equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=B requires",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "C-mode",
+      "exitCode": 1,
+      "kind": "targeted new fixture fault, no old fixture equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=C requires",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "cleanup",
+      "exitCode": 1,
+      "kind": "targeted new fixture fault, no old fixture equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=requires",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "observer-return",
+      "exitCode": 1,
+      "kind": "targeted new fixture fault, no old fixture equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=observer preserves",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    }
+  ],
+  "restoration": {
+    "scripts/remote-desktop/protected-microphone-phase3-bc/observations.mjs": {
+      "sha256": "45515b18bb6dcfb4ac8781fabd395ec1839a0555a45f622b84d5b8050bba6581",
+      "byteExact": true
+    },
+    "scripts/remote-desktop/protected-microphone-phase3-bc/resource-observer.mjs": {
+      "sha256": "8ecb10b0137f6344aad79d41793a7686ee2d3251e657d56876d256148878e5c1",
+      "byteExact": true
+    }
+  }
+}

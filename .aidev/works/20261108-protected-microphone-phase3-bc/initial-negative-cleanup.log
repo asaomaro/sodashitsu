@@ -1,0 +1,52 @@
+✖ B requires native lock while generating, exact epoch retirement, measured quiet and restored old-stream rejection (5.098054ms)
+✖ C requires actual UAC mode and own request/recovery, not Default or only ACK (0.349069ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 49.018137
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs:3:1
+✖ B requires native lock while generating, exact epoch retirement, measured quiet and restored old-stream rejection (5.098054ms)
+  AssertionError [ERR_ASSERTION]: {"cleanupConfirmed":false}
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-protected-microphone-phase3-bc/scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs:3:516)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs:4:1
+✖ C requires actual UAC mode and own request/recovery, not Default or only ACK (0.349069ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-protected-microphone-phase3-bc/scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs:4:718)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

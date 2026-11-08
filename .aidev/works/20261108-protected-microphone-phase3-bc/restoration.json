@@ -1,0 +1,85 @@
+{
+  "sourceHead": "313f6d4acceaf88b37c215b9bfea54af78fd387d",
+  "controls": [
+    {
+      "name": "B-epoch",
+      "exitCode": 1,
+      "kind": "targeted new fixture guard fault; no old source/runtime equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=B requires",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "C-mode",
+      "exitCode": 1,
+      "kind": "targeted new fixture guard fault; no old source/runtime equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=C requires",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "cleanup",
+      "exitCode": 1,
+      "kind": "targeted new fixture guard fault; no old source/runtime equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=requires",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "observer-return",
+      "exitCode": 1,
+      "kind": "targeted new fixture guard fault; no old source/runtime equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=observer preserves",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "synthetic",
+      "exitCode": 1,
+      "kind": "targeted new fixture guard fault; no old source/runtime equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=native ready rejects",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    },
+    {
+      "name": "original-stream",
+      "exitCode": 1,
+      "kind": "targeted new fixture guard fault; no old source/runtime equivalence claimed",
+      "command": [
+        "/home/asaomaro/.nvm/versions/node/v24.22.2/bin/node",
+        "--test",
+        "--test-name-pattern=unreported or malformed",
+        "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs"
+      ]
+    }
+  ],
+  "restoration": {
+    "scripts/remote-desktop/protected-microphone-phase3-bc/observations.mjs": {
+      "sha256": "730ad1e8c63aec8483737ec4d44bbfd036c4e9b4b6c66ec156fb035529abd55b",
+      "byteExact": true
+    },
+    "scripts/remote-desktop/protected-microphone-phase3-bc/resource-observer.mjs": {
+      "sha256": "8ecb10b0137f6344aad79d41793a7686ee2d3251e657d56876d256148878e5c1",
+      "byteExact": true
+    },
+    "scripts/remote-desktop/protected-microphone-phase3-bc/native-source.mjs": {
+      "sha256": "c1c7827044ff7bb9220e7829176da95c88e45557d8cf0e1f53daabb5a7913391",
+      "byteExact": true
+    }
+  }
+}

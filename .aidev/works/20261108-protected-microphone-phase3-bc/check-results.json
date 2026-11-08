@@ -1,0 +1,17 @@
+{
+  "sourceHead": "313f6d4acceaf88b37c215b9bfea54af78fd387d",
+  "node": "24.22.2",
+  "syntaxExitCode": 0,
+  "pureRestoredTests": 8,
+  "pureTestsExitCode": 0,
+  "negativeControls": 6,
+  "negativeFailureExitCodes": "all nonzero",
+  "restoredSourceSHA": 3,
+  "WindowsExecuted": false,
+  "CSharpCompiled": false,
+  "nativeTokenOrCOMExecuted": false,
+  "audioOrLockOrUacExecuted": false,
+  "productionSourceChanged": false,
+  "AfixtureChanged": false,
+  "validationScope": "synthetic evidence/observer/nativeSource/originalStream helpers only; does not prove actual Windows/native execution"
+}

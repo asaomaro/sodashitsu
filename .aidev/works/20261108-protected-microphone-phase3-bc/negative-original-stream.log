@@ -1,0 +1,30 @@
+✖ unreported or malformed measurement fields do not become zero/known success (1.418077ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 52.525151
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs:7:1
+✖ unreported or malformed measurement fields do not become zero/known success (1.418077ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-protected-microphone-phase3-bc/scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs:7:300)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
