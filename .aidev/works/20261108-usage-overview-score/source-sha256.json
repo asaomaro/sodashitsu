@@ -1,0 +1,12 @@
+{
+  "sourceHead": "b18dcecdf3ef755b5d32e1fc180c493244f35c89",
+  "files": {
+    "packages/client-core/src/agent/usageOverviewAssessment.test.ts": "11195055ebca56698225bf3fd14f95ce2118a197e571af75fce393f5983c8808",
+    "packages/client-core/src/agent/usageOverviewAssessment.ts": "ddea4216e223eb28d3a4568231066e7dbd026e2c74a8c652e4cc424a521717f2",
+    "packages/client-core/src/index.ts": "4abd9d14601e22b1e17d94db5061014620c58ae07d3f08954180183e351f971c",
+    "packages/tui/src/modes/MonitorView.test.ts": "9507db6c7faa5be36c66c24fe38b87401c9d3ce575d0e434fd593524eab58b4f",
+    "packages/tui/src/modes/MonitorView.ts": "e7e6a1d7437b7fe88ef14ce11336066848e5e90d144ed9a1a15365c0aa180ef6",
+    "packages/web/src/dashboard/UsageInsightsPanel.test.ts": "a8b403fa2604ffaa3ed02a5d86173a97357952cdde346ba4672d9e56573c5a75",
+    "packages/web/src/dashboard/UsageInsightsPanel.vue": "dc3ecd6d5ef65632c22a62ab58ce1951ab0586245f27e1e7a8e6f54896c89744"
+  }
+}

@@ -1,0 +1,4 @@
+
+> @sodashitsu/tui@0.1.0 build /workspaces/sodashitsu-usage-overview-score/packages/tui
+> tsc -b
+

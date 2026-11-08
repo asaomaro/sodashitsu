@@ -1,0 +1,434 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-usage-overview-score
+
+ ❯ |@sodashitsu/client-core| src/agent/usageOverviewAssessment.test.ts (21 tests | 2 failed) 22ms
+   ❯ overview numeric assessment (21)
+     × uses all formal known results, never a bounded tool breakdown or unrelated tokens/activity 13ms
+     × does not turn missing results or low samples into success or an E grade 2ms
+ ❯ |@sodashitsu/web| src/dashboard/UsageInsightsPanel.test.ts (10 tests | 2 failed) 385ms
+   × scores only the displayed filtered aggregate without invoking an agent and clears it with the scope 35ms
+   × shows unassessed instead of a zero grade when tool results are unavailable 30ms
+ ❯ |@sodashitsu/tui| src/modes/MonitorView.test.ts (9 tests | 1 failed) 1518ms
+   × adds a common numeric score to overview only and never generates an agent report 1010ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/UsageInsightsPanel.test.ts > scores only the displayed filtered aggregate without invoking an agent and clears it with the scope
+Error: Unable to get [data-overview-assessment] within: <section data-v-08517a84="" class="insights" data-usage-insights="" aria-label="利用分析ダッシュボード">
+  <div data-v-08517a84="" class="insights-heading">
+    <div data-v-08517a84=""><span data-v-08517a84="" class="eyebrow">USAGE INTELLIGENCE</span>
+      <h2 data-v-08517a84="">エージェント利用の全体像</h2>
+      <p data-v-08517a84="">消費の推移、委譲、ツール利用をひとつの画面で。</p>
+    </div>
+  </div>
+  <div data-v-08517a84="" class="filter-toolbar"><button data-v-08517a84="" data-assistant-feature="" aria-expanded="false">期間・条件</button><span data-v-08517a84="">2026-10-10 〜 2026-11-08 UTC</span><button data-v-08517a84="">7日</button><button data-v-08517a84="">30日</button><button data-v-08517a84="">90日</button></div>
+  <form data-v-08517a84="" class="insights-filters" style="display: none;"><label data-v-08517a84="">開始<input data-v-08517a84="" type="date"></label><label data-v-08517a84="">終了<input data-v-08517a84="" type="date"></label><label data-v-08517a84="">PC<select data-v-08517a84="">
+        <option data-v-08517a84="" value="current">現在のPC</option>
+        <option data-v-08517a84="" value="all">接続中の全PCを比較</option>
+        <option data-v-08517a84="" value="local">ローカル</option>
+        <option data-v-08517a84="" value="remote">Other PC</option>
+      </select></label><label data-v-08517a84="">種類<select data-v-08517a84="">
+        <option value="" data-v-08517a84="">すべて</option>
+        <option value="claude" data-v-08517a84="">Claude Code</option>
+        <option value="codex" data-v-08517a84="">Codex</option>
+        <option value="muse" data-v-08517a84="">Muse Code</option>
+        <option value="agy" data-v-08517a84="">Antigravity CLI</option>
+        <option value="copilot" data-v-08517a84="">GitHub Copilot CLI</option>
+      </select></label><label data-v-08517a84="">モデル<select data-v-08517a84="">
+        <option data-v-08517a84="" value="">すべて</option>
+      </select></label><label data-v-08517a84="">プロジェクト／WS<select data-v-08517a84="">
+        <option data-v-08517a84="" value="">すべて</option>
+      </select></label><label data-v-08517a84="">設定単位<select data-v-08517a84="">
+        <option data-v-08517a84="" value="">すべて</option>
+      </select></label><label data-v-08517a84="">役割<select data-v-08517a84="">
+        <option data-v-08517a84="" value="">すべて</option>
+        <option data-v-08517a84="" value="main">メイン</option>
+        <option data-v-08517a84="" value="sub">サブ</option>
+        <option data-v-08517a84="" value="unknown">未取得</option>
+      </select></label><label data-v-08517a84="">時刻<select data-v-08517a84="">
+        <option data-v-08517a84="" value="UTC">UTC</option>
+        <option data-v-08517a84="" value="Asia/Tokyo">PCのローカル時刻</option>
+      </select></label><button data-v-08517a84="" data-assistant-action="" type="submit">集計・更新</button></form>
+  <!--v-if-->
+  <!--v-if-->
+  <!--v-if-->
+  <p data-v-08517a84="">対象のログを検出できませんでした。未取得を利用ゼロとは扱いません。</p>
+  <div data-v-08517a84="" class="collection-state" role="status"><span data-v-08517a84="" class="warning">● 一部の記録</span><span data-v-08517a84="">対象PC ローカル · 3:40:05 PM 更新 · 2026-10-10〜2026-11-08 UTC · 表示 Asia/Tokyo</span><button data-v-08517a84="" data-assistant-action="">セッションCSV</button><button data-v-08517a84="" data-assistant-action="">JSON</button></div>
+  <div data-v-08517a84="" class="insights-metrics">
+    <article data-v-08517a84=""><span data-v-08517a84="">期間の取得トークン</span><strong data-v-08517a84="">100</strong><small data-v-08517a84="">前期間比 +0.0%</small></article>
+    <article data-v-08517a84=""><span data-v-08517a84="">サブエージェントの比率</span><strong data-v-08517a84="">—</strong><small data-v-08517a84="">役割を取得できたトークンのみ</small></article>
+    <article data-v-08517a84=""><span data-v-08517a84="">ツール呼び出し</span><strong data-v-08517a84="">200</strong><small data-v-08517a84="">結果取得 50% · 失敗 5</small></article>
+    <article data-v-08517a84=""><span data-v-08517a84="">キャッシュ読取率</span><strong data-v-08517a84="">0%</strong><small data-v-08517a84="">入力＋キャッシュ読取が分母 · 応答あたり 100 tok</small></article>
+  </div>
+  <!--v-if-->
+  <div data-v-08517a84="" class="collection-state">記録された処理ターン：開始 1 · 完了 1 · 中断 0 · 失敗 0<small data-v-08517a84="">各イベントの期間内件数。成果品質やタスク達成率ではありません。</small></div>
+  <div data-v-08517a84="" class="insights-grid overview">
+    <article data-v-08517a84="" class="insight-card timeline">
+      <div data-v-08517a84="" class="card-heading">
+        <h3 data-v-08517a84="">利用推移</h3><select data-v-08517a84="">
+          <option data-v-08517a84="" value="day">日別</option>
+          <option data-v-08517a84="" value="week">週別</option>
+          <option data-v-08517a84="" value="month">月別</option>
+        </select>
+      </div>
+      <p data-v-08517a84="">この期間に取得できた記録がありません。</p>
+      <div data-v-08517a84="" class="axis-labels"><span data-v-08517a84="">2026-10-10</span><span data-v-08517a84="">2026-11-09</span></div>
+      <div data-v-08517a84="" class="chart-legend"><span data-v-08517a84="">● 選択期間</span><span data-v-08517a84="">┄ 前期間（同じ日数）</span></div>
+      <div data-v-08517a84="" class="period-bars"><button data-v-08517a84="" title="2026-10-10: 未取得 tok" aria-label="2026-10-10: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-10</span></button><button data-v-08517a84="" title="2026-10-11: 未取得 tok" aria-label="2026-10-11: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-11</span></button><button data-v-08517a84="" title="2026-10-12: 未取得 tok" aria-label="2026-10-12: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-12</span></button><button data-v-08517a84="" title="2026-10-13: 未取得 tok" aria-label="2026-10-13: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-13</span></button><button data-v-08517a84="" title="2026-10-14: 未取得 tok" aria-label="2026-10-14: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-14</span></button><button data-v-08517a84="" title="2026-10-15: 未取得 tok" aria-label="2026-10-15: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-15</span></button><button data-v-08517a84="" title="2026-10-16: 未取得 tok" aria-label="2026-10-16: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-16</span></button><button data-v-08517a84="" title="2026-10-17: 未取得 tok" aria-label="2026-10-17: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-17</span></button><button data-v-08517a84="" title="2026-10-18: 未取得 tok" aria-label="2026-10-18: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-18</span></button><button data-v-08517a84="" title="2026-10-19: 未取得 tok" aria-label="2026-10-19: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-19</span></button><button data-v-08517a84="" title="2026-10-20: 未取得 tok" aria-label="2026-10-20: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-20</span></button><button data-v-08517a84="" title="2026-10-21: 未取得 tok" aria-label="2026-10-21: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-21</span></button><button data-v-08517a84="" title="2026-10-22: 未取得 tok" aria-label="2026-10-22: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-22</span></button><button data-v-08517a84="" title="2026-10-23: 未取得 tok" aria-label="2026-10-23: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-23</span></button><button data-v-08517a84="" title="2026-10-24: 未取得 tok" aria-label="2026-10-24: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-24</span></button><button data-v-08517a84="" title="2026-10-25: 未取得 tok" aria-label="2026-10-25: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-25</span></button><button data-v-08517a84="" title="2026-10-26: 未取得 tok" aria-label="2026-10-26: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-26</span></button><button data-v-08517a84="" title="2026-10-27: 未取得 tok" aria-label="2026-10-27: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-27</span></button><button data-v-08517a84="" title="2026-10-28: 未取得 tok" aria-label="2026-10-28: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-28</span></button><button data-v-08517a84="" title="2026-10-29: 未取得 tok" aria-label="2026-10-29: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-29</span></button><button data-v-08517a84="" title="2026-10-30: 未取得 tok" aria-label="2026-10-30: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-30</span></button><button data-v-08517a84="" title="2026-10-31: 未取得 tok" aria-label="2026-10-31: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-31</span></button><button data-v-08517a84="" title="2026-11-01: 未取得 tok" aria-label="2026-11-01: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-01</span></button><button data-v-08517a84="" title="2026-11-02: 未取得 tok" aria-label="2026-11-02: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-02</span></button><button data-v-08517a84="" title="2026-11-03: 未取得 tok" aria-label="2026-11-03: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-03</span></button><button data-v-08517a84="" title="2026-11-04: 未取得 tok" aria-label="2026-11-04: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-04</span></button><button data-v-08517a84="" title="2026-11-05: 未取得 tok" aria-label="2026-11-05: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-05</span></button><button data-v-08517a84="" title="2026-11-06: 未取得 tok" aria-label="2026-11-06: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-06</span></button><button data-v-08517a84="" title="2026-11-07: 未取得 tok" aria-label="2026-11-07: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-07</span></button><button data-v-08517a84="" title="2026-11-08: 未取得 tok" aria-label="2026-11-08: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-08</span></button><button data-v-08517a84="" title="2026-11-09: 未取得 tok" aria-label="2026-11-09: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-09</span></button></div><small data-v-08517a84="">記録がない日を利用ゼロとは扱いません。前期間はUTCで同じ日数。週・月の端は選択期間内のみ。</small>
+    </article>
+    <article data-v-08517a84="" class="insight-card roles">
+      <h3 data-v-08517a84="">メインとサブエージェント</h3>
+      <div data-v-08517a84="" class="role-donut" style="--sub: 0%;">
+        <div data-v-08517a84=""><strong data-v-08517a84="">—</strong><small data-v-08517a84="">サブの比率</small></div>
+      </div>
+    </article>
+    <article data-v-08517a84="" class="insight-card">
+      <h3 data-v-08517a84="">ツール利用の構成</h3>
+      <p data-v-08517a84="">取得できるツール呼び出しがありません。</p>
+      <details data-v-08517a84="">
+        <summary data-v-08517a84="">ツール・Skill・MCPの内訳</summary>
+      </details>
+    </article>
+    <article data-v-08517a84="" class="insight-card">
+      <h3 data-v-08517a84="">プロジェクト／ワークスペース別</h3>
+      <details data-v-08517a84="">
+        <summary data-v-08517a84="">種類・モデル・設定別</summary>
+      </details>
+    </article>
+    <article data-v-08517a84="" class="insight-card parents">
+      <h3 data-v-08517a84="">親子エージェントとセッション</h3>
+      <div data-v-08517a84="" class="parent-graph"></div>
+      <details data-v-08517a84="">
+        <summary data-v-08517a84="">セッション一覧と詳細</summary>
+        <div data-v-08517a84="" class="session-map"></div><small data-v-08517a84="">親子関係が記録にない場合は未取得。上位24件を表示。</small>
+      </details>
+      <!--v-if-->
+    </article>
+    <article data-v-08517a84="" class="insight-card">
+      <h3 data-v-08517a84="">利用が集中する時間帯</h3>
+      <div data-v-08517a84="" class="hour-heat">
+        <div data-v-08517a84="" style="opacity: 0.25;" title="0時: 未取得"><span data-v-08517a84="">0</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="1時: 未取得"><span data-v-08517a84="">1</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="2時: 未取得"><span data-v-08517a84="">2</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="3時: 未取得"><span data-v-08517a84="">3</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="4時: 未取得"><span data-v-08517a84="">4</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="5時: 未取得"><span data-v-08517a84="">5</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="6時: 未取得"><span data-v-08517a84="">6</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="7時: 未取得"><span data-v-08517a84="">7</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="8時: 未取得"><span data-v-08517a84="">8</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="9時: 未取得"><span data-v-08517a84="">9</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="10時: 未取得"><span data-v-08517a84="">10</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="11時: 未取得"><span data-v-08517a84="">11</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="12時: 未取得"><span data-v-08517a84="">12</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="13時: 未取得"><span data-v-08517a84="">13</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="14時: 未取得"><span data-v-08517a84="">14</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="15時: 未取得"><span data-v-08517a84="">15</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="16時: 未取得"><span data-v-08517a84="">16</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="17時: 未取得"><span data-v-08517a84="">17</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="18時: 未取得"><span data-v-08517a84="">18</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="19時: 未取得"><span data-v-08517a84="">19</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="20時: 未取得"><span data-v-08517a84="">20</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="21時: 未取得"><span data-v-08517a84="">21</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="22時: 未取得"><span data-v-08517a84="">22</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="23時: 未取得"><span data-v-08517a84="">23</span><small data-v-08517a84="">—</small></div>
+      </div>
+      <p data-v-08517a84="">Asia/Tokyo · 応答記録の時刻であり、作業時間ではありません。</p>
+    </article>
+    <article data-v-08517a84="" class="insight-card">
+      <h3 data-v-08517a84="">利用制限と到達見込み</h3>
+      <p data-v-08517a84="">現在接続しているPCの制限枠です。履歴のPC選択・期間フィルターとは別の観測です。</p><label data-v-08517a84=""><input data-v-08517a84="" type="checkbox">この画面で上限接近を知らせる</label>
+      <p data-v-08517a84="">制限の使用率は未取得です。</p><small data-v-08517a84="">予測は画面表示中の同じ制限枠の観測から計算。リセット・値の減少で再計算します。</small>
+    </article>
+  </div>
+  <details data-v-08517a84="" class="coverage">
+    <summary data-v-08517a84="">取得範囲と欠損を確認</summary>
+    <p data-v-08517a84="">最大400日分の数値記録を保存。設定単位は認証アカウントの同一性を保証しません。メイン／サブの合計は応答単位の記録から計算し、会計累計へ再加算しません。</p>
+    <p data-v-08517a84="">履歴分析はClaude Code・Codexに対応。他の種類の期間・ツール履歴は未対応で、0とは扱いません。記録のないツール結果や親子関係は未取得。作業の完了率・品質はトークン数から推定しません。</p>
+  </details>
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/dashboard/UsageInsightsPanel.test.ts:58:72
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/UsageInsightsPanel.test.ts > shows unassessed instead of a zero grade when tool results are unavailable
+Error: Unable to get [data-overview-assessment] within: <section data-v-08517a84="" class="insights" data-usage-insights="" aria-label="利用分析ダッシュボード">
+  <div data-v-08517a84="" class="insights-heading">
+    <div data-v-08517a84=""><span data-v-08517a84="" class="eyebrow">USAGE INTELLIGENCE</span>
+      <h2 data-v-08517a84="">エージェント利用の全体像</h2>
+      <p data-v-08517a84="">消費の推移、委譲、ツール利用をひとつの画面で。</p>
+    </div>
+  </div>
+  <div data-v-08517a84="" class="filter-toolbar"><button data-v-08517a84="" data-assistant-feature="" aria-expanded="false">期間・条件</button><span data-v-08517a84="">2026-10-10 〜 2026-11-08 UTC</span><button data-v-08517a84="">7日</button><button data-v-08517a84="">30日</button><button data-v-08517a84="">90日</button></div>
+  <form data-v-08517a84="" class="insights-filters" style="display: none;"><label data-v-08517a84="">開始<input data-v-08517a84="" type="date"></label><label data-v-08517a84="">終了<input data-v-08517a84="" type="date"></label><label data-v-08517a84="">PC<select data-v-08517a84="">
+        <option data-v-08517a84="" value="current">現在のPC</option>
+        <option data-v-08517a84="" value="all">接続中の全PCを比較</option>
+        <option data-v-08517a84="" value="local">ローカル</option>
+        <option data-v-08517a84="" value="remote">Other PC</option>
+      </select></label><label data-v-08517a84="">種類<select data-v-08517a84="">
+        <option value="" data-v-08517a84="">すべて</option>
+        <option value="claude" data-v-08517a84="">Claude Code</option>
+        <option value="codex" data-v-08517a84="">Codex</option>
+        <option value="muse" data-v-08517a84="">Muse Code</option>
+        <option value="agy" data-v-08517a84="">Antigravity CLI</option>
+        <option value="copilot" data-v-08517a84="">GitHub Copilot CLI</option>
+      </select></label><label data-v-08517a84="">モデル<select data-v-08517a84="">
+        <option data-v-08517a84="" value="">すべて</option>
+      </select></label><label data-v-08517a84="">プロジェクト／WS<select data-v-08517a84="">
+        <option data-v-08517a84="" value="">すべて</option>
+      </select></label><label data-v-08517a84="">設定単位<select data-v-08517a84="">
+        <option data-v-08517a84="" value="">すべて</option>
+      </select></label><label data-v-08517a84="">役割<select data-v-08517a84="">
+        <option data-v-08517a84="" value="">すべて</option>
+        <option data-v-08517a84="" value="main">メイン</option>
+        <option data-v-08517a84="" value="sub">サブ</option>
+        <option data-v-08517a84="" value="unknown">未取得</option>
+      </select></label><label data-v-08517a84="">時刻<select data-v-08517a84="">
+        <option data-v-08517a84="" value="UTC">UTC</option>
+        <option data-v-08517a84="" value="Asia/Tokyo">PCのローカル時刻</option>
+      </select></label><button data-v-08517a84="" data-assistant-action="" type="submit">集計・更新</button></form>
+  <!--v-if-->
+  <!--v-if-->
+  <!--v-if-->
+  <p data-v-08517a84="">対象のログを検出できませんでした。未取得を利用ゼロとは扱いません。</p>
+  <div data-v-08517a84="" class="collection-state" role="status"><span data-v-08517a84="" class="">● 読取済み</span><span data-v-08517a84="">対象PC ローカル · 3:40:05 PM 更新 · 2026-10-10〜2026-11-08 UTC · 表示 Asia/Tokyo</span><button data-v-08517a84="" data-assistant-action="">セッションCSV</button><button data-v-08517a84="" data-assistant-action="">JSON</button></div>
+  <div data-v-08517a84="" class="insights-metrics">
+    <article data-v-08517a84=""><span data-v-08517a84="">期間の取得トークン</span><strong data-v-08517a84="">100</strong><small data-v-08517a84="">前期間比 +0.0%</small></article>
+    <article data-v-08517a84=""><span data-v-08517a84="">サブエージェントの比率</span><strong data-v-08517a84="">—</strong><small data-v-08517a84="">役割を取得できたトークンのみ</small></article>
+    <article data-v-08517a84=""><span data-v-08517a84="">ツール呼び出し</span><strong data-v-08517a84="">1</strong><small data-v-08517a84="">結果取得 100% · 失敗 0</small></article>
+    <article data-v-08517a84=""><span data-v-08517a84="">キャッシュ読取率</span><strong data-v-08517a84="">0%</strong><small data-v-08517a84="">入力＋キャッシュ読取が分母 · 応答あたり 100 tok</small></article>
+  </div>
+  <!--v-if-->
+  <div data-v-08517a84="" class="collection-state">記録された処理ターン：開始 1 · 完了 1 · 中断 0 · 失敗 0<small data-v-08517a84="">各イベントの期間内件数。成果品質やタスク達成率ではありません。</small></div>
+  <div data-v-08517a84="" class="insights-grid overview">
+    <article data-v-08517a84="" class="insight-card timeline">
+      <div data-v-08517a84="" class="card-heading">
+        <h3 data-v-08517a84="">利用推移</h3><select data-v-08517a84="">
+          <option data-v-08517a84="" value="day">日別</option>
+          <option data-v-08517a84="" value="week">週別</option>
+          <option data-v-08517a84="" value="month">月別</option>
+        </select>
+      </div>
+      <p data-v-08517a84="">この期間に取得できた記録がありません。</p>
+      <div data-v-08517a84="" class="axis-labels"><span data-v-08517a84="">2026-10-10</span><span data-v-08517a84="">2026-11-09</span></div>
+      <div data-v-08517a84="" class="chart-legend"><span data-v-08517a84="">● 選択期間</span><span data-v-08517a84="">┄ 前期間（同じ日数）</span></div>
+      <div data-v-08517a84="" class="period-bars"><button data-v-08517a84="" title="2026-10-10: 未取得 tok" aria-label="2026-10-10: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-10</span></button><button data-v-08517a84="" title="2026-10-11: 未取得 tok" aria-label="2026-10-11: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-11</span></button><button data-v-08517a84="" title="2026-10-12: 未取得 tok" aria-label="2026-10-12: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-12</span></button><button data-v-08517a84="" title="2026-10-13: 未取得 tok" aria-label="2026-10-13: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-13</span></button><button data-v-08517a84="" title="2026-10-14: 未取得 tok" aria-label="2026-10-14: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-14</span></button><button data-v-08517a84="" title="2026-10-15: 未取得 tok" aria-label="2026-10-15: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-15</span></button><button data-v-08517a84="" title="2026-10-16: 未取得 tok" aria-label="2026-10-16: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-16</span></button><button data-v-08517a84="" title="2026-10-17: 未取得 tok" aria-label="2026-10-17: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-17</span></button><button data-v-08517a84="" title="2026-10-18: 未取得 tok" aria-label="2026-10-18: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-18</span></button><button data-v-08517a84="" title="2026-10-19: 未取得 tok" aria-label="2026-10-19: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-19</span></button><button data-v-08517a84="" title="2026-10-20: 未取得 tok" aria-label="2026-10-20: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-20</span></button><button data-v-08517a84="" title="2026-10-21: 未取得 tok" aria-label="2026-10-21: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-21</span></button><button data-v-08517a84="" title="2026-10-22: 未取得 tok" aria-label="2026-10-22: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-22</span></button><button data-v-08517a84="" title="2026-10-23: 未取得 tok" aria-label="2026-10-23: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-23</span></button><button data-v-08517a84="" title="2026-10-24: 未取得 tok" aria-label="2026-10-24: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-24</span></button><button data-v-08517a84="" title="2026-10-25: 未取得 tok" aria-label="2026-10-25: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-25</span></button><button data-v-08517a84="" title="2026-10-26: 未取得 tok" aria-label="2026-10-26: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-26</span></button><button data-v-08517a84="" title="2026-10-27: 未取得 tok" aria-label="2026-10-27: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-27</span></button><button data-v-08517a84="" title="2026-10-28: 未取得 tok" aria-label="2026-10-28: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-28</span></button><button data-v-08517a84="" title="2026-10-29: 未取得 tok" aria-label="2026-10-29: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-29</span></button><button data-v-08517a84="" title="2026-10-30: 未取得 tok" aria-label="2026-10-30: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-30</span></button><button data-v-08517a84="" title="2026-10-31: 未取得 tok" aria-label="2026-10-31: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-10-31</span></button><button data-v-08517a84="" title="2026-11-01: 未取得 tok" aria-label="2026-11-01: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-01</span></button><button data-v-08517a84="" title="2026-11-02: 未取得 tok" aria-label="2026-11-02: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-02</span></button><button data-v-08517a84="" title="2026-11-03: 未取得 tok" aria-label="2026-11-03: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-03</span></button><button data-v-08517a84="" title="2026-11-04: 未取得 tok" aria-label="2026-11-04: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-04</span></button><button data-v-08517a84="" title="2026-11-05: 未取得 tok" aria-label="2026-11-05: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-05</span></button><button data-v-08517a84="" title="2026-11-06: 未取得 tok" aria-label="2026-11-06: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-06</span></button><button data-v-08517a84="" title="2026-11-07: 未取得 tok" aria-label="2026-11-07: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-07</span></button><button data-v-08517a84="" title="2026-11-08: 未取得 tok" aria-label="2026-11-08: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-08</span></button><button data-v-08517a84="" title="2026-11-09: 未取得 tok" aria-label="2026-11-09: 未取得 tok" style="height: 3px; opacity: 0.2;"><i data-v-08517a84="" class="main" style="height: 0%;"></i><i data-v-08517a84="" class="sub" style="height: 0%;"></i><i data-v-08517a84="" class="unknown" style="height: 0%;"></i><span data-v-08517a84="">2026-11-09</span></button></div><small data-v-08517a84="">記録がない日を利用ゼロとは扱いません。前期間はUTCで同じ日数。週・月の端は選択期間内のみ。</small>
+    </article>
+    <article data-v-08517a84="" class="insight-card roles">
+      <h3 data-v-08517a84="">メインとサブエージェント</h3>
+      <div data-v-08517a84="" class="role-donut" style="--sub: 0%;">
+        <div data-v-08517a84=""><strong data-v-08517a84="">—</strong><small data-v-08517a84="">サブの比率</small></div>
+      </div>
+    </article>
+    <article data-v-08517a84="" class="insight-card">
+      <h3 data-v-08517a84="">ツール利用の構成</h3>
+      <p data-v-08517a84="">取得できるツール呼び出しがありません。</p>
+      <details data-v-08517a84="">
+        <summary data-v-08517a84="">ツール・Skill・MCPの内訳</summary>
+      </details>
+    </article>
+    <article data-v-08517a84="" class="insight-card">
+      <h3 data-v-08517a84="">プロジェクト／ワークスペース別</h3>
+      <details data-v-08517a84="">
+        <summary data-v-08517a84="">種類・モデル・設定別</summary>
+      </details>
+    </article>
+    <article data-v-08517a84="" class="insight-card parents">
+      <h3 data-v-08517a84="">親子エージェントとセッション</h3>
+      <div data-v-08517a84="" class="parent-graph"></div>
+      <details data-v-08517a84="">
+        <summary data-v-08517a84="">セッション一覧と詳細</summary>
+        <div data-v-08517a84="" class="session-map"></div><small data-v-08517a84="">親子関係が記録にない場合は未取得。上位24件を表示。</small>
+      </details>
+      <!--v-if-->
+    </article>
+    <article data-v-08517a84="" class="insight-card">
+      <h3 data-v-08517a84="">利用が集中する時間帯</h3>
+      <div data-v-08517a84="" class="hour-heat">
+        <div data-v-08517a84="" style="opacity: 0.25;" title="0時: 未取得"><span data-v-08517a84="">0</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="1時: 未取得"><span data-v-08517a84="">1</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="2時: 未取得"><span data-v-08517a84="">2</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="3時: 未取得"><span data-v-08517a84="">3</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="4時: 未取得"><span data-v-08517a84="">4</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="5時: 未取得"><span data-v-08517a84="">5</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="6時: 未取得"><span data-v-08517a84="">6</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="7時: 未取得"><span data-v-08517a84="">7</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="8時: 未取得"><span data-v-08517a84="">8</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="9時: 未取得"><span data-v-08517a84="">9</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="10時: 未取得"><span data-v-08517a84="">10</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="11時: 未取得"><span data-v-08517a84="">11</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="12時: 未取得"><span data-v-08517a84="">12</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="13時: 未取得"><span data-v-08517a84="">13</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="14時: 未取得"><span data-v-08517a84="">14</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="15時: 未取得"><span data-v-08517a84="">15</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="16時: 未取得"><span data-v-08517a84="">16</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="17時: 未取得"><span data-v-08517a84="">17</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="18時: 未取得"><span data-v-08517a84="">18</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="19時: 未取得"><span data-v-08517a84="">19</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="20時: 未取得"><span data-v-08517a84="">20</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="21時: 未取得"><span data-v-08517a84="">21</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="22時: 未取得"><span data-v-08517a84="">22</span><small data-v-08517a84="">—</small></div>
+        <div data-v-08517a84="" style="opacity: 0.25;" title="23時: 未取得"><span data-v-08517a84="">23</span><small data-v-08517a84="">—</small></div>
+      </div>
+      <p data-v-08517a84="">Asia/Tokyo · 応答記録の時刻であり、作業時間ではありません。</p>
+    </article>
+    <article data-v-08517a84="" class="insight-card">
+      <h3 data-v-08517a84="">利用制限と到達見込み</h3>
+      <p data-v-08517a84="">現在接続しているPCの制限枠です。履歴のPC選択・期間フィルターとは別の観測です。</p><label data-v-08517a84=""><input data-v-08517a84="" type="checkbox">この画面で上限接近を知らせる</label>
+      <p data-v-08517a84="">制限の使用率は未取得です。</p><small data-v-08517a84="">予測は画面表示中の同じ制限枠の観測から計算。リセット・値の減少で再計算します。</small>
+    </article>
+  </div>
+  <details data-v-08517a84="" class="coverage">
+    <summary data-v-08517a84="">取得範囲と欠損を確認</summary>
+    <p data-v-08517a84="">最大400日分の数値記録を保存。設定単位は認証アカウントの同一性を保証しません。メイン／サブの合計は応答単位の記録から計算し、会計累計へ再加算しません。</p>
+    <p data-v-08517a84="">履歴分析はClaude Code・Codexに対応。他の種類の期間・ツール履歴は未対応で、0とは扱いません。記録のないツール結果や親子関係は未取得。作業の完了率・品質はトークン数から推定しません。</p>
+  </details>
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/dashboard/UsageInsightsPanel.test.ts:63:72
+     61| });
+     62| it('shows unassessed instead of a zero grade when tool results are una…
+     63|  setup(async(_id,p)=>fixture(p));await flushPromises();expect(wrapper!…
+       |                                                                        ^
+     64| });
+     65|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  |@sodashitsu/client-core| src/agent/usageOverviewAssessment.test.ts > overview numeric assessment > uses all formal known results, never a bounded tool breakdown or unrelated tokens/activity
+AssertionError: expected { score: 96, grade: 'A', …(8) } to match object { score: 95, grade: 'A', …(4) }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "coveragePct": 80,
+    "failed": 20,
+    "grade": "A",
+-   "score": 95,
++   "score": 96,
+    "success": 380,
+    "unknown": 100,
+  }
+
+ ❯ src/agent/usageOverviewAssessment.test.ts:8:38
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  |@sodashitsu/client-core| src/agent/usageOverviewAssessment.test.ts > overview numeric assessment > does not turn missing results or low samples into success or an E grade
+AssertionError: expected { score: 100, grade: 'A', …(8) } to match object { score: null, grade: null }
+(8 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "grade": null,
+-   "score": null,
++   "grade": "A",
++   "score": 100,
+  }
+
+ ❯ src/agent/usageOverviewAssessment.test.ts:14:98
+     12|  });
+     13|  it("does not turn missing results or low samples into success or an E…
+     14|   for(const d of [scope(0,0,0),scope(100,0,0),scope(100,9,0)])expect(u…
+       |                                                                                                  ^
+     15|   expect(usageOverviewAssessment(scope(10,10,10))).toMatchObject({scor…
+     16|  });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  |@sodashitsu/tui| src/modes/MonitorView.test.ts > adds a common numeric score to overview only and never generates an agent report
+AssertionError: expected ' エージェント利用分析 · 自動更新                   …' to contain 'A · 95 / 100点'
+
+- Expected
++ Received
+
+- A · 95 / 100点
++  エージェント利用分析 · 自動更新                                                                                             
++  [1 概要]  2 比較   3 親子・ツール   4 収集状況   5 エージェント分析                                                         
++  d 期間 30日 · k CLI すべて · m 親子 すべて                                                                                  
++  r 更新 · p 自動更新停止/再開 · ↑↓/PgUp/PgDn スクロール · Esc 端末                                                           
++  ╭─ 利用サマリー ─────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
++  │ 期間 2026-10-05 ～ 2026-11-03 (UTC)                                                                                    │  
++  │ トークン 100 · 呼出 3 · ツール 200 · エラー 5                                                                          │  
++  │ 入力 100 / 出力 0 / キャッシュ読込 0 / 書込 0                                                                          │  
++  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
++    一部の記録のみの集計です（収集状況を参照）。                                                                              
++    活動: 開始 3 / 完了 2 / 中断 0 / 失敗 1                                                                                   
++  ╭─ エージェント別 ───────────────────────────────────────────────────────────────────────────────────────────────────────╮  
++  │ [############] codex · 100 tok (100.0%) · 3回 · tool 2                                                                 │  
++  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
++  ╭─ 日別 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
++  │ [############] 2026-11-03 · 100 tok (100.0%) · 3回 · tool 2                                                            │  
++  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
++                                                                                                                              
+
+ ❯ src/modes/MonitorView.test.ts:86:105
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed | 35 passed (40)
+   Start at  15:40:02
+   Duration  3.32s (transform 50%, tests 35%, import 10%, environment 5%)
+

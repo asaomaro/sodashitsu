@@ -1,0 +1,139 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+ExpectError: expect(locator).toContainText(expected) failed
+
+Locator: locator('[data-overview-assessment]')
+Expected substring: "A · 95 / 100点"
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toContainText" locator('[data-overview-assessment]') with timeout 5000ms
+  - waiting for locator('[data-overview-assessment]')
+
+    at captureRawStack (/workspaces/sodashitsu-usage-overview-score/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js:8588:17)
+    at callMatcherAsStep (/workspaces/sodashitsu-usage-overview-score/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13310:57)
+    at Object.toContainText (/workspaces/sodashitsu-usage-overview-score/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13302:23)
+    at /workspaces/sodashitsu-usage-overview-score/.aidev/works/20261108-usage-overview-score/browser.mjs:9:414 {
+  matcherResult: {
+    name: 'toContainText',
+    expected: 'A · 95 / 100点',
+    message: 'expect(locator).toContainText(expected) failed\n' +
+      '\n' +
+      "Locator: locator('[data-overview-assessment]')\n" +
+      'Expected substring: "A · 95 / 100点"\n' +
+      'Timeout: 5000ms\n' +
+      'Error: element(s) not found\n' +
+      '\n' +
+      'Call log:\n' +
+      `  - Expect "toContainText" locator('[data-overview-assessment]') with timeout 5000ms\n` +
+      "  - waiting for locator('[data-overview-assessment]')\n",
+    pass: false,
+    actual: undefined,
+    log: [
+      `  - Expect "toContainText" locator('[data-overview-assessment]') with timeout 5000ms`,
+      "  - waiting for locator('[data-overview-assessment]')"
+    ],
+    timeout: 5000,
+    ariaSnapshot: '- region "利用分析ダッシュボード":\n' +
+      '  - text: USAGE INTELLIGENCE\n' +
+      '  - heading "エージェント利用の全体像" [level=2]\n' +
+      '  - paragraph: 消費の推移、委譲、ツール利用をひとつの画面で。\n' +
+      '  - button "期間・条件"\n' +
+      '  - text: 2026-10-10 〜 2026-11-08 UTC\n' +
+      '  - button "7日"\n' +
+      '  - button "30日"\n' +
+      '  - button "90日"\n' +
+      '  - status:\n' +
+      '    - text: ● 一部の記録 対象PC ローカル · 9:00:00 AM 更新 · 2026-10-10〜2026-11-08 UTC · 表示 Asia/Tokyo\n' +
+      '    - button "セッションCSV"\n' +
+      '    - button "JSON"\n' +
+      '  - article:\n' +
+      '    - text: 期間の取得トークン\n' +
+      '    - strong: "100"\n' +
+      '    - text: 前期間比 +0.0%\n' +
+      '  - article:\n' +
+      '    - text: サブエージェントの比率\n' +
+      '    - strong: —\n' +
+      '    - text: 役割を取得できたトークンのみ\n' +
+      '  - article:\n' +
+      '    - text: ツール呼び出し\n' +
+      '    - strong: "200"\n' +
+      '    - text: 結果取得 50% · 失敗 5\n' +
+      '  - article:\n' +
+      '    - text: キャッシュ読取率\n' +
+      '    - strong: 0%\n' +
+      '    - text: 入力＋キャッシュ読取が分母 · 応答あたり 100 tok\n' +
+      '  - text: 記録された処理ターン：開始 1 · 完了 200 · 中断 0 · 失敗 0 各イベントの期間内件数。成果品質やタスク達成率ではありません。\n' +
+      '  - article:\n' +
+      '    - heading "利用推移" [level=3]\n' +
+      '    - combobox:\n' +
+      '      - option "日別" [selected]\n' +
+      '      - option "週別"\n' +
+      '      - option "月別"\n' +
+      '    - paragraph: この期間に取得できた記録がありません。\n' +
+      '    - text: 2026-10-10 2026-11-09 ● 選択期間 ┄ 前期間（同じ日数）\n' +
+      `    - 'button "2026-10-10: 未取得 tok"'\n` +
+      `    - 'button "2026-10-11: 未取得 tok"'\n` +
+      `    - 'button "2026-10-12: 未取得 tok"'\n` +
+      `    - 'button "2026-10-13: 未取得 tok"'\n` +
+      `    - 'button "2026-10-14: 未取得 tok"'\n` +
+      `    - 'button "2026-10-15: 未取得 tok"'\n` +
+      `    - 'button "2026-10-16: 未取得 tok"'\n` +
+      `    - 'button "2026-10-17: 未取得 tok"'\n` +
+      `    - 'button "2026-10-18: 未取得 tok"'\n` +
+      `    - 'button "2026-10-19: 未取得 tok"'\n` +
+      `    - 'button "2026-10-20: 未取得 tok"'\n` +
+      `    - 'button "2026-10-21: 未取得 tok"'\n` +
+      `    - 'button "2026-10-22: 未取得 tok"'\n` +
+      `    - 'button "2026-10-23: 未取得 tok"'\n` +
+      `    - 'button "2026-10-24: 未取得 tok"'\n` +
+      `    - 'button "2026-10-25: 未取得 tok"'\n` +
+      `    - 'button "2026-10-26: 未取得 tok"'\n` +
+      `    - 'button "2026-10-27: 未取得 tok"'\n` +
+      `    - 'button "2026-10-28: 未取得 tok"'\n` +
+      `    - 'button "2026-10-29: 未取得 tok"'\n` +
+      `    - 'button "2026-10-30: 未取得 tok"'\n` +
+      `    - 'button "2026-10-31: 未取得 tok"'\n` +
+      `    - 'button "2026-11-01: 未取得 tok"'\n` +
+      `    - 'button "2026-11-02: 未取得 tok"'\n` +
+      `    - 'button "2026-11-03: 未取得 tok"'\n` +
+      `    - 'button "2026-11-04: 未取得 tok"'\n` +
+      `    - 'button "2026-11-05: 未取得 tok"'\n` +
+      `    - 'button "2026-11-06: 未取得 tok"'\n` +
+      `    - 'button "2026-11-07: 未取得 tok"'\n` +
+      `    - 'button "2026-11-08: 未取得 tok"'\n` +
+      `    - 'button "2026-11-09: 未取得 tok"'\n` +
+      '    - text: 記録がない日を利用ゼロとは扱いません。前期間はUTCで同じ日数。週・月の端は選択期間内のみ。\n' +
+      '  - article:\n' +
+      '    - heading "メインとサブエージェント" [level=3]\n' +
+      '    - strong: —\n' +
+      '    - text: サブの比率\n' +
+      '  - article:\n' +
+      '    - heading "ツール利用の構成" [level=3]\n' +
+      '    - paragraph: 取得できるツール呼び出しがありません。\n' +
+      '    - group: ツール・Skill・MCPの内訳\n' +
+      '  - article:\n' +
+      '    - heading "プロジェクト／ワークスペース別" [level=3]\n' +
+      '    - group: 種類・モデル・設定別\n' +
+      '  - article:\n' +
+      '    - heading "親子エージェントとセッション" [level=3]\n' +
+      '    - group: セッション一覧と詳細\n' +
+      '  - article:\n' +
+      '    - heading "利用が集中する時間帯" [level=3]\n' +
+      '    - text: 0 — 1 — 2 — 3 — 4 — 5 — 6 — 7 — 8 — 9 — 10 — 11 — 12 — 13 — 14 — 15 — 16 — 17 — 18 — 19 — 20 — 21 — 22 — 23 —\n' +
+      '    - paragraph: Asia/Tokyo · 応答記録の時刻であり、作業時間ではありません。\n' +
+      '  - article:\n' +
+      '    - heading "利用制限と到達見込み" [level=3]\n' +
+      '    - paragraph: 現在接続しているPCの制限枠です。履歴のPC選択・期間フィルターとは別の観測です。\n' +
+      '    - checkbox "この画面で上限接近を知らせる"\n' +
+      '    - text: この画面で上限接近を知らせる\n' +
+      '    - paragraph: 制限の使用率は未取得です。\n' +
+      '    - text: 予測は画面表示中の同じ制限枠の観測から計算。リセット・値の減少で再計算します。\n' +
+      '  - group: 取得範囲と欠損を確認'
+  }
+}
+
+Node.js v24.15.0

@@ -1,0 +1,10 @@
+- [x] 既存AI評価と数値概要の取得元/期間cohort/正式direct集計を調査
+- [x] rootへ式・分母・10件minimum・閾値・不明/coverage/暫定方針を共有し承認
+- [x] 共通BigInt純関数とWeb/TUI概要のみ表示
+- [x] 閾値/浮動誤差/未知/不正分母/0点/部分取得の計算回帰
+- [x] 旧UI/誤ったunknown成功扱い負例5fail→3SHA完全復元40pass
+- [x] 生成4テーマDOM/狭幅/フィルタ/低sample/0点E/追加model0
+- [x] corebuild・core2filestrict型・TUIbuild/全型
+- [x] Web全型+Vite最終build
+- [x] 文言のみ精密化/最終生成物更新と証跡
+- [ ] 最終独立差分レビュー（必須）

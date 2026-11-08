@@ -1,0 +1,15 @@
+{
+  "negativeExit": 1,
+  "restoredExit": 0,
+  "before": {
+    "packages/client-core/src/agent/usageOverviewAssessment.ts": "ddea4216e223eb28d3a4568231066e7dbd026e2c74a8c652e4cc424a521717f2",
+    "packages/web/src/dashboard/UsageInsightsPanel.vue": "dc3ecd6d5ef65632c22a62ab58ce1951ab0586245f27e1e7a8e6f54896c89744",
+    "packages/tui/src/modes/MonitorView.ts": "e7e6a1d7437b7fe88ef14ce11336066848e5e90d144ed9a1a15365c0aa180ef6"
+  },
+  "after": {
+    "packages/client-core/src/agent/usageOverviewAssessment.ts": "ddea4216e223eb28d3a4568231066e7dbd026e2c74a8c652e4cc424a521717f2",
+    "packages/web/src/dashboard/UsageInsightsPanel.vue": "dc3ecd6d5ef65632c22a62ab58ce1951ab0586245f27e1e7a8e6f54896c89744",
+    "packages/tui/src/modes/MonitorView.ts": "e7e6a1d7437b7fe88ef14ce11336066848e5e90d144ed9a1a15365c0aa180ef6"
+  },
+  "byteExact": true
+}

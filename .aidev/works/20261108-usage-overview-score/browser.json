@@ -1,0 +1,16 @@
+{
+  "generated": true,
+  "themeCount": 4,
+  "lowSampleUnassessed": true,
+  "measuredZeroIsE": true,
+  "filterScopeFollows": true,
+  "unknownNotSuccess": true,
+  "coverageSeparated": true,
+  "periodCohortExplained": true,
+  "partialExplicit": true,
+  "narrowFits": true,
+  "onlyOverview": true,
+  "modelCalls": 0,
+  "windowsOperations": 0,
+  "pageErrors": []
+}
