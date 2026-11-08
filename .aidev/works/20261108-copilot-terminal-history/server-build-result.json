@@ -1,0 +1,134 @@
+{
+  "sourceHead": "a1ae6c4e5e8ba7cc0a09ab8c075fa2309db77076",
+  "runtimeHead": "9c1c1b5d",
+  "node": "24.22.2",
+  "pnpm": "9.15.9",
+  "nodeOptions": "--max-old-space-size=8192",
+  "command": "NODE_OPTIONS=--max-old-space-size=8192 node corepack/dist/corepack.js pnpm@9.15.9 --filter @sodashitsu/server build",
+  "exitCode": 0,
+  "log": "server-build.log",
+  "completedAtUtc": "2026-11-08T09:01:01.678938+00:00",
+  "distFiles": 1844,
+  "relatedArtifacts": {
+    "agent/CopilotTerminalBindings.d.ts": {
+      "bytes": 737,
+      "sha256": "ced3bd17922dd51948c1074951589a1070190c1768289394b1f798d576f5f8d7"
+    },
+    "agent/CopilotTerminalBindings.d.ts.map": {
+      "bytes": 613,
+      "sha256": "a2738a58722e7d395b1a5764fcdc661591a441e3546cb6b99c43920179f1d571"
+    },
+    "agent/CopilotTerminalBindings.js": {
+      "bytes": 1184,
+      "sha256": "bf79395d7f9653c8aeb362f27c58dea05adac78e93fb97f089ef1eeb504ed5bf"
+    },
+    "agent/CopilotTerminalBindings.js.map": {
+      "bytes": 1364,
+      "sha256": "d00f3ee5fe061d4ffa5912a2361f7a8e04d53e4eb2e981a0dc9c38ee9b7dbd1a"
+    },
+    "agent/NativeSubagentReader.d.ts": {
+      "bytes": 2577,
+      "sha256": "c0e2bba02bd32b0eec6b331c4fb55391fbd05b88d3706d16edfc223e364270dd"
+    },
+    "agent/NativeSubagentReader.d.ts.map": {
+      "bytes": 2047,
+      "sha256": "b624065b6f06d0de39d32eb83318344736ca39a5989d645c87f6489c90b80402"
+    },
+    "agent/NativeSubagentReader.js": {
+      "bytes": 24915,
+      "sha256": "ec5486ea5256f54743505111e7ab98d7e2fd9e32a065ab520c68f85cc32bb2e7"
+    },
+    "agent/NativeSubagentReader.js.map": {
+      "bytes": 26879,
+      "sha256": "bf2388abaf74d8b144e38ee3944f7d6ca732543444e866d2ccad3dc9aae33d23"
+    },
+    "agent/NativeSubagentRecords.d.ts": {
+      "bytes": 2325,
+      "sha256": "c0cc4564857d2953f0f74e2f85d783460e64b5e331ad9279c213279a03079807"
+    },
+    "agent/NativeSubagentRecords.d.ts.map": {
+      "bytes": 2239,
+      "sha256": "6c486810ebf209cc8a0d3602b42a7a65cac6058609305ff90e81c9438a4af512"
+    },
+    "agent/NativeSubagentRecords.js": {
+      "bytes": 18056,
+      "sha256": "79437ee8638814a777bc31553eab4958dd4cd93daae2c8963354d85dbd0ea819"
+    },
+    "agent/NativeSubagentRecords.js.map": {
+      "bytes": 20659,
+      "sha256": "deca72bc98b149afc976287b4b5a001e0f6ef20645a44f70792b65785f59251e"
+    },
+    "agent/NativeSubagentService.d.ts": {
+      "bytes": 2354,
+      "sha256": "df9880e5cc19422e4c653d5b72e03a36434fa30d7c40071d31c9e8268233aa2b"
+    },
+    "agent/NativeSubagentService.d.ts.map": {
+      "bytes": 2245,
+      "sha256": "b8826d26e92b579f93beee5bf4318a0821b58077ba881e70a94827beb24ffbb3"
+    },
+    "agent/NativeSubagentService.js": {
+      "bytes": 10684,
+      "sha256": "6e6a31d8357a450ee87d90f31f855aa487fc882d979994fc00a7d778a811dd4b"
+    },
+    "agent/NativeSubagentService.js.map": {
+      "bytes": 12790,
+      "sha256": "c379e3149271046355d97f1a8df4c661d2971772b4d3982c4c4a5342227948e9"
+    },
+    "agent/SubagentHistoryService.d.ts": {
+      "bytes": 1536,
+      "sha256": "41141ddd503fc03d6b545f5d18c716d6d311112beca17e37057c4b8e319d0603"
+    },
+    "agent/SubagentHistoryService.d.ts.map": {
+      "bytes": 1210,
+      "sha256": "dbb9bd47dd2de02b2fd40867960f3909b543ead9d3f3804a12db5b48d000379a"
+    },
+    "agent/SubagentHistoryService.js": {
+      "bytes": 5613,
+      "sha256": "cf2e5590d6cd690d0c7964b3289d6064cc49af91b76251dd2d1b497c7ccdf5f8"
+    },
+    "agent/SubagentHistoryService.js.map": {
+      "bytes": 6336,
+      "sha256": "0eb0e49ed746de5186b38953d5e03a0229571f2109ca3c6a271c4eb5bf83bd95"
+    },
+    "agent/SubagentTerminalBinding.d.ts": {
+      "bytes": 1312,
+      "sha256": "57a73dad8fd49783a239eaa77f84bb33a50490ba5fbf7f0b1de7d3b97e767b9b"
+    },
+    "agent/SubagentTerminalBinding.d.ts.map": {
+      "bytes": 1120,
+      "sha256": "85f0e22a7d7638949f9e82261c0f33eed7c75342575eb5c9fa5335742bfc2260"
+    },
+    "agent/SubagentTerminalBinding.js": {
+      "bytes": 62,
+      "sha256": "88ebf04637a6f8f181544456320516bb93bfce138e2e1a87ea5da6b81e572687"
+    },
+    "agent/SubagentTerminalBinding.js.map": {
+      "bytes": 147,
+      "sha256": "4af5480602bdd23a80aeb3ae41dbc52171b540705b4b198e1c6305e1efbb847a"
+    },
+    "composeServer.d.ts": {
+      "bytes": 6794,
+      "sha256": "e9ca8fcc965df1574518f61af137f682426f9a0ec8b7ddc4f4a4bf143d463ae5"
+    },
+    "composeServer.d.ts.map": {
+      "bytes": 2604,
+      "sha256": "726c9488257951af8050e83a1d20303da0e1eac1b0e409df41f18fe9bc8641bc"
+    },
+    "composeServer.js": {
+      "bytes": 115969,
+      "sha256": "ef528710c60d90045e1d688a25e9b84765bb9bfcd1bfd8ddca909afb03442a50"
+    },
+    "composeServer.js.map": {
+      "bytes": 79809,
+      "sha256": "f36736e1ae4df27ae31af3c48b320fda78879daa9182655c2a5e7c0210cd923c"
+    }
+  },
+  "hostManifest": {
+    "sha256": "ee15ca5ec579d107619830c936a08c2a6d826483917ee907235970c03f6d4fad",
+    "entries": 41,
+    "allEntriesMatch": true
+  },
+  "nineSourceAndTestsUnchanged": true,
+  "workspaceAliases": "own packages with regular own dist outputs; dependency symlinks only; no shared main dist writes",
+  "sourceEditsDuringBuild": false
+}

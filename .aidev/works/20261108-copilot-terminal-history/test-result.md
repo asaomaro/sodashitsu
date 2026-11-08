@@ -31,3 +31,7 @@ Seven groups all exit1, nine failing regressioncases total. Group1 is literal pr
 Readonly terminal metadata only. toolCallId is not a child-session ID; no child record/intake/model/effort/send connected, no parent usage or content fallback. Existing numeric engine honestly rejects Copilot child numbers. Optional private transcriptUnavailableReason only explains a verified no-body result; existing kinds default behavior unchanged.
 
 Parent scan is existing4MiB/512MiB/256KiBline/20kdedup with EOF/namespace/fdpath revisions reused, not a new full scan per request. Formal start/end private maps retain latest256; old private proof retires without poisoning current fold. Generic collector remains incomplete, not all historical sessions. Timestamps are formal only, not arrival/scan time. Foreignowner history rule is Unix-only; no Windows actual test claimed. Actual installedCopilot lifecycle execution remains unverified. AGY is later scope. Independent final review required.
+
+## Production artifact
+
+After source freeze, finaltype/123pass/negative restoration and separate-context final review no findings, Node24.22.2/8GiB/corepack-pnpm9.15.9 production server build completed exit0 once. All9source/test bytes remained fixed. Own server dist all-file SHA/bytes inserver-dist-sha256.json; related7modules×4artifacts and hostmanifest everyentry checked. server-build-result.json/rawserver-build.log preserve exit/HEAD. No extra fullsuite/Windows/model/preview action or sharedmain output modification.
