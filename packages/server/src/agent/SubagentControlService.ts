@@ -22,7 +22,7 @@ export class SubagentControlService {
     if(!target)return draft("target-unavailable");
     if(target.kind!=="codex")return draft("transport-not-connected");
     this.prune();
-    if(this.uncertain.has(target.key)||this.running.has(target.key)||this.running.size>=2)return draft("target-busy");
+    if(this.uncertain.has(target.key)||this.running.has(target.key)||this.running.size>=2||this.uncertain.size+this.running.size>=128)return draft("target-busy");
     this.running.add(target.key);
     try{
       const expires=this.now()+10_000,controller=new AbortController();this.controllers.add(controller);
@@ -45,7 +45,7 @@ export class SubagentControlService {
     this.prune();
     const lease=this.leases.get(params.leaseId);
     if(!ctx.current()||ctx.signal?.aborted||!lease||lease.owner!==ctx.owner||lease.expires<=this.now()||lease.target.paneId!==params.paneId||lease.target.recordId!==params.agentId||!lease.target.current())return {status:"rejected",reason:"scope-expired"};
-    if(this.running.has(lease.target.key)||this.uncertain.has(lease.target.key)||this.running.size>=2||this.receipts.size>=128)return {status:"rejected",reason:"target-busy"};
+    if(this.running.has(lease.target.key)||this.uncertain.has(lease.target.key)||this.running.size>=2||this.receipts.size>=128||this.uncertain.size+this.running.size>=128)return {status:"rejected",reason:"target-busy"};
     this.leases.delete(params.leaseId); // Every attempted send consumes its lease, including lost ACK.
     this.running.add(lease.target.key);
     const work=(async():Promise<AgentSubagentSendResult>=>{

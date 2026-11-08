@@ -61,3 +61,18 @@ it("does not queue a double click or accept a late acknowledgement after parent 
  f.pane.agent!.instanceId=randomUUID();finish({status:"accepted",turnId:"late-turn"});
  expect(await first).toMatchObject({status:"delivery-unknown"});expect(await repeat).toMatchObject({status:"delivery-unknown"});expect(count).toBe(1);service.close();
 });
+it("reserves a bounded unknown-delivery slot and never evicts uncertainty when receipt TTL expires",async()=>{
+ const f=fixture(),ids=Array.from({length:130},()=>randomUUID());f.pane.agent!.subagents={count:ids.length,items:ids.map(id=>({id,depth:1,startedAt:1}))};
+ let now=0,hold=false,writes=0;const finish:Array<()=>void>=[];
+ const service=new SubagentControlService({session:f.session,now:()=>now,input:async r=>{
+  if(!r.send)return {status:"ready",state:{daemon:"generated",mode:"start"}};
+  writes++;if(hold)await new Promise<void>(resolve=>finish.push(resolve));return {status:"delivery-unknown"};
+ }});
+ const prepare=async(id:string)=>{const c=await service.control(f.pane.id,id,f.ctx);if(c.mode!=="direct")throw Error("expected generated lease");return {paneId:f.pane.id,agentId:id,leaseId:c.leaseId,requestId:randomUUID(),text:"generated"};};
+ for(const id of ids.slice(0,127))expect(await service.send(await prepare(id),f.ctx)).toMatchObject({status:"delivery-unknown"});
+ now=31*60_000;const a=await prepare(ids[127]!),b=await prepare(ids[128]!);hold=true;
+ const first=service.send(a,f.ctx),second=service.send(b,f.ctx);finish.splice(0).forEach(resolve=>resolve());
+ expect(await first).toMatchObject({status:"delivery-unknown"});expect(await second).toMatchObject({status:"rejected",reason:"target-busy"});expect(writes).toBe(128);
+ now=62*60_000;expect(await service.control(f.pane.id,ids[129]!,f.ctx)).toMatchObject({mode:"parent-draft",reason:"target-busy"});
+ expect(await service.control(f.pane.id,ids[0]!,f.ctx)).toMatchObject({mode:"parent-draft",reason:"target-busy"});service.close();
+});

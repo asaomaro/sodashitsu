@@ -1,0 +1,43 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-conversation-control
+
+ ❯ |@sodashitsu/server| src/agent/SubagentControlService.test.ts (14 tests | 1 failed) 45ms
+   × reserves a bounded unknown-delivery slot and never evicts uncertainty when receipt TTL expires 36ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentControlService.test.ts > reserves a bounded unknown-delivery slot and never evicts uncertainty when receipt TTL expires
+AssertionError: expected { status: 'delivery-unknown', …(1) } to match object { status: 'rejected', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "reason": "target-busy",
+-   "status": "rejected",
++   "reason": "delivery-unknown",
++   "status": "delivery-unknown",
+  }
+
+ ❯ src/agent/SubagentControlService.test.ts:75:86
+     73|  now=31*60_000;const a=await prepare(ids[127]!),b=await prepare(ids[12…
+     74|  const first=service.send(a,f.ctx),second=service.send(b,f.ctx);finish…
+     75|  expect(await first).toMatchObject({status:"delivery-unknown"});expect…
+       |                                                                                      ^
+     76|  now=62*60_000;expect(await service.control(f.pane.id,ids[129]!,f.ctx)…
+     77|  expect(await service.control(f.pane.id,ids[0]!,f.ctx)).toMatchObject(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  10:16:07
+   Duration  955ms (transform 72%, import 22%, tests 5%)
+
