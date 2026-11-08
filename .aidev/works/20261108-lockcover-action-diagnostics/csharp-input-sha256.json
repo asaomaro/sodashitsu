@@ -1,0 +1,6 @@
+{
+  "scripts/remote-desktop/WindowsDesktopUnlock.cs": "3ec171e77e41bb5fdcbb1fa4b5db86cc34b4731cf4286385320b24da61750c0f",
+  "scripts/remote-desktop/WindowsDesktopHost.cs": "cf36d62d8bc80e29664269d6078ff5a8f50d3ffaadf7ab2120a9105d7efee815",
+  "scripts/remote-desktop/WindowsLockCoverChecks.cs": "a54de3c4f86d2b6ce1aab12211e65259ed1817c4649a0170b9e116d080ca3e4a",
+  ".aidev/works/20261108-lockcover-action-diagnostics/LockCoverObservationChecks.cs": "b41d3424f5ec0b59c1355ac9636de84febac6706356d889c8c40c94c3695f378"
+}
