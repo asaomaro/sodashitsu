@@ -43,6 +43,16 @@ it("requires Stop plus exact DB/type/terminal proof and never clears a child obs
  f.controller.offer(f.observation({generationId:"late",model:"late-result"}));await new Promise(r=>setTimeout(r,100));expect(f.controller.binding(f.pane.id,f.child)?.settings.model).toBe("child-observed");
  await appendFile(f.childFile,'{"role":"user","message":{"content":[]}}\n');expect(await binding.openRecord()).toBeUndefined();f.controller.forget(f.pane.id);expect(binding.current()).toBe(false);
 });
+it("retires an old terminal proof when a new child-file revision has a fresh self observation, without inferring alive state",async()=>{
+ const f=await fixture();f.controller.offer(f.observation());f.controller.offer(f.stop());
+ await vi.waitFor(()=>expect(f.controller.terminals(f.pane.id).items).toHaveLength(1),{timeout:3000});const old=f.controller.terminals(f.pane.id).items[0]!;
+ await appendFile(f.childFile,'{"role":"user","message":{"content":[]}}\n{"role":"assistant","message":{"content":[]}}\n{"type":"turn_ended","status":"success"}\n');
+ f.controller.offer(f.observation({generationId:"next-generation",model:"new-self-model",reasoningEffort:undefined}));
+ await vi.waitFor(()=>expect(f.controller.binding(f.pane.id,f.child)?.settings).toEqual({model:"new-self-model",modelBasis:"session"}),{timeout:3000});
+ expect(old.current()).toBe(false);expect(f.controller.terminals(f.pane.id).items).toEqual([]);expect(f.pane.agent).not.toHaveProperty("subagents");
+ f.controller.offer(f.stop());await vi.waitFor(()=>expect(f.controller.terminals(f.pane.id).items).toHaveLength(1),{timeout:3000});
+ expect(f.controller.terminals(f.pane.id).items[0]?.settings).toEqual({model:"new-self-model",modelBasis:"session"});
+});
 it.each(["parent","refkind","instance","verified","pid"])("rejects changed %s owner before private data is returned",async change=>{
  const f=await fixture();f.controller.offer(f.observation());await vi.waitFor(()=>expect(f.controller.binding(f.pane.id,f.child)).toBeDefined(),{timeout:3000});const b=f.controller.binding(f.pane.id,f.child)!;
  if(change==="parent")f.pane.agentSession!.sessionId=randomUUID();if(change==="refkind")f.pane.agentSession!.kind="codex";if(change==="instance")f.pane.agent!.instanceId=randomUUID();if(change==="verified")f.verified(false);if(change==="pid")f.pid(false);

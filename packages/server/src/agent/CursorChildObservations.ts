@@ -91,7 +91,7 @@ export class CursorChildObservations {
    if(old&&digest(old.lineage)!==digest(opened.lineage)){delete slot.binding;slot.conflict=true;state.incomplete=true;return;}
    if(slot.conflict)return;
    if(report.phase==="observation"){
-    if(old?.terminal||state.exhausted)return;
+    if(old?.terminal&&old.fileRevision===fileRevision||state.exhausted)return;
    }else{
     if(!cursorChildStopMatches({parentId:report.parentId,childId:report.childId,logicalId:report.logicalId,type:report.childType,status:report.status,settings:{}},opened.lineage,opened.terminal)){
      // A just-received formal Stop may precede its final transcript flush.

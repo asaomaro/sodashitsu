@@ -1,0 +1,44 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-intake
+
+ ❯ |@sodashitsu/server| src/agent/CursorChildObservations.test.ts (16 tests | 1 failed) 5368ms
+   × retires an old terminal proof when a new child-file revision has a fresh self observation, without inferring alive state 3200ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildObservations.test.ts > retires an old terminal proof when a new child-file revision has a fresh self observation, without inferring alive state
+AssertionError: expected { model: 'child-observed', …(3) } to deeply equal { model: 'new-self-model', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "model": "new-self-model",
++   "model": "child-observed",
+    "modelBasis": "session",
++   "reasoningEffort": "high",
++   "reasoningEffortBasis": "session",
+  }
+
+ ❯ vi.waitFor.timeout src/agent/CursorChildObservations.test.ts:51:81
+     49|  await appendFile(f.childFile,'{"role":"user","message":{"content":[]}…
+     50|  f.controller.offer(f.observation({generationId:"next-generation",mode…
+     51|  await vi.waitFor(()=>expect(f.controller.binding(f.pane.id,f.child)?.…
+       |                                                                                 ^
+     52|  expect(old.current()).toBe(false);expect(f.controller.terminals(f.pan…
+     53|  f.controller.offer(f.stop());await vi.waitFor(()=>expect(f.controller…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+   Start at  11:41:42
+   Duration  5.61s (tests 97%, transform 2%, import 1%)
+
