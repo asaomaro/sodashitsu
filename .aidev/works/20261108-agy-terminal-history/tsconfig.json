@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "../../.."
+  },
+  "files": [
+    "../../../packages/server/src/agent/AntigravitySubagentReader.ts",
+    "../../../packages/server/src/agent/AntigravityChildRecord.ts",
+    "../../../packages/server/src/agent/AntigravityTerminalSnapshot.ts",
+    "../../../packages/server/src/agent/AntigravityTerminalHistory.ts",
+    "../../../packages/server/src/agent/AntigravityTerminalHistory.test.ts",
+    "../../../packages/server/src/agent/NativeSubagentService.ts",
+    "../../../packages/server/src/composeServer.ts",
+    "../../../packages/server/src/composeServer.agyTerminalHistory.integration.test.ts"
+  ],
+  "include": [],
+  "exclude": []
+}

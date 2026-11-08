@@ -1,3 +1,4 @@
+import {AntigravityTerminalHistory} from "./AntigravityTerminalHistory.js";
 import type {SubagentTerminalCollection} from "./SubagentTerminalBinding.js";
 import type { ClaudeChildSource } from "./ClaudeChildObservations.js";
 import type { Pane } from "@sodashitsu/protocol";
@@ -7,6 +8,7 @@ import type { Subagents } from "./SubagentTracker.js";
 
 type Source=NativeSubagentSource|ClaudeChildSource;
 interface Deps {
+  agyHistory?:Pick<AntigravityTerminalHistory,"read"|"forget"|"close">;
   observeClaude?: (source:ClaudeChildSource)=>Promise<Subagents|undefined>;
   session: { snapshot(): { panes: Pane[] }; getPane(id: string): Pane | undefined; setAgentSubagents(id: string, value: Subagents | undefined): boolean; hasVerifiedAgentSession(paneId: string, instanceId: string, sessionId: string): boolean };
   bus: Pick<EventBus, "subscribe">;
@@ -25,6 +27,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 /** Polls the current verified session; stale asynchronous reads never cross an instance/session change. */
 export class NativeSubagentService {
   private readonly reader;
+  private readonly agyHistory;
   private readonly sub;
   private readonly known = new Map<string, Source>();
   private timer: unknown;
@@ -38,8 +41,9 @@ export class NativeSubagentService {
   private closed = false;
   constructor(private readonly deps: Deps) {
     this.reader = deps.reader ?? new NativeSubagentReader();
+    this.agyHistory=deps.agyHistory??new AntigravityTerminalHistory();
     this.sub = deps.bus.subscribe(event => {
-      if (event.event === "pane.closed") { this.reader.forget(event.data.paneId); this.known.delete(event.data.paneId); this.pending.delete(event.data.paneId); }
+      if (event.event === "pane.closed") { this.reader.forget(event.data.paneId);this.agyHistory.forget(event.data.paneId); this.known.delete(event.data.paneId); this.pending.delete(event.data.paneId); }
     });
   }
   start(): void { if (!this.closed && this.timer === undefined) this.schedule(); }
@@ -69,7 +73,7 @@ export class NativeSubagentService {
       if(fast&&eligible)this.fastTicks++;
       if(fast&&!eligible)this.cooldownUntil=now+2000;
       for (const [id, owner] of this.known) if (!ids.has(id)) {
-        this.reader.forget(id); this.known.delete(id); this.pending.delete(id);
+        this.reader.forget(id);this.agyHistory.forget(id); this.known.delete(id); this.pending.delete(id);
         const pane = this.deps.session.getPane(id);
         if (pane?.agent?.instanceId === owner.instanceId && pane.agent.kind === owner.kind && pane.agent.subagents !== undefined) this.deps.session.setAgentSubagents(id, undefined);
       }
@@ -133,6 +137,13 @@ export class NativeSubagentService {
     const current=()=>!this.closed&&this.deps.session.getPane(paneId)?.cwd===cwd&&same(source,sourceOf(this.deps.session.getPane(paneId)))&&same(source,this.known.get(paneId))&&this.verified(source);
     return this.reader.copilotTerminals?.(source,current)??unavailable();
   }
+  agyTerminals(paneId:string,allowed:()=>boolean=()=>true):Promise<SubagentTerminalCollection> {
+    const pane=this.deps.session.getPane(paneId),source=sourceOf(pane),cwd=pane?.cwd;
+    const unavailable=():SubagentTerminalCollection=>({status:"unavailable",bindings:[],incomplete:true});
+    if(this.closed||source?.kind!=="agy"||!cwd||!same(source,this.known.get(paneId))||!this.verified(source)||!allowed())return Promise.resolve(unavailable());
+    const current=()=>!this.closed&&this.deps.session.getPane(paneId)?.cwd===cwd&&same(source,sourceOf(this.deps.session.getPane(paneId)))&&same(source,this.known.get(paneId))&&this.verified(source);
+    return this.agyHistory.read(source,current,allowed);
+  }
   museChildSession(paneId:string,child:string):string|undefined {
     const source=sourceOf(this.deps.session.getPane(paneId));
     if(!source||source.kind!=="muse"||!same(source,this.known.get(paneId))||!this.verified(source))return undefined;
@@ -147,6 +158,6 @@ export class NativeSubagentService {
     this.closed = true;
     this.sub.dispose();
     if (this.timer !== undefined) (this.deps.clearTimer ?? (t => clearTimeout(t as ReturnType<typeof setTimeout>)))(this.timer);
-    this.timer = undefined; this.known.clear(); this.pending.clear(); this.reader.close();
+    this.timer = undefined; this.known.clear(); this.pending.clear();this.agyHistory.close(); this.reader.close();
   }
 }

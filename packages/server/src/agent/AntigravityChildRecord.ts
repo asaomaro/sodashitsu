@@ -3,16 +3,18 @@ import {locateExtra,openExtra,type ExtraRoots} from "../conversation/ExtraAgentR
 import {verifyAntigravityChild} from "./AntigravitySubagentReader.js";
 import {entriesOfLine} from "./SubagentTranscript.js";
 import type {SubagentTranscriptEntry} from "@sodashitsu/protocol";
-/** Parent invoke result + exact descriptor UUID/spawn-step proof. Never follows workspaceUris. */
-export async function openAntigravityChildRecord(parent:string,child:string,roots:ExtraRoots) {
- if(parent===child||!await verifyAntigravityChild(parent,child,roots))return undefined;
+/** Parent invoke result + exact descriptor UUID/spawn-step proof. Never follows workspaceUris.
+ * Optional verifier is a server-private KILLED-only proof; RPC never supplies callbacks. */
+export async function openAntigravityChildRecord(parent:string,child:string,roots:ExtraRoots,verify?:()=>Promise<boolean>) {
+ const owned=verify??(()=>verifyAntigravityChild(parent,child,roots));
+ if(parent===child||!await owned())return undefined;
  const path=await locateExtra("agy",child,roots),opened=path&&await openExtra("agy",child,roots);
  if(!path||!opened)return undefined;
  try{
   if(process.geteuid&&opened.st.uid!==process.geteuid())throw Error("child owner mismatch");
   const revision=await opened.fd.stat({bigint:true});
   const unchanged=async()=>{
-   if(!await verifyAntigravityChild(parent,child,roots))return false;
+   if(!await owned())return false;
    const after=await opened.fd.stat({bigint:true}).catch(()=>undefined),leaf=await lstat(path,{bigint:true}).catch(()=>undefined);
    return await locateExtra("agy",child,roots)===path&&!!leaf&&!leaf.isSymbolicLink()&&[leaf,after].every(st=>st!==undefined&&(["dev","ino","size","mtimeNs","ctimeNs"] as const).every(k=>st[k]===revision[k]));
   };

@@ -1,3 +1,4 @@
+import type {BigIntStats} from "node:fs";
 import { lstat, opendir, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { locateExtra, openExtra, type ExtraRoots } from "../conversation/ExtraAgentRecords.js";
@@ -5,6 +6,11 @@ import { openVerified, readRange } from "./safeFile.js";
 import type { SubagentInfo } from "@sodashitsu/protocol";
 import type { Subagents } from "./SubagentTracker.js";
 
+export interface AntigravityDescriptorProof {id:string;spawnStepIndex:number;startedAt:number;state:"SUBAGENT_STATE_ALIVE"|"SUBAGENT_STATE_KILLED";file:string;revision:BigIntStats;description?:string;type?:string}
+/** Private observer reuses the exact invoke/descriptor parser without altering current snapshots. */
+export async function readAntigravityDescriptorProofs(sessionId:string,roots:ExtraRoots,observe:(value:AntigravityDescriptorProof)=>void):Promise<Subagents|undefined>{
+  return scanAntigravitySubagents(sessionId,roots,true,observe);
+}
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const label = (v: unknown): string | undefined => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, 200) || undefined : undefined;
 async function spawnProofs(transcript: string): Promise<Map<number, { id: string; at: number }> | undefined> {
@@ -46,7 +52,7 @@ export async function verifyAntigravityChild(sessionId: string, child: string, r
   const proof = await scanAntigravitySubagents(sessionId, roots, true);
   return proof?.items.some(item => item.id === child) === true;
 }
-async function scanAntigravitySubagents(sessionId: string, roots: ExtraRoots, includeRetired: boolean): Promise<Subagents | undefined> {
+async function scanAntigravitySubagents(sessionId: string, roots: ExtraRoots, includeRetired: boolean, observe?: (value:AntigravityDescriptorProof)=>void): Promise<Subagents | undefined> {
   const transcript = await locateExtra("agy", sessionId, roots);
   if (!transcript) return undefined;
   const parentBefore = await lstat(transcript).catch(() => null);
@@ -74,6 +80,7 @@ async function scanAntigravitySubagents(sessionId: string, roots: ExtraRoots, in
     if (!opened) return undefined;
     try {
       if (opened.st.size > 32 * 1024) return undefined;
+      const revision=observe?await opened.fd.stat({bigint:true}):undefined;
       const bytes = await readRange(opened.fd, 0, opened.st.size);
       const after = await opened.fd.stat(), path = await lstat(file).catch(() => null);
       if (!path || path.dev !== opened.st.dev || path.ino !== opened.st.ino || after.size !== opened.st.size || after.mtimeMs !== opened.st.mtimeMs || await realpath(file) !== file) return undefined;
@@ -85,6 +92,11 @@ async function scanAntigravitySubagents(sessionId: string, roots: ExtraRoots, in
       if (row.state === "SUBAGENT_STATE_KILLED" && !includeRetired) continue;
       if (!["SUBAGENT_STATE_ALIVE", "SUBAGENT_STATE_KILLED"].includes(row.state)) return undefined;
       const description = label(row.subagentDescriptor?.role), type = label(row.subagentDescriptor?.typeName);
+      if(observe&&revision){
+        const final=await opened.fd.stat({bigint:true}),leaf=await lstat(file,{bigint:true});
+        if(![final,leaf].every(value=>(["dev","ino","size","mtimeNs","ctimeNs"] as const).every(key=>value[key]===revision[key])))return undefined;
+        observe({id,spawnStepIndex:row.spawnStepIndex,startedAt:proof.at,state:row.state,file,revision,...(description?{description}:{}),...(type?{type}:{})});
+      }
       // Availability hint only; actual viewing revalidates the complete formal relation.
       const childFile = includeRetired ? null : await openExtra("agy", id, roots).catch(() => null);
       const hasTranscript = !!childFile; await childFile?.fd.close();
