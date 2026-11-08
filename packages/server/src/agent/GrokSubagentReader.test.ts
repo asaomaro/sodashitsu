@@ -102,5 +102,5 @@ it("bounds physical attempt verifiers until their actual parent handles close an
 });
 it("refuses over-limit child files without reading their body",async()=>{
  const f=await fixture();await writeFile(f.file,start()+finish());const dir=join(f.base,child);await mkdir(dir);const file=join(dir,"chat_history.jsonl");await writeFile(file,"");await truncate(file,512*1024*1024+1);
- try{await f.reader.read(f.source,()=>true);const target=f.reader.terminals(f.source,()=>true).bindings[0]!;expect(await target.openRecord("transcript",()=>true)).toBeUndefined();}finally{f.reader.close();}
+ try{await f.reader.read(f.source,()=>true);const target=f.reader.terminals(f.source,()=>true).bindings[0]!;const opened=await target.openRecord("transcript",()=>true);try{expect(opened).toBeUndefined();}finally{await opened?.fd.close();}}finally{f.reader.close();}
 });

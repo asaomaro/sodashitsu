@@ -27,7 +27,7 @@ it("feeds verified native ended attempts into exact history text and child-only 
   const list=await f.history.read({paneId});expect(list).toMatchObject({status:"ok",items:[{id:child,terminalStatus:"completed",model:"effective-child",modelBasis:"creation"}]});const selection={paneId,agentId:child,entryId:list.items[0]!.entryId};
   expect(await f.history.transcript(selection)).toMatchObject({status:"ok",running:false,terminalStatus:"completed",entries:[{kind:"say",text:"Generated ended child answer"}]});
   const usage=await f.history.usageRead(selection);expect(usage).toMatchObject({status:"ok",usage:{source:"grok-usage",consumptionScope:"subtree",tokens:{total:120},costUsd:0.0123456789,costBasis:"reported"}});expect(usage.usage).not.toHaveProperty("contextTokens");expect(f.pane.agent?.subagents?.count).toBe(0);
-  f.verified=false;expect(await f.history.usageRead(selection)).toMatchObject({status:"unavailable"});expect(await f.history.transcript(selection)).toMatchObject({status:"unreadable"});
+  const binding=f.native.grokTerminals(paneId).bindings[0]!;f.verified=false;expect(binding.current()).toBe(false);expect(f.native.grokTerminals(paneId).status).toBe("unavailable");expect(await f.history.usageRead(selection)).toMatchObject({status:"unavailable"});expect(await f.history.transcript(selection)).toMatchObject({status:"unreadable"});
  }finally{f.history.close();f.native.close();}
 });
 it("never uses an old history selection for a new child attempt before or after native catchup",async()=>{
