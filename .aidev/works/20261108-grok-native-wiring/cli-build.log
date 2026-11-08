@@ -1,0 +1,4 @@
+
+> @sodashitsu/cli@0.1.0 build /workspaces/sodashitsu-grok-native-wiring/packages/cli
+> tsc -b
+

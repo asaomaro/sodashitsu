@@ -1,0 +1,92 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-native-wiring/packages/server
+
+ ❯ src/agent/GrokNativeWiring.test.ts (3 tests | 2 failed) 39ms
+   × publishes Grok creation/session models and effort through the real service, CLI view and shared Web/TUI label 16ms
+   × rejects in-flight model results when the parent fresh proof or reference kind is lost 8ms
+{"ts":"2026-11-08T00:35:21.367Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T00:35:21.368Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T00:35:21.369Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T00:35:21.369Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T00:35:21.371Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-grok-subagent-wire-WqNuos/state/commands.json","count":0}
+{"ts":"2026-11-08T00:35:23.131Z","level":"info","msg":"agent session attached","paneId":"dae6855d-4378-49ca-8cac-ce8b69d28cc6","kind":"grok","session":"01a1b675","source":"hook"}
+ ❯ src/composeServer.grokSubagents.integration.test.ts (1 test | 1 failed) 9853ms
+   × publishes Grok native child settings through production snapshot, CLI serialization and shared labels 9852ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/composeServer.grokSubagents.integration.test.ts > publishes Grok native child settings through production snapshot, CLI serialization and shared labels
+AssertionError: expected undefined to match object { model: 'grok-4', …(2) }
+
+- Expected:
+{
+  "model": "grok-4",
+  "modelBasis": "creation",
+  "state": "unknown",
+}
+
++ Received:
+undefined
+
+ ❯ vi.waitFor.timeout src/composeServer.grokSubagents.integration.test.ts:40:89
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/agent/GrokNativeWiring.test.ts > publishes Grok creation/session models and effort through the real service, CLI view and shared Web/TUI label
+AssertionError: expected undefined to match object { count: 1, countBasis: 'alive', …(1) }
+
+- Expected:
+{
+  "count": 1,
+  "countBasis": "alive",
+  "items": [
+    {
+      "id": "01a1b675-8b2e-78f3-9d3b-4533ea165d9a",
+      "model": "grok-4",
+      "modelBasis": "creation",
+      "state": "unknown",
+    },
+  ],
+}
+
++ Received:
+undefined
+
+ ❯ src/agent/GrokNativeWiring.test.ts:24:61
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/agent/GrokNativeWiring.test.ts > rejects in-flight model results when the parent fresh proof or reference kind is lost
+AssertionError: expected undefined to be 1 // Object.is equality
+
+- Expected:
+1
+
++ Received:
+undefined
+
+ ❯ src/agent/GrokNativeWiring.test.ts:36:68
+     34| it("rejects in-flight model results when the parent fresh proof or ref…
+     35|  const f=await fixture();try{
+     36|   await f.service.refresh();expect(f.pane.agent?.subagents?.count).toB…
+       |                                                                    ^
+     37|   const reading=f.service.refresh();f.verified=false;await reading;exp…
+     38|   f.verified=true;await f.service.refresh();expect(f.pane.agent?.subag…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 1 passed (4)
+   Start at  09:35:18
+   Duration  13.12s (tests 68%, transform 27%, import 5%)
+
+  Transform  transforming modules took 3.93s · 27% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-grok-native-wiring/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/GrokNativeWiring.test.ts src/composeServer.grokSubagents.integration.test.ts

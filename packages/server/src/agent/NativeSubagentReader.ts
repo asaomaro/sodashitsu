@@ -1,6 +1,7 @@
 import { readCodexControlStatus, type CodexControlTarget, type CodexObservedState } from "./CodexControlStatus.js";
 import { MuseChildObservations } from "./MuseChildObservations.js";
 import { CodexChildObservationCache } from "./CodexChildObservationCache.js";
+import { GrokSubagentReader } from "./GrokSubagentReader.js";
 import { CodexSubagentStream } from "./CodexSubagentStream.js";
 import { readAntigravitySubagents } from "./AntigravitySubagentReader.js";
 import { realpath, lstat } from "node:fs/promises";
@@ -15,7 +16,7 @@ import type { Subagents } from "./SubagentTracker.js";
 export interface NativeSubagentSource {
   paneId: string;
   instanceId: string;
-  kind: NativeSubagentKind | "agy";
+  kind: NativeSubagentKind | "agy" | "grok";
   sessionId: string;
 }
 interface State {
@@ -41,13 +42,14 @@ export class NativeSubagentReader {
   private readonly states = new Map<string, State>();
   private closed = false;
   private readonly codexObservations=new CodexChildObservationCache();
+  private readonly grokReader:GrokSubagentReader;
   private observationEpoch=0;
   private readonly museObservations: Pick<MuseChildObservations,"readMany"|"forget">;
   private readonly agyStates = new Map<string, { key: string; reading?: Promise<Subagents | undefined> }>();
-  constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}, private readonly codexStatus: (target: CodexControlTarget) => Promise<Map<string, CodexObservedState>> = readCodexControlStatus, museObservations?: Pick<MuseChildObservations,"readMany"|"forget">) { this.museObservations = museObservations ?? new MuseChildObservations(roots); }
+  constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}, private readonly codexStatus: (target: CodexControlTarget) => Promise<Map<string, CodexObservedState>> = readCodexControlStatus, museObservations?: Pick<MuseChildObservations,"readMany"|"forget">) { this.museObservations = museObservations ?? new MuseChildObservations(roots); this.grokReader=new GrokSubagentReader(roots); }
 
-  forget(paneId: string): void { this.codexObservations.forget(paneId); this.museObservations.forget(); this.states.get(paneId)?.abort.abort(); this.states.delete(paneId); this.agyStates.delete(paneId); }
-  close(): void { this.closed = true; for (const state of this.states.values()) state.abort.abort(); this.states.clear(); this.agyStates.clear(); this.museObservations.forget(); this.codexObservations.close(); }
+  forget(paneId: string): void { this.grokReader.forget(paneId); this.codexObservations.forget(paneId); this.museObservations.forget(); this.states.get(paneId)?.abort.abort(); this.states.delete(paneId); this.agyStates.delete(paneId); }
+  close(): void { this.closed = true; for (const state of this.states.values()) state.abort.abort(); this.states.clear(); this.agyStates.clear(); this.museObservations.forget(); this.codexObservations.close(); this.grokReader.close(); }
 
   /** Internal provider-owned relation, never a client path or a guessed child UUID. */
   museChildSession(source:NativeSubagentSource,child:string):string|undefined {
@@ -63,14 +65,20 @@ export class NativeSubagentReader {
 
   /** Internal scheduling hint only; never a partial activity snapshot or public protocol value. */
   progress(source: NativeSubagentSource): { offset: number; pending: boolean; generation: number } | undefined {
+    if(source.kind==="grok")return this.closed?undefined:this.grokReader.progress(source);
     const state=this.states.get(source.paneId);
     if(this.closed||source.kind==="agy"||!state||state.invalid||state.key!==JSON.stringify([source.instanceId,source.kind,source.sessionId]))return undefined;
     return {offset:state.offset,pending:state.pending===true,generation:state.generation};
   }
 
-  async read(source: NativeSubagentSource): Promise<Subagents | undefined> {
-    if (this.closed) return undefined;
+  async read(source: NativeSubagentSource,verified:()=>boolean=()=>true): Promise<Subagents | undefined> {
+    if (this.closed||!verified()) return undefined;
     if(source.kind!=="codex")this.codexObservations.forget(source.paneId);
+    if(source.kind!=="grok")this.grokReader.forget(source.paneId);
+    if(source.kind==="grok"){
+      this.states.get(source.paneId)?.abort.abort();this.states.delete(source.paneId);this.agyStates.delete(source.paneId);
+      return this.grokReader.read(source,()=>!this.closed&&verified());
+    }
     if (source.kind === "agy") return this.readAgy(source);
     this.agyStates.delete(source.paneId);
     const key = JSON.stringify([source.instanceId, source.kind, source.sessionId]);

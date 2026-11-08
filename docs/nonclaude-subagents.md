@@ -9,9 +9,10 @@
 | Muse Code | 親session streamの`subagent.control.*`の開始・状態・result_ready | 1.4.14-R7309.1で隔離実CLIの子起動・終了を確認 |
 | GitHub Copilot CLI | 親`events.jsonl`の`custom_agent.started/completed/failed`および`subagent.started/completed/failed` | 導入0.0.362のSDK schemaと[現行SDKの正式イベント](https://github.com/github/copilot-sdk/blob/main/docs/features/streaming-events.md#sub-agent-and-skill-events)から生成fixtureで確認。実CLI往復は未検証 |
 | Antigravity CLI | 親の正式な`invoke_subagent`起動結果と、直属の子descriptorのUUID・`spawnStepIndex` | 1.4.12の隔離実CLIで子起動・応答・native list・killを確認。ALIVEは所属数、作業状態は不明 |
+| Grok CLI | 親`updates.jsonl`の正式な生成・進捗・終了と、直属の子の`ModelChanged` | 1.0.77の隔離ローカル模擬APIで子1件の生成・終了・確定モデルを確認。設定変更・effortと公開配線は生成fixtureで確認 |
 | Bob Shell、その他 | 未対応 | 正式な親子取得契約が未確認。件数を推測しない |
 
-Codex・Muse・Copilot・Antigravityは約2秒ごとに、現在の親paneへ改めて結び付けられた会話の記録だけを読みます。保存済みの会話IDだけでは取得せず、現在のinstanceについてサーバが確認した証拠が必要です。読み終わるまでにinstanceや会話が変われば結果を捨てます。読み取りによるCLI・モデルの起動や、子への入力は行いません。
+Codex・Muse・Copilot・Antigravity・Grokは約2秒ごとに、現在の親paneへ改めて結び付けられた会話の記録だけを読みます。保存済みの会話IDだけでは取得せず、現在のinstanceについてサーバが確認した証拠が必要です。読み終わるまでにinstanceや会話が変われば結果を捨てます。読み取りによるCLI・モデルの起動や、子への入力は行いません。
 
 Codex・Muse・Copilotは開始済みの子を一覧に載せ、終了・失敗・割込の記録で外します。履歴や同じイベントを読み直しても件数を足しません。Codexのinteractedは入力の配達なので、再び実行中とは断定しません。正式startedで同じ親会話への所属を確認済みの子がcompleted後に改めてinteractedで参照された場合は、所属数`countBasis: alive`・作業状態`state: unknown`として表示します。既知の実行中が混ざる場合はその項目だけ`state: working`を明示します。completedだけで終わった過去の子を一覧へ戻すことはなく、再参照後のcompletedでunknown項目も外します。interruptedや未知kindは再参照の所属証拠を失効させ、新しい正式startedまで復帰させません。所属証拠のないinteractedや未知状態は引き続き未取得です。実行中の子への配達は実行中を維持します。所属証拠はcompleted後も含めて256件までで、超過時は未取得です。未知の状態、読めない記録、未確認の親は`undefined`（CLIでは`null`）です。従来の実行中件数の0件は取得済みの終了状態を意味します。Antigravityの所属数0件は、確認した直属フォルダにALIVEの子が無い状態です。サーバ再起動時も所属を再確認して正式記録の最終状態を読み戻します。
 
@@ -46,3 +47,11 @@ Copilotの両イベント名は同じ`toolCallId`を子の鍵にし、イベン�
 ## Codexの子のeffort
 
 正式な親rolloutの`SubAgentActivity`の`started`にある`reasoning_effort`は、生成時に解決済みの値です。SDK schemaでは`reasoningEffort`というcamelCase名で定義されますが、保存済みrolloutはsnake_caseです。取得できた既知の値だけ`SubagentInfo.reasoningEffort`と`reasoningEffortBasis: creation`へ保持します。これは開始時の確定値であり、現在ターンのeffortを保証しません。後のinteractedやモデル名のsuffix、起動希望flagでは上書きしません。再startedに値が無ければ古いeffortは残しません。現在値を取るための子rollout追加scanは行いません。CLIの`agent get/list`もこのoptionalな値と由来を保持し、未取得時は従来どおり項目を省略します。
+
+## Grokの子のモデル・effort
+
+現在の親会話・instanceがサーバで改めて確認された場合だけ、正式な`_x.ai/session/update`の親・子・attemptを照合します。`subagent_spawned`は生成済みの所属を示すため、`countBasis: alive`・`state: unknown`で始めます。正式な進捗通知で`working`、同じattemptの終了で一覧から外します。未取得・不完全な記録は0件へ変換しません。
+
+生成通知にある確定モデルと、直属の子自身の正式`ModelChanged`のモデル・effortを表示します。親の設定やモデル名のsuffixから補いません。設定変更の最後の通知にeffortが無ければ、前のeffortを残しません。内部の由来は`creation`/`session`で区別し、現在ターンの実行モデルと断定しません。
+
+1.0.77の実CLIは、外部接続の無い隔離環境のローカル模擬APIで子の生成・終了と確定モデルを確認しました。子の`ModelChanged`/effortは一次schemaに基づく生成記録で、公開snapshot・CLI・共通画面表示まで検証しました。実サービス上の設定変更成功を示すものではありません。現在子の表示を接続した段階で、終了子の履歴・送信は別の対応です。[検証記録](../.aidev/works/20261108-grok-native-wiring/test-result.md)。

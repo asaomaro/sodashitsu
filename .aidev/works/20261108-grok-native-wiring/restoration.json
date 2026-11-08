@@ -1,0 +1,17 @@
+{
+  "byteExact": true,
+  "results": [
+    {
+      "log": "negative-old-wiring.log",
+      "exitCode": 1
+    },
+    {
+      "log": "restored-wiring.log",
+      "exitCode": 0
+    }
+  ],
+  "sha256": {
+    "packages/server/src/agent/NativeSubagentReader.ts": "8a7e03b090a22f4629f4ba015b84b4512f391deacdbc778998e09fbc7e370f33",
+    "packages/server/src/agent/NativeSubagentService.ts": "525ee514cdd508afa7a81c78374da0136dca63dfa01d356bcaefe6b3dc093f3f"
+  }
+}

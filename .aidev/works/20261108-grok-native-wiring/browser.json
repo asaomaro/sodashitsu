@@ -1,0 +1,13 @@
+{
+  "actualPublicSnapshot": true,
+  "realSubagentList": true,
+  "model": "grok-observed-child",
+  "effort": "high",
+  "unknownNotCompletion": true,
+  "noUnsupportedTranscriptButton": true,
+  "themes": [
+    "dracula",
+    "one-light"
+  ],
+  "pageErrors": []
+}

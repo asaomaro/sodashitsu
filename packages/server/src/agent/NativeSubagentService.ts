@@ -16,7 +16,7 @@ interface Deps {
 }
 const sourceOf = (pane: Pane | undefined): Source | undefined => {
   const agent = pane?.agent, ref = pane?.agentSession;
-  if (!pane || !agent || !ref || ref.kind !== agent.kind || !["codex", "muse", "copilot", "agy", "claude"].includes(agent.kind)) return undefined;
+  if (!pane || !agent || !ref || ref.kind !== agent.kind || !["codex", "muse", "copilot", "agy", "claude", "grok"].includes(agent.kind)) return undefined;
   return { paneId: pane.id, instanceId: agent.instanceId, kind: agent.kind as Source["kind"], sessionId: ref.sessionId };
 };
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -81,7 +81,8 @@ export class NativeSubagentService {
         if(!same(source,sourceOf(before))||!this.verified(source))return;
         const position=source.kind==="claude"?undefined:this.reader.progress?.(source);
         let readRejected=false;
-        const value = await (source.kind==="claude"?this.deps.observeClaude!(source):this.reader.read(source)).catch(() => {readRejected=true;return undefined;});
+        const current=()=>!this.closed&&same(source,sourceOf(this.deps.session.getPane(source.paneId)))&&this.verified(source);
+        const value = await (source.kind==="claude"?this.deps.observeClaude!(source):this.reader.read(source,current)).catch(() => {readRejected=true;return undefined;});
         const pane = this.deps.session.getPane(source.paneId);
         if (this.closed || !same(source, sourceOf(pane))) return;
         const verified=this.verified(source);

@@ -1,0 +1,1 @@
+{"kind":"grok","subagents":{"count":1,"countBasis":"alive","items":[{"id":"01a1b675-8b2e-78f3-9d3b-4533ea165d9a","startedAt":1794062519093,"depth":1,"state":"unknown","type":"general-purpose","description":"Native mock child","model":"grok-observed-child","modelBasis":"session","reasoningEffort":"high","reasoningEffortBasis":"session"}]}}

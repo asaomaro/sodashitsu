@@ -1,0 +1,19 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-grok-native-wiring/packages/server
+
+{"ts":"2026-11-08T00:35:35.664Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T00:35:35.665Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T00:35:35.666Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T00:35:35.666Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T00:35:35.669Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-grok-subagent-wire-64LyAQ/state/commands.json","count":0}
+{"ts":"2026-11-08T00:35:36.256Z","level":"info","msg":"agent session attached","paneId":"a6d540f3-6486-4320-8042-cd3c6b4f899b","kind":"grok","session":"01a1b675","source":"hook"}
+
+ Test Files  6 passed (6)
+      Tests  70 passed (70)
+   Start at  09:35:31
+   Duration  12.74s (tests 69%, transform 25%, import 6%)
+
+  Transform  transforming modules took 7.43s · 25% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
