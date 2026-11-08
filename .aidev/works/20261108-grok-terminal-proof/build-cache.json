@@ -1,0 +1,12 @@
+[
+  {
+    "package": "tui",
+    "identicalSourceTree": "0cccf35aea7fb841598b3a6dadddbfbecde5b338",
+    "reusedDerivedTscCache": true
+  },
+  {
+    "package": "desktop-assistant",
+    "identicalSourceTree": "02c7ff95c011bd0110acf1e4fe0570f8fd48eda9",
+    "reusedDerivedTscCache": true
+  }
+]
