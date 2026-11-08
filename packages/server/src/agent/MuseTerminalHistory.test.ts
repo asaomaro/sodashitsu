@@ -74,8 +74,26 @@ it("keeps the physical quota through close and rejects a late retired Muse verif
 });
 it("revokes earlier terminal proof after a malformed time, unknown schema or invalid binding",async()=>{
  const f=await setup();try{
-  for(const row of [{...f.event("start_attested"),recorded_at:undefined},{...f.event("result_ready"),payload_schema_version:99},f.event("child_session_bound",{child_session_id:f.child,schema_version:1,storage_layout:"unknown"})]){
+  for(const row of [{...f.event("start_attested"),recorded_at:undefined},{...f.event("result_ready"),payload_schema_version:99},{...f.event("child_session_bound"),schema_version:99},f.event("child_session_bound",{child_session_id:f.child,schema_version:1,storage_layout:"unknown"})]){
    const fold=new NativeSubagentRecords("muse",parent);[f.spawn(),f.bound(),f.event("start_attested"),f.event("result_ready")].forEach(value=>fold.consume(value));expect(fold.museTerminals()).toHaveLength(1);fold.consume(row);expect(fold.museTerminals()).toEqual([]);
   }
+ }finally{f.history.close();f.reader.close();}
+});
+it.each(["volatile","unknown-schema","unknown-record"])("never promotes a %s binding through later valid start/result",async variant=>{
+ const f=await setup();try{
+  const bound=f.bound();if(variant==="volatile")bound.durability="volatile";else if(variant==="unknown-schema")bound.payload_schema_version=99;else bound.record_type="unknown";
+  const rows=[f.spawn(),bound,f.event("start_attested"),f.event("result_ready",{},birthUs+3000000)];
+  const fold=new NativeSubagentRecords("muse",parent);rows.forEach(row=>fold.consume(row));expect(fold.museTerminals()).toEqual([]);expect(fold.museChildSession(f.id)).toBe(f.child);
+  await writeFile(f.file,f.lines(rows));await f.reader.read(f.source);expect((await f.history.read({paneId:f.source.paneId})).items).toHaveLength(0);
+  await appendFile(f.file,f.lines([f.bound(),f.event("start_attested",{},birthUs+4000000),f.event("result_ready",{},birthUs+5000000)]));await f.reader.read(f.source);expect((await f.history.read({paneId:f.source.paneId})).items).toHaveLength(1);
+ }finally{f.history.close();f.reader.close();}
+});
+it("bounds private history bindings and never admits an unaccepted or missing raw child",async()=>{
+ const f=await setup();try{
+  const fold=new NativeSubagentRecords("muse",parent),first=randomUUID();
+  for(let n=0;n<257;n++)fold.consume(f.event("child_session_bound",{subagent_id:n===0?first:randomUUID(),child_session_id:randomUUID(),schema_version:1,storage_layout:"nested_session_v1"}));
+  expect((fold as any).museHistoryBindings.size).toBe(256);
+  for(let n=0;n<300;n++)fold.consume(f.event("child_session_bound",{subagent_id:randomUUID(),schema_version:1,storage_layout:"nested_session_v1"}));
+  expect((fold as any).museHistoryBindings.size).toBe(256);const replacement=randomUUID();fold.consume(f.event("child_session_bound",{subagent_id:first,child_session_id:replacement,schema_version:1,storage_layout:"nested_session_v1"}));expect(fold.museChildSession(first)).toBe(replacement);expect((fold as any).museHistoryBindings.get(first)).toBe(replacement);expect((fold as any).museHistoryBindings.size).toBe(256);
  }finally{f.history.close();f.reader.close();}
 });

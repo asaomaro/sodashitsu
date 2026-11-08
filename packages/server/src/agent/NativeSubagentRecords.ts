@@ -19,6 +19,7 @@ export class NativeSubagentRecords {
   private readonly museInputs = new Map<string,{text:string;truncated:boolean}>();
   museChildInput(id:string): {text:string;truncated:boolean}|undefined { const input=this.museInputs.get(id);return input?{...input}:undefined; }
   private readonly museBindings = new Map<string, string>();
+  private readonly museHistoryBindings = new Map<string,string>();
   private readonly museStarts = new Map<string,{item:SubagentInfo;eventId:string}>();
   private readonly museEnds = new Map<string,MuseTerminalFact>();
   museTerminals():readonly MuseTerminalFact[]|undefined {
@@ -148,32 +149,34 @@ export class NativeSubagentRecords {
 
   private muse(row: Record<string, any>): void {
     const stream = object(row.stream), payload = object(row.payload), record = object(payload?.record);
-    if (row.schema_version !== 1 || stream?.kind !== "session" || stream.id !== this.sessionId || payload?.kind !== "subagent_control" || !record) return;
+    if (stream?.kind !== "session" || stream.id !== this.sessionId || payload?.kind !== "subagent_control" || !record) return;
     if (record.parent_session_id !== undefined && record.parent_session_id !== this.sessionId) return;
     const type = row.payload_type, id = record.subagent_id;
     if (typeof type !== "string" || !type.startsWith("subagent.control.") || typeof id !== "string" || !ID.test(id)) return;
-    if(typeof row.id!=="string"||!ID.test(row.id)){this.museEnds.delete(id);this.museStarts.delete(id);return;}
+    if(row.schema_version!==1){this.museEnds.delete(id);this.museStarts.delete(id);this.museHistoryBindings.delete(id);return;}
+    if(typeof row.id!=="string"||!ID.test(row.id)){this.museEnds.delete(id);this.museStarts.delete(id);this.museHistoryBindings.delete(id);return;}
     if(!this.admit(`m:${row.id}`))return;
     const at = Number(row.recorded_at) / 1000;
-    if (!Number.isFinite(at) || at < 0){this.museEnds.delete(id);this.museStarts.delete(id);return;}
+    if (!Number.isFinite(at) || at < 0){this.museEnds.delete(id);this.museStarts.delete(id);this.museHistoryBindings.delete(id);return;}
     // History uses durable provider evidence only; it does not change active folding.
     const historyValid=row.record_type==="event"&&row.durability==="durable"&&Number.isSafeInteger(row.recorded_at)&&row.recorded_at>=0&&record.kind===type.slice("subagent.control.".length)&&
       Object.hasOwn(MUSE_HISTORY_VERSIONS,record.kind)&&row.payload_schema_version===MUSE_HISTORY_VERSIONS[record.kind];
-    if(!historyValid){this.museEnds.delete(id);this.museStarts.delete(id);}
+    if(!historyValid){this.museEnds.delete(id);this.museStarts.delete(id);this.museHistoryBindings.delete(id);}
     if (type === "subagent.control.child_session_bound") {
       const child=record.child_session_id;
-      this.museEnds.delete(id);
+      this.museEnds.delete(id);this.museHistoryBindings.delete(id);
       // A replacement or invalid binding cannot reuse a previous attested start.
       if(this.museBindings.has(id)||!historyValid)this.museStarts.delete(id);
       if(record.kind==="child_session_bound"&&record.schema_version===1&&record.storage_layout==="nested_session_v1"&&typeof child==="string"&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(child)&&child!==this.sessionId&&(this.museBindings.has(id)||this.museBindings.size<MAX))this.museBindings.set(id,child);
       else {this.museBindings.delete(id);this.museStarts.delete(id);}
+      if(historyValid&&typeof child==="string"&&this.museBindings.get(id)===child&&(this.museHistoryBindings.has(id)||this.museHistoryBindings.size<MAX))this.museHistoryBindings.set(id,child);
       return;
     }
     if (["subagent.control.spawn_accepted", "subagent.control.resume_context_recorded"].includes(type)) {
       this.museEnds.delete(id);this.museStarts.delete(id);
       if (!this.metadata.has(id) && this.metadata.size >= MAX) { this.limited = true; return; }
       {
-        if(type==="subagent.control.spawn_accepted")this.museBindings.delete(id);
+        if(type==="subagent.control.spawn_accepted"){this.museBindings.delete(id);this.museHistoryBindings.delete(id);}
         this.museInputs.delete(id);
         if(typeof record.objective==="string"){
           let text=record.objective.slice(0,4000);if(/[\uD800-\uDBFF]$/.test(text))text=text.slice(0,-1);
@@ -189,8 +192,8 @@ export class NativeSubagentRecords {
       this.museEnds.delete(id);
       if(historyValid&&(this.museStarts.has(id)||this.museStarts.size<MAX))this.museStarts.set(id,{item:{id,startedAt:at,depth:1,...this.metadata.get(id)},eventId:row.id});
     }else if(type==="subagent.control.result_ready"&&historyValid){
-      const start=this.museStarts.get(id),child=this.museBindings.get(id);
-      if(start&&child&&at>=start.item.startedAt)this.museEnds.set(id,{id,childSession:child,startedAt:start.item.startedAt,endedAt:at,eventId:JSON.stringify([start.eventId,row.id,row.recorded_at]),...(start.item.description?{description:start.item.description}:{}),...(start.item.type?{type:start.item.type}:{})});
+      const start=this.museStarts.get(id),child=this.museHistoryBindings.get(id);
+      if(start&&child&&this.museBindings.get(id)===child&&at>=start.item.startedAt)this.museEnds.set(id,{id,childSession:child,startedAt:start.item.startedAt,endedAt:at,eventId:JSON.stringify([start.eventId,row.id,row.recorded_at]),...(start.item.description?{description:start.item.description}:{}),...(start.item.type?{type:start.item.type}:{})});
     }else if(type==="subagent.control.status_updated"){
       if(["running","starting"].includes(record.control_status)){if(this.museEnds.has(id))this.museStarts.delete(id);this.museEnds.delete(id);}
       else if(!["result_ready","resultReady","closing","closed"].includes(record.control_status)){this.museEnds.delete(id);this.museStarts.delete(id);}

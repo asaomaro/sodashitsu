@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "files": [
+    "../../../packages/server/src/agent/NativeSubagentRecords.ts",
+    "../../../packages/server/src/agent/MuseTerminalHistory.test.ts"
+  ]
+}
