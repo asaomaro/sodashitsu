@@ -7,4 +7,4 @@
 - [x] corebuild・core2filestrict型・TUIbuild/全型
 - [x] Web全型+Vite最終build
 - [x] 文言のみ精密化/最終生成物更新と証跡
-- [ ] 最終独立差分レビュー（必須）
+- [x] 最終独立差分レビュー（review_audio_integration、b18/dfccまで追加must/should無し）

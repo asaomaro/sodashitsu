@@ -8,4 +8,4 @@ b0db固定上で対象3packages core/TUI/Web build0（Web test-inclusive型＋Vi
 
 生成RPCの実Chrome DOMで4テーマ/390px/既知95点A/低sample未評価/真の0点E/CLI条件追従/overviewのみ/追加モデル呼出0を確認。Soda dark画像を目視。旧Web sourceではカード欠落で失敗し、Web SHA完全復元後同browser成功（browser-negative.log/browser-restoration.json/browser-final.log）。初回browserは閉じた条件フォームをselectしようとしてtimeout、runnerで条件ボタンを開く実操作へ修正（browser-initial.log保持）。製品コードの不具合ではない。own Chromium/Viteはfinallyでawait close。実モデル・利用者記録・Windows・OSclipboard操作0。
 
-独立レビューはreview_audio_integrationへ依頼。計算/guardの機能上の指摘なし、inferredの説明を正式Read分類と本文推測操作で区別するshouldをb18で解消。最終照合待ち。
+独立レビューはreview_audio_integrationへ依頼。計算/guardの機能上の指摘なし、inferredの説明を正式Read分類と本文推測操作で区別するshouldをb18で解消。最終7source SHA・復元3SHA・40pass/型/build/4テーマDOMを独立照合し、追加must/should無しで完了。

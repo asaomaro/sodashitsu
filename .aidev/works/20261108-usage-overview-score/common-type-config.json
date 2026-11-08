@@ -1,0 +1,17 @@
+{
+  "extends": "/workspaces/sodashitsu-usage-overview-score/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "/workspaces/sodashitsu-usage-overview-score/node_modules/@types"
+    ]
+  },
+  "files": [
+    "/workspaces/sodashitsu-usage-overview-score/packages/client-core/src/agent/usageOverviewAssessment.ts",
+    "/workspaces/sodashitsu-usage-overview-score/packages/client-core/src/agent/usageOverviewAssessment.test.ts"
+  ]
+}
