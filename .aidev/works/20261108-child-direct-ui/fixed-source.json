@@ -1,0 +1,17 @@
+{
+  "head": "d531275c6edfb5c9469f998754718e94cc76e5c8",
+  "sha256": {
+    "packages/client-core/src/agent/SubagentConversationControl.test.ts": "b5b558249ffee28377d8622b3f6c8bcad51dd4de8c0ec0f6878b4fe5bb2c6f45",
+    "packages/client-core/src/agent/SubagentConversationControl.ts": "e1a98d9e38891bc1097dcee7d0a5a98c9dfd183e726290516bbcc6e2a20089d0",
+    "packages/client-core/src/index.ts": "b708277b9ec75a8327eae8fc8862f022eabf6fed02a18da0ceb542ea1586f415",
+    "packages/tui/src/modes/ChildConversationDialog.test.ts": "c63487d88afd1b64304c5f957fc2de7aa7a9983d30eb53a9e70159bab6c34ee5",
+    "packages/tui/src/modes/ChildConversationDialog.ts": "681d5e30f6957a70843a736e2fe807a526285c6386d2ccba8812004941b217f8",
+    "packages/tui/src/modes/SubagentTranscript.ts": "295dc11bd8ae77101c443fbf9da9c2ac5ebacbad17cf22cded0c4a9d76a014f5",
+    "packages/web/src/components/ChildConversationWindow.test.ts": "6cb510bc5bfd4ac23626af75790f9d2f1c49695376f267f38e41b1cb1b951e81",
+    "packages/web/src/components/ChildConversationWindow.vue": "fb4645aebe8ff57513a1a9444b331885f228987ebfda2cb0c7513716ab8689ba",
+    "packages/web/src/components/graph/SubagentTranscriptWindow.test.ts": "06a3fdd3ddf146f6743ce948c5c3f978938a9c6fef0610183c69ebc8e1679a69",
+    "packages/web/src/components/graph/SubagentTranscriptWindow.vue": "d56a8ec972e6716dbc49214c9a5c332ab043ce1285651d4db641b22c67e7e3f5",
+    "packages/web/src/conversation/childRequestId.test.ts": "6a55a51c3e87f04466ba41ee5572e2e592408c7e3435389ca6538d0701377822",
+    "packages/web/src/conversation/childRequestId.ts": "2f43f7b36e915339e962c9662e5acb2f92f8fc2cb26930455e8e779f87b3adf9"
+  }
+}

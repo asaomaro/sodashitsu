@@ -1,0 +1,24 @@
+{
+  "head": "d531275c6edfb5c9469f998754718e94cc76e5c8",
+  "before": {
+    "packages/web/src/components/ChildConversationWindow.vue": "fb4645aebe8ff57513a1a9444b331885f228987ebfda2cb0c7513716ab8689ba",
+    "packages/tui/src/modes/ChildConversationDialog.ts": "681d5e30f6957a70843a736e2fe807a526285c6386d2ccba8812004941b217f8"
+  },
+  "after": {
+    "packages/web/src/components/ChildConversationWindow.vue": "fb4645aebe8ff57513a1a9444b331885f228987ebfda2cb0c7513716ab8689ba",
+    "packages/tui/src/modes/ChildConversationDialog.ts": "681d5e30f6957a70843a736e2fe807a526285c6386d2ccba8812004941b217f8"
+  },
+  "exact": {
+    "packages/web/src/components/ChildConversationWindow.vue": true,
+    "packages/tui/src/modes/ChildConversationDialog.ts": true
+  },
+  "negative-webExit": 1,
+  "negative-tuiExit": 1,
+  "negative-browserExit": 1,
+  "restored-webExit": 0,
+  "restored-tuiExit": 0,
+  "restored-browserExit": 0,
+  "webTypeExit": 0,
+  "tuiTypeExit": 0,
+  "coreTypeExit": 0
+}

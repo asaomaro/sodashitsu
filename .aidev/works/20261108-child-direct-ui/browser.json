@@ -1,0 +1,20 @@
+{
+  "generated": true,
+  "realModelCalls": 0,
+  "formalCapabilityOnly": true,
+  "freshLeaseAtSubmit": true,
+  "acceptedIsNotCompletion": true,
+  "unknownRetainsDraft": true,
+  "unknownNoRetry": true,
+  "parentDraftNoAutomaticSend": true,
+  "checkedParentSendExplicit": true,
+  "graphReaderStillReadonly": true,
+  "newHostNoDuplicateHeader": true,
+  "themeCount": 4,
+  "focus": true,
+  "draggable": true,
+  "resizableComputed": "both",
+  "narrowFits": true,
+  "escapeCloses": true,
+  "pageErrors": []
+}
