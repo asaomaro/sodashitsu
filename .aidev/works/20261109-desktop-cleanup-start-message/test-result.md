@@ -1,0 +1,11 @@
+# Desktop開始時の入力解放未確認案内
+
+Source: 59cb81f4 (base cf659f60)。3製品source/2test。
+
+既存typed `server_busy` + exact固定cleanup理由だけを、ローカル固定のSodashitsu再起動説明へ変換する。認証済みmachine channelのbridgeは従来すべてDesktopBridgeErrorへ落としていたため、pending methodがdesktop.startの場合だけ、own code/messageの2field完全一致をRpcErrorへ復元する。LocalDesktopRpcは既存typed値を直接渡す。他method・他code・他message・untyped Error/object・余剰field・malformedはgenericのまま。入力guard/cleanup proof/権限/期限/操作は変更なし。
+
+関連2file 346 PASS。5source/testを入口にserver既存strict設定でtsc noEmit exit0。全repository build/test再実行なし。初回root既定Vite設定は未linkのWebplugin解決で起動失敗したため、専用Node test configと既存server依存linkを用いて同じ実source2fileに限定した。
+
+旧Relay+bridgeの2製品sourceをdurable保存後に置換し、実認証Relay local/remote回帰2件が失敗(exit1)。両file byteExact/SHA復元後、今回の17件がPASS、他329skip。原log添付。回帰fixtureも既存providerのtyped例外を実protocol errorへserializeし、DesktopBridgeRpcが実wire replyを受ける経路で確認。Native/helperは開始させず、合成WebSocket/APIのみ。Windows/実画面/入力/利用者データ/モデル0。
+
+Rootの実機faultは再handoff後に再現していない。今回の変更は原因そのものを修正したと主張せず、同じ正式拒否が起きた場合の案内改善だけ。未知例外の原文は公開しない。

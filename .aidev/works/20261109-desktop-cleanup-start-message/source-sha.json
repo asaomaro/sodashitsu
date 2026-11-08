@@ -1,0 +1,7 @@
+{
+  "packages/server/src/desktop/DesktopStartFailure.ts": "0b894677860d023d57a7d133103e69529eeb31534ff8322f5aabebf800f71d51",
+  "packages/server/src/desktop/DesktopStartFailure.test.ts": "df08838ab7f08f5ce401a23134e48f5def9374b6261f6c5ff6fe612582833809",
+  "packages/server/src/desktop/DesktopRelay.ts": "1aef2ea35490315babc3d7ca34d33d4db22681a0c25ddb80a02ea6ac5ecc7089",
+  "packages/server/src/desktop/DesktopRelay.test.ts": "bf55bce54239209530fa5310bfd8ae835cde0722866168aee36b1d9c233675f0",
+  "packages/server/src/desktop/bridgeRpc.ts": "5596b4e54f656a66734ff89510b127e61c27344591e7bf6ee03bdf35163a30f7"
+}

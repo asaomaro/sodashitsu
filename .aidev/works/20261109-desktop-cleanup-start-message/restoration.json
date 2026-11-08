@@ -1,0 +1,13 @@
+{
+  "negativeExit": 1,
+  "restored": {
+    "packages/server/src/desktop/DesktopRelay.ts": {
+      "sha256": "1aef2ea35490315babc3d7ca34d33d4db22681a0c25ddb80a02ea6ac5ecc7089",
+      "byteExact": true
+    },
+    "packages/server/src/desktop/bridgeRpc.ts": {
+      "sha256": "5596b4e54f656a66734ff89510b127e61c27344591e7bf6ee03bdf35163a30f7",
+      "byteExact": true
+    }
+  }
+}

@@ -1,0 +1,31 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-cleanup-message
+
+ ❯ packages/server/src/desktop/DesktopRelay.test.ts (334 tests | 2 failed | 332 skipped) 144ms
+   × shows only the fixed cleanup restart explanation through authenticated local RPC 86ms
+   × shows only the fixed cleanup restart explanation through authenticated remote RPC 57ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/desktop/DesktopRelay.test.ts > shows only the fixed cleanup restart explanation through authenticated local RPC
+ FAIL  packages/server/src/desktop/DesktopRelay.test.ts > shows only the fixed cleanup restart explanation through authenticated remote RPC
+AssertionError: expected '共有を開始できません。Bの補助プログラム設定・共有先の許可・接続状態を確認…' to be '接続先PCで前の入力の解放を確認できないため、共有を停止しています。接続先…' // Object.is equality
+
+Expected: "接続先PCで前の入力の解放を確認できないため、共有を停止しています。接続先PCのSodashitsuサーバーを再起動してから接続し直してください。"
+Received: "共有を開始できません。Bの補助プログラム設定・共有先の許可・接続状態を確認してください。"
+
+ ❯ packages/server/src/desktop/DesktopRelay.test.ts:2074:56
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed | 1 skipped (2)
+      Tests  2 failed | 344 skipped (346)
+   Start at  04:29:58
+   Duration  2.09s (transform 77%, import 18%, tests 5%)
+
+  Transform  transforming modules took 2.46s · 77% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-cleanup-message
+
+
+ Test Files  2 passed (2)
+      Tests  346 passed (346)
+   Start at  04:28:00
+   Duration  100.84s (tests 97%, transform 3%, import 1%)
+

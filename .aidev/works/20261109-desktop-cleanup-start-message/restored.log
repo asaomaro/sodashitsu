@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-cleanup-message
+
+
+ Test Files  2 passed (2)
+      Tests  17 passed | 329 skipped (346)
+   Start at  04:30:01
+   Duration  2.23s (transform 76%, import 15%, tests 9%)
+
+  Transform  transforming modules took 2.54s · 76% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
