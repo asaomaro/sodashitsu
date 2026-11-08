@@ -65,3 +65,12 @@ it("retains fixed-size dedup proofs, never unrelated progress/finish prose or ob
   expect(proofs).toHaveLength(10);expect(proofs.every(p=>/^[a-f0-9]{64}$/.test(p))).toBe(true);
   expect(proofs.reduce((n,p)=>n+p.length,0)).toBe(640);
 });
+it("retains only explicit terminal attempts privately and retires them on a new spawn",()=>{
+ for(const [status,terminalStatus] of [["completed","completed"],["failed","error"],["cancelled","aborted"]]){
+  const records=new GrokSubagentRecords(parent);records.consume(spawn());records.consume(finish(2,{status}));
+  expect(records.snapshot()?.count).toBe(0);expect(records.terminal(child)).toMatchObject({attempt:"at1.generated",terminalStatus,endedAt:2000,item:{id:child,startedAt:1000}});
+  records.consume(spawn(3,{attempt_id:"another-attempt"}));expect(records.terminals()).toEqual([]);expect(records.snapshot()?.count).toBe(1);
+ }
+ const unowned=new GrokSubagentRecords(parent);unowned.consume(finish());expect(unowned.terminals()).toBeUndefined();
+ const legacy=new GrokSubagentRecords(parent);legacy.consume(spawn(1,{attempt_id:undefined}));legacy.consume(finish(2,{attempt_id:undefined}));expect(legacy.snapshot()?.count).toBe(0);expect(legacy.terminals()).toBeUndefined();
+});

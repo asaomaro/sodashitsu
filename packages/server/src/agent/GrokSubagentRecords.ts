@@ -1,11 +1,12 @@
-import type { SubagentInfo } from "@sodashitsu/protocol";
+import type { SubagentInfo,SubagentTerminalStatus } from "@sodashitsu/protocol";
 import type { Subagents } from "./SubagentTracker.js";
 import { createHash } from "node:crypto";
 
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const obj = (v: unknown): Record<string, any> | undefined => v !== null && typeof v === "object" && !Array.isArray(v) ? v as Record<string, any> : undefined;
 const text = (v: unknown, max = 200): string | undefined => typeof v === "string" && v.length > 0 && v.length <= max && !/[\x00-\x1f\x7f-\x9f]/.test(v) ? v : undefined;
-interface Child { item: SubagentInfo; attempt: string; active: boolean; attempts: Set<string> }
+export interface GrokTerminalFact {item:SubagentInfo;attempt:string;terminalStatus:SubagentTerminalStatus;endedAt:number;eventId:string}
+interface Child { item: SubagentInfo; attempt: string; active: boolean; attempts: Set<string>;terminal?:{status:SubagentTerminalStatus;at:number;eventId:string} }
 
 /** The installed CLI's durable parent update envelope, never tool-result prose.
  * Spawn proves membership before prompt dispatch; only running progress proves work.
@@ -64,6 +65,7 @@ export class GrokSubagentRecords {
     } else {
       if (!["completed", "failed", "cancelled"].includes(update.status)) { this.invalid = true; return; }
       child.active = false;
+      child.terminal={status:update.status==="completed"?"completed":update.status==="cancelled"?"aborted":"error",at,eventId};
     }
   }
 
@@ -71,6 +73,16 @@ export class GrokSubagentRecords {
     if (!this.seen || this.invalid) return undefined;
     const items = [...this.children.values()].filter(c => c.active).map(c => ({ ...c.item })).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id));
     return { count: items.length, countBasis: "alive", items: items.slice(0, 64) };
+  }
+
+  terminal(id:string):GrokTerminalFact|undefined {
+    if(!this.seen||this.invalid)return;const child=this.children.get(id);
+    if(!child||child.active||!child.terminal||!child.attempt)return;
+    return{item:{...child.item},attempt:child.attempt,terminalStatus:child.terminal.status,endedAt:child.terminal.at,eventId:child.terminal.eventId};
+  }
+  terminals():ReadonlyArray<GrokTerminalFact>|undefined {
+    if(!this.seen||this.invalid||[...this.children.values()].some(child=>!child.active&&child.terminal&&!child.attempt))return;
+    return [...this.children.keys()].flatMap(id=>{const value=this.terminal(id);return value?[value]:[];});
   }
 
   bindings(): ReadonlyArray<{ id: string; attempt: string; active: boolean; startedAt: number }> | undefined {

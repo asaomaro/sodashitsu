@@ -1,3 +1,7 @@
+import {randomUUID,createHash} from "node:crypto";
+import type {SubagentTerminalBinding,SubagentTerminalCollection,TerminalRecord} from "./SubagentTerminalBinding.js";
+import {extraRecord} from "../conversation/ExtraAgentRecords.js";
+import {entriesOfLine} from "./SubagentTranscript.js";
 import { lstat, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { GrokSubagentRecords } from "./GrokSubagentRecords.js";
@@ -7,7 +11,7 @@ import { readRange, type OpenedFile } from "./safeFile.js";
 import type { Subagents } from "./SubagentTracker.js";
 
 export interface GrokSubagentSource { paneId: string; instanceId: string; sessionId: string }
-interface State { key: string; generation: number; offset: number; fold: GrokSubagentRecords; dev: number; ino: number; invalid: boolean; pending: boolean; last?: {size:number;mtimeMs:number;ctimeMs:number}; reading?: Promise<Subagents | undefined> }
+interface State { namespace:string;key: string; generation: number; offset: number; fold: GrokSubagentRecords; dev: number; ino: number; invalid: boolean; pending: boolean; last?: {size:number;mtimeMs:number;ctimeMs:number}; reading?: Promise<Subagents | undefined> }
 const CHUNK = 4 * 1024 * 1024, MAX_FILE = 512 * 1024 * 1024, MAX_LINE = 256 * 1024;
 const identity = (a: {dev:number;ino:number}, b: {dev:number;ino:number}) => a.dev === b.dev && a.ino === b.ino;
 const revision = (a: {size:number;mtimeMs:number;ctimeMs:number}, b: {size:number;mtimeMs:number;ctimeMs:number}) => a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
@@ -18,6 +22,7 @@ export class GrokSubagentReader {
   private readonly states = new Map<string, State>();
   private closed = false;
   private supplementSlots = 0;
+  private proofSlots=0;
   constructor(private readonly roots: GrokSessionRoots = {}) {}
   private key(s: GrokSubagentSource): string { return JSON.stringify([s.instanceId, s.sessionId]); }
   forget(paneId: string): void { this.states.delete(paneId); }
@@ -31,7 +36,7 @@ export class GrokSubagentReader {
     const key = this.key(source);
     let state = this.states.get(source.paneId);
     if (!state || state.key !== key) {
-      state = { key, generation:(state?.generation ?? 0)+1, offset:0, fold:new GrokSubagentRecords(source.sessionId), dev:-1, ino:-1, invalid:false, pending:false };
+      state = { namespace:randomUUID(),key, generation:(state?.generation ?? 0)+1, offset:0, fold:new GrokSubagentRecords(source.sessionId), dev:-1, ino:-1, invalid:false, pending:false };
       this.states.set(source.paneId, state);
     }
     if (state.reading) return state.reading;
@@ -39,6 +44,46 @@ export class GrokSubagentReader {
     const work = this.refresh(source, own, current).catch(() => {own.pending=false;return undefined;}).finally(() => { if (own.reading === work) delete own.reading; });
     own.reading = work;
     return work;
+  }
+  /** Private formal attempt proof. No scan, provider or model is started by this getter. */
+  terminals(source:GrokSubagentSource,verified:()=>boolean):SubagentTerminalCollection {
+    const unknown=(status:"unavailable"|"pending"="unavailable"):SubagentTerminalCollection=>({status,bindings:[],incomplete:true});
+    const state=this.states.get(source.paneId),key=this.key(source);
+    if(this.closed||!verified()||!state||state.key!==key)return unknown();
+    if(state.invalid||state.pending||!state.last||state.offset!==state.last.size)return unknown("pending");
+    const facts=state.fold.terminals();if(!facts)return unknown("pending");const namespace=state.namespace;
+    const scope=()=>!this.closed&&verified()&&this.states.get(source.paneId)===state&&state.key===key&&state.namespace===namespace&&!state.invalid&&!state.pending&&state.last!==undefined&&state.offset===state.last.size;
+    const bindings:SubagentTerminalBinding[]=facts.map(fact=>{
+      const sameFact=()=>{const now=state.fold.terminal(fact.item.id);return now?.attempt===fact.attempt&&now.eventId===fact.eventId&&now.endedAt===fact.endedAt&&now.item.startedAt===fact.item.startedAt&&now.terminalStatus===fact.terminalStatus;};
+      const current=()=>scope()&&sameFact();
+      const verify=async(allowed:()=>boolean):Promise<boolean>=>{
+        if(!allowed()||!current()||this.proofSlots>=4)return false;this.proofSlots++;
+        let record:Awaited<ReturnType<GrokSubagentReader["open"]>>;
+        try{
+          const before={...state.last!};record=await this.open(source.sessionId);
+          return !!record&&allowed()&&current()&&identity(state,record.opened.st)&&revision(before,record.opened.st)&&revision(before,state.last!)&&state.offset===record.opened.st.size&&await record.unchanged()&&allowed()&&current()&&revision(before,state.last!);
+        }catch{return false;}finally{await record?.opened.fd.close().catch(()=>undefined);this.proofSlots--;}
+      };
+      const bindingKey=createHash("sha256").update(JSON.stringify([key,namespace,fact.item.id,fact.attempt,fact.eventId,fact.endedAt])).digest("hex");
+      return{source:{...source,kind:"grok"},item:{...fact.item,terminalStatus:fact.terminalStatus,endedAt:fact.endedAt,hasTranscript:true},eventId:bindingKey,key:bindingKey,kind:"grok",recordId:fact.item.id,current,verify,
+        openRecord:async(purpose,allowed):Promise<TerminalRecord|undefined>=>{
+          if(!allowed()||!current()||!await verify(allowed))return;
+          const location=await locateGrokSession(fact.item.id,this.roots);if(!location||!allowed()||!current())return;
+          const name=purpose==="usage"?"usage.json":"chat_history.jsonl",opened=await openGrokSessionRecord(fact.item.id,name,this.roots);if(!opened)return;
+          try{
+            const file=join(location.dir,name),before=await opened.fd.stat({bigint:true});
+            const unchanged=async()=>{
+              if(!allowed()||!current())return false;
+              const [leaf,fd,found]=await Promise.all([lstat(file,{bigint:true}).catch(()=>undefined),opened.fd.stat({bigint:true}).catch(()=>undefined),locateGrokSession(fact.item.id,this.roots)]);
+              return allowed()&&current()&&found?.dir===location.dir&&await realpath(file).catch(()=>undefined)===file&&[leaf,fd].every(st=>!!st&&st.isFile()&&!st.isSymbolicLink()&&st.nlink===1n&&(["dev","ino","size","mtimeNs","ctimeNs"] as const).every(k=>st[k]===before[k]))&&await verify(allowed)&&allowed()&&current();
+            };
+            if(!await unchanged())throw Error("record changed");return{...opened,unchanged};
+          }catch{await opened.fd.close().catch(()=>undefined);return;}
+        },
+        entries:row=>{if(!row||typeof row!=="object"||Array.isArray(row))return[];const value=extraRecord(row,"grok");return value?entriesOfLine({type:value.role,timestamp:value.at,message:{content:value.text}}):[];},
+      };
+    });
+    return{status:"ok",bindings,incomplete:true};
   }
   private async open(id: string): Promise<{opened:OpenedFile;unchanged:()=>Promise<boolean>} | undefined> {
     const location = await locateGrokSession(id, this.roots);
@@ -61,7 +106,7 @@ export class GrokSubagentReader {
     const {opened}=record;
     try {
       if(!current())return;
-      if(!identity(state,opened.st)||opened.st.size<state.offset||(state.last&&opened.st.size<=state.last.size&&!revision(state.last,opened.st))){state.dev=opened.st.dev;state.ino=opened.st.ino;state.offset=0;state.generation++;state.fold=new GrokSubagentRecords(source.sessionId);state.invalid=false;delete state.last;}
+      if(!identity(state,opened.st)||opened.st.size<state.offset||(state.last&&opened.st.size<=state.last.size&&!revision(state.last,opened.st))){state.dev=opened.st.dev;state.ino=opened.st.ino;state.offset=0;state.generation++;state.namespace=randomUUID();state.fold=new GrokSubagentRecords(source.sessionId);state.invalid=false;delete state.last;}
       // Remember rejected revisions too: an initially oversized/invalid line
       // leaves offset zero, but a subsequent in-place repair must reset the fold.
       state.last={size:opened.st.size,mtimeMs:opened.st.mtimeMs,ctimeMs:opened.st.ctimeMs};
@@ -80,7 +125,7 @@ export class GrokSubagentReader {
         }
         state.offset+=end+1;
       }
-      if(!await record.unchanged()){state.offset=0;state.generation++;state.fold=new GrokSubagentRecords(source.sessionId);return;}
+      if(!await record.unchanged()){state.offset=0;state.generation++;state.namespace=randomUUID();state.fold=new GrokSubagentRecords(source.sessionId);return;}
       if(!current())return;
       if(state.offset<opened.st.size){state.pending=bytes.length===CHUNK;return;}
       const snapshot=state.fold.snapshot();if(!snapshot)return;
@@ -110,7 +155,7 @@ export class GrokSubagentReader {
       try{await Promise.race([worker(),new Promise<void>(resolve=>{timer=setTimeout(()=>{active=false;resolve();},2000);})]);}
       finally{active=false;if(timer)clearTimeout(timer);}
       if(!current())return;
-      if(!await record.unchanged()){state.offset=0;state.generation++;state.fold=new GrokSubagentRecords(source.sessionId);return;}
+      if(!await record.unchanged()){state.offset=0;state.generation++;state.namespace=randomUUID();state.fold=new GrokSubagentRecords(source.sessionId);return;}
       return snapshot;
     } finally {await opened.fd.close().catch(()=>undefined);}
   }

@@ -61,3 +61,30 @@ it("recovers after an initially invalid oversized line is shortened in place to 
  expect(await f.reader.read(f.source,()=>true)).toBeUndefined();
  await writeFile(f.file,start());expect((await f.reader.read(f.source,()=>true))?.count).toBe(1);f.reader.close();
 });
+it("grants a terminal attempt only from a fresh EOF namespace and rechecks parent proof around child records",async()=>{
+ const f=await fixture();await writeFile(f.file,start()+finish());const dir=join(f.base,child);await mkdir(dir);await writeFile(join(dir,"chat_history.jsonl"),JSON.stringify({type:"assistant",content:"Generated child result"})+"\n");await writeFile(join(dir,"usage.json"),JSON.stringify({sessionId:child}));
+ try{
+  expect(f.reader.terminals(f.source,()=>true).status).toBe("unavailable");await f.reader.read(f.source,()=>true);
+  const result=f.reader.terminals(f.source,()=>true);expect(result).toMatchObject({status:"ok",bindings:[{kind:"grok",item:{terminalStatus:"completed",startedAt:1000,endedAt:2000}}]});const target=result.bindings[0]!;
+  expect(await target.verify(()=>true)).toBe(true);const text=await target.openRecord("transcript",()=>true);expect(text).toBeDefined();expect(await text?.unchanged()).toBe(true);await text?.fd.close();const ledger=await target.openRecord("usage",()=>true);expect(ledger).toBeDefined();await ledger?.fd.close();
+  await appendFile(f.file,event("subagent_spawned",3,{parent_session_id:parent,attempt_id:"new-attempt",model:"resolved-child"}));expect(await target.verify(()=>true)).toBe(false);expect(await target.openRecord("transcript",()=>true)).toBeUndefined();
+  await f.reader.read(f.source,()=>true);expect(target.current()).toBe(false);expect(f.reader.terminals(f.source,()=>true).bindings).toEqual([]);
+  await appendFile(f.file,event("subagent_finished",4,{attempt_id:"new-attempt",status:"completed"}));await f.reader.read(f.source,()=>true);expect(f.reader.terminals(f.source,()=>true).bindings[0]?.key).not.toBe(target.key);
+ }finally{f.reader.close();}
+});
+it.each(["forget","rotate","rewrite"])("invalidates an old terminal namespace after %s even with identical lifecycle bytes",async mode=>{
+ const f=await fixture();await writeFile(f.file,start()+finish());try{
+  await f.reader.read(f.source,()=>true);const old=f.reader.terminals(f.source,()=>true).bindings[0]!;
+  if(mode==="forget")f.reader.forget(f.source.paneId);else if(mode==="rotate"){await rename(f.file,f.file+".old");await writeFile(f.file,start()+finish());}else{await writeFile(f.file,start()+finish());await utimes(f.file,new Date(),new Date(Date.now()+1000));}
+  if(mode!=="forget")expect(await old.verify(()=>true)).toBe(false);
+  await f.reader.read(f.source,()=>true);const next=f.reader.terminals(f.source,()=>true).bindings[0]!;expect(next.key).not.toBe(old.key);expect(old.current()).toBe(false);expect(await old.verify(()=>true)).toBe(false);expect(await next.verify(()=>true)).toBe(true);
+ }finally{f.reader.close();}
+});
+it("fails closed on partial parents, missing attempts, changed scope and child symlinks",async()=>{
+ const f=await fixture();await writeFile(f.file,start()+finish());const dir=join(f.base,child);await mkdir(dir);const outside=join(f.root,"generated-outside");await writeFile(outside,"{}\n");await symlink(outside,join(dir,"chat_history.jsonl"));
+ try{
+  await f.reader.read(f.source,()=>true);let allowed=true;const old=f.reader.terminals(f.source,()=>allowed).bindings[0]!;expect(await old.openRecord("transcript",()=>true)).toBeUndefined();
+  allowed=false;expect(old.current()).toBe(false);expect(await old.verify(()=>true)).toBe(false);expect(f.reader.terminals({...f.source,instanceId:"other"},()=>true).status).toBe("unavailable");allowed=true;
+  await appendFile(f.file,'{"incomplete":');await f.reader.read(f.source,()=>true);expect(f.reader.terminals(f.source,()=>true).status).toBe("pending");expect(await old.verify(()=>true)).toBe(false);
+ }finally{f.reader.close();}
+});
