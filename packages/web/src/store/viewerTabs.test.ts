@@ -74,3 +74,7 @@ it("keeps the public controller connection and completes startup only after loca
   expect(request).toHaveBeenLastCalledWith("preview.helper_start",{machineId:"B",viewerId,proof});
   expect(document.querySelector("iframe")).toBeNull();
 });
+it("does not create a localhost proof frame after a stopped probe returns late",async()=>{
+ const tabs=useViewerTabsStore(),viewerId=crypto.randomUUID();let resolve!:(x:unknown)=>void;const probe={id:crypto.randomUUID(),origin:'http://p00000000000000000000000000000000.localhost:1234',url:'http://p00000000000000000000000000000000.localhost:1234/probe'};
+ const request=vi.fn(async(method:string)=>{if(method==='preview.helper_start')throw {code:'unauthorized'};if(method==='preview.helper_probe')return new Promise(r=>{resolve=r;});return {};});tabs.connect({request}as never);const pending=tabs.startHelper('B',viewerId);const settled=pending.catch(e=>e);await vi.waitFor(()=>expect(resolve).toBeDefined());await tabs.stopHelper(viewerId);resolve(probe);await settled;expect(document.querySelector('[data-preview-helper-probe]')).toBeNull();expect(request.mock.calls.filter(([m])=>m==='preview.helper_start')).toHaveLength(1);
+});

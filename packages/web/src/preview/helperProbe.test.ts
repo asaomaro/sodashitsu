@@ -6,6 +6,7 @@ afterEach(()=>{vi.useRealTimers();document.body.replaceChildren();});
 it("only accepts proof from the actual local frame and cleans up after cancellation",async()=>{
   const abort=new AbortController(), reading=readLocalHelperProof(probe,abort.signal);
   const frame=document.querySelector("iframe")!;
+  expect(frame.getAttribute("allow")).toBe(`local-network-access ${probe.origin}; local-network ${probe.origin}; loopback-network ${probe.origin}`);
   const data={type:"soda-preview-helper-probe",id:probe.id,secret:"x".repeat(43)};
   window.dispatchEvent(new MessageEvent("message",{source:window,origin:probe.origin,data}));
   window.dispatchEvent(new MessageEvent("message",{source:frame.contentWindow,origin:"https://evil.example",data}));

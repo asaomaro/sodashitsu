@@ -1,3 +1,4 @@
+import { PreviewHelperStartError, type PreviewHelperStage } from "../preview/helperStartError.js";
 import { readLocalHelperProof } from "../preview/helperProbe.js";
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
@@ -38,16 +39,22 @@ export const useViewerTabsStore = defineStore("viewerTabs", () => {
     const controller = port, abort = new AbortController();
     helperProbes.get(viewerId)?.abort();
     helperProbes.set(viewerId, abort);
+    let stage:PreviewHelperStage="start";
     try {
       try { await controller.request("preview.helper_start", {machineId, viewerId}); }
       catch (error) {
         if (abort.signal.aborted || (error as {code?:string})?.code !== "unauthorized") throw error;
+        stage="probe";
         const probe = await controller.request("preview.helper_probe", {machineId, viewerId});
+        if (abort.signal.aborted) throw new Error("helper probe cancelled");
+        stage="local-proof";
         const proof = await readLocalHelperProof(probe, abort.signal);
         if (abort.signal.aborted) throw new Error("helper probe cancelled");
+        stage="attach";
         await controller.request("preview.helper_start", {machineId, viewerId, proof});
       }
-    } finally { if (helperProbes.get(viewerId) === abort) helperProbes.delete(viewerId); }
+    } catch(error) { throw new PreviewHelperStartError(stage,error); }
+    finally { if (helperProbes.get(viewerId) === abort) helperProbes.delete(viewerId); }
   }
   async function stopHelper(viewerId: string) {
     helperProbes.get(viewerId)?.abort();

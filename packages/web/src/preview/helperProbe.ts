@@ -8,6 +8,8 @@ export function readLocalHelperProof(probe: PreviewHelperProbe, signal: AbortSig
   return new Promise((resolve, reject) => {
     const frame = document.createElement("iframe");
     frame.hidden = true;
+    // Delegate only to this validated, short-lived loopback origin; never bypass browser permission.
+    frame.allow = `local-network-access ${probe.origin}; local-network ${probe.origin}; loopback-network ${probe.origin}`;
     frame.setAttribute("data-preview-helper-probe", "");
     frame.sandbox.add("allow-scripts", "allow-same-origin");
     const finish = (error?: Error, proof?: {id:string;secret:string}) => {

@@ -3,6 +3,7 @@ import "./viewportMaximize.css";
 import { useViewportMaximize } from "./useViewportMaximize.js";
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { PreviewLocalOrigin, type PreviewApp, type PreviewDisplay } from "@sodashitsu/protocol";
+import { previewHelperErrorMessage } from "../preview/helperStartError.js";
 import { useViewerTabsStore } from "../store/viewerTabs.js";
 import { ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
@@ -27,7 +28,7 @@ function maximizeKey(event: KeyboardEvent) {
 }
 const sourcePane = ref("");
 const controller = useViewerTabsStore();
-const helperStarting = ref(false);
+const helperStarting = ref(false), helperFailure = ref("");
 let helperStart: Promise<void> = Promise.resolve();
 const helperConnected = ref(false), opening = ref(false);
 const panes = computed(() => [...session.panes.values()].filter(p => !p.virtual && session.tabs.get(p.tabId)?.workspaceId === props.workspaceId && !session.tabs.get(p.tabId)?.nativeView));
@@ -35,10 +36,11 @@ const targetPane = computed(() => panes.value.find(p => p.id === sourcePane.valu
 const conn = inject(ConnectionKey, null), view = useViewStore(), machines = useMachinesStore();
 const allowedPane = ref<string | null>(null), viewerId = ref(""), apps = ref<PreviewApp[]>([]), displays = ref<PreviewDisplay[]>([]), selected = ref(""), error = ref(""), name = ref("web"), port = ref(5173), refresh = ref(0);
 const current = computed(() => displays.value.find((d) => d.requestId === selected.value));
+const helperLoginOrigin = location.origin;
 const helperCommand = computed(() => `sodactl ${machines.selectedId === "local" ? "" : `--machine ${machines.selectedId} `}preview helper --viewer ${viewerId.value} --url ${location.origin}`);
 let dead = false, epoch = 0, busy = false, lastPoll = 0;
 const acknowledged = new Set<string>();
-function reset() { if (viewerId.value) void controller.stopHelper(viewerId.value).catch(() => undefined); helperStarting.value = false; epoch++; allowedPane.value = null; viewerId.value = ""; displays.value = []; selected.value = ""; acknowledged.clear(); helperConnected.value = false; }
+function reset() { if (viewerId.value) void controller.stopHelper(viewerId.value).catch(() => undefined); helperStarting.value = false; helperFailure.value = ""; epoch++; allowedPane.value = null; viewerId.value = ""; displays.value = []; selected.value = ""; acknowledged.clear(); helperConnected.value = false; }
 async function enable() {
   if (!conn || !targetPane.value) return;
   const paneId = targetPane.value, version = ++epoch;
@@ -49,17 +51,21 @@ async function enable() {
     allowedPane.value = paneId; viewerId.value = result.viewerId;
     await poll(true);
     if (!helperConnected.value && version === epoch && !dead) {
-      helperStarting.value = true;
-      const id = result.viewerId, machine = machines.selectedId;
-      helperStart = controller.startHelper(machine, id).then(async () => {
-        if (dead || version !== epoch) { await controller.stopHelper(id).catch(() => undefined); return; }
-        await poll(true);
-      }).catch(() => { /* Another browser PC or an older server retains the manual route. */ })
-        .finally(() => { if (version === epoch) helperStarting.value = false; });
-      await helperStart;
+      await startHelperFor(version, result.viewerId, machines.selectedId);
     }
   } catch (e) { if (version === epoch) error.value = e instanceof Error ? e.message : String(e); }
 }
+async function startHelperFor(version:number,id:string,machine:string) {
+  if (dead || version!==epoch || helperStarting.value || viewerId.value!==id) return;
+  helperStarting.value=true;helperFailure.value="";
+  helperStart=controller.startHelper(machine,id).then(async()=>{
+    if(dead||version!==epoch||viewerId.value!==id||machines.selectedId!==machine){await controller.stopHelper(id).catch(()=>undefined);return;}
+    await poll(true);
+  }).catch(e=>{if(!dead&&version===epoch&&viewerId.value===id&&machines.selectedId===machine)helperFailure.value=previewHelperErrorMessage(e);})
+    .finally(()=>{if(version===epoch)helperStarting.value=false;});
+  await helperStart;
+}
+async function retryHelper() { if(allowedPane.value&&viewerId.value&&!helperConnected.value)await startHelperFor(epoch,viewerId.value,machines.selectedId); }
 async function disable() { reset(); await conn?.request("preview.unwatch", { viewId: props.tabId }).catch(() => undefined); }
 async function poll(force = false) {
   if (!conn || busy || view.connectionState !== "open") return;
@@ -70,7 +76,12 @@ async function poll(force = false) {
   try {
     const [list, result] = await Promise.all([
       conn.request("preview.list", targetPane.value ? { paneId: targetPane.value } : {}),
-      allowedPane.value ? conn.request("preview.poll", { viewId: props.tabId }) : Promise.resolve(null),
+      allowedPane.value ? conn.request("preview.poll", { viewId: props.tabId }).catch(e=>{
+        if(!dead&&version===epoch&&(e as {code?:string})?.code==='not_found') {
+          reset();error.value="この画面の表示許可を確認できません。もう一度、このpaneでの表示を許可してください。";return null;
+        }
+        throw e;
+      }) : Promise.resolve(null),
     ]);
     if (dead || version !== epoch) return;
     apps.value = list.apps;
@@ -134,7 +145,7 @@ onBeforeUnmount(() => { dead = true; clearInterval(timer); if (allowedPane.value
     <label>表示元のペイン <select v-model="sourcePane" aria-label="表示元のペイン"><option value="">自動選択</option><option v-for="p in panes" :key="p.id" :value="p.id">{{ p.label || p.title || p.id.slice(0,8) }}</option></select></label>
     <div class="preview-tools">
       <template v-if="!allowedPane"><p>このpaneの開発アプリを表示します。PC側で補助プログラムを動かします。</p><button data-assistant-action :disabled="!targetPane" @click="enable">このpaneでエージェントからの表示を許可</button></template>
-      <template v-else><span>{{ helperConnected ? "ブラウザPCのhelperに接続済み" : helperStarting ? "helperを自動起動しています…" : "ブラウザPCのhelperが未接続です" }}</span><button data-assistant-action @click="disable">許可を取り消す</button><template v-if="!helperConnected && !helperStarting"><p>このブラウザPCでhelperを自動起動できませんでした。ブラウザを使うPCで次を実行してください（ログイン済みのsodactl）。</p><code data-preview-helper-command>{{ helperCommand }}</code></template></template>
+      <template v-else><span>{{ helperConnected ? "ブラウザPCのhelperに接続済み" : helperStarting ? "helperを自動起動しています…" : "ブラウザPCのhelperが未接続です" }}</span><button data-assistant-action @click="disable">許可を取り消す</button><template v-if="!helperConnected && !helperStarting"><p>このブラウザPCでhelperを自動起動できませんでした。</p><p v-if="helperFailure" role="status" data-preview-helper-failure>{{ helperFailure }}</p><button data-assistant-action @click="retryHelper">helperの自動起動を再試行</button><p>手動で起動する場合は、このブラウザを使うPCのsodactlで、表示中のURLにログインしてから実行してください。localhostなど別URLのログインは流用されません。</p><code data-preview-helper-login>sodactl login --url {{ helperLoginOrigin }} --token &lt;TOKEN&gt;</code><code data-preview-helper-command>{{ helperCommand }}</code></template></template>
       <form @submit.prevent="register"><input v-model="name" aria-label="アプリ名" maxlength="80"><input v-model="port" aria-label="ポート" type="number" min="1" max="65535"><button data-assistant-action :disabled="opening">{{ helperConnected ? "登録して開く" : "登録" }}</button></form>
       <div class="preview-apps"><span v-for="app in apps" :key="app.id">{{ app.name }} :{{ app.port }} <button data-assistant-action :disabled="!allowedPane || !helperConnected || opening || app.state === 'stopped'" @click="open(app)">開く</button></span></div>
       <p v-if="error" role="alert">{{ error }}</p>
