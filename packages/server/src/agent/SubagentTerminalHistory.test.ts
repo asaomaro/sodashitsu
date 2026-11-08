@@ -7,19 +7,19 @@ function fixture(){
  const history=new SubagentTerminalHistory({getPane:()=>pane,hasVerifiedAgentSession:()=>verified});
  return{history,source:history.source(paneId)!,get pane(){return pane;},set pane(p:Pane){pane=p;},set verified(v:boolean){verified=v;}};
 }
-const item=(id="child"):SubagentHistoryItem=>({id,terminalStatus:"completed",startedAt:1000,hasTranscript:true});
+const item=(id="child"):Omit<SubagentHistoryItem,"entryId">=>({id,terminalStatus:"completed",startedAt:1000,hasTranscript:true});
 afterEach(()=>vi.useRealTimers());
 it("keeps unknown history distinct from a known empty collection and never changes active counts",async()=>{
  const f=fixture(),before=structuredClone(f.pane.agent?.subagents);
  expect(await f.history.read({paneId})).toMatchObject({status:"unavailable",items:[],incomplete:true});
  f.history.mark(f.source,"ok",false);expect(await f.history.read({paneId})).toMatchObject({status:"ok",items:[],incomplete:false});
  f.history.note(f.source,item(),"formal-stop",async()=>true);
- expect((await f.history.read({paneId})).items).toEqual([item()]);expect(f.pane.agent?.subagents).toEqual(before);f.history.close();
+ expect((await f.history.read({paneId})).items).toMatchObject([item()]);expect(f.pane.agent?.subagents).toEqual(before);f.history.close();
 });
 it("compares only exact source identity fields, independent of property order, and retains no extra source payload",async()=>{
  const f=fixture(),reordered={sessionId:f.source.sessionId,kind:f.source.kind,instanceId:f.source.instanceId,paneId:f.source.paneId,unused:"x".repeat(200000)};
  expect(f.history.note(reordered,item(),"event",async()=>true)).toBe(true);
- expect((await f.history.read({paneId})).items).toEqual([item()]);
+ expect((await f.history.read({paneId})).items).toMatchObject([item()]);
  const stored=(f.history as unknown as {states:Map<string,{source:unknown}>}).states.get(paneId)?.source;
  expect(stored).toEqual(f.source);expect(stored).not.toHaveProperty("unused");f.history.close();
 });
@@ -84,4 +84,12 @@ it("does not publish an old entry whose proof is replaced during asynchronous va
  const f=fixture();let finish!:(value:boolean)=>void;f.history.note(f.source,item(),"same-event",()=>new Promise(resolve=>{finish=resolve;}));
  const reading=f.history.read({paneId});f.history.note(f.source,item(),"same-event",async()=>false);finish(true);
  expect(await reading).toMatchObject({status:"pending",items:[],incomplete:true});f.history.close();
+});
+
+it("mints history entry IDs and never grants a later birth with an earlier selected ID",async()=>{
+ const f=fixture();f.history.note(f.source,item(),"old-attempt",async()=>true);const first=(await f.history.read({paneId})).items[0]!;
+ expect(first.entryId).toMatch(/^[a-f0-9-]{36}$/);expect(await f.history.grant(paneId,"child",()=>true,first.entryId)).toBeDefined();
+ f.history.note(f.source,item(),"old-attempt",async()=>true);expect((await f.history.read({paneId})).items[0]?.entryId).toBe(first.entryId);
+ f.history.note(f.source,{...item(),startedAt:2000},"new-attempt",async()=>true);const next=(await f.history.read({paneId})).items[0]!;expect(next.entryId).not.toBe(first.entryId);
+ expect(await f.history.grant(paneId,"child",()=>true,first.entryId)).toBeUndefined();expect(await f.history.grant(paneId,"child",()=>true,next.entryId)).toBeDefined();f.history.close();
 });
