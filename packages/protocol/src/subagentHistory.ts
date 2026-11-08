@@ -35,8 +35,9 @@ export interface AgentSubagentHistoryResult {
   incomplete: boolean;
 }
 
-/** Separate strict methods make old peers fail closed instead of stripping a history selector. */
-const historySelection = { paneId:z.string().uuid(), agentId:z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), entryId:z.string().uuid() };
+/** Separate strict methods make old peers fail closed instead of stripping a history selector.
+ * Child IDs are opaque formal event IDs (including colon/dot), never file locators. */
+const historySelection = { paneId:z.string().uuid(), agentId:z.string().regex(/^[A-Za-z0-9_:.-]{1,128}$/), entryId:z.string().uuid() };
 export const AgentSubagentHistoryTranscriptParams=z.object({...historySelection,offset:z.number().int().nonnegative().optional()}).strict();
 export type AgentSubagentHistoryTranscriptParams=z.infer<typeof AgentSubagentHistoryTranscriptParams>;
 export type AgentSubagentHistoryTranscriptResult=AgentSubagentTranscriptResult;

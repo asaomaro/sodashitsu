@@ -224,3 +224,10 @@ it.each(["missing-reset", "oversized-reset"])(
   },
 );
 it("does not claim there is no history when the current page is empty but more pages remain",async()=>{const f=fixture(()=>page([],{offset:64,more:true}));await f.reader.refresh();expect(f.reader.state.more).toBe(true);expect(subagentHistoryMessage(f.reader.state)).not.toContain("ありません");});
+it("retains formally accepted colon/dot tool IDs without changing their exact entry selector",async()=>{
+ const ids=['call:1','call.part:1',':event.1'];const f=fixture(()=>page(ids.map((id,n)=>({...row(n+1),id}))));f.reader.start();await vi.advanceTimersByTimeAsync(0);
+ expect(f.reader.state.items.map(r=>[r.id,r.entryId])).toEqual(ids.map((id,n)=>[id,uuid(n+1)]));expect(f.reader.state.incomplete).toBe(false);expect(f.request).toHaveBeenCalledWith('agent.subagent_history',expect.any(Object));
+});
+it("still rejects path/encoded/control IDs even if the entry UUID is valid",async()=>{
+ const f=fixture(()=>page(['../child','child/1','child\\1','child%2F1','child 1','child\n1','x'.repeat(129)].map((id,n)=>({...row(n+1),id}))));f.reader.start();await vi.advanceTimersByTimeAsync(0);expect(f.reader.state.items).toHaveLength(0);expect(f.reader.state.incomplete).toBe(true);
+});

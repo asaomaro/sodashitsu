@@ -34,7 +34,7 @@ export function safeSubagentHistoryItem(value: unknown): SubagentHistoryItem | n
   if (
     !object(value) ||
     !text(value.id, 128) ||
-    !/^[A-Za-z0-9_-]+$/.test(value.id) ||
+    !/^[A-Za-z0-9_:.-]+$/.test(value.id) ||
     typeof value.entryId !== "string" ||
     !UUID_RE.test(value.entryId) ||
     !(
