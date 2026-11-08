@@ -2,7 +2,7 @@ import type { UsageInsights } from "@sodashitsu/protocol";
 
 export const USAGE_OVERVIEW_ASSESSMENT_TITLE = "ツール結果の機械評価（記録分）";
 export const USAGE_OVERVIEW_ASSESSMENT_RULE = "点数 = ⌊(既知結果 − 失敗) ÷ 既知結果 × 100⌋。既知結果10件以上で評価。A ≥95・B ≥90・C ≥80・D ≥60・E <60。";
-export const USAGE_OVERVIEW_ASSESSMENT_LIMIT = "選択期間内に開始されたツールの、取得時点までに判明した正式な結果だけの評価です。未取得・推定・入れ子の内訳は成功に含めません。成果品質・生産性・目的達成の評価ではなく、作業記録を読むAI評価とは別です。";
+export const USAGE_OVERVIEW_ASSESSMENT_LIMIT = "選択期間内に開始されたツールの、取得時点までに判明した正式な結果だけの評価です。結果未取得の呼び出しや、本文から推測した入れ子の操作は成功に含めません。成果品質・生産性・目的達成の評価ではなく、作業記録を読むAI評価とは別です。";
 type Scope = Pick<UsageInsights, "totals" | "partial" | "collecting">;
 
 /** Uses the full filtered aggregate, not the truncated tool-name list. Missing is never zero. */
