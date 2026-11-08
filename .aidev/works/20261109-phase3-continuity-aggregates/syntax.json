@@ -1,0 +1,122 @@
+[
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/run-a.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/clock-failure.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/fixture-parity-integration.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/build-fixture.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/pipeline-stage.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/private-server.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/receipt-publication.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/detector.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/safety.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/prepare.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/absolute-pcm.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/continuity-aggregate.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/calibrate.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/pure-checks.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/protocol-negotiation.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/viewer-heartbeat.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3/microphone-client-parity.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/clock-failure.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/run-bc.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/build-fixture.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/resource-observer.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/private-server.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/session.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/prepare.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/native-source.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/observations.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/pure-checks.test.mjs",
+    "exit": 0
+  },
+  {
+    "file": "scripts/remote-desktop/protected-microphone-phase3-bc/old-stream-probe.mjs",
+    "exit": 0
+  }
+]

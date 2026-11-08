@@ -1,0 +1,22 @@
+{
+  "negative": [
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/detector.mjs",
+      "exit": 1
+    },
+    {
+      "file": "scripts/remote-desktop/protected-microphone-phase3/Receiver.cs",
+      "exit": 1
+    }
+  ],
+  "restored": {
+    "scripts/remote-desktop/protected-microphone-phase3/detector.mjs": {
+      "sha256": "8b6d1b3147a56499df59756c42fab7d93d3c734dc69d64e8b2d731bca0f8fcb2",
+      "byteExact": true
+    },
+    "scripts/remote-desktop/protected-microphone-phase3/Receiver.cs": {
+      "sha256": "71713b63f42e96ac718fa33e646fe928a1580b4eb62b0be46285098f765721c1",
+      "byteExact": true
+    }
+  }
+}

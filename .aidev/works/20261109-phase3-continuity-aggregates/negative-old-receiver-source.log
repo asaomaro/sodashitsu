@@ -1,0 +1,30 @@
+✖ C# capture metadata observer preserves flags reset and old detector predicates verbatim (3.694534ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 48.271637
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/continuity-aggregate.test.mjs:10:1
+✖ C# capture metadata observer preserves flags reset and old detector predicates verbatim (3.694534ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(source.includes('if(ObservePacketFlags!=null)ObservePacketFlags(flags);if((flags&5)!=0){used=0;discontinuity=true;}'))
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-continuity-aggregates/scripts/remote-desktop/protected-microphone-phase3/continuity-aggregate.test.mjs:10:176)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

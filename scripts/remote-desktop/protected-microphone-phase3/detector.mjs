@@ -8,15 +8,20 @@ export function metrics(samples){
 }
 export class Detector {
  baseline=0;tone=0;firstTone;lastTone;previous;streak=0;streakStart=0;continuous=false;baselineBad=false;maxGap=0;discontinuities=0;maxLeftRms=0;maxRightRms=0;maxLeftTone=0;maxRightTone=0;clipped=0;
+ continuity={captureFlagsObserved:false,maxStreakFrames:0,maxStreakWallMs:0,nonToneResetCount:0,brokenResetCount:0,gapResetCount:0,baselineBrokenWindows:0,baselineGapWindows:0,toneBrokenWindows:0,toneGapWindows:0,toneNonToneWindows:0,firstToneAtMs:null,lastToneAtMs:null,firstResetAtMs:null,lastResetAtMs:null,baselineDataFlags:0,baselineTimestampFlags:0,toneDataFlags:0,toneTimestampFlags:0,firstBaselineFlagAtMs:null,lastBaselineFlagAtMs:null,firstTonePhaseFlagAtMs:null,lastTonePhaseFlagAtMs:null};
+ observeCaptureFlags(flags,wallMs,{baseline=false}={}){this.continuity.captureFlagsObserved=true;if(!(flags&5))return;const c=this.continuity;if(baseline){if(flags&1)c.baselineDataFlags++;if(flags&4)c.baselineTimestampFlags++;c.firstBaselineFlagAtMs??=wallMs;c.lastBaselineFlagAtMs=wallMs;}else{if(flags&1)c.toneDataFlags++;if(flags&4)c.toneTimestampFlags++;c.firstTonePhaseFlagAtMs??=wallMs;c.lastTonePhaseFlagAtMs=wallMs;}}
  accept(left,right,wallMs,{baseline=false,discontinuity=false}={}){
   if(!Number.isFinite(wallMs)||wallMs<0||this.previous!==undefined&&wallMs<this.previous)throw Error('wall-order');
   const l=metrics(left),r=metrics(right),gap=this.previous===undefined?0:wallMs-this.previous;this.previous=wallMs;this.maxGap=Math.max(this.maxGap,gap);if(discontinuity)this.discontinuities++;
-  if(baseline){this.baseline++;if(Math.max(l.rms,r.rms)>10||Math.max(l.magnitude,r.magnitude)>10)this.baselineBad=true;this.streak=0;return;}
+  if(baseline){if(discontinuity)this.continuity.baselineBrokenWindows++;if(gap>60)this.continuity.baselineGapWindows++;this.baseline++;if(Math.max(l.rms,r.rms)>10||Math.max(l.magnitude,r.magnitude)>10)this.baselineBad=true;this.streak=0;return;}
   this.maxLeftRms=Math.max(this.maxLeftRms,l.rms);this.maxRightRms=Math.max(this.maxRightRms,r.rms);this.maxLeftTone=Math.max(this.maxLeftTone,l.magnitude);this.maxRightTone=Math.max(this.maxRightTone,r.magnitude);this.clipped+=l.clips+r.clips;
   const tone=l.rms>=4000&&l.rms<=7000&&l.magnitude>=6500&&l.magnitude<=9500&&l.clips===0;
+  const c=this.continuity;if(!tone)c.toneNonToneWindows++;if(discontinuity)c.toneBrokenWindows++;if(gap>60)c.toneGapWindows++;
+  if(this.streak>0&&(!tone||discontinuity||gap>60)){if(!tone)c.nonToneResetCount++;if(discontinuity)c.brokenResetCount++;if(gap>60)c.gapResetCount++;c.firstResetAtMs??=wallMs;c.lastResetAtMs=wallMs;}
   if(!tone||discontinuity||gap>60){this.streak=0;if(!tone)return;}
   this.tone++;this.firstTone??=wallMs;this.lastTone=wallMs;if(this.streak++===0)this.streakStart=wallMs;
   if(this.streak>=280&&wallMs-this.streakStart>=5500)this.continuous=true;
+  c.firstToneAtMs??=wallMs;c.lastToneAtMs=wallMs;if(this.streak>c.maxStreakFrames||this.streak===c.maxStreakFrames&&wallMs-this.streakStart>c.maxStreakWallMs){c.maxStreakFrames=this.streak;c.maxStreakWallMs=wallMs-this.streakStart;}
  }
- result(){const span=this.firstTone===undefined?0:this.lastTone-this.firstTone;return{ok:this.baseline>=90&&!this.baselineBad&&this.tone>=290&&span>=5700&&this.continuous&&this.clipped===0,baselineFrames:this.baseline,baselineBad:this.baselineBad,toneFrames:this.tone,toneWallSpanMs:span,continuousThresholdMet:this.continuous,maximumReadGapMs:this.maxGap,captureDiscontinuities:this.discontinuities,maxLeftRms:this.maxLeftRms,maxRightRms:this.maxRightRms,maxLeft997Magnitude:this.maxLeftTone,maxRight997Magnitude:this.maxRightTone,clipCount:this.clipped,rawAudioStored:false};}
+ result(){const span=this.firstTone===undefined?0:this.lastTone-this.firstTone;return{ok:this.baseline>=90&&!this.baselineBad&&this.tone>=290&&span>=5700&&this.continuous&&this.clipped===0,baselineFrames:this.baseline,baselineBad:this.baselineBad,toneFrames:this.tone,toneWallSpanMs:span,continuousThresholdMet:this.continuous,maximumReadGapMs:this.maxGap,captureDiscontinuities:this.discontinuities,maxLeftRms:this.maxLeftRms,maxRightRms:this.maxRightRms,maxLeft997Magnitude:this.maxLeftTone,maxRight997Magnitude:this.maxRightTone,clipCount:this.clipped,continuity:{...this.continuity,...(!this.continuity.captureFlagsObserved?{baselineDataFlags:null,baselineTimestampFlags:null,toneDataFlags:null,toneTimestampFlags:null}:{})},rawAudioStored:false};}
 }
