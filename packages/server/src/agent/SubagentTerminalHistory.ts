@@ -4,8 +4,9 @@ import type { AgentSubagentHistoryParams, AgentSubagentHistoryResult, Pane, Suba
 export interface SubagentHistorySource {paneId:string;instanceId:string;kind:string;sessionId:string}
 interface Session {getPane(id:string):Pane|undefined;hasVerifiedAgentSession(pane:string,instance:string,session:string):boolean}
 export type SubagentHistoryNote = Omit<SubagentHistoryItem,"entryId">;
-interface Entry {item:SubagentHistoryItem;eventId:string;verify:(current:()=>boolean)=>Promise<boolean>}
-interface State {source:SubagentHistorySource;revision:string;items:Map<string,Entry>;omittedBefore:boolean;status:"ok"|"pending";incomplete:boolean}
+export interface SubagentHistoryProof<T> {target:T;current():boolean}
+interface Entry<T> {proof?:SubagentHistoryProof<T>;item:SubagentHistoryItem;eventId:string;verify:(current:()=>boolean)=>Promise<boolean>}
+interface State<T> {source:SubagentHistorySource;revision:string;items:Map<string,Entry<T>>;omittedBefore:boolean;status:"ok"|"pending";incomplete:boolean}
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
 const sameSource=(a:SubagentHistorySource,b:SubagentHistorySource|undefined)=>!!b&&a.paneId===b.paneId&&a.instanceId===b.instanceId&&a.kind===b.kind&&a.sessionId===b.sessionId;
 const clean=(v:unknown,max:number):string|undefined=>typeof v==="string"&&v.length>0&&v.length<=max&&!/[\x00-\x1f\x7f-\x9f]/.test(v)?v:undefined;
@@ -13,8 +14,8 @@ const clean=(v:unknown,max:number):string|undefined=>typeof v==="string"&&v.leng
 /** Small, private terminal collection. It does not mutate AgentInfo, usage,
  * active counts, graph controls or session data. Only trusted provider adapters
  * can note an entry; every public read separately revalidates its owned record. */
-export class SubagentTerminalHistory {
-  private readonly states=new Map<string,State>();
+export class SubagentTerminalHistory<T=unknown> {
+  private readonly states=new Map<string,State<T>>();
   private closed=false;
   private checks=0;
   constructor(private readonly session:Session){}
@@ -32,7 +33,7 @@ export class SubagentTerminalHistory {
     if(!this.current(source))return;
     const state=this.state(source);state.status=status;state.incomplete=incomplete;
   }
-  private state(source:SubagentHistorySource):State{
+  private state(source:SubagentHistorySource):State<T>{
     let state=this.states.get(source.paneId);
     if(!state||!sameSource(state.source,source)){
       state={source:{paneId:source.paneId,instanceId:source.instanceId,kind:source.kind,sessionId:source.sessionId},revision:randomUUID(),items:new Map(),omittedBefore:false,status:"pending",incomplete:true};
@@ -41,8 +42,8 @@ export class SubagentTerminalHistory {
     }
     return state;
   }
-  note(source:SubagentHistorySource,item:SubagentHistoryNote,eventId:string,verify:(current:()=>boolean)=>Promise<boolean>):boolean{
-    if(!this.current(source)||!clean(eventId,256)||!clean(item.id,128)||!["completed","aborted","error"].includes(item.terminalStatus))return false;
+  note(source:SubagentHistorySource,item:SubagentHistoryNote,eventId:string,verify:(current:()=>boolean)=>Promise<boolean>,proof?:SubagentHistoryProof<T>):boolean{
+    if(!this.current(source)||proof!==undefined&&!proof.current()||!clean(eventId,256)||!clean(item.id,128)||!["completed","aborted","error"].includes(item.terminalStatus))return false;
     const state=this.state(source),previous=state.items.get(item.id);
     const publicItem:SubagentHistoryItem={id:item.id,terminalStatus:item.terminalStatus,entryId:previous?.eventId===eventId?previous.item.entryId:randomUUID()};
     for(const key of ["type","description","model","reasoningEffort"] as const){const v=clean(item[key],key==="description"?2000:key==="type"?200:128);if(v)publicItem[key]=v;}
@@ -50,26 +51,31 @@ export class SubagentTerminalHistory {
     if(publicItem.reasoningEffort&&(item.reasoningEffortBasis==="turn"||item.reasoningEffortBasis==="creation"||item.reasoningEffortBasis==="session"))publicItem.reasoningEffortBasis=item.reasoningEffortBasis;else delete publicItem.reasoningEffort;
     for(const key of ["startedAt","endedAt"] as const)if(typeof item[key]==="number"&&Number.isSafeInteger(item[key])&&item[key]!>=0)publicItem[key]=item[key];
     if(item.hasTranscript===true)publicItem.hasTranscript=true;
-    if(previous?.eventId===eventId&&same(previous.item,publicItem)){state.items.set(item.id,{item:publicItem,eventId,verify});return true;}
+    if(previous?.eventId===eventId&&same(previous.item,publicItem)){state.items.set(item.id,{item:publicItem,eventId,verify,...(proof?{proof}:{})});return true;}
     if(previous)publicItem.entryId=randomUUID();
-    state.items.delete(item.id);state.items.set(item.id,{item:publicItem,eventId,verify});state.revision=randomUUID();state.status="ok";
+    state.items.delete(item.id);state.items.set(item.id,{item:publicItem,eventId,verify,...(proof?{proof}:{})});state.revision=randomUUID();state.status="ok";
     while(state.items.size>256){state.items.delete(state.items.keys().next().value!);state.omittedBefore=true;}
     return true;
   }
-  private async verify(entry:Entry,current:()=>boolean):Promise<boolean>{
-    if(this.checks>=4||!current())return false;
+  private async verify(entry:Entry<T>,current:()=>boolean):Promise<boolean>{
+    const valid=()=>current()&&entry.proof?.current()!==false;
+    if(this.checks>=4||!valid())return false;
     this.checks++;
-    try{return await entry.verify(current)&&current();}catch{return false;}finally{this.checks--;}
+    try{return await entry.verify(valid)&&valid();}catch{return false;}finally{this.checks--;}
   }
-  async grant(paneId:string,id:string,allowed:()=>boolean=()=>true,entryId?:string):Promise<{source:SubagentHistorySource;item:SubagentHistoryItem;current:()=>boolean}|undefined>{
+  async grant(paneId:string,id:string,allowed:()=>boolean=()=>true,entryId?:string):Promise<{source:SubagentHistorySource;item:SubagentHistoryItem;proof?:SubagentHistoryProof<T>;current:()=>boolean}|undefined>{
     const source=this.source(paneId),state=this.states.get(paneId),entry=state?.items.get(id);
     if(!source||!state||!entry||!sameSource(source,state.source)||entryId!==undefined&&entry.item.entryId!==entryId)return;
     let active=true,timer:ReturnType<typeof setTimeout>|undefined;
-    const current=()=>active&&allowed()&&this.current(source)&&this.states.get(paneId)===state&&state.items.get(id)===entry;
+    const current=()=>active&&allowed()&&this.current(source)&&this.states.get(paneId)===state&&state.items.get(id)===entry&&entry.proof?.current()!==false;
     try{
       const valid=await Promise.race([this.verify(entry,current),new Promise<false>(resolve=>{timer=setTimeout(()=>{active=false;resolve(false);},1500);})]);
-      if(valid&&current())return{source,item:{...entry.item},current:()=>allowed()&&this.current(source)&&this.states.get(paneId)===state&&state.items.get(id)===entry};
+      if(valid&&current())return{source,item:{...entry.item},...(entry.proof?{proof:entry.proof}:{}),current:()=>allowed()&&this.current(source)&&this.states.get(paneId)===state&&state.items.get(id)===entry&&entry.proof?.current()!==false};
     }finally{active=false;if(timer)clearTimeout(timer);}
+  }
+  async grantEntry(paneId:string,entryId:string,allowed:()=>boolean=()=>true){
+    const state=this.states.get(paneId),entry=state&&[...state.items.values()].find(value=>value.item.entryId===entryId);
+    return entry?this.grant(paneId,entry.item.id,allowed,entryId):undefined;
   }
   async read(params:AgentSubagentHistoryParams,allowed:()=>boolean=()=>true):Promise<AgentSubagentHistoryResult>{
     const source=this.source(params.paneId),state=this.states.get(params.paneId);

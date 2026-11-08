@@ -93,3 +93,11 @@ it("mints history entry IDs and never grants a later birth with an earlier selec
  f.history.note(f.source,{...item(),startedAt:2000},"new-attempt",async()=>true);const next=(await f.history.read({paneId})).items[0]!;expect(next.entryId).not.toBe(first.entryId);
  expect(await f.history.grant(paneId,"child",()=>true,first.entryId)).toBeUndefined();expect(await f.history.grant(paneId,"child",()=>true,next.entryId)).toBeDefined();f.history.close();
 });
+
+it("retains private targets only behind current proofs and never serializes them into list rows",async()=>{
+ const f=fixture();let current=true;const target={privateRecord:"not-public"};
+ f.history.note(f.source,item(),"owned",async()=>true,{target,current:()=>current});
+ const rows=await f.history.read({paneId});expect(JSON.stringify(rows)).not.toContain("privateRecord");
+ const grant=await f.history.grantEntry(paneId,rows.items[0]!.entryId);expect(grant?.proof?.target).toBe(target);expect(grant?.current()).toBe(true);
+ current=false;expect(grant?.current()).toBe(false);expect(await f.history.read({paneId})).toMatchObject({status:"pending",items:[]});f.history.close();
+});
