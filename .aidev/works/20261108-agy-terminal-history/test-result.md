@@ -12,3 +12,5 @@ Generated private composition uses authenticated websocket APIs, own fake agy pr
 Unchanged polling does no parent readRange. Partial/unparsed append blocks old body/usage; unrelated complete append preserves same fact only after formal rescan. KILLED/newdescriptor/rewrite/truncate/scope/forget/close retire prior proofs; physical slots remain held through FD close. Invalid or missing descriptors, wrong UUID/spawnStep, unknown state and symlinks fail closed. Parent <=4MiB/20k rows/256KiB line, descriptor <=32KiB/256 entries, cache64 and physical4. Oversize/unknown is unavailable, not known zero.
 
 No real model calls, Windows or user pane/record/viewer changes. Production server build follows separately once, with own workspace output directories and source hash equality.
+
+Production package build completed once: exit0, Node24.22.2/8GiB/pnpm9.15.9, fixed source aca40219 (product c200d38d). All 1852 server dist files SHA saved; 24 related JS/declaration/maps exist; 41 host-manifest entries match bytes/SHA; all 8 fixed source/test SHA still match. Build bundles internal resources only and does not start Electron/agents. No global suite was run.

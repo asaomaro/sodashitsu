@@ -1,0 +1,13 @@
+{
+  "exitCode": 0,
+  "sourceHead": "aca402190f302bb78e6e6b704e8f9b53bc134d34",
+  "node": "24.22.2",
+  "heapMiB": 8192,
+  "pnpm": "9.15.9",
+  "package": "@sodashitsu/server",
+  "distFiles": 1852,
+  "command": "corepack.js pnpm@9.15.9 --filter @sodashitsu/server build",
+  "scope": "production server/reference TS emit, desktop-assistant host assets/prune; not global build/test",
+  "realModel": false,
+  "Windows": false
+}

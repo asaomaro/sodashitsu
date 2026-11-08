@@ -1,0 +1,281 @@
+{
+  "sourceShaMatches": true,
+  "hostManifestVersion": 1,
+  "hostManifestEntries": 41,
+  "hostManifestSha256": "78779e113a072895917168dfa0b76ef20117d08e83466e8cf631cf6c8c96147e",
+  "hostEntries": [
+    {
+      "path": "assets/actor.js",
+      "ok": true,
+      "sha256": "fca4b9a83d90652ddfc5b81dc283ab3909742e43f24771590a3a14dd5e408c72",
+      "bytes": 2666
+    },
+    {
+      "path": "assets/appearance.js",
+      "ok": true,
+      "sha256": "f73f0d9b78e074645ff78f660406a9ed9e43567629f8f5c9c87d20ab3f741621",
+      "bytes": 1620
+    },
+    {
+      "path": "assets/apps.js",
+      "ok": true,
+      "sha256": "cda093b79825ef22466ef11194cc645f1b83a67c47e9d10aa4578cf9500f1184",
+      "bytes": 3135
+    },
+    {
+      "path": "assets/bubble.html",
+      "ok": true,
+      "sha256": "f9706095eded03beacbb3fbead56bd9562a1697d1c4df85e9dd60f250a76b1f0",
+      "bytes": 4168
+    },
+    {
+      "path": "assets/bubble.js",
+      "ok": true,
+      "sha256": "7b331f78df70afb95ea9b9fc505cd34ae7537a2c84ac0abbdf0cb99e0d64b3e9",
+      "bytes": 22963
+    },
+    {
+      "path": "assets/captain-female.png",
+      "ok": true,
+      "sha256": "f37fca28b6502ecc7d62a394e2a59de7d142370fac3c67b9866e72be9ed2548b",
+      "bytes": 1730068
+    },
+    {
+      "path": "assets/captain-female.svg",
+      "ok": true,
+      "sha256": "e9092bdbcc6f8f6e58c4fd930adfe2c4322bea1bcf2ffa2d28f7dbf5375729ac",
+      "bytes": 1168
+    },
+    {
+      "path": "assets/captain-images.json",
+      "ok": true,
+      "sha256": "ea7247a78849509a1abd3f87830fdd66be2ea9e55529b2155ba2df276eb8aa0c",
+      "bytes": 506
+    },
+    {
+      "path": "assets/captain-male.png",
+      "ok": true,
+      "sha256": "e6602058f6ea23790e9d6b631030d20776e0bbafdaab34f7e536bcefe2807916",
+      "bytes": 1734711
+    },
+    {
+      "path": "assets/captain-male.svg",
+      "ok": true,
+      "sha256": "7f0470213e75ea653781d5017708efc635a87780956559d5fbd4762d8ea0e693",
+      "bytes": 1153
+    },
+    {
+      "path": "assets/captain-robot.png",
+      "ok": true,
+      "sha256": "b426334cdbb2ca01cbb790dbef4586228e1a42535ed55ca150548e449b4fa3ef",
+      "bytes": 1400260
+    },
+    {
+      "path": "assets/captain-robot.svg",
+      "ok": true,
+      "sha256": "7d02fca79c421f0a658cc5abbb0346615a77a6a9baec657b3bf2314a95998c17",
+      "bytes": 1249
+    },
+    {
+      "path": "assets/capture.js",
+      "ok": true,
+      "sha256": "68aac2c3b26752a1f5e99623e0dd3de570e2dfd37591664183cfdd7eb878d273",
+      "bytes": 4772
+    },
+    {
+      "path": "assets/character.html",
+      "ok": true,
+      "sha256": "da4d4cd5ff2316330e4082c26fbb6c1d18b00db2e69b1e43642a258430dded57",
+      "bytes": 559
+    },
+    {
+      "path": "assets/character.js",
+      "ok": true,
+      "sha256": "c5e1d9236ebbc2eba23174516de3b0b754ddeb4e998c0c43a0647d2706cfc1b9",
+      "bytes": 4352
+    },
+    {
+      "path": "assets/file-inputs.js",
+      "ok": true,
+      "sha256": "0e7c63c9f9408ef8dfc7c3baef7ce2a5396ac706add515209f0276901d7af0e1",
+      "bytes": 1747
+    },
+    {
+      "path": "assets/notice.html",
+      "ok": true,
+      "sha256": "e6ff9f1012074ba4fcd365e5ea8fe4e28dc826e230e8ca678f5f1add0cd6ea1b",
+      "bytes": 919
+    },
+    {
+      "path": "assets/notice.js",
+      "ok": true,
+      "sha256": "a30643d07a26f1462ee5d620574123b3f68c698e138a20f9e30859383a3b9940",
+      "bytes": 3180
+    },
+    {
+      "path": "assets/ocr.js",
+      "ok": true,
+      "sha256": "a6e39364d4c679607d7cf9773bd82aba425defeddba5ddc754c8c3f79f0153f9",
+      "bytes": 8394
+    },
+    {
+      "path": "assets/panel.html",
+      "ok": true,
+      "sha256": "8db0f6fdc52d21743abf4528615d576db1cde10e2611dd02c411ba0104c26c44",
+      "bytes": 958
+    },
+    {
+      "path": "assets/recording.js",
+      "ok": true,
+      "sha256": "d4be45b4ca14757309699bbde4b3925e5cfecbe4237f0fb78cd2828961481c1a",
+      "bytes": 11015
+    },
+    {
+      "path": "assets/reminder-notices.js",
+      "ok": true,
+      "sha256": "dbb03ba19a0b32650327a838c6c823733bd1f79b36e275fc06e84965ab60f13e",
+      "bytes": 961
+    },
+    {
+      "path": "assets/reminders.js",
+      "ok": true,
+      "sha256": "856ed86a38ea3f68cafe0724627f0381994307c66e9af8970435422dc51b4c83",
+      "bytes": 2010
+    },
+    {
+      "path": "assets/resize.js",
+      "ok": true,
+      "sha256": "bdcb8728265f60a39e3f4d53e1ab340b10dc96d0063e4bb28b784b271019b2fc",
+      "bytes": 2036
+    },
+    {
+      "path": "assets/sections.js",
+      "ok": true,
+      "sha256": "06f87ebf8fac839718a965fefdddeb55b7e0f004b70a9887f1b3521e1dd85823",
+      "bytes": 2334
+    },
+    {
+      "path": "assets/settings.html",
+      "ok": true,
+      "sha256": "8369d391a48479811440a92d055a11acf26cf94249ed127ec26b5f5824344784",
+      "bytes": 13990
+    },
+    {
+      "path": "assets/settings.js",
+      "ok": true,
+      "sha256": "4c03368e42f503e720aff5558ddcdd756eca54afb7039ab25e066b47416d6cb1",
+      "bytes": 17128
+    },
+    {
+      "path": "assets/sodashitsu-icon.svg",
+      "ok": true,
+      "sha256": "b71c39a9ebb20a2a52873d01186f8f4a579c31482a0b2eeb960cc8845b168a3c",
+      "bytes": 1699
+    },
+    {
+      "path": "assets/sodashitsu.ico",
+      "ok": true,
+      "sha256": "22b95935f72ebb6be12d912f359c99c4dabd1adf76105136644aada6354fd2fa",
+      "bytes": 29417
+    },
+    {
+      "path": "assets/sodashitsu.png",
+      "ok": true,
+      "sha256": "4b348a33947e4288076e714d9dc158b229be64cc23b1281db716667ce77500fa",
+      "bytes": 13144
+    },
+    {
+      "path": "assets/style.css",
+      "ok": true,
+      "sha256": "bec30a5d3ffdefa002ea5b207d44d228df2ee882e504f1d5ef3b26be83edab12",
+      "bytes": 19455
+    },
+    {
+      "path": "assets/tool-window.js",
+      "ok": true,
+      "sha256": "3ab5e1b8e27bee8aca7f767de22dcf0484b77fd9cba6b7030bfe4cd009f3cef8",
+      "bytes": 88
+    },
+    {
+      "path": "assets/tools.html",
+      "ok": true,
+      "sha256": "154a3ebaf02aa8518564364b87ab8020854337658a639e3b5807e2984fed7e7e",
+      "bytes": 8733
+    },
+    {
+      "path": "assets/tools.js",
+      "ok": true,
+      "sha256": "e7cc40ef6d4a7b7aff9d5b19066f3ab89aef16543a0807ca051600c9a05ed35d",
+      "bytes": 13525
+    },
+    {
+      "path": "assets/tray.png",
+      "ok": true,
+      "sha256": "a70da44a4677e75c60a25977a305bc9899d39a9a5224106a9e4f5838b1495313",
+      "bytes": 1663
+    },
+    {
+      "path": "assets/window.js",
+      "ok": true,
+      "sha256": "68bc6308e76c2d136496c333133d531291c39e59e73703da990ec3392bc858d5",
+      "bytes": 4234
+    },
+    {
+      "path": "dist/main.mjs",
+      "ok": true,
+      "sha256": "c641dc6e450044a5f108028a028b97c2fa877b099d004ceb3a4125dd3d8bfeb2",
+      "bytes": 825694
+    },
+    {
+      "path": "dist/managed-relay.cjs",
+      "ok": true,
+      "sha256": "091d49dc2b157cd39af088ad74f449a38bf649752043f5a728ec39a5cd7989df",
+      "bytes": 4035
+    },
+    {
+      "path": "dist/preload.cjs",
+      "ok": true,
+      "sha256": "bacb70bdec244fbf1e53f7b02871a72f6e2cd2c052be051ea7b3aaa986b08258",
+      "bytes": 10213
+    },
+    {
+      "path": "package.json",
+      "ok": true,
+      "sha256": "cfbca805de8588736182d37ba43e342cbda13b0fd5b21bf31b6f9ff8aa33949a",
+      "bytes": 146
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.txt",
+      "ok": true,
+      "sha256": "2bad882411b47370a07deaec74d28a8f9ffce5db24d11ceee216efaa9cf8596e",
+      "bytes": 8846
+    }
+  ],
+  "relatedDist": {
+    "packages/server/dist/agent/AntigravityChildRecord.js": "2c844b2bc0e4c712ad8b969dab5d6122dc64b66742f6f4356b3aac9f173b2047",
+    "packages/server/dist/agent/AntigravityChildRecord.js.map": "b1c36bba8f8365cdd821560d6566739b6cdee3df58478bf867ab41f714b013b9",
+    "packages/server/dist/agent/AntigravityChildRecord.d.ts": "96c374b4537b074eb11e4f453f47644f820177bc852aab77b0dd6cb8aad0530d",
+    "packages/server/dist/agent/AntigravityChildRecord.d.ts.map": "4085367a490f35cb5ce9d00023265749855106ca784fbff7e6cd0c4027deacfb",
+    "packages/server/dist/agent/AntigravitySubagentReader.js": "0383d8e75999b980e437deef8733b14298af166e656e85d7a2e6f0a6072f97a9",
+    "packages/server/dist/agent/AntigravitySubagentReader.js.map": "046eabb6425fd22dffe865a471c889c47996763cf17483c1484ce88b428f2b9a",
+    "packages/server/dist/agent/AntigravitySubagentReader.d.ts": "025ceef08cb6b2bbdb3fe3af3675c2f85283e62d34b4c1774c99489bb7ed55a5",
+    "packages/server/dist/agent/AntigravitySubagentReader.d.ts.map": "8d175bd6e46ac77208d362605c7ed3d818294bf9dcbafba66a644dbc2c1fd6a3",
+    "packages/server/dist/agent/AntigravityTerminalHistory.js": "ee6c5d6bd05bea31e308ede1b8aa5683f22a578240037c12d69509a81a4e760b",
+    "packages/server/dist/agent/AntigravityTerminalHistory.js.map": "dc6d7a3a05b2d8d09fb4dea230baee1b9171216e8bdf254540e3e394667dbc7f",
+    "packages/server/dist/agent/AntigravityTerminalHistory.d.ts": "290e8ec5b5e9080ec43bcac24f6650ec19304d6494eb3165abdae08654c30b2e",
+    "packages/server/dist/agent/AntigravityTerminalHistory.d.ts.map": "d43b5a61fb27467fb420866323d5d0ea88d1293a4896c2eade19e219d8996f42",
+    "packages/server/dist/agent/AntigravityTerminalSnapshot.js": "57ac3b66e02a88a38b6ecdef362e8d6347c6e855b92d05548e7855645e64752c",
+    "packages/server/dist/agent/AntigravityTerminalSnapshot.js.map": "7eb77a46fd1a9d8cb53022c22da848c20a5c460c3a9fd6d11c795b3fb5999e18",
+    "packages/server/dist/agent/AntigravityTerminalSnapshot.d.ts": "67ee9fc524b20728862ab7b19890970a525bdd13572f286863fbfb016595b89d",
+    "packages/server/dist/agent/AntigravityTerminalSnapshot.d.ts.map": "8c60858108717ec88a55b1140364937ec0f7e71fea5f4e7e86f3717bb20b6271",
+    "packages/server/dist/agent/NativeSubagentService.js": "5f7a566b3d739097aa85599e6c10b52a4ed51cbec7eaf1aef586a32886a1fe92",
+    "packages/server/dist/agent/NativeSubagentService.js.map": "653fc6c55c118914d9d500222c6c3dc98c745f13bea3b4e8c10ada2c70fdbaee",
+    "packages/server/dist/agent/NativeSubagentService.d.ts": "14aa9f151dbb2d1b96b6f272496e4d4041c1cdfb436ee65cd8ca561d0c91a1ea",
+    "packages/server/dist/agent/NativeSubagentService.d.ts.map": "c9353d8c27973a72a79c3877751d14ce9b5b5ea584d5e5b9e664202aa343ef04",
+    "packages/server/dist/composeServer.js": "98c78c2d30a92b85afb1068eb1bec0079dc416cfa49ca1036eeaf4014f23e090",
+    "packages/server/dist/composeServer.js.map": "9c59d139f1b90155a2b0242bd8a1be4541c531fe3b04e12d8b8af440dbeb04e0",
+    "packages/server/dist/composeServer.d.ts": "e9ca8fcc965df1574518f61af137f682426f9a0ec8b7ddc4f4a4bf143d463ae5",
+    "packages/server/dist/composeServer.d.ts.map": "726c9488257951af8050e83a1d20303da0e1eac1b0e409df41f18fe9bc8641bc"
+  },
+  "distFiles": 1852
+}

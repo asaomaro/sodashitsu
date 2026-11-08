@@ -1,0 +1,5 @@
+
+> @sodashitsu/server@0.1.0 build /workspaces/sodashitsu-agy-terminal-history/packages/server
+> tsc -b && node ../desktop-assistant/scripts/build-host.mjs && node scripts/prune-retired-features.mjs
+
+assistant_internal_resources_built_no_execution
