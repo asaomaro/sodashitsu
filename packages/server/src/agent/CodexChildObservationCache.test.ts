@@ -4,6 +4,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {randomUUID} from "node:crypto";
 import {CodexChildObservationCache} from "./CodexChildObservationCache.js";
+vi.mock("node:fs/promises",async importOriginal=>{const actual=await importOriginal<typeof import("node:fs/promises")>();return {...actual,lstat:vi.fn(actual.lstat)};});
 const dirs:string[]=[];afterEach(async()=>{await Promise.all(dirs.splice(0).map(d=>rm(d,{recursive:true,force:true})));});
 const turn=(model:string,effort?:string)=>JSON.stringify({timestamp:"2026-11-08T00:00:01Z",type:"turn_context",payload:{model,effort}})+"\n";
 const message=(bytes:number)=>'{"type":"response_item","payload":{"type":"message","content":[{"type":"output_text","text":"'+'x'.repeat(bytes)+'"}]}}\n';
@@ -59,3 +60,29 @@ it("an old cancelled owner never retires the new owner's observation cache",asyn
   release();expect((await old).size).toBe(0);expect(f.cache.progress().cacheSize).toBe(1);
  }finally{release?.();spy.mockRestore();f.cache.close();}
 });
+
+it("a timed-out failed open cannot erase the same owner's fresh observation",async()=>{
+ const f=await fixture(),child=randomUUID(),item={id:child,startedAt:0};await writeFile(join(f.dir,`rollout-generated-${child}.jsonl`),meta(f.parent,child)+turn("fresh-model","medium"));
+ const records=await import("./CodexChildRecord.js");let release!:()=>void,returned=false;
+ const gate=new Promise<void>(resolve=>release=resolve),spy=vi.spyOn(records,"openCodexChildRecord").mockImplementationOnce(async()=>{await gate;returned=true;return undefined;});
+ try{
+  await f.cache.read(f.home,f.parent,[item],()=>true,f.owner);
+  expect(returned).toBe(false);
+  expect((await f.cache.read(f.home,f.parent,[item],()=>true,f.owner)).get(child)?.model).toBe("fresh-model");
+  release();await vi.waitFor(()=>expect(returned).toBe(true));await new Promise<void>(resolve=>setImmediate(resolve));
+  expect(f.cache.progress().cacheSize).toBe(1);
+  expect((await f.cache.read(f.home,f.parent,[item],()=>true,f.owner)).get(child)?.model).toBe("fresh-model");
+ }finally{release?.();spy.mockRestore();f.cache.close();}
+},6000);
+it.each([false,true])("a timed-out initial stat cannot replace a fresh same-owner entry (reject=%s)",async(reject)=>{
+ const f=await fixture(),child=randomUUID(),item={id:child,startedAt:0};await writeFile(join(f.dir,`rollout-generated-${child}.jsonl`),meta(f.parent,child)+turn("fresh-model","medium"));
+ const records=await import("./CodexChildRecord.js"),original=records.openCodexChildRecord;let release!:()=>void,returned=false;
+ const gate=new Promise<void>(resolve=>release=resolve),spy=vi.spyOn(records,"openCodexChildRecord").mockImplementationOnce(async(...args)=>{const opened=await original(...args);if(opened){const stat=opened.fd.stat.bind(opened.fd);vi.spyOn(opened.fd,"stat").mockImplementationOnce(async(...args)=>{const result=await stat(...args);await gate;returned=true;if(reject)throw Error("generated late stat failure");return result;});}return opened;});
+ try{await f.cache.read(f.home,f.parent,[item],()=>true,f.owner);expect(returned).toBe(false);expect((await f.cache.read(f.home,f.parent,[item],()=>true,f.owner)).get(child)?.model).toBe("fresh-model");release();await vi.waitFor(()=>expect(returned).toBe(true));await new Promise<void>(resolve=>setImmediate(resolve));expect(f.cache.progress().known).toBe(1);}finally{release?.();spy.mockRestore();f.cache.close();}
+},6000);
+it("a timed-out path probe cannot invalidate a newer same-owner append",async()=>{
+ const f=await fixture(),child=randomUUID(),item={id:child,startedAt:0},file=join(f.dir,`rollout-generated-${child}.jsonl`);await writeFile(file,meta(f.parent,child)+turn("old-model","low"));await f.cache.read(f.home,f.parent,[item],()=>true,f.owner);
+ const fs=await import("node:fs/promises"),original=fs.lstat;let release!:()=>void,returned=false;
+ const gate=new Promise<void>(resolve=>release=resolve),spy=vi.spyOn(fs,"lstat").mockImplementationOnce(async(...args)=>{const result=await original(...args);await gate;returned=true;return result;});
+ try{await f.cache.read(f.home,f.parent,[item],()=>true,f.owner);expect(returned).toBe(false);await appendFile(file,turn("fresh-model","medium"));expect((await f.cache.read(f.home,f.parent,[item],()=>true,f.owner)).get(child)?.model).toBe("fresh-model");release();await vi.waitFor(()=>expect(returned).toBe(true));await new Promise<void>(resolve=>setImmediate(resolve));expect(f.cache.progress().known).toBe(1);}finally{release?.();spy.mockRestore();f.cache.close();}
+},6000);

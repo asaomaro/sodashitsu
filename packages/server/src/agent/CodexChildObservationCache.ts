@@ -50,9 +50,11 @@ export class CodexChildObservationCache{
   if(!candidates.length)return false;this.entries.delete(candidates[0]!.key);return true;
  }
  private retire(scope:string):void{this.owners.delete(scope);for(const[k,e]of this.entries)if(e.scope===scope)this.entries.delete(k);}
- private async probe(e:Entry):Promise<boolean>{
+ private async probe(e:Entry,check:()=>boolean):Promise<boolean>{
   const st=await lstat(e.file,{bigint:true}).catch(()=>undefined);
-  if(!st||!st.isFile()||st.isSymbolicLink()||st.nlink!==1n||await realpath(e.file).catch(()=>null)!==e.file){e.reset=true;e.available=false;return false;}
+  const path=await realpath(e.file).catch(()=>null);
+  if(!check()||this.entries.get(e.key)!==e)return false;
+  if(!st||!st.isFile()||st.isSymbolicLink()||st.nlink!==1n||path!==e.file){e.reset=true;e.available=false;return false;}
   if(st.dev!==e.revision.dev||st.ino!==e.revision.ino||st.size<e.revision.size||(st.size===e.revision.size&&!same(st,e.revision))){e.reset=true;e.available=false;return false;}
   e.revision=st;return true;
  }
@@ -70,13 +72,13 @@ export class CodexChildObservationCache{
   const check=()=>active&&!this.closed&&current()&&performance.now()<expires-100;
   this.bytes=0;
   const work=async()=>{
-   await Promise.all(keys.map(key=>this.slot(check,async()=>{const e=this.entries.get(key);if(e)await this.probe(e);})));if(!check())return;
+   await Promise.all(keys.map(key=>this.slot(check,async()=>{const e=this.entries.get(key);if(e)await this.probe(e,check);})));if(!check())return;
    const selected:number[]=[];
    for(let n=0;n<items.length&&selected.length<4;n++){const i=(rotation!.cursor+n)%items.length,e=this.entries.get(keys[i]!);if(!e||this.needs(e))selected.push(i);}
    if(selected.length)rotation!.cursor=(selected.at(-1)!+1)%Math.max(1,items.length);
    await Promise.all(selected.map(i=>this.slot(check,async()=>{
     try{await this.advance(home,parent,items[i]!,keys[i]!,scope,owner.paneId,check);}
-    catch{const entry=this.entries.get(keys[i]!);if(entry){entry.reset=true;entry.available=false;}}
+    catch{if(!check())return;const entry=this.entries.get(keys[i]!);if(entry){entry.reset=true;entry.available=false;}}
    })));
   };
   try{await Promise.race([work().catch(()=>undefined),new Promise<void>(resolve=>{timer=setTimeout(resolve,Math.max(0,expires-100-performance.now()));})]);}
@@ -86,7 +88,7 @@ export class CodexChildObservationCache{
   // Reserve the last 100ms for fresh path checks; never expose an unvalidated cached candidate.
   const result=new Map<string,Observation>();let finalActive=true,finalTimer:ReturnType<typeof setTimeout>|undefined;
   const finalCheck=()=>finalActive&&!this.closed&&current()&&performance.now()<expires;
-  const finalize=async()=>{await Promise.all(keys.map((key,index)=>this.slot(finalCheck,async()=>{const e=this.entries.get(key);if(!e)return;await this.probe(e);if(finalCheck()&&this.entries.get(key)===e)result.set(items[index]!.id,this.observation(e));})));};
+  const finalize=async()=>{await Promise.all(keys.map((key,index)=>this.slot(finalCheck,async()=>{const e=this.entries.get(key);if(!e)return;await this.probe(e,finalCheck);if(finalCheck()&&this.entries.get(key)===e)result.set(items[index]!.id,this.observation(e));})));};
   try{await Promise.race([finalize(),new Promise<void>(resolve=>{finalTimer=setTimeout(resolve,Math.max(0,expires-performance.now()));})]);}
   finally{finalActive=false;if(finalTimer)clearTimeout(finalTimer);}
   if(!current()){this.retire(scope);return new Map();}
@@ -95,10 +97,11 @@ export class CodexChildObservationCache{
 
  private async advance(home:string,parent:string,item:SubagentInfo,key:string,scope:string,pane:string,check:()=>boolean):Promise<void>{
   if(!check())return;
-  const opened=await openCodexChildRecord(home,parent,item.id).catch(()=>undefined);if(!opened){this.entries.delete(key);return;}
+  const opened=await openCodexChildRecord(home,parent,item.id).catch(()=>undefined);if(!opened){if(check())this.entries.delete(key);return;}
   try{
    if(!check())return;
    let e=this.entries.get(key);const before=await opened.fd.stat({bigint:true});
+   if(!check())return;
    if(before.size>BigInt(MAX_FILE)){this.entries.delete(key);return;}
    if(!e||e.reset||e.file!==opened.file||e.revision.dev!==before.dev||e.revision.ino!==before.ino||before.size<e.revision.size||(before.size===e.revision.size&&!same(before,e.revision))){
     if(!e&&!this.evict())return;

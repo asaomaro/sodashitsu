@@ -15,3 +15,12 @@
 - https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/protocol/src/protocol.rs
 
 独立レビューはrootが別contextで実施。未反映の段階では本番表示の成功を主張しない。
+
+## 遅着IOの追加修正
+
+同owner/scopeの旧readがtimeoutした後、新readが作ったcacheへ旧open失敗が遅着し、entryを削除する問題を独立reviewで確認。open失敗・initial fd.stat（例外も含む）・path probeのawait後に旧readのcheckを再確認し、probeはentry同一性も確認する。期限や権限は変更しない。
+
+- 旧1e1 runtimeをそのまま使用した生成4case（late open / initial stat resolve・reject / path probe）が4 fail。生出力late-negative.log。
+- runtime固定snapshotへcmp完全一致復元し、200 tests / 13 suites pass（late-restored.log）。
+- 最終source固定後server全体noEmit（test含む）exit0。
+- 本修正ではproduction read/Windows操作/model呼出しなし。先行actual結果は1e1に対する証拠として保持。

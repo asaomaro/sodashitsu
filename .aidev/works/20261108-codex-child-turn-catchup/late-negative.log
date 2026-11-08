@@ -1,0 +1,69 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-codex-child-turn-catchup
+
+ ❯ packages/server/src/agent/CodexChildObservationCache.test.ts (9 tests | 4 failed | 5 skipped) 7871ms
+   × a timed-out failed open cannot erase the same owner's fresh observation 1979ms
+   × a timed-out initial stat cannot replace a fresh same-owner entry (reject=false) 1962ms
+   × a timed-out initial stat cannot replace a fresh same-owner entry (reject=true) 1962ms
+   × a timed-out path probe cannot invalidate a newer same-owner append 1966ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/CodexChildObservationCache.test.ts > a timed-out failed open cannot erase the same owner's fresh observation
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/server/src/agent/CodexChildObservationCache.test.ts:73:40
+     71|   expect((await f.cache.read(f.home,f.parent,[item],()=>true,f.owner))…
+     72|   release();await vi.waitFor(()=>expect(returned).toBe(true));await ne…
+     73|   expect(f.cache.progress().cacheSize).toBe(1);
+       |                                        ^
+     74|   expect((await f.cache.read(f.home,f.parent,[item],()=>true,f.owner))…
+     75|  }finally{release?.();spy.mockRestore();f.cache.close();}
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  packages/server/src/agent/CodexChildObservationCache.test.ts > a timed-out initial stat cannot replace a fresh same-owner entry (reject=false)
+ FAIL  packages/server/src/agent/CodexChildObservationCache.test.ts > a timed-out initial stat cannot replace a fresh same-owner entry (reject=true)
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/server/src/agent/CodexChildObservationCache.test.ts:81:352
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  packages/server/src/agent/CodexChildObservationCache.test.ts > a timed-out path probe cannot invalidate a newer same-owner append
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/server/src/agent/CodexChildObservationCache.test.ts:87:404
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+
+ Test Files  1 failed | 12 skipped (13)
+      Tests  4 failed | 196 skipped (200)
+   Start at  09:10:31
+   Duration  8.98s (transform 42%, tests 40%, import 17%)
+
+  Transform  transforming modules took 8.21s · 42% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
