@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-direct-ui/packages/client-core
+
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  11:37:28
+   Duration  926ms (transform 76%, import 22%, tests 2%)
+

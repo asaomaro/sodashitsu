@@ -1,0 +1,4 @@
+
+> @sodashitsu/client-core@0.1.0 typecheck /workspaces/sodashitsu-child-direct-ui/packages/client-core
+> tsc --noEmit -p tsconfig.typecheck.json
+

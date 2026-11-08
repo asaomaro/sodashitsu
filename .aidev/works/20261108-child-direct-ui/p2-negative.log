@@ -1,0 +1,60 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-direct-ui/packages/client-core
+
+ ❯ src/agent/SubagentConversationControl.test.ts (23 tests | 4 failed) 23ms
+   × serializes a background read before the fresh submit read 4ms
+   × locks the target after unknown even if the draft changed during delivery 1ms
+   × locks the target after throw even if the draft changed during delivery 1ms
+   × locks the target after malformed even if the draft changed during delivery 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/SubagentConversationControl.test.ts > serializes a background read before the fresh submit read
+AssertionError: expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ src/agent/SubagentConversationControl.test.ts:257:18
+    255|   const submit = f.control.send("generated text", () => true);
+    256|   for (let i = 0; i < 8; i++) await Promise.resolve();
+    257|   expect(checks).toBe(2);
+       |                  ^
+    258|   expect(f.request.mock.calls.filter(([m]) => m === "agent.subagent_se…
+    259|   finishBackground(ready());
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/agent/SubagentConversationControl.test.ts > locks the target after unknown even if the draft changed during delivery
+ FAIL  src/agent/SubagentConversationControl.test.ts > locks the target after throw even if the draft changed during delivery
+ FAIL  src/agent/SubagentConversationControl.test.ts > locks the target after malformed even if the draft changed during delivery
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/agent/SubagentConversationControl.test.ts:288:45
+    286|       finish(why === "unknown" ? { status: "delivery-unknown", reason:…
+    287|     expect(await submit).toBeNull();
+    288|     expect(f.control.state.deliveryUnknown).toBe(true);
+       |                                             ^
+    289|     expect(f.control.state.capability).toBeNull();
+    290|     expect(f.control.state.last?.status).toBe("delivery-unknown");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 19 passed (23)
+   Start at  11:37:26
+   Duration  1.01s (transform 74%, import 23%, tests 3%)
+
+undefined
+/workspaces/sodashitsu-child-direct-ui/packages/client-core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/SubagentConversationControl.test.ts

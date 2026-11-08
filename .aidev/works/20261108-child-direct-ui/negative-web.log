@@ -1,0 +1,120 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-direct-ui/packages/web
+
+ ❯ src/components/ChildConversationWindow.test.ts (22 tests | 7 failed) 114ms
+   × uses a new lease after typing for eleven seconds and sends only to the explicit child target 7ms
+   × retains the child draft and locks direct input after unknown 7ms
+   × retains the child draft and locks direct input after throw 3ms
+   × distinguishes a failed fresh capability read from attempted delivery 3ms
+   × does not send after scope changes during the fresh capability read 3ms
+   × does not send after draft changes during the fresh capability read 2ms
+   × does not send after close changes during the fresh capability read 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/ChildConversationWindow.test.ts > uses a new lease after typing for eleven seconds and sends only to the explicit child target
+AssertionError: expected 'Child task ×  親: Parent task · 子: Chi…' to contain '送信先: 子「Child task」'
+
+Expected: "送信先: 子「Child task」"
+Received: "Child task ×  親: Parent task · 子: Child taskこの子の会話記録は未取得です。閲覧専用。この操舵室の接続経路では、子への直接送信を利用できません。親へ依頼する下書き"
+
+ ❯ src/components/ChildConversationWindow.test.ts:229:28
+    227|   );
+    228|   await flush();
+    229|   expect(f.wrapper.text()).toContain("送信先: 子「Child task」");
+       |                            ^
+    230|   expect(f.wrapper.find(".sat-head").exists()).toBe(false);
+    231|   await f.wrapper.get('[aria-label="子へのメッセージ"]').setValue("generated d…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/components/ChildConversationWindow.test.ts > retains the child draft and locks direct input after unknown
+ FAIL  src/components/ChildConversationWindow.test.ts > retains the child draft and locks direct input after throw
+Error: Unable to get [aria-label="子へのメッセージ"] within: <section data-v-d3e53cb3="" class="child-conversation" role="dialog" aria-label="サブエージェントの会話" tabindex="-1" style="transform: translate(0px,0px);">
+  <header data-v-d3e53cb3=""><strong data-v-d3e53cb3="">Child task</strong><button data-v-d3e53cb3="" data-assistant-feature="" aria-label="子の会話を閉じる"> × </button></header>
+  <p data-v-d3e53cb3="" class="child-meta"> 親: Parent task · 子: Child task
+    <!--v-if-->
+  </p>
+  <div data-v-d3e53cb3="" class="child-history">
+    <p data-v-d3e53cb3="" role="status">この子の会話記録は未取得です。</p>
+  </div>
+  <footer data-v-d3e53cb3="">
+    <p data-v-d3e53cb3="">閲覧専用。この操舵室の接続経路では、子への直接送信を利用できません。</p><button data-v-d3e53cb3="" data-assistant-feature="">親へ依頼する下書き</button>
+    <!--v-if-->
+    <!--v-if-->
+  </footer>
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/components/ChildConversationWindow.test.ts:275:21
+    273|     );
+    274|     await flush();
+    275|     await f.wrapper.get('[aria-label="子へのメッセージ"]').setValue("keep gene…
+       |                     ^
+    276|     await f.wrapper.get("[data-child-compose]").trigger("submit");
+    277|     await flush();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/components/ChildConversationWindow.test.ts > distinguishes a failed fresh capability read from attempted delivery
+Error: Unable to get [aria-label="子へのメッセージ"] within: <section data-v-d3e53cb3="" class="child-conversation" role="dialog" aria-label="サブエージェントの会話" tabindex="-1" style="transform: translate(0px,0px);">
+  <header data-v-d3e53cb3=""><strong data-v-d3e53cb3="">Child task</strong><button data-v-d3e53cb3="" data-assistant-feature="" aria-label="子の会話を閉じる"> × </button></header>
+  <p data-v-d3e53cb3="" class="child-meta"> 親: Parent task · 子: Child task
+    <!--v-if-->
+  </p>
+  <div data-v-d3e53cb3="" class="child-history">
+    <p data-v-d3e53cb3="" role="status">この子の会話記録は未取得です。</p>
+  </div>
+  <footer data-v-d3e53cb3="">
+    <p data-v-d3e53cb3="">閲覧専用。この操舵室の接続経路では、子への直接送信を利用できません。</p><button data-v-d3e53cb3="" data-assistant-feature="">親へ依頼する下書き</button>
+    <!--v-if-->
+    <!--v-if-->
+  </footer>
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/components/ChildConversationWindow.test.ts:301:19
+    299|   });
+    300|   await flush();
+    301|   await f.wrapper.get('[aria-label="子へのメッセージ"]').setValue("not sent");
+       |                   ^
+    302|   await f.wrapper.get("[data-child-compose]").trigger("submit");
+    303|   await flush();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  src/components/ChildConversationWindow.test.ts > does not send after scope changes during the fresh capability read
+ FAIL  src/components/ChildConversationWindow.test.ts > does not send after draft changes during the fresh capability read
+ FAIL  src/components/ChildConversationWindow.test.ts > does not send after close changes during the fresh capability read
+Error: Unable to get [aria-label="子へのメッセージ"] within: <section data-v-d3e53cb3="" class="child-conversation" role="dialog" aria-label="サブエージェントの会話" tabindex="-1" style="transform: translate(0px,0px);">
+  <header data-v-d3e53cb3=""><strong data-v-d3e53cb3="">Child task</strong><button data-v-d3e53cb3="" data-assistant-feature="" aria-label="子の会話を閉じる"> × </button></header>
+  <p data-v-d3e53cb3="" class="child-meta"> 親: Parent task · 子: Child task
+    <!--v-if-->
+  </p>
+  <div data-v-d3e53cb3="" class="child-history">
+    <p data-v-d3e53cb3="" role="status">この子の会話記録は未取得です。</p>
+  </div>
+  <footer data-v-d3e53cb3="">
+    <p data-v-d3e53cb3="">閲覧専用。この操舵室の接続経路では、子への直接送信を利用できません。</p><button data-v-d3e53cb3="" data-assistant-feature="">親へ依頼する下書き</button>
+    <!--v-if-->
+    <!--v-if-->
+  </footer>
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/components/ChildConversationWindow.test.ts:321:21
+    319|     );
+    320|     await flush();
+    321|     await f.wrapper.get('[aria-label="子へのメッセージ"]').setValue("old gener…
+       |                     ^
+    322|     await f.wrapper.get("[data-child-compose]").trigger("submit");
+    323|     await flush();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  7 failed | 34 passed (41)
+   Start at  11:46:12
+   Duration  1.90s (environment 44%, transform 39%, import 10%, tests 7%)
+
+undefined
+/workspaces/sodashitsu-child-direct-ui/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/ChildConversationWindow.test.ts src/components/graph/SubagentTranscriptWindow.test.ts src/conversation/childRequestId.test.ts
