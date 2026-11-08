@@ -43,7 +43,7 @@ export class NativeSubagentRecords {
   private readonly codexEnds = new Map<string,CodexTerminalFact>();
   private codexMalformed = false;
   private copilotMalformed = false;
-  private readonly copilotStarts = new Map<string,{item:SubagentInfo;eventId:string;publicMessages:string[];publicOmitted:boolean}>();
+  private readonly copilotStarts = new Map<string,{item:SubagentInfo;eventId:string;publicMessages:string[];publicOmitted:boolean;publicIds:Map<string,string>;publicInvalid:boolean}>();
   private copilotPublicCount=0;
   private readonly copilotEnds = new Map<string,CopilotTerminalFact>();
   copilotTerminals():readonly CopilotTerminalFact[]|undefined {
@@ -217,8 +217,10 @@ export class NativeSubagentRecords {
 
   private copilot(row: Record<string, any>): void {
     const message=copilotPublicMessage(row);
-    if(message){const start=this.copilotStarts.get(message.child);if(start&&!this.copilotEnds.has(message.child)&&!start.publicMessages.includes(message.fingerprint)){
-      if(start.publicMessages.length<64&&this.copilotPublicCount<4096){start.publicMessages.push(message.fingerprint);this.copilotPublicCount++;}else start.publicOmitted=true;
+    if(message){const start=this.copilotStarts.get(message.child);if(start&&!this.copilotEnds.has(message.child)&&!start.publicInvalid){
+      const prior=start.publicIds.get(message.eventId);
+      if(prior&&prior!==message.fingerprint){this.copilotPublicCount-=start.publicMessages.length;start.publicMessages=[];start.publicIds.clear();start.publicInvalid=true;start.publicOmitted=true;}
+      else if(!prior){if(start.publicMessages.length<64&&this.copilotPublicCount<4096){start.publicIds.set(message.eventId,message.fingerprint);start.publicMessages.push(message.fingerprint);this.copilotPublicCount++;}else start.publicOmitted=true;}
     }}
     if (typeof row.type !== "string" || !/^(?:custom_agent|subagent)\./.test(row.type)) return;
     // Selecting the main custom agent is not a child execution lifecycle.
@@ -236,7 +238,7 @@ export class NativeSubagentRecords {
     if(phase==="started"){
       if(!this.copilotStarts.has(id)&&this.copilotStarts.size>=MAX){const oldest=this.copilotStarts.keys().next().value!;this.copilotPublicCount-=this.copilotStarts.get(oldest)!.publicMessages.length;this.copilotStarts.delete(oldest);this.copilotEnds.delete(oldest);}
       this.copilotPublicCount-=this.copilotStarts.get(id)?.publicMessages.length??0;
-      this.copilotStarts.set(id,{publicMessages:[],publicOmitted:false,item:{id,startedAt:at,depth:1,...(type?{type}:{}),...(description?{description}:{})},eventId:row.id});
+      this.copilotStarts.set(id,{publicMessages:[],publicOmitted:false,publicIds:new Map(),publicInvalid:false,item:{id,startedAt:at,depth:1,...(type?{type}:{}),...(description?{description}:{})},eventId:row.id});
     }else if(phase==="completed"||phase==="failed"){
       const start=this.copilotStarts.get(id);
       if(start&&at>=start.item.startedAt)this.copilotEnds.set(id,{id,startedAt:start.item.startedAt,endedAt:at,eventId:JSON.stringify([start.eventId,row.id,row.type,at]),terminalStatus:phase==="completed"?"completed":"error",publicMessages:[...start.publicMessages],...(start.publicOmitted?{publicOmitted:true}:{}),...(start.item.type?{type:start.item.type}:{}),...(start.item.description?{description:start.item.description}:{})});
