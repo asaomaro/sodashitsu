@@ -72,6 +72,7 @@ export class GrokSubagentReader {
           const name=purpose==="usage"?"usage.json":"chat_history.jsonl",opened=await openGrokSessionRecord(fact.item.id,name,this.roots);if(!opened)return;
           try{
             const file=join(location.dir,name),before=await opened.fd.stat({bigint:true});
+            if(!before.isFile()||before.nlink!==1n||before.size>BigInt(MAX_FILE))throw Error("record limit");
             const unchanged=async()=>{
               if(!allowed()||!current())return false;
               const [leaf,fd,found]=await Promise.all([lstat(file,{bigint:true}).catch(()=>undefined),opened.fd.stat({bigint:true}).catch(()=>undefined),locateGrokSession(fact.item.id,this.roots)]);

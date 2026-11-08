@@ -1,5 +1,5 @@
-import { afterEach, expect, it } from "vitest";
-import { mkdtemp, mkdir, writeFile, appendFile, rm, symlink, rename, utimes } from "node:fs/promises";
+import { afterEach, expect, it,vi } from "vitest";
+import { mkdtemp, mkdir, writeFile, appendFile, rm, symlink, rename, utimes,truncate } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { GrokSubagentReader } from "./GrokSubagentReader.js";
@@ -87,4 +87,20 @@ it("fails closed on partial parents, missing attempts, changed scope and child s
   allowed=false;expect(old.current()).toBe(false);expect(await old.verify(()=>true)).toBe(false);expect(f.reader.terminals({...f.source,instanceId:"other"},()=>true).status).toBe("unavailable");allowed=true;
   await appendFile(f.file,'{"incomplete":');await f.reader.read(f.source,()=>true);expect(f.reader.terminals(f.source,()=>true).status).toBe("pending");expect(await old.verify(()=>true)).toBe(false);
  }finally{f.reader.close();}
+});
+
+it("bounds physical attempt verifiers until their actual parent handles close and rejects late owner changes",async()=>{
+ const f=await fixture();await writeFile(f.file,start()+finish());let verified=true;
+ try{
+  await f.reader.read(f.source,()=>true);const target=f.reader.terminals(f.source,()=>verified).bindings[0]!,original=Reflect.get(f.reader,"open").bind(f.reader),release:Array<()=>Promise<void>>=[];
+  const spy=vi.spyOn(f.reader as any,"open").mockImplementation(()=>new Promise(resolve=>{release.push(async()=>resolve(await original(parent)));}));
+  try{
+   const calls=Array.from({length:4},()=>target.verify(()=>true));expect(release).toHaveLength(4);expect(await target.verify(()=>true)).toBe(false);verified=false;
+   await Promise.all(release.map(finish=>finish()));expect(await Promise.all(calls)).toEqual([false,false,false,false]);expect(Reflect.get(f.reader,"proofSlots")).toBe(0);
+  }finally{spy.mockRestore();}
+ }finally{f.reader.close();}
+});
+it("refuses over-limit child files without reading their body",async()=>{
+ const f=await fixture();await writeFile(f.file,start()+finish());const dir=join(f.base,child);await mkdir(dir);const file=join(dir,"chat_history.jsonl");await writeFile(file,"");await truncate(file,512*1024*1024+1);
+ try{await f.reader.read(f.source,()=>true);const target=f.reader.terminals(f.source,()=>true).bindings[0]!;expect(await target.openRecord("transcript",()=>true)).toBeUndefined();}finally{f.reader.close();}
 });
