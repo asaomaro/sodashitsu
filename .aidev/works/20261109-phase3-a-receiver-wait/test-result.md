@@ -1,0 +1,5 @@
+# A operator receiver-arm bounded wait
+
+Root explicitly chose90s to accommodate actual image/consent roundtrips. Only run-a receiver-armed wait45000→90000 changes. Overall manifest approval/expiry≤240s and every until iteration's expiry/issue check are unchanged; receiveridentity/elevation/native/source/media/cleanup/calibration untouched. No fixedstage expansion. A7 receiver_wait expiration cannot explain earlier A6 postconnect failure. No author actual model/Windows/media/input.
+
+Actual source receiver intake VM records the until budget: old45000 gives1FAIL, durable byteExact restoration→all A/BC/intake/negotiation/pipeline35PASS, changed JSsyntax0. RuntimeSHA/8 unchanged C# SHA and negative/positive raw logs retained. No production build/C#recompile needed. New job/manifest/approval required; do not extend/reuse previous job. Independent source review completed before final commit: runtime4147SHA/C#8base independently recomputed, old1FAIL→byteExact35PASS/syntax0 and unchanged overall240s/guard/cleanup confirmed; no blocking findings.

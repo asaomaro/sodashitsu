@@ -1,0 +1,38 @@
+✔ actual intake wait failure yields only fixed stage (2.743909ms)
+✔ actual intake identity failure yields only fixed stage (0.745036ms)
+✔ actual intake native_probe failure yields only fixed stage (0.767308ms)
+✔ actual intake native_scope failure yields only fixed stage (0.732262ms)
+✔ actual intake source_connect failure yields only fixed stage (0.772668ms)
+✔ successful generated intake preserves ownership (0.73118ms)
+✖ operator receiver-arm budget is90s inside unchanged overall expiry (1.504219ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 6
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 51.150379
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:10:1
+✖ operator receiver-arm budget is90s inside unchanged overall expiry (1.504219ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+  +   45000
+  -   90000
+    ]
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/failure-stage.test.mjs:10:342)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 45000 ],
+    expected: [ 90000 ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

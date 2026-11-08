@@ -53,3 +53,5 @@ B/Cの前には既存のfresh unlock復旧が使えることをrootが確認す�
 失敗時 `result.json.failureStage` は receiver取り付き、protected source ready/schema/proof、mic ticket/lane/running、actor、baseline/cadence/result/stopの固定段階（`A_FAILURE_STAGES`）、`other` / `unknown` のみ。元の `fixture-failed-closed` は維持し、例外本文は保存しない。これは停止箇所の識別であり token access 等の原因確定ではない。JS更新後は新jobとmanifestをprepareし直し、旧approval/expiry/goを再利用しない。
 
 失敗時の `failureEvidence` はschema検証済み ready のbackend enum/保護・mic bool、正式protected failure code、正式mic state enumのみを保存する。一般 `error` はcode enum未定義のため `desktop_error_unclassified` とし、message/code本文を保存しない。観測をguardへ転用せず、元の生値に対する検証とTTLを維持する。
+
+受信器の `receiver-armed.json` 待ちは90秒（rootの画像確認/UAC承諾往復用）。全体の承認期限は最大240秒のまま、各待機pollで期限・問題を確認する。期限延長や旧job再利用は行わず、他のidentity/media/採点条件は変えない。
