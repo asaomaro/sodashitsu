@@ -1,3 +1,4 @@
+import {registerSubagentHistory} from "./subagentHistory.js";
 import { AgentSubagentControlParams, AgentSubagentSendParams } from "@sodashitsu/protocol";
 import {registerSubagentUsage} from "./subagentUsage.js";
 import {createAssistantModelLister} from "../../agent/assistantModels.js";
@@ -100,6 +101,7 @@ function blockedError(paneId: string): RpcError {
 
 export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps): void {
   registerSubagentUsage(surface,deps.subagentUsage);
+  registerSubagentHistory(surface,deps.subagentHistory);
   surface.register("agent.prompt", {
     schema: AgentPromptParams,
     handler: async (ctx, params) => {
