@@ -4,12 +4,15 @@ import type { KeyInput } from "@sodashitsu/client-core";
 import {
   paneNameOf,
   subagentModelLabel,
+  SubagentUsageReader,
+  subagentUsageView,
   SubagentConversationControl,
   subagentControlMessage,
 } from "@sodashitsu/client-core";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
 import type { RequestPort } from "../term/PaneRegistry.js";
+import { usageGauge } from "./UsageView.js";
 import { SubagentTranscript } from "./SubagentTranscript.js";
 import { TextInput } from "./TextInput.js";
 import { plainText } from "./SubagentList.js";
@@ -39,6 +42,9 @@ export class ChildConversationDialog implements Overlay {
   private readonly draft = new TextInput();
   private readonly childDraft = new TextInput();
   private readonly control: SubagentConversationControl;
+  private usageReader: SubagentUsageReader | null = null;
+  private usageOpen = false;
+  private readonly childBirth: number | undefined;
   private readonly scrollbar = new ScrollBar();
   private rect: Rect | null = null;
   private scroll = 0;
@@ -61,6 +67,7 @@ export class ChildConversationDialog implements Overlay {
     const child = this.child();
     this.childName = child?.description?.trim() || child?.type?.trim() || "サブエージェント";
     this.readable = child?.hasTranscript === true;
+    this.childBirth = child?.startedAt;
     this.openedScope = child ? this.scope() : null;
     this.control = new SubagentConversationControl(
       conn,
@@ -129,6 +136,27 @@ export class ChildConversationDialog implements Overlay {
         this.openedScope!,
         this.redraw,
       );
+  }
+  private toggleUsage(): void {
+    this.usageOpen = !this.usageOpen;
+    this.scroll = 0;
+    this.usageReader?.dispose();
+    this.usageReader = null;
+    if (this.usageOpen && this.valid()) {
+      this.usageReader = new SubagentUsageReader(
+        this.conn,
+        { paneId: this.paneId, agentId: this.agentId },
+        () => {
+          if (!this.valid()) return null;
+          const child = this.child();
+          return child && child.startedAt !== this.childBirth
+            ? null
+            : JSON.stringify([this.openedScope, this.agentId, this.childBirth]);
+        },
+        () => this.redraw(),
+      );
+      this.usageReader.start();
+    }
   }
   private pending(): boolean {
     return this.busy || this.control.state.sending;
@@ -213,11 +241,16 @@ export class ChildConversationDialog implements Overlay {
   handleKey(k: KeyInput): void {
     if (isEsc(k)) {
       if (this.field !== "history") this.field = "history";
+      else if (this.usageOpen) this.toggleUsage();
       else this.cancel();
       return;
     }
     if (!this.valid() || this.pending()) return;
     if (this.field === "history") {
+      if (!k.ctrl && !k.alt && !k.meta && k.key.toLowerCase() === "u") {
+        this.toggleUsage();
+        return;
+      }
       if (!k.ctrl && !k.alt && !k.meta && k.key.toLowerCase() === "p") this.prepareParent();
       else if (!k.ctrl && !k.alt && !k.meta && k.key.toLowerCase() === "c" && this.direct())
         this.field = "child-draft";
@@ -297,6 +330,8 @@ export class ChildConversationDialog implements Overlay {
     this.draft.value = "";
     this.childDraft.value = "";
     this.control.dispose();
+    this.usageReader?.dispose();
+    this.usageReader = null;
     this.note = "";
     this.field = "history";
     this.busy = false;
@@ -323,9 +358,21 @@ export class ChildConversationDialog implements Overlay {
     const lines = this.valid()
       ? [
           ...header,
-          ...(this.transcript
-            ? this.transcript.lines(area.w, "会話を閉じる", true)
-            : ["会話記録は未取得です"]),
+          ...(this.usageOpen
+            ? (() => {
+                const v = subagentUsageView(
+                  this.usageReader?.state ?? { result: null, loading: false, failed: false },
+                );
+                return [
+                  "子の利用状況",
+                  ...v.rows.map((r) => `${r.label}: ${r.value}`),
+                  ...(v.contextPct !== undefined ? [`文脈 ${usageGauge(v.contextPct)}`] : []),
+                  ...v.notes,
+                ];
+              })()
+            : this.transcript
+              ? this.transcript.lines(area.w, "会話を閉じる", true)
+              : ["会話記録は未取得です"]),
           subagentControlMessage(this.control.state),
         ]
       : ["会話の参照が無効になりました。Escで閉じてください"];
@@ -334,7 +381,7 @@ export class ChildConversationDialog implements Overlay {
     const footer =
       this.field === "history"
         ? [
-            `${this.direct() ? "C: 子へ送信 · " : ""}P: 親への依頼を下書き · ↑↓: スクロール · Esc: 閉じる`,
+            `${this.direct() ? "C: 子へ送信 · " : ""}P: 親への依頼を下書き · U: ${this.usageOpen ? "会話" : "利用状況"} · ↑↓ · Esc: ${this.usageOpen ? "会話へ" : "閉じる"}`,
           ]
         : [
             `送信先: ${childCompose ? `子「${this.childName}」` : `親「${p ? paneNameOf(p) : "—"}」`}`,

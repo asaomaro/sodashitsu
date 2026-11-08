@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { afterEach,beforeEach,describe, expect, it, vi } from "vitest";
 import type { AgentUsage } from "@sodashitsu/protocol";
 import { UsageDialog, usageLines } from "./UsageView.js";
 import { SessionModel } from "../model/SessionModel.js";
@@ -265,4 +265,28 @@ it("dragging the variable-height child scrollbar to the bottom reveals and selec
  const track=Array.from({length:grid.h},(_,y)=>y).filter(y=>['█','░'].includes(grid.cell(99,y).ch)),thumb=track.find(y=>grid.cell(99,y).ch==='█')!;expect(track.length).toBeGreaterThan(1);
  view.handleMouse({action:'down',button:0,x:99,y:thumb});view.handleMouse({action:'move',button:0,x:99,y:track.at(-1)!+5});view.handleMouse({action:'up',button:0,x:99,y:track.at(-1)!+5});view.render(grid,area,theme);
  const text=Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join('\n');expect(text).toContain('Generated child 63');view.handleKey({key:'Enter'} as never);expect(ui.dialogContext).toMatchObject({agentId:'c63'});
+});
+
+describe("child usage inside information",()=>{
+ beforeEach(()=>vi.useFakeTimers());afterEach(()=>vi.useRealTimers());
+ const flush=async()=>{for(let i=0;i<16;i++)await Promise.resolve();};
+ function childInfo(reply:()=>unknown|Promise<unknown>){
+   const model=new SessionModel();model.applySnapshot(snapshot(),"client");const original=model.panes.get("p1")!;
+   const pane={...original,agent:{...original.agent!,kind:"codex",instanceId:"i",subagents:{count:2,items:[{id:"a",description:"Child A",startedAt:1},{id:"b",description:"Child B",startedAt:2}]}},agentSession:{kind:"codex" as const,sessionId:"s",reportedAt:1}};model.panes.set("p1",pane);
+   const request=vi.fn(async(_m:string,_p:unknown)=>reply());let outer:string|null="machine-client";
+   const ui=new UiState(model),usage={status:"ready",data:{panes:{},accounts:[]}} as unknown as UsageModel;
+   const dialog=new UsageDialog("p1",model,ui,usage,{port:{request} as never,outer:()=>outer,redraw:vi.fn()});
+   const render=()=>{const grid=new Grid(110,40);dialog.render({grid,theme:new ThemeColors("dracula")});return Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join("\n");};
+   return{dialog,request,model,pane,render,disconnect:()=>{outer=null;}};
+ }
+ const response={status:"ok",usage:{source:"grok-usage",consumptionScope:"subtree",costUsd:0.0031,costBasis:"reported",partial:true}};
+ it("selects one child with Tab/U and restores parent information with Esc without mixing totals",async()=>{
+   const f=childInfo(()=>response);expect(f.request).not.toHaveBeenCalled();f.dialog.handleKey({key:"Tab"} as never);f.dialog.handleKey({key:"u"} as never);await flush();expect(f.render()).toContain("子: Child B");expect(f.render()).toContain("この子と配下");expect(f.render()).toContain("$0.0031");expect(f.request.mock.calls[0]).toEqual(["agent.subagent_usage",{paneId:"p1",agentId:"b"}]);f.dialog.handleKey({key:"Escape"} as never);await vi.advanceTimersByTimeAsync(30000);expect(f.request).toHaveBeenCalledTimes(1);expect(f.render()).not.toContain("$0.0031");f.dialog.dispose();
+ });
+ it("opens numeric details from the rendered child row by mouse",async()=>{
+   const f=childInfo(()=>response);const y=f.render().split("\n").findIndex(row=>row.includes("Child A"));expect(y).toBeGreaterThan(0);f.dialog.handleMouse({action:"down",button:0,x:8,y});await flush();expect(f.render()).toContain("子: Child A");expect(f.request.mock.calls[0]).toEqual(["agent.subagent_usage",{paneId:"p1",agentId:"a"}]);f.dialog.dispose();
+ });
+ it("discards late child data after the parent connection changes",async()=>{
+   let finish!:(v:unknown)=>void;const f=childInfo(()=>new Promise(r=>{finish=r;}));f.dialog.handleKey({key:"u"} as never);f.disconnect();finish(response);await flush();expect(f.render()).not.toContain("$0.0031");expect(f.render()).toContain("親の参照が無効");await vi.advanceTimersByTimeAsync(30000);expect(f.request).toHaveBeenCalledTimes(1);f.dialog.dispose();
+ });
 });

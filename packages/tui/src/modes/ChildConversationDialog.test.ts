@@ -371,3 +371,57 @@ it("sends the edited child draft from an explicit click on the rendered send row
   expect(f.render()).toContain("処理の完了ではありません");
   f.dialog.dispose();
 });
+it("shows child-only usage from U without requiring a transcript and stops it on return", async () => {
+  const f = fixture(
+    vi.fn(async () => ({
+      status: "ok",
+      usage: {
+        source: "rollout",
+        consumptionScope: "self",
+        tokens: { basis: "transcript", input: 42, output: 0 },
+        contextUsedPct: 0,
+        partial: true,
+      },
+    })) as never,
+    false,
+  );
+  await flush();
+  expect(f.request).not.toHaveBeenCalled();
+  key(f, "u");
+  await flush();
+  expect(f.render()).toContain("入力: 42");
+  expect(f.render()).toContain("出力: 0");
+  expect(f.render()).toContain("一部取得");
+  expect(f.render()).not.toContain("コスト (USD)");
+  expect(f.request.mock.calls[0]).toEqual(["agent.subagent_usage", { paneId: "p1", agentId: "c" }]);
+  key(f, "Escape");
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(f.request).toHaveBeenCalledTimes(1);
+  expect(f.render()).not.toContain("入力: 42");
+  f.dialog.dispose();
+});
+it("clears child numbers immediately when an observed child birth changes", async () => {
+  const f = fixture(
+    vi.fn(async () => ({
+      status: "ok",
+      usage: {
+        source: "rollout",
+        consumptionScope: "self",
+        tokens: { basis: "transcript", input: 42 },
+      },
+    })) as never,
+    false,
+  );
+  await flush();
+  key(f, "u");
+  await flush();
+  expect(f.render()).toContain("入力: 42");
+  f.model.panes.set("p1", {
+    ...f.p,
+    agent: { ...f.p.agent, subagents: { count: 1, items: [{ id: "c", startedAt: 99 }] } },
+  });
+  expect(f.render()).not.toContain("入力: 42");
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(f.request).toHaveBeenCalledTimes(1);
+  f.dialog.dispose();
+});

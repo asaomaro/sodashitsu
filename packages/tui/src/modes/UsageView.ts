@@ -1,8 +1,9 @@
 import { sectionRule, sectionSides } from "../render/chrome/page.js";
 import { ScrollBar } from "./ScrollBar.js";
 import { glyphFor, stateColor } from "../render/chrome/context.js";
-import {subagentCountLabel,subagentStateLabel,subagentModelLabel,subagentsMoreLabel,paneNameOf,observedAgentModel, type KeyInput } from "@sodashitsu/client-core";
+import {SubagentUsageReader,subagentUsageView,subagentCountLabel,subagentStateLabel,subagentModelLabel,subagentsMoreLabel,paneNameOf,observedAgentModel, type KeyInput } from "@sodashitsu/client-core";
 import { formatUsageCredits, shortId, type AgentUsage,type Pane,type SubagentInfo, type AccountCostResult } from "@sodashitsu/protocol";
+import type {RequestPort} from "../term/PaneRegistry.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
 import type { UsageModel } from "../model/UsageModel.js";
@@ -124,15 +125,48 @@ export class UsageDialog implements Overlay {
   }
   private accountHits: { y: number; key: string }[] = [];
   private selectedAccount = 0;
+  private selectedChild=0;
+  private childHits:Array<{y:number;index:number}>=[];
+  private childReader:SubagentUsageReader|null=null;
+  private childTarget:{id:string;birth:number;name:string}|null=null;
+  private readonly openedScope:string|null;
+  private disposed=false;
+  private scope():string|null{
+    if(!this.childOptions||!this.paneId||this.disposed)return null;
+    const p=this.model.panes.get(this.paneId),a=p?.agent,r=p?.agentSession,outer=this.childOptions.outer();
+    return outer!==null&&a&&r?.sessionId&&r.kind===a.kind?JSON.stringify([outer,this.paneId,a.instanceId,a.kind,a.verified,r.kind,r.sessionId]):null;
+  }
+  private closeChildUsage():void{this.childReader?.dispose();this.childReader=null;this.childTarget=null;this.scroll=0;}
+  private openChildUsage():void{
+    this.closeChildUsage();
+    if(!this.childOptions||!this.paneId||this.scope()!==this.openedScope||this.openedScope===null)return;
+    const child=this.model.panes.get(this.paneId)?.agent?.subagents?.items.slice(0,64)[this.selectedChild];
+    if(!child)return;
+    const target={id:child.id,birth:child.startedAt,name:child.description?.trim()||child.type?.trim()||"サブエージェント"};this.childTarget=target;
+    this.childReader=new SubagentUsageReader(this.childOptions.port,{paneId:this.paneId,agentId:target.id},()=>{
+      if(this.scope()!==this.openedScope)return null;
+      const current=this.model.panes.get(this.paneId!)?.agent?.subagents?.items.find(c=>c.id===target.id);
+      return current&&current.startedAt!==target.birth?null:JSON.stringify([this.openedScope,target.id,target.birth]);
+    },()=>this.childOptions?.redraw());this.childReader.start();
+  }
   private scroll = 0;
   constructor(
     private readonly paneId: string | null,
     private readonly model: SessionModel,
     private readonly ui: UiState,
     private readonly usage: UsageModel,
-  ) {}
+    private readonly childOptions?:{port:RequestPort;outer:()=>string|null;redraw:()=>void},
+  ) {this.openedScope=this.scope();}
   handleKey(k: KeyInput): void {
     this.scrollbar.cancel();
+    if(this.paneId&&this.childOptions){
+      if(isEsc(k)&&this.childTarget){this.closeChildUsage();return;}
+      if(k.key==="Tab"){
+        const n=this.model.panes.get(this.paneId)?.agent?.subagents?.items.slice(0,64).length??0;
+        this.selectedChild=(this.selectedChild+1)%Math.max(1,n);if(this.childTarget)this.openChildUsage();return;
+      }
+      if(!k.ctrl&&!k.alt&&!k.meta&&k.key.toLowerCase()==="u"){if(this.childTarget)this.closeChildUsage();else this.openChildUsage();return;}
+    }
     if (!this.paneId && isEnter(k)) {
       const a = this.usage.data.accounts[this.selectedAccount];
       if (a) this.ui.openDialogWithContext({ kind: "accountCost", accountKey: a.accountKey });
@@ -146,6 +180,9 @@ export class UsageDialog implements Overlay {
   handleMouse(ev: OverlayMouse): boolean {
     if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
+    if(this.paneId&&this.childOptions&&ev.action==="down"&&ev.button===0){
+      const hit=this.childHits.find(h=>h.y===ev.y);if(hit){this.selectedChild=hit.index;this.openChildUsage();}
+    }
     if (!this.paneId && ev.action === "down" && ev.button === 0) {
       const hit = this.accountHits.find((h) => h.y === ev.y);
       if (hit) this.ui.openDialogWithContext({ kind: "accountCost", accountKey: hit.key });
@@ -153,8 +190,9 @@ export class UsageDialog implements Overlay {
     if (ev.action === "wheel") this.scroll = Math.max(0, this.scroll + (ev.button === 65 ? 1 : -1));
     return true;
   }
+  dispose():void{this.disposed=true;this.closeChildUsage();}
   cancel(): void {
-    this.ui.closeDialog();
+    this.dispose();this.ui.closeDialog();
   }
   render({ grid, theme }: OverlayRenderContext) {
     this.rect = centeredRect(grid, grid.w - 2, grid.h - 2);
@@ -171,9 +209,9 @@ export class UsageDialog implements Overlay {
     const childLines:string[]=[];
     if(pane?.agent?.subagents){
       childLines.push(subagentCountLabel(pane.agent.subagents));
-      for(const child of pane.agent.subagents.items.slice(0,64)){
+      for(const [i,child] of pane.agent.subagents.items.slice(0,64).entries()){
         const label=subagentModelLabel(child),name=child.description?.trim()||child.type?.trim()||"サブエージェント";
-        childLines.push(`${subagentStateLabel(child)} · ${name}`,...(label?[`  ${label}`]:[]));
+        childLines.push(`${this.childOptions&&i===this.selectedChild?"▶ ":""}${subagentStateLabel(child)} · ${name}`,...(label?[`  ${label}`]:[]));
       }
       const more=subagentsMoreLabel({...pane.agent.subagents,items:pane.agent.subagents.items.slice(0,64)});if(more)childLines.push(more);
     }
@@ -185,7 +223,12 @@ export class UsageDialog implements Overlay {
             `会話 ${pane.agentSession?.sessionId ?? "—"}`,
           ]
         : []),
-      ...(statusText(this.usage)
+      ...(this.childTarget ? (()=>{
+        const valid=this.scope()===this.openedScope&&this.openedScope!==null;
+        if(!valid)this.childReader?.dispose();
+        const v=subagentUsageView(this.childReader?.state??{result:null,failed:false,loading:false});
+        return [`子: ${this.childTarget.name}`,...v.rows.map(r=>`${r.label}: ${r.value}`),...(v.contextPct!==undefined?[`文脈 ${usageGauge(v.contextPct)}`]:[]),...v.notes,...(!valid?["親の参照が無効になりました"]:[])];
+      })() : statusText(this.usage)
         ? [statusText(this.usage)!]
         : this.paneId
           ? usageLines(this.usage.data.panes[this.paneId])
@@ -197,10 +240,17 @@ export class UsageDialog implements Overlay {
                   `${w.label}: ${usageGauge(w.usedPct)} · リセット ${w.resetsAt ? new Date(w.resetsAt).toLocaleString("ja-JP") : "—"}${w.stale ? "（古い値）" : ""}`,
               ),
             ])),
-      ...childLines,
-      this.paneId ? "↑↓ スクロール · Esc 閉じる" : "↑↓ スクロール · Tab:アカウント選択 / Enter:コスト · Esc 閉じる",
+      ...(this.childTarget?[]:childLines),
+      this.paneId ? this.childTarget?"Tab:子選択 · U/Esc:情報へ · ↑↓":"↑↓ スクロール · Tab:子選択 / U:子利用状況 · Esc 閉じる" : "↑↓ スクロール · Tab:アカウント選択 / Enter:コスト · Esc 閉じる",
     ];
     this.scroll = Math.min(this.scroll,Math.max(0,lines.length-area.h));
+    this.childHits=[];
+    if(this.childOptions&&!this.childTarget&&pane?.agent?.subagents){
+      let offset=lines.length-childLines.length;
+      for(const [index,child] of pane.agent.subagents.items.slice(0,64).entries()){
+        const y=area.y+offset-this.scroll;if(y>=area.y&&y<area.y+area.h)this.childHits.push({y,index});offset+=subagentModelLabel(child)?2:1;
+      }
+    }
     if (!this.paneId) {
       let offset = 0;
       for (const a of this.usage.data.accounts) {
