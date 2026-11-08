@@ -13,6 +13,7 @@
     "../../../packages/server/src/agent/AgentReportSocket.ts",
     "../../../packages/server/src/agent/AgentReportSocket.test.ts",
     "../../../packages/server/src/agent/AgentIntegrationInstaller.test.ts",
-    "../../../packages/server/src/agent/agentHookExecution.test.ts"
+    "../../../packages/server/src/agent/agentHookExecution.test.ts",
+    "../../../packages/server/src/composeServer.cursorChildObservations.integration.test.ts"
   ]
 }

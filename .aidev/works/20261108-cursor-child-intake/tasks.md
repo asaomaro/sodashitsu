@@ -1,8 +1,8 @@
 # タスク
 
-- [ ] private childreport whitelist/自己context検査
-- [ ] Cursor private observation/terminal registry＋bounded queue/親fresh/PID/DB/file proof
-- [ ] 同梱hook/AgentReportSocket/Installer明示更新/compose配線
+- [x] private childreport whitelist/自己context検査
+- [x] Cursor private observation/terminal registry＋bounded queue/親fresh/PID/DB/file proof
+- [x] 同梱hook/AgentReportSocket/Installer明示更新/compose配線
 - [ ] 生成結合/親common negative/旧source負例/exact復元/型/独立review
 - [ ] 終了history RPC/intake（次単位、旧collector stale grantを先修正）
 
@@ -21,3 +21,5 @@
 - 08b9c752へ自己3commitsのみrebase。composeの3閉鎖箇所はsubagentUsage/cursorChildObservations双方closeを保持。
 - 6suites111tests PASS。7初期負例のrawは保持し、自己source SHA一致分は二重実行しない。Observationsは後続順序/file世代の各負例と復元SHAへ更新済み、composeだけ最新API合流差分を別途最終記録。
 - production build・現在source型・独立review結果は最終記録で確定する。終了history/RPC/Grok attempt proofは後続未完のまま。
+
+最終runtime8c07ba02固定、production tsc-b/対象strict型（生成compose fixture含む）exit0、111tests PASS。test-result.md参照。独立reviewはrootへ提出。
