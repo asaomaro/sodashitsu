@@ -387,7 +387,7 @@ export class UsageDashboard {
       put(y++,u?"文脈 "+usageGauge(contextPercent(u))+" · 更新 "+new Date(u.updatedAt).toLocaleString("ja-JP"):"",bg);
     }
     const offsets:number[]=[];let total=0;for(const row of rows){offsets.push(total);total+=height(row);}
-    this.scrollbar.render(grid,{...area,y:trackY,h:room},total,offsets[start]??0,c,offset=>{this.selected=Math.max(0,offsets.findIndex((n,i)=>n<=offset&&(offsets[i+1]??Infinity)>offset));});
+    this.scrollbar.render(grid,{...area,y:trackY,h:room},total,offsets[start]??0,c,offset=>{const end=Math.min(total,Math.max(0,offset)+room);let selected=0;for(let i=0;i<rows.length;i++){if(offsets[i]!+height(rows[i]!)>end)break;selected=i;}this.selected=selected;});
     put(area.y+area.h-1,`${parents.length} エージェント · ${this.selected+Number(rows.length>0)} / ${rows.length} 行`);
     const frame={...area,w:Math.max(0,area.w-1),h:Math.max(0,area.h-1)};
     const first=sectionHeads[0]?.y;

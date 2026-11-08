@@ -257,3 +257,12 @@ it("keeps expanded children navigable when their variable-height rows exceed the
  model.panes.set('p1',{...p,agent:{kind:'codex',instanceId:'i',state:'idle',subagents:{count:70,countBasis:'alive',items:Array.from({length:70},(_,i)=>({id:`c${i}`,description:`Generated child ${i}`,startedAt:1,state:'unknown' as const,model:'actual-model',modelBasis:'turn' as const}))}} as NonNullable<typeof p.agent>});const ui=new UiState(model),usage={status:'ready',data:{panes:{},accounts:[]}} as unknown as UsageModel,view=new UsageDashboard(model,ui,usage,vi.fn());
  view.handleKey({key:' '} as never);for(let i=0;i<64;i++)view.handleKey({key:'ArrowDown'} as never);const grid=new Grid(100,25);view.render(grid,{x:0,y:0,w:100,h:25},new ThemeColors('dracula'));const text=Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join('\n');expect(text).toContain('Generated child 63');expect(text).not.toContain('Generated child 64');view.handleKey({key:'Enter'} as never);expect(ui.dialogContext).toMatchObject({agentId:'c63'});
 });
+
+it("dragging the variable-height child scrollbar to the bottom reveals and selects the final child",async()=>{
+ const {UsageDashboard}=await import('./UsageView.js'),model=new SessionModel();model.applySnapshot(snapshot(),"client");const p=model.panes.get('p1')!;
+ model.panes.set('p1',{...p,agent:{kind:'codex',instanceId:'i',state:'idle',subagents:{count:64,countBasis:'alive',items:Array.from({length:64},(_,i)=>({id:`c${i}`,description:`Generated child ${i}`,startedAt:1,state:'unknown' as const,model:'actual-model',modelBasis:'turn' as const}))}} as NonNullable<typeof p.agent>});const ui=new UiState(model),usage={status:'ready',data:{panes:{},accounts:[]}} as unknown as UsageModel,view=new UsageDashboard(model,ui,usage,vi.fn()),grid=new Grid(100,25),theme=new ThemeColors('dracula'),area={x:0,y:0,w:100,h:25};
+ view.handleKey({key:' '} as never);view.render(grid,area,theme);
+ const track=Array.from({length:grid.h},(_,y)=>y).filter(y=>['█','░'].includes(grid.cell(99,y).ch)),thumb=track.find(y=>grid.cell(99,y).ch==='█')!;expect(track.length).toBeGreaterThan(1);
+ view.handleMouse({action:'down',button:0,x:99,y:thumb});view.handleMouse({action:'move',button:0,x:99,y:track.at(-1)!+5});view.handleMouse({action:'up',button:0,x:99,y:track.at(-1)!+5});view.render(grid,area,theme);
+ const text=Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join('\n');expect(text).toContain('Generated child 63');view.handleKey({key:'Enter'} as never);expect(ui.dialogContext).toMatchObject({agentId:'c63'});
+});
