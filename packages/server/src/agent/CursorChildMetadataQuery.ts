@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
 import { dirname } from "node:path";
+import {cursorChildContextFromRoot} from "./CursorChildContext.js";
 
 /** Fixed query in an owned, non-provider Node process. SQLite never opens an
  * original CLI database here. No SDK/auth, plugins, shell, model, or child spawn. */
 const WORKER = String.raw`
+const decodeContext=${cursorChildContextFromRoot.toString()};
 const {DatabaseSync}=require('node:sqlite');
 let input='';process.stdin.setEncoding('utf8');
 process.stdin.on('data',v=>{input+=v;if(input.length>8192)process.exit(2)});
@@ -22,8 +24,22 @@ process.stdin.on('end',()=>{let db;try{
  const text=(v,max)=>typeof v==='string'&&v.length>0&&v.length<=max&&!(/[\x00-\x1f\x7f-\x9f]/).test(v);
  if(!text(meta.agentId,128)||!Number.isSafeInteger(meta.createdAt)||meta.createdAt<0||!s||
   !text(s.parentAgentId,128)||!text(s.rootParentAgentId,128)||!text(s.toolCallId,128)||!text(s.typeName,200))throw Error();
+ // Optional child-only context. A missing/unrecognized blob must not erase proven lineage.
+ let context;
+ try {
+  const rootId=meta.latestRootBlobId;
+  if(typeof rootId==='string'&&/^[a-f0-9]{64}$/.test(rootId)){
+   const table=db.prepare("SELECT type,substr(sql,1,4097) AS sql,length(sql) AS size FROM sqlite_schema WHERE name='blobs'").get();
+   if(table?.type==='table'&&table.size<=4096&&typeof table.sql==='string'&&(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?blobs\s*\(\s*id\s+TEXT\s+PRIMARY\s+KEY\s*,\s*data\s+BLOB\s*\)\s*;?\s*$/i).test(table.sql)){
+    const blob=db.prepare("SELECT length(data) AS size,substr(data,1,2097153) AS data FROM blobs WHERE id=?").get(rootId);
+    if(blob&&Number.isSafeInteger(blob.size)&&blob.size>0&&blob.size<=2097152&&blob.data instanceof Uint8Array&&require('node:crypto').createHash('sha256').update(blob.data).digest('hex')===rootId){
+     const counts=decodeContext(blob.data);if(counts)context={rootId,...counts};
+    }
+   }
+  }
+ }catch{}
  // Do not return encryption keys, credential metadata, or conversation blobs.
- process.stdout.write(JSON.stringify({agentId:meta.agentId,createdAt:meta.createdAt,subagentInfo:{parentAgentId:s.parentAgentId,rootParentAgentId:s.rootParentAgentId,toolCallId:s.toolCallId,typeName:s.typeName}}));
+ process.stdout.write(JSON.stringify({agentId:meta.agentId,createdAt:meta.createdAt,subagentInfo:{parentAgentId:s.parentAgentId,rootParentAgentId:s.rootParentAgentId,toolCallId:s.toolCallId,typeName:s.typeName},...(context?{context}:{})}));
  }catch{}finally{try{db?.close()}catch{}}});
 `;
 export interface CursorMetadataQuery { value?: string; physicalClose: Promise<void>; closed: () => boolean }

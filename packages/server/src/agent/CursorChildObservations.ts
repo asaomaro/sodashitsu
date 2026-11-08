@@ -11,7 +11,7 @@ interface Session {
  usageReportVerdict(pane:string,kind:string,pid:number|undefined,parent:string):{verdict:"accept"|"hold"|"reject"};
 }
 interface Source {key:string;paneId:string;instanceId:string;parentId:string;current():boolean}
-interface Binding {source:Source;lineage:CursorChildLineage;settings:Settings;fileRevision:string;terminal?:"completed"|"aborted"|"error"}
+interface Binding {source:Source;lineage:CursorChildLineage;settings:Settings;fileRevision:string;snapshotSeal?:string;context?:CursorChildRecord["context"];terminal?:"completed"|"aborted"|"error"}
 interface Slot {binding?:Binding;conflict:boolean}
 interface State {source:Source;slots:Map<string,Slot>;events:Map<string,{hash:string;conflict:boolean}>;incomplete:boolean;exhausted:boolean}
 interface Job {source:Source;state:State;slot:Slot;report:CursorChildReport;expires:number}
@@ -19,7 +19,7 @@ export interface CursorChildBinding {
  /** Private record/owner revision, never a client path or public child ID. */
  key:string;
  source:{paneId:string;instanceId:string;kind:"cursor";sessionId:string};
- childId:string;lineage:CursorChildLineage;settings:Settings;terminal?:"completed"|"aborted"|"error";incomplete:boolean;
+ childId:string;lineage:CursorChildLineage;settings:Settings;snapshotSeal?:string;context?:CursorChildRecord["context"];terminal?:"completed"|"aborted"|"error";incomplete:boolean;
  /** Private metadata only: a consumer MUST additionally open/revalidate before publishing or reading. */
  current():boolean;
  openRecord(allowed?:()=>boolean):Promise<CursorChildRecord|undefined>;
@@ -118,7 +118,7 @@ export class CursorChildObservations {
     ...(report.model?{model:report.model,modelBasis:"session" as const}:{}),
     ...(report.reasoningEffort?{reasoningEffort:report.reasoningEffort,reasoningEffortBasis:"session" as const}:{}),
    }:old?.settings??{};
-   slot.binding={source:job.source,lineage:{...opened.lineage},settings:{...settings},fileRevision,...(report.phase==="stop"?{terminal:report.status}:{})};
+   slot.binding={source:job.source,lineage:{...opened.lineage},settings:{...settings},fileRevision,...(opened.snapshotSeal?{snapshotSeal:opened.snapshotSeal}:{}),...(opened.context?{context:{...opened.context}}:{}),...(report.phase==="stop"?{terminal:report.status}:{})};
   }finally{await opened.fd.close();}
  }
  /** No active-list inference: these are private observations for later verified history consumers. */
@@ -127,7 +127,7 @@ export class CursorChildObservations {
   if(!state||!slot||!binding||slot.conflict)return;
   if(!binding.source.current()){this.forget(paneId);return;}
   const current=()=>!this.closed&&binding.source.current()&&this.states.get(paneId)===state&&state.slots.get(childId)===slot&&slot.binding===binding&&!slot.conflict;
-  return {key:digest([state.source.key,childId,binding.fileRevision,binding.lineage,binding.terminal]),source:{paneId,instanceId:binding.source.instanceId,kind:"cursor",sessionId:binding.source.parentId},childId,lineage:{...binding.lineage},settings:{...binding.settings},incomplete:state.incomplete,...(binding.terminal?{terminal:binding.terminal}:{}),current,
+  return {key:digest([state.source.key,childId,binding.fileRevision,binding.lineage,binding.terminal,binding.snapshotSeal,binding.context?.rootId]),source:{paneId,instanceId:binding.source.instanceId,kind:"cursor",sessionId:binding.source.parentId},childId,lineage:{...binding.lineage},settings:{...binding.settings},...(binding.snapshotSeal?{snapshotSeal:binding.snapshotSeal}:{}),...(binding.context?{context:{...binding.context}}:{}),incomplete:state.incomplete,...(binding.terminal?{terminal:binding.terminal}:{}),current,
    openRecord:async(allowed=()=>true)=>{
     const readable=()=>current()&&allowed();if(!readable())return;
     const opened=await this.records.open(binding.source.parentId,childId,readable);if(!opened)return;

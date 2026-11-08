@@ -1,4 +1,4 @@
-import type {SubagentTranscriptEntry} from "@sodashitsu/protocol";
+import type {SubagentUsage,SubagentTranscriptEntry} from "@sodashitsu/protocol";
 import type {SubagentHistoryNote,SubagentHistorySource} from "./SubagentTerminalHistory.js";
 import type {OpenedFile} from "./safeFile.js";
 import type {VerifiedSubagentTarget} from "./VerifiedSubagentTarget.js";
@@ -16,6 +16,8 @@ export interface SubagentTerminalBinding {
  transcriptUnavailableReason?:string;
  current():boolean;
  verify(allowed:()=>boolean):Promise<boolean>;
+ /** Optional provider-owned numeric projection, still bound to this exact historical proof. */
+ readUsage?(allowed:()=>boolean):Promise<SubagentUsage|undefined>;
  openRecord(purpose:"transcript"|"usage",allowed:()=>boolean):Promise<TerminalRecord|undefined>;
  entries(row:unknown):SubagentTranscriptEntry[];
 }

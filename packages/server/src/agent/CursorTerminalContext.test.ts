@@ -1,0 +1,8 @@
+import{expect,it,vi}from'vitest';import{cursorTerminalBindings}from'./CursorTerminalBindings.js';import type{CursorChildBinding}from'./CursorChildObservations.js';
+function fixture(){let allowed=true;const context={rootId:'a'.repeat(64),used:25,max:100};const close=vi.fn(async()=>{}),binding={key:'private',source:{paneId:'pane',instanceId:'instance',kind:'cursor',sessionId:'parent'},childId:'child',lineage:{id:'child',parentId:'parent',rootParentId:'parent',toolCallId:'tool',type:'Explore',createdAt:1},settings:{},terminal:'completed',incomplete:true,snapshotSeal:'sealed-at-stop',context,current:()=>allowed,openRecord:vi.fn(async()=>({snapshotSeal:'sealed-at-stop',context,fd:{close},unchanged:async()=>true}))}as unknown as CursorChildBinding;
+ const value=cursorTerminalBindings({terminals:()=>({status:'ok',items:[binding],incomplete:true})},binding.source);return{binding,target:value.bindings[0]!,close,allowed:()=>allowed,revoke:()=>{allowed=false;}};}
+it('withholds context when the numeric-owned FD cannot be confirmed closed',async()=>{const f=fixture();f.close.mockRejectedValueOnce(Error('close failure'));expect(await f.target.readUsage!(f.allowed)).toBeUndefined();expect(f.close).toHaveBeenCalledTimes(1);});
+it('rejects a newer root even if a mock record reuses an old generation seal',async()=>{
+ const f=fixture();f.binding.openRecord=async()=>({context:{rootId:'b'.repeat(64),used:50,max:100},snapshotSeal:'sealed-at-stop',fd:{close:f.close},unchanged:async()=>true})as never;
+ expect(await f.target.readUsage!(f.allowed)).toBeUndefined();expect(f.close).toHaveBeenCalledTimes(1);
+});

@@ -102,3 +102,22 @@ it("preserves the installed config-root path instead of trimming significant tra
  const reader=new CursorChildRecords({home:f.root,cursorDataHome:f.roots.cursorDataHome});
  const record=await reader.open(parent,child,()=>true);expect(record?.lineage.id).toBe(child);await record?.fd.close();reader.close();
 });
+function contextBlob(used:number,max:number){return Buffer.from([42,4,8,used,16,max]);}
+function setRoot(file:string,blob:Buffer,extra:Record<string,unknown>={}){const rootId=createHash('sha256').update(blob).digest('hex'),sql=new DatabaseSync(file);try{sql.exec('CREATE TABLE IF NOT EXISTS blobs (id TEXT PRIMARY KEY, data BLOB);');sql.prepare('INSERT OR REPLACE INTO blobs VALUES (?,?)').run(rootId,blob);sql.prepare("UPDATE meta SET value=? WHERE key='0'").run(Buffer.from(JSON.stringify(metadata({...extra,latestRootBlobId:rootId}))).toString('hex'));}finally{sql.close();}return rootId;}
+it("reads only child latest-root context via the fixed private SQLite worker and seals the DB generation",async()=>{
+ const f=await fixture();setRoot(f.childDb,contextBlob(25,100));setRoot(f.parentDb,contextBlob(99,100),{agentId:parent});const bytes=await readFile(f.childDb);const opened=await f.reader.open(parent,child,()=>true);expect(opened?.context).toMatchObject({used:25,max:100});expect(opened?.snapshotSeal).toMatch(/^[a-f0-9]{64}$/);const seal=opened!.snapshotSeal;
+ try{setRoot(f.childDb,contextBlob(50,100));expect(await opened!.unchanged()).toBe(false);}finally{await opened?.fd.close();}
+ const fresh=await f.reader.open(parent,child,()=>true);try{expect(fresh?.context).toMatchObject({used:50,max:100});expect(fresh?.snapshotSeal).not.toBe(seal);expect(await readFile(f.childDb)).not.toEqual(bytes);}finally{await fresh?.fd.close();f.reader.close();}
+});
+it("keeps formal lineage when root numeric fields are absent, oversized, or hash-inconsistent",async()=>{
+ for(const blob of [Buffer.from([42,2,16,100]),Buffer.alloc(2*1024*1024+1)]){const f=await fixture();setRoot(f.childDb,blob);const opened=await f.reader.open(parent,child,()=>true);try{expect(opened?.lineage.id).toBe(child);expect(opened?.context).toBeUndefined();}finally{await opened?.fd.close();f.reader.close();}}
+ const f=await fixture();const rootId=setRoot(f.childDb,contextBlob(25,100));const sql=new DatabaseSync(f.childDb);try{sql.prepare('UPDATE blobs SET data=? WHERE id=?').run(contextBlob(50,100),rootId);}finally{sql.close();}const opened=await f.reader.open(parent,child,()=>true);try{expect(opened?.lineage.id).toBe(child);expect(opened?.context).toBeUndefined();}finally{await opened?.fd.close();f.reader.close();}
+});
+it("does not execute a view masquerading as the official blobs table",async()=>{
+ const f=await fixture(),blob=contextBlob(25,100),rootId=createHash('sha256').update(blob).digest('hex'),sql=new DatabaseSync(f.childDb);try{sql.exec(`CREATE VIEW blobs AS SELECT '${rootId}' AS id, x'${blob.toString('hex')}' AS data`);sql.prepare("UPDATE meta SET value=? WHERE key='0'").run(Buffer.from(JSON.stringify(metadata({latestRootBlobId:rootId}))).toString('hex'));}finally{sql.close();}
+ const opened=await f.reader.open(parent,child,()=>true);try{expect(opened?.lineage.id).toBe(child);expect(opened?.context).toBeUndefined();}finally{await opened?.fd.close();f.reader.close();}
+});
+it("includes the live WAL generation in a sealed context snapshot",async()=>{
+ const f=await fixture(),writer=new DatabaseSync(f.childDb);writer.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;');
+ try{setRoot(f.childDb,contextBlob(25,100));const opened=await f.reader.open(parent,child,()=>true);expect(opened?.context?.used).toBe(25);const seal=opened?.snapshotSeal;setRoot(f.childDb,contextBlob(50,100));expect(await opened?.unchanged()).toBe(false);await opened?.fd.close();const fresh=await f.reader.open(parent,child,()=>true);try{expect(fresh?.context?.used).toBe(50);expect(fresh?.snapshotSeal).not.toBe(seal);}finally{await fresh?.fd.close();}}finally{writer.close();f.reader.close();}
+});

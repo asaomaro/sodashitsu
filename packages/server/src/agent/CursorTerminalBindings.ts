@@ -14,6 +14,17 @@ export function cursorTerminalBindings(observer:Pick<CursorChildObservations,"te
   bindings.push({source:{...source},item:{id:binding.childId,type:binding.lineage.type,startedAt:binding.lineage.createdAt,terminalStatus:binding.terminal,hasTranscript:true,...binding.settings},eventId:binding.key,key:binding.key,kind:"cursor",recordId:binding.childId,current,
    verify:async allowed=>{if(!allowed()||!current())return false;const opened=await binding.openRecord(()=>allowed()&&current());if(!opened)return false;try{return allowed()&&current()&&await opened.unchanged()&&allowed()&&current();}finally{await opened.fd.close().catch(()=>undefined);}},
    openRecord:async(purpose,allowed)=>purpose==="transcript"&&allowed()&&current()?binding.openRecord(()=>allowed()&&current()):undefined,
+   readUsage:async(allowed:()=>boolean)=>{
+    if(!binding.snapshotSeal||!binding.context||!allowed()||!current())return;
+    const opened=await binding.openRecord(()=>allowed()&&current());if(!opened)return;
+    let usage:import("@sodashitsu/protocol").SubagentUsage|undefined,closed=false;
+    try{
+     const context=opened.context;
+     if(allowed()&&current()&&opened.snapshotSeal===binding.snapshotSeal&&context&&context.rootId===binding.context?.rootId&&await opened.unchanged()&&allowed()&&current())
+      usage={source:"cursor-db",consumptionScope:"self",contextTokens:context.used,contextWindowTokens:context.max,contextUsedPct:context.used/context.max*100,partial:true};
+    }finally{closed=await opened.fd.close().then(()=>true,()=>false);}
+    return closed&&allowed()&&current()?usage:undefined;
+   },
    entries:row=>{if(!row||typeof row!=="object"||Array.isArray(row))return[];const value=extraRecord(row,"cursor");return value?entriesOfLine({type:value.role,timestamp:value.at,message:{content:value.text}}):[];},
   });
  }

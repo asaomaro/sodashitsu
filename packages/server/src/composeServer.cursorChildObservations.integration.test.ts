@@ -1,3 +1,4 @@
+import WebSocket from "ws";
 import {createHash,randomUUID} from "node:crypto";
 import {mkdtemp,mkdir,writeFile,chmod,rm} from "node:fs/promises";
 import {dirname,join} from "node:path";
@@ -14,7 +15,7 @@ it.skipIf(process.platform!=="linux"||!existsSync("/bin/bash"))("one own fake Cu
  const root=await mkdtemp(join(tmpdir(),"soda-cursor-child-compose-")),parent=randomUUID(),child=randomUUID();
  const keys=["HOME","CURSOR_CONFIG_DIR","CURSOR_DATA_DIR","CLAUDE_CONFIG_DIR","CODEX_HOME","COPILOT_HOME","GROK_HOME","MUSE_HOME","XDG_DATA_HOME","PATH","ENV","BASH_ENV","NODE_OPTIONS","SODA_ASSISTANT_ENABLED"] as const;
  const saved=Object.fromEntries(keys.map(k=>[k,process.env[k]])),offer=vi.spyOn(CursorChildObservations.prototype,"offer");
- let server:Awaited<ReturnType<typeof composeServerOnFreePort>>|undefined;
+ let server:Awaited<ReturnType<typeof composeServerOnFreePort>>|undefined,ws:WebSocket|undefined;
  try{
   const bin=join(root,"bin"),config=join(root,"config"),data=join(root,"data"),script=join(root,"fake-cursor.mjs");await mkdir(bin);
   for(const name of["muse","agy","copilot","claude","codex","grok"]){await writeFile(join(bin,name),"#!/bin/sh\nexit 1\n");await chmod(join(bin,name),0o755);}
@@ -29,6 +30,7 @@ it.skipIf(process.platform!=="linux"||!existsSync("/bin/bash"))("one own fake Cu
   const group=join(config,"chats",createHash("md5").update("/generated/project").digest("hex")),parentDb=join(group,parent,"store.db"),childDb=join(group,child,"store.db"),parentFile=join(data,"projects","generated","agent-transcripts",parent,`${parent}.jsonl`),childFile=join(dirname(parentFile),"subagents",`${child}.jsonl`);
   for(const file of[parentDb,childDb,parentFile,childFile])await mkdir(dirname(file),{recursive:true});
   for(const[file,value]of[[parentDb,{agentId:parent,createdAt:1}],[childDb,{agentId:child,createdAt:1000,subagentInfo:{parentAgentId:parent,rootParentAgentId:parent,toolCallId:"tool",typeName:"Explore"}}]] as const){const sql=new DatabaseSync(file);sql.exec("CREATE TABLE meta (key TEXT PRIMARY KEY,value TEXT);");sql.prepare("INSERT INTO meta VALUES ('0',?)").run(Buffer.from(JSON.stringify(value)).toString("hex"));sql.close();}
+  const writeRoot=(used:number)=>{const blob=Buffer.from([42,4,8,used,16,100]),rootId=createHash("sha256").update(blob).digest("hex"),db=new DatabaseSync(childDb);try{db.exec("CREATE TABLE IF NOT EXISTS blobs (id TEXT PRIMARY KEY,data BLOB);");db.prepare("INSERT OR REPLACE INTO blobs VALUES (?,?)").run(rootId,blob);db.prepare("UPDATE meta SET value=? WHERE key='0'").run(Buffer.from(JSON.stringify({agentId:child,createdAt:1000,subagentInfo:{parentAgentId:parent,rootParentAgentId:parent,toolCallId:"tool",typeName:"Explore"},latestRootBlobId:rootId})).toString("hex"));}finally{db.close();}};writeRoot(25);
   await writeFile(parentFile,'{"role":"user","message":{"content":[]}}\n');await writeFile(childFile,'{"role":"assistant","message":{"content":[]}}\n{"type":"turn_ended","status":"success"}\n');
   server=await composeServerOnFreePort({host:"127.0.0.1",stateDir:join(root,"state"),origin:[],shell:"/bin/bash"});
   const live=server,paneId=live.session.snapshot().panes[0]!.id,write=(s:string)=>live.terminals.get(paneId)!.write(s);
@@ -41,5 +43,12 @@ it.skipIf(process.platform!=="linux"||!existsSync("/bin/bash"))("one own fake Cu
   expect(live.session.getPane(paneId)?.agent?.subagents).toBeUndefined();write("s");
   await vi.waitFor(()=>expect(controller.terminals(paneId).items).toHaveLength(1),{timeout:5000});
   const binding=controller.terminals(paneId).items[0]!;expect(binding.settings.model).toBe("observed-child-model");expect(binding.settings.reasoningEffort).toBe("low");const record=await binding.openRecord();expect(record).toBeDefined();await record?.fd.close();expect(live.session.getPane(paneId)?.agent?.subagents).toBeUndefined();
- }finally{await server?.close();offer.mockRestore();for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:50});}
+  const origin=`http://127.0.0.1:${live.options.port}`,login=await fetch(`${origin}/api/login`,{method:"POST",headers:{origin,"content-type":"application/json"},body:JSON.stringify({token:live.freshToken})});expect(login.status).toBe(204);
+  ws=new WebSocket(`ws://127.0.0.1:${live.options.port}/ws`,{headers:{origin,cookie:login.headers.get("set-cookie")!.split(";")[0]!}});await new Promise<void>((yes,no)=>{ws!.once("open",yes);ws!.once("error",no);});
+  const socket=ws;let seq=0;const pending=new Map<string,(r:any)=>void>();socket.on("message",data=>{const r=JSON.parse(data.toString());pending.get(r.id)?.(r);pending.delete(r.id);});
+  const rpc=(method:string,params:unknown)=>new Promise<any>((yes,no)=>{const id=`context-${++seq}`,timer=setTimeout(()=>{pending.delete(id);no(Error("generated RPC deadline"));},5000);pending.set(id,r=>{clearTimeout(timer);yes(r);});socket.send(JSON.stringify({id,method,params}));});await rpc("client.hello",{protocol:1,kind:"desktop"});
+  const list=(await rpc("agent.subagent_history",{paneId})).result;expect(list.items).toHaveLength(1);const params={paneId,agentId:child,entryId:list.items[0].entryId};
+  const usage=(await rpc("agent.subagent_history_usage",params)).result;expect(usage).toMatchObject({status:"ok",usage:{source:"cursor-db",contextTokens:25,contextWindowTokens:100,contextUsedPct:25,partial:true}});expect(usage.usage).not.toHaveProperty("tokens");expect(usage.usage).not.toHaveProperty("observedAt");
+  writeRoot(50);expect((await rpc("agent.subagent_history_usage",params)).result).toMatchObject({status:"unavailable"});expect(live.session.getPane(paneId)?.agent?.subagents).toBeUndefined();
+ }finally{ws?.close();await server?.close();offer.mockRestore();for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:50});}
 },35000);

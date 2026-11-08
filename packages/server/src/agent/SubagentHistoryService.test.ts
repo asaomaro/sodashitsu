@@ -47,3 +47,8 @@ it("discards a late open on authorization loss and still physically closes the o
   await vi.waitFor(()=>expect(resolve).toBeTypeOf("function"));f.allowedValue=false;resolve(await f.record());expect(await reading).toMatchObject({status:"unreadable",entries:[]});expect(f.opened).toBe(f.closed);
  }finally{f.service.close();}
 });
+it("discards provider-owned numeric callbacks after parent revocation without using a current fallback",async()=>{
+ const f=await fixture();let resolve!:(u:import('@sodashitsu/protocol').SubagentUsage)=>void;
+ f.binding={...f.binding,readUsage:()=>new Promise(done=>{resolve=done;})};const item=(await f.service.read({paneId})).items[0]!;
+ const result=f.service.usageRead({paneId,agentId:'child',entryId:item.entryId});await vi.waitFor(()=>expect(resolve).toBeTypeOf('function'));f.verified=false;resolve({source:'cursor-db',consumptionScope:'self',contextTokens:1,contextWindowTokens:2,partial:true});expect(await result).toMatchObject({status:'unavailable'});expect(f.opened).toBe(f.closed);f.service.close();
+});

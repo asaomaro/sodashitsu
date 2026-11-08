@@ -61,6 +61,13 @@ export class SubagentHistoryService {
   const unavailable=():AgentSubagentHistoryUsageResult=>({status:"unavailable",reason:"選択した終了履歴の利用状況を確認できません"});
   return this.bounded(unavailable,allowed,async current=>{
    const grant=await this.history.grant(params.paneId,params.agentId,current,params.entryId);if(!grant)return unavailable();
+   const target=grant.proof?.target;
+   if(target?.readUsage){
+    const owned=()=>current()&&grant.current()&&target.current();
+    if(!owned())return unavailable();
+    const usage=await target.readUsage(owned);
+    return owned()&&usage?{status:"ok",usage,reason:"正式な終了履歴に固定した子自身の保存済み文脈量です。消費累計や現在の値ではありません"}:unavailable();
+   }
    const value=await this.usage.read(params.paneId,params.entryId);return current()&&grant.current()?value:unavailable();
   });
  }
