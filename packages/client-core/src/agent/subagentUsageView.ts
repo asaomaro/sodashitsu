@@ -27,10 +27,10 @@ export function subagentUsageView(state: SubagentUsageState): ChildUsageView {
     u = r?.status === "ok" ? r.usage : undefined;
   if (state.loading) view.notes.push("利用状況を取得中…");
   if (state.failed) view.notes.push("子の利用状況を取得できません。利用ゼロを意味しません。");
-  if (r?.reason) view.notes.push(r.reason.slice(0, 1000));
+  const reason = typeof r?.reason === "string" ? r.reason.slice(0, 1000) : null;
+  if (reason) view.notes.push(reason);
   if (!u) {
-    if (!state.loading && !state.failed && !r?.reason)
-      view.notes.push("子の利用状況は未取得です。");
+    if (!state.loading && !state.failed && !reason) view.notes.push("子の利用状況は未取得です。");
     return view;
   }
   view.rows.push({
@@ -53,11 +53,15 @@ export function subagentUsageView(state: SubagentUsageState): ChildUsageView {
     add("キャッシュ書込", tokens.cacheWrite);
     add("推論", tokens.reasoning);
     add("合計", tokens.total);
-    const basis = {
+    const bases = {
       cumulative: "報告された累計",
       transcript: "記録に残る分",
       context: "文脈内（消費累計ではありません）",
-    }[tokens.basis];
+    };
+    const basis =
+      typeof tokens.basis === "string" && Object.hasOwn(bases, tokens.basis)
+        ? bases[tokens.basis]
+        : undefined;
     if (basis) view.notes.push(`トークン: ${basis}`);
   }
   add("コンテキスト", u.contextTokens);
@@ -79,7 +83,10 @@ export function subagentUsageView(state: SubagentUsageState): ChildUsageView {
     view.rows.push({ label: "クレジット", value: formatUsageCredits(u.credits) });
   if (number(u.observedAt)) view.rows.push({ label: "実観測時刻", value: time(u.observedAt) });
   if (number(u.costAsOf)) view.rows.push({ label: "コスト時点", value: time(u.costAsOf) });
-  const source = sources[u.source];
+  const source =
+    typeof u.source === "string" && Object.hasOwn(sources, u.source)
+      ? sources[u.source]
+      : undefined;
   if (source) view.rows.push({ label: "取得元", value: source });
   if (u.costBasis === "reported") view.notes.push("コスト: 製品が報告したUSD");
   else if (u.costBasis === "cost-state") view.notes.push("コスト: 会計記録");

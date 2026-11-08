@@ -77,3 +77,24 @@ it("keeps a tiny positive reported cost distinct from actual zero", () => {
     view({ source: "grok-usage", consumptionScope: "subtree", costUsd: 0 }).rows,
   ).toContainEqual({ label: "コスト (USD)", value: "$0" });
 });
+it.each([7, {}, []])("ignores a malformed peer reason instead of throwing %#", (reason) => {
+  const v = subagentUsageView({
+    result: { status: "unavailable", reason } as never,
+    loading: false,
+    failed: false,
+  });
+  expect(v.rows).toEqual([]);
+  expect(v.notes).toEqual(["子の利用状況は未取得です。"]);
+});
+it.each(["__proto__", "constructor", ["rollout"]])(
+  "does not coerce a malformed source or basis into a known label %#",
+  (value) => {
+    const v = view({
+      source: value,
+      consumptionScope: "self",
+      tokens: { basis: value, input: 3 },
+    } as unknown as SubagentUsage);
+    expect(v.rows.some((r) => r.label === "取得元")).toBe(false);
+    expect(v.notes.some((n) => n.startsWith("トークン:"))).toBe(false);
+  },
+);

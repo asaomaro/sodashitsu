@@ -14,9 +14,9 @@ const props = withDefaults(
     agentId: string;
     active?: boolean;
     initialOpen?: boolean;
-    open?: boolean;
+    open?: boolean | null;
   }>(),
-  { active: true, initialOpen: false, open: undefined },
+  { active: true, initialOpen: false, open: null },
 );
 const conn = inject(ConnectionKey, null),
   session = useSessionStore(),
