@@ -1,0 +1,73 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-conversation-control
+
+ ❯ |@sodashitsu/server| src/agent/SubagentControlService.test.ts (13 tests | 6 failed) 28ms
+   × invalidates lease on instance before any write 11ms
+   × invalidates lease on refkind before any write 3ms
+   × invalidates lease on session before any write 2ms
+   × invalidates lease on membership before any write 1ms
+   × invalidates lease on verified before any write 1ms
+   × does not queue a double click or accept a late acknowledgement after parent scope loss 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentControlService.test.ts > invalidates lease on instance before any write
+ FAIL  |@sodashitsu/server| src/agent/SubagentControlService.test.ts > invalidates lease on refkind before any write
+ FAIL  |@sodashitsu/server| src/agent/SubagentControlService.test.ts > invalidates lease on session before any write
+ FAIL  |@sodashitsu/server| src/agent/SubagentControlService.test.ts > invalidates lease on membership before any write
+ FAIL  |@sodashitsu/server| src/agent/SubagentControlService.test.ts > invalidates lease on verified before any write
+AssertionError: expected { status: 'accepted', …(2) } to match object { status: 'rejected' }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "rejected",
++   "status": "accepted",
+  }
+
+ ❯ src/agent/SubagentControlService.test.ts:37:129
+     35|  if(change==="close")f.service.close();
+     36|  const ctx=change==="owner"?{...f.ctx,owner:{}}:f.ctx;
+     37|  expect(await f.service.send({paneId:f.pane.id,agentId:f.child,leaseId…
+       |                                                                                                                                 ^
+     38| });
+     39| it("never substitutes the parent, an absent child or an unrelated prod…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/SubagentControlService.test.ts > does not queue a double click or accept a late acknowledgement after parent scope loss
+AssertionError: expected { status: 'accepted', …(2) } to match object { status: 'delivery-unknown' }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "delivery-unknown",
++   "status": "accepted",
+  }
+
+ ❯ src/agent/SubagentControlService.test.ts:62:22
+     60|  expect(await service.control(f.pane.id,f.child,f.ctx)).toMatchObject(…
+     61|  f.pane.agent!.instanceId=randomUUID();finish({status:"accepted",turnI…
+     62|  expect(await first).toMatchObject({status:"delivery-unknown"});expect…
+       |                      ^
+     63| });
+     64|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 7 passed (13)
+   Start at  10:05:52
+   Duration  1.04s (transform 75%, import 22%, tests 3%)
+

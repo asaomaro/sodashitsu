@@ -1,0 +1,34 @@
+{
+  "sourceHead": "844aec1ab96c08c68b78f4d07c543ad121207fdc",
+  "base": "d631c935",
+  "node": "24.22.2",
+  "checks": {
+    "selected7Suites33Tests": 0,
+    "protocol56Suites593Tests": 0,
+    "serverTscBuild": 0,
+    "cliBootstrapBuild": 0,
+    "serverFullTestInclusiveTypecheck8GiB": 0,
+    "initialTypecheckDefaultHeap": "134 OOM",
+    "first8GiBTypecheck": "2 missing CLI dist bootstrap only"
+  },
+  "runtimeSha256": {
+    "packages/protocol/src/index.ts": "abae7f8670c495861c6515abcd3c7dc48af8dc0cef17024f2a125a945e772547",
+    "packages/protocol/src/messages.ts": "c6c44052a5b108d6aa2d0db43079d6661dd5cba6ac80c1cb908d72b88499dfd4",
+    "packages/protocol/src/subagentControl.ts": "761b8d0ddaf3258d5c5d1682b873a4bdc50f2d35c44070d757d290eb8b5aaecd",
+    "packages/server/src/agent/CodexControlSocket.ts": "d7f0cf71142995f1e75ea915d9f168f02499cb92fa8956008e60b1bd6896b02c",
+    "packages/server/src/agent/CodexSubagentControl.ts": "65514404067fac00ebb90c88952700ba21037e34533f7b8fa4524d862de1b679",
+    "packages/server/src/agent/SubagentControlService.ts": "c6a29d5f2876607072d6286bd960474d61caf2aa921ed3801a789d02ea2a7cc5",
+    "packages/server/src/agent/VerifiedSubagentTarget.ts": "f43532377b341a8535bce209d210b07c827d5f820a79a5920fa5ea3f2e7a35f8",
+    "packages/server/src/composeServer.ts": "74fc2c5a0f6d4c26603a0be579d653cc4261171f9c035add620e7263b40ca753",
+    "packages/server/src/surface/methods/agent.ts": "8196be84057d08a6edfc4fdd31f3a0d657d73775ee2080e6967704bbe6dd9e31",
+    "packages/server/src/surface/methods/deps.ts": "7fe84d832582f15d32b7975817ce8dbea7d8dd9a72c7c4b154c726774c069780"
+  },
+  "limits": [
+    "generated provider/API fixtures only",
+    "no real model/user child send",
+    "no Windows/remote/auth login",
+    "Claude Soda child transport not connected",
+    "Codex parent-owned children cannot accept direct app-server input",
+    "ended-child collection/Cursor intake/child-usage still separate unfinished tasks"
+  ]
+}

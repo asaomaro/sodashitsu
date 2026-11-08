@@ -1,0 +1,39 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-conversation-control
+
+ ❯ |@sodashitsu/server| src/surface/methods/subagentControl.integration.test.ts (1 test | 1 failed) 15ms
+   × auth surface routes one generated child instruction to the existing owned Unix daemon and never its parent 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/surface/methods/subagentControl.integration.test.ts > auth surface routes one generated child instruction to the existing owned Unix daemon and never its parent
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/surface/methods/subagentControl.integration.test.ts:37:112
+     35|   const surface=new ControlSurface();registerAgentMethods(surface,{ses…
+     36|   const ctx={clientId:"own-generated",sink:{} as never,connectionAutho…
+     37|   const prepared=await surface.invoke(ctx,"agent.subagent_control",{pa…
+       |                                                                                                                ^
+     38|   if(!prepared.ok)throw Error();const lease=prepared.result as {mode:s…
+     39|   const params={paneId,agentId:child,leaseId:lease.leaseId,requestId:r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  10:05:48
+   Duration  1.68s (transform 82%, import 17%, tests 1%)
+

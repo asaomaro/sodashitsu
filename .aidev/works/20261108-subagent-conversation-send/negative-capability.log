@@ -1,0 +1,33 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-subagent-conversation-control
+
+ ❯ |@sodashitsu/server| src/agent/CodexSubagentControl.test.ts (8 tests | 2 failed) 12ms
+   × does not treat false direct capability as permission 4ms
+   × does not treat null direct capability as permission 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CodexSubagentControl.test.ts > does not treat false direct capability as permission
+ FAIL  |@sodashitsu/server| src/agent/CodexSubagentControl.test.ts > does not treat null direct capability as permission
+AssertionError: expected 'ready' to be 'unavailable' // Object.is equality
+
+Expected: "unavailable"
+Received: "ready"
+
+ ❯ src/agent/CodexSubagentControl.test.ts:29:155
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 6 passed (8)
+   Start at  10:05:50
+   Duration  888ms (transform 76%, import 22%, tests 2%)
+

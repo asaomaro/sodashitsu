@@ -1,0 +1,31 @@
+{
+  "thread": {
+    "sha256": "25f3eb2888f592c7810420b054aba8ffb5fa134dd2a2d1cce5a90c2f038be7f6",
+    "source": "codex-cli 0.166.0 app-server generate-json-schema --experimental"
+  },
+  "steer": {
+    "sha256": "202bc34e1f268b69e28c75f2ddd8b4990562eef114aca4663d9596f59d425bf8",
+    "source": "codex-cli 0.166.0 app-server generate-json-schema --experimental"
+  },
+  "capability": {
+    "description": "Whether the app server accepts direct turn input for this loaded thread. `None` means the capability is unavailable, such as for an unloaded stored thread.",
+    "type": [
+      "boolean",
+      "null"
+    ]
+  },
+  "claudeSdk": {
+    "version": "0.3.319",
+    "integrity": "sha512-7X+sh4uZv/u4OL4I4cQvMr9N3NM6FDiuyk829hFylgbrnNwVyiGElWEDWGuO26zwMIxmgpKdPoDILoFIHh1uwA=="
+  },
+  "primarySource": [
+    {
+      "url": "https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/app-server/src/request_processors/thread_input.rs",
+      "sha256": "74c64b92942218d1493481b4795603a9873783b8e537520538a4937f9b8cf716"
+    },
+    {
+      "url": "https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/app-server/src/request_processors/turn_processor.rs",
+      "sha256": "9c4203992f3bbc6027876057b27c7433a211198ee6c377c26f11482cc1f07305"
+    }
+  ]
+}

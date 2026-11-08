@@ -1,0 +1,26 @@
+[
+  {
+    "name": "old-route",
+    "exitCode": 1
+  },
+  {
+    "name": "capability",
+    "exitCode": 1
+  },
+  {
+    "name": "scope",
+    "exitCode": 1
+  },
+  {
+    "name": "dedup",
+    "exitCode": 1
+  },
+  {
+    "restored": {
+      "packages/server/src/surface/methods/agent.ts": "8196be84057d08a6edfc4fdd31f3a0d657d73775ee2080e6967704bbe6dd9e31",
+      "packages/server/src/agent/CodexSubagentControl.ts": "b9f29b4583b76ffef8f49b635b6cee8706ad3687e79527f12166c7170079092d",
+      "packages/server/src/agent/VerifiedSubagentTarget.ts": "f43532377b341a8535bce209d210b07c827d5f820a79a5920fa5ea3f2e7a35f8",
+      "packages/server/src/agent/SubagentControlService.ts": "648ef95b185368e92f9461bed4d1c62df8dbe84aace453d6738752043110190e"
+    }
+  }
+]

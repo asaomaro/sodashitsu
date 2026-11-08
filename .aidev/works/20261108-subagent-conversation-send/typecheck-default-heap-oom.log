@@ -1,0 +1,26 @@
+
+> @sodashitsu/server@0.1.0 typecheck /workspaces/sodashitsu-subagent-conversation-control/packages/server
+> tsc --noEmit -p tsconfig.typecheck.json
+
+
+<--- Last few GCs --->
+
+[1857397:0x12140000]   213133 ms: Scavenge 4086.9 (4097.8) -> 4083.3 (4097.8) MB, pooled: 0 MB, 4.71 / 0.00 ms  (average mu = 0.311, current mu = 0.275) allocation failure; 
+[1857397:0x12140000]   213873 ms: Mark-Compact (reduce) 4089.5 (4100.3) -> 4082.8 (4091.1) MB, pooled: 0 MB, 200.45 / 0.00 ms  (+ 477.6 ms in 95 steps since start of marking, biggest step 5.6 ms, walltime since start of marking 740 ms) (average mu = 0.288
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+
+ 1: 0x942e80  [node]
+ 2: 0x75f71e node::OOMErrorHandler(char const*, v8::OOMDetails const&) [node]
+ 3: 0xc9a1e0  [node]
+ 4: 0xc9a2cf  [node]
+ 5: 0xf3e5a5  [node]
+ 6: 0xf3e5d2  [node]
+ 7: 0xf3e8ca  [node]
+ 8: 0xf4f5ca  [node]
+ 9: 0xf53970  [node]
+10: 0x19f1e81  [node]
+Aborted (core dumped)
+/workspaces/sodashitsu-subagent-conversation-control/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 typecheck: `tsc --noEmit -p tsconfig.typecheck.json`
+Exit status 134

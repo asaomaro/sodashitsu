@@ -1,0 +1,2 @@
+packages/server/src/agent/GrokNativeWiring.test.ts(8,27): error TS2307: Cannot find module '../../../cli/dist/agentStatus.js' or its corresponding type declarations.
+packages/server/src/composeServer.grokSubagents.integration.test.ts(10,27): error TS2307: Cannot find module '../../cli/dist/agentStatus.js' or its corresponding type declarations.
