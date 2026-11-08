@@ -1,0 +1,78 @@
+{
+  "stage": "phase3-bc-windows-compile-pure",
+  "windowsCheckoutHead": "7ff573be",
+  "receiptSha256": "57cbed5f44e4a023c2f4242e4b5666857aea053f63aef72a2a90414560e32e52",
+  "wrapperExitCode": 0,
+  "timedOut": false,
+  "cancelled": false,
+  "stderrEmpty": true,
+  "beforePaneCount": 2,
+  "afterPaneCount": 2,
+  "missingPaneCount": 0,
+  "ok": true,
+  "sourceFiles": 12,
+  "binaries": 7,
+  "sourceGitCheckoutExact": true,
+  "compile": [
+    {
+      "name": "receiver-bc.exe",
+      "exitCode": 0
+    },
+    {
+      "name": "probe-bc.exe",
+      "exitCode": 0
+    },
+    {
+      "name": "probe.exe",
+      "exitCode": 0
+    },
+    {
+      "name": "operator-bc.exe",
+      "exitCode": 0
+    },
+    {
+      "name": "uac-noop.exe",
+      "exitCode": 0
+    },
+    {
+      "name": "generated-checks.exe",
+      "exitCode": 0
+    },
+    {
+      "name": "generated-bc-checks.exe",
+      "exitCode": 0
+    }
+  ],
+  "generated": [
+    {
+      "name": "generated-checks.exe",
+      "result": {
+        "ok": true,
+        "generatedOnly": true,
+        "endpointOpened": false,
+        "nativeProbe": false,
+        "rawAudioStored": false
+      }
+    },
+    {
+      "name": "generated-bc-checks.exe",
+      "result": {
+        "ok": true,
+        "generatedOnly": true,
+        "nativeProbe": false,
+        "endpointOpened": false,
+        "lockOrUac": false
+      }
+    }
+  ],
+  "operatorReceiverProbeNoopExecuted": false,
+  "lockOrUac": false,
+  "rawAudioStored": false,
+  "verificationScope": "Windows compilation and generated-only execution; not actual token/COM/endpoint/audio/lock/UAC behavior",
+  "checkoutLineEndings": {
+    "coreAutocrlf": "true (unchanged)",
+    "sourceComparison": "actual Windows raw bytes equal git cat-file --filters HEAD:path, not Linux LF raw blobs",
+    "sourceAndBinaryShaRechecked": "reported by root operator",
+    "statusClean": "reported by root operator"
+  }
+}
