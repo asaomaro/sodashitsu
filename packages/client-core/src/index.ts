@@ -67,3 +67,5 @@ export * from "./layout/normalSession.js";
 export * from "./layout/normalSummary.js";
 
 export * from "./agent/SubagentConversationControl.js";
+export * from "./agent/SubagentUsageReader.js";
+export * from "./agent/subagentUsageView.js";
