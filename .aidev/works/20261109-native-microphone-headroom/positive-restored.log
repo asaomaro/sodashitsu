@@ -1,0 +1,13 @@
+✔ empty valid buffer adds bounded silence headroom before one unchanged PCM packet (0.53505ms)
+✔ valid plans never exceed capacity or original1920frame total; old inadmissible padding still rejected (1.513075ms)
+✔ actual staging body prefixes zeros only, preserves user960 and clears entire scratch on invalid input (0.498972ms)
+✔ source-bound1ms-jitter model now preserves tone300 and continuous without changing detector (56.926661ms)
+✔ native wire/expiry/allowed calls/start-stop and60ms wait remain unchanged; all staging retirement paths zero (4.950514ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 114.073845
