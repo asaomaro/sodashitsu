@@ -1,8 +1,10 @@
+import {isAbsolute} from "node:path";
 import { ASSISTANT_EFFORTS } from "@sodashitsu/protocol";
 import type { SubagentInfo } from "@sodashitsu/protocol";
 import type { Subagents } from "./SubagentTracker.js";
 
 export type NativeSubagentKind = "codex" | "muse" | "copilot";
+export interface CodexTerminalFact {id:string;startedAt:number;endedAt:number;eventId:string;terminalStatus:"completed"|"aborted";description?:string;type?:string}
 const ID = /^[A-Za-z0-9_:.-]{1,128}$/;
 const MAX = 256;
 const label = (v: unknown, max: number): string | undefined =>
@@ -24,16 +26,29 @@ export class NativeSubagentRecords {
   // state rejoins membership until a later successful, same-parent interaction.
   private readonly codexRelations = new Map<string, { item: SubagentInfo; terminal: boolean }>();
   private readonly codexReferences = new Map<string, SubagentInfo>();
+  private codexFirstRow=false;
+  private codexCwd:string|undefined;
+  codexParentCwd():string|undefined{return this.codexCwd;}
+  private readonly codexEnds = new Map<string,CodexTerminalFact>();
   private codexMalformed = false;
   private copilotMalformed = false;
   private seen = false;
   private limited = false;
   constructor(readonly kind: NativeSubagentKind, readonly sessionId: string) {}
 
+  /** Formal terminal facts only; no working/alive count is added or inferred. */
+  codexTerminals():readonly CodexTerminalFact[]|undefined {
+    if(this.kind!=="codex"||!this.seen||this.limited||this.codexMalformed)return;
+    return [...this.codexEnds.values()].map(value=>({...value}));
+  }
+
   consume(value: unknown): void {
     const row = object(value);
+    if(this.kind==="codex"&&!this.codexFirstRow){this.codexFirstRow=true;const p=object(row?.payload);if(row?.type==="session_meta"&&p?.id===this.sessionId&&typeof p.cwd==="string"&&isAbsolute(p.cwd)&&!/[\x00-\x1f\x7f]/.test(p.cwd))this.codexCwd=p.cwd;}
     if (!row) return;
-    if (this.kind === "codex") this.codex(row);
+    if (this.kind === "codex") {
+      this.codex(row);
+    }
     else if (this.kind === "muse") this.muse(row);
     else this.copilot(row);
   }
@@ -93,6 +108,7 @@ export class NativeSubagentRecords {
     const meta: Partial<SubagentInfo> = { ...(effort ? { reasoningEffort: effort, reasoningEffortBasis: "creation" } : {}), ...(name ? { description: name } : {}), ...(model ? { type: model } : {}) };
     // A fresh successful reference to an owned, completed child proves membership, not work.
     if (item.kind === "interacted") {
+      this.codexEnds.delete(id);
       if (!this.items.has(id)) {
         const relation = this.codexRelations.get(id);
         if (relation?.terminal) this.codexReferences.set(id, { ...relation.item, ...meta, state: "unknown" });
@@ -101,6 +117,7 @@ export class NativeSubagentRecords {
       return;
     }
     this.codexReferences.delete(id);
+    this.codexEnds.delete(id);
     if (item.kind === "started") {
       if (!this.codexRelations.has(id) && this.codexRelations.size >= MAX) { this.limited = true; return; }
       const previous = this.metadata.get(id);
@@ -110,7 +127,10 @@ export class NativeSubagentRecords {
       this.codexRelations.set(id, { item: created, terminal: false });
     } else if (item.kind === "completed" || item.kind === "interrupted") {
       const relation = this.codexRelations.get(id);
-      if (relation) relation.terminal = true;
+      if (relation) {
+        relation.terminal = true;
+        if(at>=relation.item.startedAt)this.codexEnds.set(id,{id,startedAt:relation.item.startedAt,endedAt:at,eventId:JSON.stringify([item.id,item.kind,at]),terminalStatus:item.kind==="completed"?"completed":"aborted",...(relation.item.description?{description:relation.item.description}:{}),...(relation.item.type?{type:relation.item.type}:{})});
+      }
     } else {
       // Unknown lifecycle semantics cannot preserve or manufacture ownership.
       this.codexRelations.delete(id);

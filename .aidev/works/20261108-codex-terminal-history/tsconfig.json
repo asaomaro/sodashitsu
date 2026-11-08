@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "../../.."
+  },
+  "files": [
+    "../../../packages/server/src/agent/CodexSubagentStream.ts",
+    "../../../packages/server/src/agent/NativeSubagentRecords.ts",
+    "../../../packages/server/src/agent/NativeSubagentReader.ts",
+    "../../../packages/server/src/agent/NativeSubagentService.ts",
+    "../../../packages/server/src/agent/CodexTerminalBindings.ts",
+    "../../../packages/server/src/agent/CodexTerminalHistory.test.ts",
+    "../../../packages/server/src/composeServer.ts",
+    "../../../packages/server/src/composeServer.codexTerminalHistory.integration.test.ts"
+  ],
+  "include": [],
+  "exclude": []
+}

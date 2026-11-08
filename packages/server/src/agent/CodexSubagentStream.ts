@@ -26,7 +26,7 @@ export class CodexSubagentStream {
       }
       this.size += piece.length;
       if (newline < 0 || this.invalid) return;
-      if (this.envelope) { if (!this.envelope.finish()) this.invalid = true; }
+      if (this.envelope) { if (!this.envelope.finish()) this.invalid = true; else fold.consume(null); }
       else if (this.size) {
         try { fold.consume(JSON.parse(Buffer.concat(this.pieces, this.size).toString("utf8"))); }
         catch { this.invalid = true; }

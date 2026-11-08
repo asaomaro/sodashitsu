@@ -1,3 +1,7 @@
+import type {BigIntStats} from "node:fs";
+import {randomUUID} from "node:crypto";
+import {codexTerminalBindings} from "./CodexTerminalBindings.js";
+import type {CodexTerminalFact} from "./NativeSubagentRecords.js";
 import type {SubagentTerminalCollection} from "./SubagentTerminalBinding.js";
 import { readCodexControlStatus, type CodexControlTarget, type CodexObservedState } from "./CodexControlStatus.js";
 import { MuseChildObservations } from "./MuseChildObservations.js";
@@ -21,6 +25,9 @@ export interface NativeSubagentSource {
   sessionId: string;
 }
 interface State {
+  namespace:string;
+  inputRevision?:BigIntStats;
+  codexEOF?:BigIntStats;
   key: string;
   fold: NativeSubagentRecords;
   offset: number;
@@ -37,6 +44,7 @@ interface State {
 const CHUNK = 4 * 1024 * 1024;
 const MAX_BYTES = 512 * 1024 * 1024;
 const MAX_LINE = 256 * 1024;
+const exactRevision=(a:BigIntStats,b:BigIntStats)=>(["dev","ino","size","mtimeNs","ctimeNs"] as const).every(k=>a[k]===b[k]);
 
 /** Exact owned-session files only. No CLI/model launch, directory-wide transcript scan, or latest-session fallback. */
 export class NativeSubagentReader {
@@ -45,6 +53,7 @@ export class NativeSubagentReader {
   private readonly codexObservations=new CodexChildObservationCache();
   private readonly grokReader:GrokSubagentReader;
   private observationEpoch=0;
+  private terminalChecks=0;
   private readonly museObservations: Pick<MuseChildObservations,"readMany"|"forget">;
   private readonly agyStates = new Map<string, { key: string; reading?: Promise<Subagents | undefined> }>();
   constructor(private readonly roots: ExtraRoots & { codexHome?: string } = {}, private readonly codexStatus: (target: CodexControlTarget) => Promise<Map<string, CodexObservedState>> = readCodexControlStatus, museObservations?: Pick<MuseChildObservations,"readMany"|"forget">) { this.museObservations = museObservations ?? new MuseChildObservations(roots); this.grokReader=new GrokSubagentReader(roots); }
@@ -55,6 +64,33 @@ export class NativeSubagentReader {
   grokTerminals(source:NativeSubagentSource,current:()=>boolean):SubagentTerminalCollection {
     if(this.closed||source.kind!=="grok"||!current())return{status:"unavailable",bindings:[],incomplete:true};
     return this.grokReader.terminals(source,current);
+  }
+
+  codexTerminals(source:NativeSubagentSource,verified:()=>boolean,cwd:string):SubagentTerminalCollection {
+    const unknown=():SubagentTerminalCollection=>({status:"pending",bindings:[],incomplete:true});
+    const state=this.states.get(source.paneId),key=JSON.stringify([source.instanceId,source.kind,source.sessionId]);
+    if(this.closed||source.kind!=="codex"||!verified()||!state||state.key!==key)return{status:"unavailable",bindings:[],incomplete:true};
+    const facts=state.fold.codexTerminals();
+    if(!facts||state.fold.codexParentCwd()!==cwd)return{status:state.pending?"pending":"unavailable",bindings:[],incomplete:true};
+    if(!state.codexEOF)return unknown();
+    const namespace=state.namespace;
+    const current=(fact:CodexTerminalFact)=>!this.closed&&verified()&&this.states.get(source.paneId)===state&&state.key===key&&state.namespace===namespace&&!state.abort.signal.aborted&&!state.invalid&&!state.pending&&state.codexEOF!==undefined&&state.offset===Number(state.codexEOF.size)&&!state.codex?.partial&&state.fold.codexTerminals()?.some(now=>now.id===fact.id&&now.eventId===fact.eventId&&now.startedAt===fact.startedAt&&now.endedAt===fact.endedAt)===true;
+    const verify=async(fact:CodexTerminalFact,allowed:()=>boolean)=>{
+      if(!allowed()||!current(fact)||this.terminalChecks>=4)return false;this.terminalChecks++;
+      let opened:OpenedFile|null=null,accepted=false;const revision=state.codexEOF!;
+      try{opened=await this.open(source);if(!opened)return false;
+        const fd=await opened.fd.stat({bigint:true});
+        if(!allowed()||!current(fact)||!exactRevision(revision,fd)||state.codexEOF===undefined||!exactRevision(revision,state.codexEOF)||!await this.sameCodexPath(source,revision)||!allowed()||!current(fact))return false;
+        const after=await opened.fd.stat({bigint:true});accepted=allowed()&&current(fact)&&exactRevision(revision,after)&&state.codexEOF!==undefined&&exactRevision(revision,state.codexEOF);
+      }catch{return false;}finally{await opened?.fd.close().catch(()=>undefined);this.terminalChecks--;}
+      return accepted&&allowed()&&current(fact)&&state.codexEOF!==undefined&&exactRevision(revision,state.codexEOF);
+    };
+    return codexTerminalBindings({source:{...source,kind:"codex"},home:this.roots.codexHome??process.env.CODEX_HOME??join(homedir(),".codex"),namespace,facts,current,verify});
+  }
+
+  private async sameCodexPath(source:NativeSubagentSource,revision:BigIntStats):Promise<boolean>{
+    const opened=await this.open(source);if(!opened)return false;
+    try{return exactRevision(revision,await opened.fd.stat({bigint:true}));}finally{await opened.fd.close().catch(()=>undefined);}
   }
 
   /** Internal provider-owned relation, never a client path or a guessed child UUID. */
@@ -91,7 +127,7 @@ export class NativeSubagentReader {
     let state = this.states.get(source.paneId);
     if (!state || state.key !== key) {
       state?.abort.abort(); this.museObservations.forget();
-      state = { abort: new AbortController(), key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false, generation: 0, observationEpoch: ++this.observationEpoch };
+      state = { namespace:randomUUID(), abort: new AbortController(), key, fold: new NativeSubagentRecords(source.kind, source.sessionId), offset: 0, dev: -1, ino: -1, invalid: false, generation: 0, observationEpoch: ++this.observationEpoch };
       this.states.set(source.paneId, state);
     }
     const current = state;
@@ -134,7 +170,13 @@ export class NativeSubagentReader {
     if (!opened) return undefined;
     try {
       const { fd, st } = opened;
-      if (state.dev !== st.dev || state.ino !== st.ino || st.size < state.offset) {
+      const live=()=>!this.closed&&this.states.get(source.paneId)===state&&!state.abort.signal.aborted;
+      if(!live())return undefined;
+      const scanRevision=source.kind==="codex"?await fd.stat({bigint:true}):undefined;
+      if(!live()||scanRevision&&scanRevision.size!==BigInt(st.size))return undefined;
+      const rewritten=scanRevision&&state.inputRevision&&scanRevision.size===state.inputRevision.size&&!exactRevision(scanRevision,state.inputRevision);
+      if (state.dev !== st.dev || state.ino !== st.ino || st.size < state.offset || rewritten) {
+        state.namespace=randomUUID();delete state.codexEOF;delete state.inputRevision;
         state.generation++; this.museObservations.forget();
         state.offset = 0; state.fold = new NativeSubagentRecords(source.kind as NativeSubagentKind, source.sessionId); state.invalid = false;
         delete state.codex;
@@ -143,6 +185,7 @@ export class NativeSubagentReader {
       if (state.invalid || st.size > MAX_BYTES) return undefined;
       const bytes = await readRange(fd, state.offset, Math.min(CHUNK, st.size - state.offset));
       if (source.kind === "codex") {
+        if(bytes.length)delete state.codexEOF;state.inputRevision=scanRevision!;
         state.codex ??= new CodexSubagentStream();
         state.codex.consume(bytes, state.fold);
         state.offset += bytes.length;
@@ -150,12 +193,14 @@ export class NativeSubagentReader {
         state.pending=!state.invalid&&bytes.length>0&&state.offset<st.size;
         // A current snapshot requires all available bytes and a complete final line.
         if (state.invalid || state.offset < st.size || state.codex.partial) return undefined;
+        const revision = await fd.stat({ bigint: true });
+        if(!live())return undefined;
+        if (!exactRevision(scanRevision!,revision)||!await this.sameCodexPath(source,revision)||!live()) { state.pending = live(); return undefined; }
+        const sealAfter=await fd.stat({bigint:true});if(!live()||!exactRevision(revision,sealAfter)){state.pending=live();return undefined;}
+        state.codexEOF=revision;
         const members = state.fold.snapshot();
         if (!members || !members.items?.length) return members;
-        const revision = await fd.stat({ bigint: true });
-        if (revision.size !== BigInt(st.size)) { state.pending = true; return undefined; }
-        const current = () => !this.closed && this.states.get(source.paneId) === state && !state.abort.signal.aborted;
-        if (!current()) return undefined;
+        const current = live;
         const home = await realpath(this.roots.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex"));
         const statuses = await this.codexStatus({ home, parentId: source.sessionId, childIds: members.items.map(item => item.id), signal: state.abort.signal, current }).catch(() => new Map<string, CodexObservedState>());
         if (!current()) return undefined;
