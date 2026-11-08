@@ -1,0 +1,38 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-muse-terminal-history
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts (11 tests | 1 failed | 10 skipped) 22ms
+   × requires a durable attested start, exact binding and literal result_ready; closing alone is not terminal history 21ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/MuseTerminalHistory.test.ts > requires a durable attested start, exact binding and literal result_ready; closing alone is not terminal history
+AssertionError: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "childSession": "4f7d9654-d1d0-49a2-b1f1-f147c3977bd8",
++     "description": "Generated public child task",
++     "endedAt": 1794022023366.977,
++     "eventId": "[\"460db58b-d7b2-47a4-95a7-550e10f89651\",\"405d12fe-8f3b-4c52-9122-c48bc0cd532b\",1794022023366977]",
++     "id": "3adf6ad9-319e-4171-98ad-698381e4c35d",
++     "startedAt": 1794022023366.977,
++     "type": "workflow-agent",
++   },
++ ]
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts:29:278
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 skipped (11)
+   Start at  16:04:03
+   Duration  1.07s (transform 77%, import 21%, tests 2%)
+

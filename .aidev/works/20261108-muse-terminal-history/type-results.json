@@ -1,0 +1,10 @@
+{
+  "sourceHead": "ab7c4375f9660813f3267038ca2459c92621f448",
+  "node": "24.22.2",
+  "maxOldSpaceMiB": 8192,
+  "command": "node --max-old-space-size=8192 node_modules/typescript/bin/tsc -p .aidev/works/20261108-muse-terminal-history/tsconfig.json",
+  "exitCode": 0,
+  "scope": "strict changed production source and new fixtures, real compose transitive dependencies; no emit; not full repository test-inclusive CI",
+  "log": "typecheck.log",
+  "dependencyBootstrapExitCode": 0
+}

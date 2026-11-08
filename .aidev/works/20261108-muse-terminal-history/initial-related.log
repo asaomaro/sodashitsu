@@ -1,0 +1,62 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-muse-terminal-history
+
+ ❯ packages/server/src/composeServer.codexTerminalHistory.integration.test.ts (0 test)
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts (9 tests | 1 failed) 423ms
+   × serves exact readonly history body and birth-filtered child usage without parent counters or active resurrection 96ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/composeServer.codexTerminalHistory.integration.test.ts [ packages/server/src/composeServer.codexTerminalHistory.integration.test.ts ]
+Error: Cannot find package '@sodashitsu/client-core/desktop/DesktopSourceIdle' imported from /workspaces/sodashitsu-muse-terminal-history/packages/server/src/desktop/DesktopRelay.ts
+ ❯ packages/server/src/desktop/DesktopRelay.ts:4:1
+      2| import {DesktopRegionSpec} from "@sodashitsu/protocol";
+      3| import {DesktopSharedMonitorsFailure} from "@sodashitsu/protocol";
+      4| import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/Deskt…
+       | ^
+      5| import {desktopFeaturesFromProtocols} from "@sodashitsu/protocol";
+      6| import {DESKTOP_SHARED_DELTAS_PROTOCOL} from "@sodashitsu/protocol";
+ ❯ packages/server/src/composeServer.ts:22:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/MuseTerminalHistory.test.ts > serves exact readonly history body and birth-filtered child usage without parent counters or active resurrection
+AssertionError: expected { status: 'ok', usage: { …(4) } } to match object { status: 'ok', usage: { …(2) } }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "status": "ok",
+    "usage": {
+      "consumptionScope": "self",
+      "tokens": {
+-       "cacheRead": 30,
+-       "input": 70,
+-       "output": 20,
++       "cacheRead": 60,
++       "input": 1000039,
++       "output": 40,
+      },
+    },
+  }
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts:39:48
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 5 passed (7)
+      Tests  1 failed | 92 passed (93)
+   Start at  15:53:00
+   Duration  2.87s (transform 45%, tests 38%, import 16%)
+
+  Transform  transforming modules took 4.68s · 45% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

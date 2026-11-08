@@ -1,0 +1,41 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-muse-terminal-history
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts (11 tests | 1 failed | 10 skipped) 80ms
+   × serves exact readonly history body and birth-filtered child usage without parent counters or active resurrection 78ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/MuseTerminalHistory.test.ts > serves exact readonly history body and birth-filtered child usage without parent counters or active resurrection
+AssertionError: expected { status: 'ok', usage: { …(4) } } to match object { status: 'ok', usage: { …(2) } }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "status": "ok",
+    "usage": {
+      "consumptionScope": "self",
+      "tokens": {
+-       "cacheRead": 30,
+-       "input": 70,
+-       "output": 20,
++       "cacheRead": 60,
++       "input": 1000039,
++       "output": 40,
+      },
+    },
+  }
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts:39:48
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 skipped (11)
+   Start at  16:04:00
+   Duration  1.07s (transform 71%, import 20%, tests 8%)
+

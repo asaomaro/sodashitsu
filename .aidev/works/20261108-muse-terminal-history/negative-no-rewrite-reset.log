@@ -1,0 +1,28 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-muse-terminal-history
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts (11 tests | 1 failed | 10 skipped) 42ms
+   × requires newline-complete EOF, namespace revision and fresh source; unrelated append keeps an existing selector 41ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/MuseTerminalHistory.test.ts > requires newline-complete EOF, namespace revision and fresh source; unrelated append keeps an existing selector
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts:64:294
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 skipped (11)
+   Start at  16:04:04
+   Duration  1.05s (transform 75%, import 21%, tests 4%)
+

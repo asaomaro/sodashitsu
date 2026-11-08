@@ -1,0 +1,46 @@
+{
+  "sourceHead": "ab7c4375f9660813f3267038ca2459c92621f448",
+  "files": {
+    "packages/server/src/agent/MuseTerminalBindings.ts": {
+      "sha256": "ec5e8ecc72f03ebe9cafe1aca367259432cf6796c15616833ce4a4f99fe69316",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/MuseTerminalHistory.test.ts": {
+      "sha256": "8aec78ab32c70732754d3d168c549e5fc48404507ad6f9bf1084174ff0e99ea9",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/NativeSubagentReader.ts": {
+      "sha256": "4844675dc9913f0de0e5cdb7552189acb5698552245096f40b71be85b4c212a7",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/NativeSubagentRecords.ts": {
+      "sha256": "f8d863644d9e9267846feba0ccde100040525006f7286c9847245289ab9faf65",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/NativeSubagentService.ts": {
+      "sha256": "c3046fd62e830e2ab1891a724b1739421c83121521d44801f8c96b2995dc8a6f",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/SubagentHistoryService.ts": {
+      "sha256": "2ff4fa60e660a4621606e3bc6b4214c3e2701dad956e548d7afdc789e8bd4c8e",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/agent/SubagentTerminalBinding.ts": {
+      "sha256": "3ed71850877c465f64fee63ce2bec01ee733af08e4c1c95a93b52e479b291139",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/composeServer.museTerminalHistory.integration.test.ts": {
+      "sha256": "93a82af97d9aea234564af4297cf15a03a17e15cbac859be34f517dd16026bdb",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/composeServer.ts": {
+      "sha256": "bb693b6b4ae7e3a4f10c23a322b9494e6ddf20fdce888178a8c26b46a061380b",
+      "matchesFixedCommit": true
+    },
+    "packages/server/src/usage/SubagentUsageAccumulator.ts": {
+      "sha256": "4e6e6c563330b30053862348495cf1a7a82121f8bc7f2e9845292533f4f7f1ae",
+      "matchesFixedCommit": true
+    }
+  },
+  "allMatch": true
+}

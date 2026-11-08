@@ -1,0 +1,25 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-muse-terminal-history
+
+{"ts":"2026-11-08T07:04:37.992Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T07:04:37.992Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T07:04:37.993Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T07:04:37.993Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T07:04:37.994Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T07:04:37.994Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T07:04:37.994Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T07:04:37.994Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T07:04:37.996Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-muse-terminal-public-sN4FQY/state/commands.json","count":0}
+{"ts":"2026-11-08T07:04:37.997Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-codex-terminal-public-NGCKlZ/state/commands.json","count":0}
+{"ts":"2026-11-08T07:04:38.610Z","level":"info","msg":"agent session attached","paneId":"0fddaf92-476d-418e-9825-139cb93dd240","kind":"codex","session":"ba5a7a65","source":"hook"}
+{"ts":"2026-11-08T07:04:38.654Z","level":"info","msg":"agent session attached","paneId":"82bc6e80-3f1c-4093-80fc-610630b92fa6","kind":"muse","session":"01a1b40b","source":"hook"}
+
+ Test Files  10 passed (10)
+      Tests  108 passed (108)
+   Start at  16:04:33
+   Duration  11.27s (tests 50%, transform 39%, import 10%)
+
+  Transform  transforming modules took 13.75s · 39% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

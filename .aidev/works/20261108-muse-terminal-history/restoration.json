@@ -1,0 +1,74 @@
+{
+  "sourceHead": "ab7c4375f9660813f3267038ca2459c92621f448",
+  "negative": [
+    {
+      "name": "old-compose",
+      "kind": "actual old source",
+      "source": "packages/server/src/composeServer.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "old-history-birth",
+      "kind": "actual old source",
+      "source": "packages/server/src/agent/SubagentHistoryService.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "old-usage-timing",
+      "kind": "actual old source",
+      "source": "packages/server/src/usage/SubagentUsageAccumulator.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "closing-is-terminal",
+      "kind": "targeted absent guard",
+      "source": "packages/server/src/agent/NativeSubagentRecords.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "no-rewrite-reset",
+      "kind": "targeted absent guard",
+      "source": "packages/server/src/agent/NativeSubagentReader.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    },
+    {
+      "name": "no-post-close-current",
+      "kind": "targeted absent guard",
+      "source": "packages/server/src/agent/NativeSubagentReader.ts",
+      "exitCode": 1,
+      "failedAsExpected": true
+    }
+  ],
+  "restored": {
+    "packages/server/src/composeServer.ts": {
+      "sha256": "bb693b6b4ae7e3a4f10c23a322b9494e6ddf20fdce888178a8c26b46a061380b",
+      "actualSha256": "bb693b6b4ae7e3a4f10c23a322b9494e6ddf20fdce888178a8c26b46a061380b",
+      "byteExact": true
+    },
+    "packages/server/src/agent/NativeSubagentReader.ts": {
+      "sha256": "4844675dc9913f0de0e5cdb7552189acb5698552245096f40b71be85b4c212a7",
+      "actualSha256": "4844675dc9913f0de0e5cdb7552189acb5698552245096f40b71be85b4c212a7",
+      "byteExact": true
+    },
+    "packages/server/src/agent/NativeSubagentRecords.ts": {
+      "sha256": "f8d863644d9e9267846feba0ccde100040525006f7286c9847245289ab9faf65",
+      "actualSha256": "f8d863644d9e9267846feba0ccde100040525006f7286c9847245289ab9faf65",
+      "byteExact": true
+    },
+    "packages/server/src/agent/SubagentHistoryService.ts": {
+      "sha256": "2ff4fa60e660a4621606e3bc6b4214c3e2701dad956e548d7afdc789e8bd4c8e",
+      "actualSha256": "2ff4fa60e660a4621606e3bc6b4214c3e2701dad956e548d7afdc789e8bd4c8e",
+      "byteExact": true
+    },
+    "packages/server/src/usage/SubagentUsageAccumulator.ts": {
+      "sha256": "4e6e6c563330b30053862348495cf1a7a82121f8bc7f2e9845292533f4f7f1ae",
+      "actualSha256": "4e6e6c563330b30053862348495cf1a7a82121f8bc7f2e9845292533f4f7f1ae",
+      "byteExact": true
+    }
+  }
+}
