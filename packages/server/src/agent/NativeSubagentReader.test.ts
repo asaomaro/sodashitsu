@@ -15,6 +15,21 @@ async function setup() {
   return { home, text, rows, file: join(dir, `rollout-fixture-${id}.jsonl`), source: { paneId: "pane", instanceId: "instance-1", kind: "codex", sessionId: id } as NativeSubagentSource };
 }
 describe("owned native records reader", () => {
+  it("publishes interrupted children after exact-parent successful followup, while keeping namespace reset isolated", async () => {
+    const f = await setup();
+    const start = f.rows[0];
+    const event = (kind: string, id: string) => ({ ...start, payload: { ...start.payload, item: { ...start.payload.item, kind, id } } });
+    const reader = new NativeSubagentReader({ codexHome: f.home }, async () => new Map());
+    try {
+      await writeFile(f.file, [start, event("interrupted", "interruption")].map(row => JSON.stringify(row)).join("\n") + "\n");
+      expect(await reader.read(f.source)).toEqual({ count: 0, items: [] });
+      await appendFile(f.file, JSON.stringify(event("interacted", "followup")) + "\n");
+      expect(await reader.read(f.source)).toMatchObject({ count: 1, countBasis: "alive", items: [{ state: "unknown" }] });
+      reader.forget(f.source.paneId);
+      await writeFile(f.file, JSON.stringify(event("interacted", "fresh-namespace-unowned")) + "\n");
+      expect(await reader.read({ ...f.source, instanceId: "instance-2" })).toBeUndefined();
+    } finally { reader.close(); }
+  });
   it("refines only EOF-proven Codex members with working/idle/unknown runtime states", async () => {
     const f = await setup();
     const rows = (await readFile(new URL("./fixtures/native-subagents/codex-referenced-members.jsonl", import.meta.url), "utf8")).trim().split("\n").map(line => JSON.parse(line));

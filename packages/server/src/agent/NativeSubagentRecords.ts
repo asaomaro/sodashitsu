@@ -20,8 +20,9 @@ export class NativeSubagentRecords {
   private readonly metadata = new Map<string, Partial<SubagentInfo>>();
   private readonly uncertain = new Set<string>();
   private readonly records = new Set<string>();
-  // Bounded, exact-parent start proofs survive task completion, not interruption/unknown kinds.
-  private readonly codexRelations = new Map<string, { item: SubagentInfo; completed: boolean }>();
+  // A turn interruption does not erase conversation ownership. Neither terminal
+  // state rejoins membership until a later successful, same-parent interaction.
+  private readonly codexRelations = new Map<string, { item: SubagentInfo; terminal: boolean }>();
   private readonly codexReferences = new Map<string, SubagentInfo>();
   private codexMalformed = false;
   private copilotMalformed = false;
@@ -91,7 +92,7 @@ export class NativeSubagentRecords {
     if (item.kind === "interacted") {
       if (!this.items.has(id)) {
         const relation = this.codexRelations.get(id);
-        if (relation?.completed) this.codexReferences.set(id, { ...relation.item, ...meta, state: "unknown" });
+        if (relation?.terminal) this.codexReferences.set(id, { ...relation.item, ...meta, state: "unknown" });
         this.apply(id, "unknown", at, meta);
       }
       return;
@@ -103,12 +104,12 @@ export class NativeSubagentRecords {
       if (previous) { delete previous.reasoningEffort; delete previous.reasoningEffortBasis; }
       const created: SubagentInfo = { ...this.codexRelations.get(id)?.item, id, startedAt: at, depth: 1, ...meta };
       if (!effort) { delete created.reasoningEffort; delete created.reasoningEffortBasis; }
-      this.codexRelations.set(id, { item: created, completed: false });
-    } else if (item.kind === "completed") {
+      this.codexRelations.set(id, { item: created, terminal: false });
+    } else if (item.kind === "completed" || item.kind === "interrupted") {
       const relation = this.codexRelations.get(id);
-      if (relation) relation.completed = true;
+      if (relation) relation.terminal = true;
     } else {
-      // No inferred revival after interruption or an unknown lifecycle state.
+      // Unknown lifecycle semantics cannot preserve or manufacture ownership.
       this.codexRelations.delete(id);
     }
     this.apply(id, item.kind === "started" ? "active" : ["completed", "interrupted"].includes(item.kind) ? "terminal" : "unknown", at, meta);

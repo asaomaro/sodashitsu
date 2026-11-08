@@ -66,19 +66,53 @@ describe("native subagent lifecycle records", () => {
     for (const row of rows.filter(r => r.payload.item.kind === "completed")) fold.consume({ ...row, payload: { ...row.payload, item: { ...row.payload.item, id: row.payload.item.id + "-new" } } });
     expect(fold.snapshot()).toMatchObject({ count: 1 }); expect(fold.snapshot()).not.toHaveProperty("countBasis");
   });
-  it("does not revive completed-only children, unowned references, interruption or unknown-state ownership", async () => {
+  it("does not revive completed-only children, unowned references or unknown-state ownership", async () => {
     const rows = await fixture("codex-referenced-members"), parent = rows[0].payload.thread_id;
     const completed = new NativeSubagentRecords("codex", parent);
     rows.filter(r => r.payload.item.kind !== "interacted").forEach(r => completed.consume(r));
     expect(completed.snapshot()).toEqual({ count: 0, items: [] });
     const event = (kind: string, id: string) => ({ ...rows[0], payload: { ...rows[0].payload, item: { ...rows[0].payload.item, kind, id } } });
     const unknown = new NativeSubagentRecords("codex", parent); unknown.consume(event("interacted", "unowned")); expect(unknown.snapshot()).toBeUndefined();
-    for (const kind of ["interrupted", "future-state"]) {
+    for (const kind of ["future-state"]) {
       const fold = new NativeSubagentRecords("codex", parent); fold.consume(rows[0]); fold.consume(event(kind, "terminal-or-unknown")); fold.consume(event("interacted", "later-reference"));
       expect(fold.snapshot()).toBeUndefined(); fold.consume(event("started", "new-formal-start")); expect(fold.snapshot()?.count).toBe(1);
       fold.consume(event("completed", "new-completion")); fold.consume(event("interacted", "new-reference")); expect(fold.snapshot()).toMatchObject({ count: 1, countBasis: "alive", items: [{ state: "unknown" }] });
     }
     const foreign = new NativeSubagentRecords("codex", "other-parent"); rows.forEach(r => foreign.consume(r)); expect(foreign.snapshot()).toBeUndefined();
+  });
+  it("preserves exact-parent ownership across interruption and rejoins only on a later formal interaction", async()=>{
+    const rows=await fixture("codex-referenced-members"),parent=rows[0].payload.thread_id,fold=new NativeSubagentRecords("codex",parent);
+    const starts=rows.filter(row=>row.payload.item.kind==="started");
+    const event=(row:any,kind:string,id:string)=>({...row,payload:{...row.payload,item:{...row.payload.item,kind,id}}});
+    for(const row of starts){fold.consume(row);fold.consume(event(row,"interrupted",row.payload.item.id+"-interrupt"));}
+    expect(fold.snapshot()).toEqual({count:0,items:[]});
+    for(const row of starts)fold.consume(event(row,"interacted",row.payload.item.id+"-followup"));
+    expect(fold.snapshot()).toMatchObject({count:3,countBasis:"alive",items:[{state:"unknown"},{state:"unknown"},{state:"unknown"}]});
+    expect(fold.snapshot()?.items.map(i=>i.startedAt)).toEqual(starts.map(row=>Date.parse(row.timestamp)));
+    // Historical replay and delivery do not claim working, nor restore a later completion.
+    for(const row of starts){fold.consume(row);fold.consume(event(row,"interrupted",row.payload.item.id+"-interrupt"));}
+    expect(fold.snapshot()?.count).toBe(3);
+    fold.consume(event(starts[0],"completed","fresh-completion"));expect(fold.snapshot()?.count).toBe(2);
+    fold.consume(event(starts[0],"future-state","unknown-after-owned"));fold.consume(event(starts[0],"interacted","unknown-followup"));expect(fold.snapshot()).toBeUndefined();
+  });
+  it("does not obtain ownership from foreign starts, interruption-only records or another parent", async () => {
+    const rows = await fixture("codex-referenced-members"), source = rows[0], parent = source.payload.thread_id;
+    const event = (kind: string, id: string, thread = parent) => ({ ...source, payload: { ...source.payload, thread_id: thread, item: { ...source.payload.item, kind, id } } });
+    for (const foreignStart of [false, true]) {
+      const fold = new NativeSubagentRecords("codex", parent);
+      if (foreignStart) fold.consume(event("started", "foreign-start", "foreign-parent"));
+      fold.consume(event("interrupted", "without-owned-start"));
+      expect(fold.snapshot()).toEqual({ count: 0, items: [] });
+      fold.consume(event("interacted", "without-owned-followup"));
+      expect(fold.snapshot()).toBeUndefined();
+    }
+    const fold = new NativeSubagentRecords("codex", parent);
+    fold.consume(source); fold.consume(event("interrupted", "owned-interruption"));
+    fold.consume(event("interacted", "foreign-followup", "foreign-parent"));
+    expect(fold.snapshot()).toEqual({ count: 0, items: [] });
+    fold.consume(event("started", "fresh-owned-start"));
+    expect(fold.snapshot()).toMatchObject({ count: 1 });
+    expect(fold.snapshot()?.items[0]?.state ?? "working").toBe("working");
   });
   it("keeps malformed important events unknown and bounds retained Codex ownership proofs", async () => {
     const rows = await fixture("codex-referenced-members"), parent = rows[0].payload.thread_id;
