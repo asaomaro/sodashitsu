@@ -344,3 +344,30 @@ it("accepts a long bounded child draft and rejects oversized edits without silen
   expect(f.request).not.toHaveBeenCalled();
   f.dialog.dispose();
 });
+
+it("sends the edited child draft from an explicit click on the rendered send row", async () => {
+  const f = fixture(
+    vi.fn(async () => ({
+      status: "accepted",
+      reason: "accepted",
+      turnId: "generated-mouse",
+    })) as never,
+    false,
+    ready,
+  );
+  await flush();
+  key(f, "c");
+  f.dialog.handlePaste("generated mouse request");
+  const y = f
+    .render()
+    .split("\n")
+    .findIndex((row) => row.includes("[ 子へ送信 ]"));
+  expect(y).toBeGreaterThan(0);
+  f.dialog.handleMouse({ action: "down", button: 0, x: 8, y } as never);
+  await flush();
+  expect(f.request).toHaveBeenCalledTimes(1);
+  expect(f.request.mock.calls[0]?.[0]).toBe("agent.subagent_send");
+  expect(f.request.mock.calls[0]?.[1]).toMatchObject({ text: "generated mouse request" });
+  expect(f.render()).toContain("処理の完了ではありません");
+  f.dialog.dispose();
+});

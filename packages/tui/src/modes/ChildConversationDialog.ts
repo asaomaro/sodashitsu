@@ -276,10 +276,19 @@ export class ChildConversationDialog implements Overlay {
     if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "wheel") this.scroll = Math.max(0, this.scroll + (ev.button === 65 ? 1 : -1));
-    if (ev.action === "down" && ev.button === 0 && ev.y === this.sendY && this.field !== "history")
-      void (this.field === "child-draft" || this.field === "child-send"
-        ? this.sendChild()
-        : this.sendParent());
+    if (
+      ev.action === "down" &&
+      ev.button === 0 &&
+      ev.y === this.sendY &&
+      this.field !== "history"
+    ) {
+      if (this.field === "child-draft" || this.field === "child-send") {
+        if (this.valid() && !this.pending() && this.direct()) {
+          this.field = "child-send";
+          void this.sendChild();
+        }
+      } else void this.sendParent();
+    }
     return true;
   }
   dispose(): void {

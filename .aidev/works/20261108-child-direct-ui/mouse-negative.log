@@ -1,0 +1,29 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-direct-ui/packages/tui
+
+ ❯ src/modes/ChildConversationDialog.test.ts (27 tests | 1 failed) 202ms
+   × sends the edited child draft from an explicit click on the rendered send row 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/ChildConversationDialog.test.ts > sends the edited child draft from an explicit click on the rendered send row
+AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
+ ❯ src/modes/ChildConversationDialog.test.ts:368:21
+    366|   f.dialog.handleMouse({ action: "down", button: 0, x: 8, y } as never…
+    367|   await flush();
+    368|   expect(f.request).toHaveBeenCalledTimes(1);
+       |                     ^
+    369|   expect(f.request.mock.calls[0]?.[0]).toBe("agent.subagent_send");
+    370|   expect(f.request.mock.calls[0]?.[1]).toMatchObject({ text: "generate…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 32 passed (33)
+   Start at  11:48:43
+   Duration  1.44s (transform 73%, import 19%, tests 9%)
+
+undefined
+/workspaces/sodashitsu-child-direct-ui/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/ChildConversationDialog.test.ts src/modes/SubagentTranscript.test.ts

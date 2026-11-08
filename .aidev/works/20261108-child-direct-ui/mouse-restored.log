@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-direct-ui/packages/tui
+
+
+ Test Files  2 passed (2)
+      Tests  33 passed (33)
+   Start at  11:48:45
+   Duration  1.32s (transform 73%, import 18%, tests 9%)
+
