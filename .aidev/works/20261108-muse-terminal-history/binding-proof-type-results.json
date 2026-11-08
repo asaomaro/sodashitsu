@@ -1,0 +1,12 @@
+{
+  "sourceHead": "2046c977a1d7a7252ddd79b2f5b1a64b03bce7c1",
+  "command": "node --max-old-space-size=8192 node_modules/typescript/bin/tsc -p .aidev/works/20261108-muse-terminal-history/tsconfig-binding-proof.json",
+  "exitCode": 0,
+  "scope": "changed Records production source + complete changed Muse history fixture and transitive imports; prior remaining 8 TS source bytes unchanged and strict checked at ab7",
+  "log": "binding-proof-typecheck.log",
+  "initialBuildAborted": {
+    "exitCode": 143,
+    "reason": "Own production tsc stopped on independent review P2 before build completed; not a passed build or typecheck",
+    "log": "server-build-pre-review-fix.log"
+  }
+}

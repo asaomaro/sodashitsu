@@ -1,0 +1,113 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-muse-terminal-history
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts (15 tests | 4 failed | 11 skipped) 50ms
+   × revokes earlier terminal proof after a malformed time, unknown schema or invalid binding 19ms
+   × never promotes a volatile binding through later valid start/result 10ms
+   × never promotes a unknown-schema binding through later valid start/result 9ms
+   × never promotes a unknown-record binding through later valid start/result 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/agent/MuseTerminalHistory.test.ts > revokes earlier terminal proof after a malformed time, unknown schema or invalid binding
+AssertionError: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "childSession": "6876f510-49ed-4c20-bf9b-c338b06fea91",
++     "description": "Generated public child task",
++     "endedAt": 1794022023366.977,
++     "eventId": "[\"9bd69bc1-29fd-4933-8656-60209a9e50dc\",\"210bab7e-c4f1-4065-84be-e5043add1085\",1794022023366977]",
++     "id": "41905e26-b6e7-4082-91c9-e660ec20f96f",
++     "startedAt": 1794022023366.977,
++     "type": "workflow-agent",
++   },
++ ]
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts:78:256
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  packages/server/src/agent/MuseTerminalHistory.test.ts > never promotes a volatile binding through later valid start/result
+AssertionError: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "childSession": "6706e519-409d-445d-985d-a4c5af1539e1",
++     "description": "Generated public child task",
++     "endedAt": 1794022026366.977,
++     "eventId": "[\"e46ab66d-b3f0-439b-98b1-09af0a8af715\",\"23a3afae-6ed3-403c-b6de-ed84a2bf30b4\",1794022026366977]",
++     "id": "1532f726-63ad-49c0-9823-54b00ae507c0",
++     "startedAt": 1794022023366.977,
++     "type": "workflow-agent",
++   },
++ ]
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts:86:121
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  packages/server/src/agent/MuseTerminalHistory.test.ts > never promotes a unknown-schema binding through later valid start/result
+AssertionError: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "childSession": "ad1d5da5-b8b3-4084-b732-16e13822cfd2",
++     "description": "Generated public child task",
++     "endedAt": 1794022026366.977,
++     "eventId": "[\"87873d52-df81-4580-80be-784e6528aa7a\",\"2a69acc1-2c4e-43f5-bc42-53b84d19e872\",1794022026366977]",
++     "id": "b002f3d1-b89e-456c-a2e3-ccef0ce7ec32",
++     "startedAt": 1794022023366.977,
++     "type": "workflow-agent",
++   },
++ ]
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts:86:121
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  packages/server/src/agent/MuseTerminalHistory.test.ts > never promotes a unknown-record binding through later valid start/result
+AssertionError: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "childSession": "0b20b4be-c312-4938-8630-6713d4342660",
++     "description": "Generated public child task",
++     "endedAt": 1794022026366.977,
++     "eventId": "[\"4308009e-c37d-4b19-bbfc-7eafeed9aa9e\",\"78ebfeae-7881-4b81-b3f7-1043f62624b5\",1794022026366977]",
++     "id": "1042c727-5292-48c3-9857-5f15d0c10357",
++     "startedAt": 1794022023366.977,
++     "type": "workflow-agent",
++   },
++ ]
+
+ ❯ packages/server/src/agent/MuseTerminalHistory.test.ts:86:121
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 11 skipped (15)
+   Start at  16:11:06
+   Duration  974ms (transform 73%, import 21%, tests 6%)
+

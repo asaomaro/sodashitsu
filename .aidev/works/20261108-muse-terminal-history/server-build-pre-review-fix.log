@@ -1,0 +1,8 @@
+
+> @sodashitsu/server@0.1.0 build /workspaces/sodashitsu-muse-terminal-history/packages/server
+> tsc -b && node ../desktop-assistant/scripts/build-host.mjs && node scripts/prune-retired-features.mjs
+
+Terminated
+/workspaces/sodashitsu-muse-terminal-history/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 build: `tsc -b && node ../desktop-assistant/scripts/build-host.mjs && node scripts/prune-retired-features.mjs`
+Exit status 143
