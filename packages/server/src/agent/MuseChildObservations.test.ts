@@ -81,3 +81,16 @@ it("keeps last formal Muse child-session proof private across terminal/resume an
   reader.forget(source.paneId);await writeFile(file,JSON.stringify(event("status_updated",{control_status:"running"}))+"\n");expect((await reader.read({...source,instanceId:"replacement"}))?.items[0]).not.toHaveProperty("model");
  }finally{reader.close();}
 });
+
+it("refreshes Muse child settings at an unchanged parent EOF without losing the observed model between polls",async()=>{
+ const home=await mkdtemp(join(tmpdir(),"soda-muse-child-eof-"));dirs.push(home);
+ const dataHome=join(home,"data"),dir=join(dataHome,"muse","sessions","2026","11","07",parent),nested=join(dir,"subagent",child);await mkdir(nested,{recursive:true});
+ const rows=(await readFile(new URL("./fixtures/native-subagents/muse.jsonl",import.meta.url),"utf8")).trim().split("\n").map(line=>JSON.parse(line));Object.assign(rows[3].payload.record,{child_session_id:child,schema_version:1,storage_layout:"nested_session_v1"});
+ await writeFile(join(dir,"session.jsonl"),rows.slice(0,rows.findIndex(r=>r.payload_type==="subagent.control.result_ready")).map(r=>JSON.stringify(r)).join("\n")+"\n");await writeFile(join(nested,"session.jsonl"),configured("first-child-model"));
+ const observer=new MuseChildObservations({dataHome},async()=>({events:[]})),reader=new NativeSubagentReader({dataHome},undefined,observer),source={paneId:"p",instanceId:"instance",kind:"muse" as const,sessionId:parent};
+ try{
+  expect((await reader.read(source))?.items[0]?.model).toBe("first-child-model");
+  expect((await reader.read(source))?.items[0]?.model).toBe("first-child-model");
+  await appendFile(join(nested,"session.jsonl"),configured("next-child-model"));expect((await reader.read(source))?.items[0]?.model).toBe("next-child-model");
+ }finally{reader.close();}
+});

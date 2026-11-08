@@ -176,7 +176,9 @@ export class NativeSubagentReader {
       const end = bytes.lastIndexOf(10);
       if (end < 0) {
         if (bytes.length > MAX_LINE) state.invalid = true;
-        return state.invalid ? undefined : state.fold.snapshot();
+        // Muse child settings can change while its parent record stays at EOF.
+        // Reuse the existing revision/current checks below for an empty EOF read.
+        if (state.invalid || source.kind !== "muse" || bytes.length !== 0 || state.offset !== st.size) return state.invalid ? undefined : state.fold.snapshot();
       }
       let start = 0;
       while (start <= end) {
