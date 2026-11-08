@@ -580,3 +580,6 @@ it("opens sibling and terminal selectors within the same conversation overlay", 
   expect(f.model.panes.get("p1")?.agent?.subagents?.count).toBe(1);
   f.dialog.dispose();
 });
+it("shows Cursor DB context for a read-only historical child even without a transcript",async()=>{
+ const f=fixture(vi.fn(async()=>({status:'ok',usage:{source:'cursor-db',consumptionScope:'self',contextTokens:25,contextWindowTokens:100,contextUsedPct:25,partial:true},reason:'保存済みの子自身の文脈量'}))as never,false,undefined,{...historyItem,hasTranscript:false});await flush();key(f,'u');await flush();const text=f.render();expect(text).toContain('Cursor子DB');expect(text).toContain('コンテキスト: 25');expect(text).toContain('コンテキスト上限: 100');expect(text).toContain('25%');expect(text).not.toContain('入力:');expect(text).not.toContain('コスト (USD)');expect(f.request).toHaveBeenCalledWith('agent.subagent_history_usage',expect.objectContaining({entryId:historyItem.entryId}));expect(f.rpc.mock.calls.some(c=>['agent.subagent_control','agent.subagent_send','agent.prompt'].includes(c[0]))).toBe(false);f.dialog.dispose();
+});
