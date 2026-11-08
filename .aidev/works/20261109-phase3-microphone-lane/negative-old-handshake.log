@@ -1,0 +1,50 @@
+✖ protected-microphone-phase3/run-a.mjs: delayed-provider needs immediate attach and formal ready before start (19.054249ms)
+✖ protected-microphone-phase3/run-a.mjs: cold-native-source needs immediate attach and formal ready before start (4.430684ms)
+✖ protected-microphone-phase3-bc/session.mjs: delayed-provider needs immediate attach and formal ready before start (2.878845ms)
+✖ protected-microphone-phase3-bc/session.mjs: cold-native-source needs immediate attach and formal ready before start (2.290854ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 339.691486
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:6:168
+✖ protected-microphone-phase3/run-a.mjs: delayed-provider needs immediate attach and formal ready before start (19.054249ms)
+  Error: generated barrier rejected
+      at until (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:13:399)
+      at async evalmachine.<anonymous>:8:151
+      at async TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:16:24)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:6:168
+✖ protected-microphone-phase3/run-a.mjs: cold-native-source needs immediate attach and formal ready before start (4.430684ms)
+  Error: generated closed
+      at Object.send (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:9:202)
+      at evalmachine.<anonymous>:8:59
+      at async TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:16:24)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:6:168
+✖ protected-microphone-phase3-bc/session.mjs: delayed-provider needs immediate attach and formal ready before start (2.878845ms)
+  Error: generated barrier rejected
+      at until (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:13:399)
+      at async evalmachine.<anonymous>:1:1688
+      at async TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:16:24)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:6:168
+✖ protected-microphone-phase3-bc/session.mjs: cold-native-source needs immediate attach and formal ready before start (2.290854ms)
+  Error: generated closed
+      at Object.send (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:9:202)
+      at evalmachine.<anonymous>:1:1628
+      at async TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-a-failure-stage/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:16:24)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

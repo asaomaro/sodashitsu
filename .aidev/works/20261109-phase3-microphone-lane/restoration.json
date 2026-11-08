@@ -1,0 +1,23 @@
+{
+  "base": "bf1146804cdd947f09c3884fbd9b9bfda6a7a2c3",
+  "sourceSha256": {
+    "scripts/remote-desktop/protected-microphone-phase3/run-a.mjs": "5567b9a9ad97617adfdefcded1b8172f646e810eb224055768d23d70e6a3566b",
+    "scripts/remote-desktop/protected-microphone-phase3-bc/session.mjs": "fc53e27e6ccbc5dd815c68dc87eea8ce2f98cf1132da8dc7e4376d9c60f04e78"
+  },
+  "byteExact": true,
+  "negativeExit": 1,
+  "restoredExit": 0,
+  "csharpUnchanged": {
+    "scripts/remote-desktop/protected-microphone-phase3/Probe.cs": "bc15f0f39b59a3069354a7ac012d5e59dea20e5b007ffc0bb2b7393bbb1a090c",
+    "scripts/remote-desktop/protected-microphone-phase3/DetectorChecks.cs": "36e585670394cb11c193db6dd13eacb0c6f87dd322216996623040cb4c9361c9",
+    "scripts/remote-desktop/protected-microphone-phase3/Receiver.cs": "2d7fb64bbea2ed869046d28e78b35589d0b84988604b017a2852e7b491dba53c",
+    "scripts/remote-desktop/protected-microphone-phase3/Endpoint.cs": "494b3307e0f981c7b5b29e73aa150117e1fe3574a462ea5f2ab5346c660a4ad1",
+    "scripts/remote-desktop/protected-microphone-phase3-bc/ProbeBC.cs": "c0bfaceefc40318da89dd9db36359300711917d77b2f9a108d49a2d0185bd520",
+    "scripts/remote-desktop/protected-microphone-phase3-bc/GeneratedChecksBC.cs": "8da656d44cb6702168ec8b0a21467a8c3a9dab591d0ce68fe97790954d6c243d",
+    "scripts/remote-desktop/protected-microphone-phase3-bc/OperatorBC.cs": "3d8c773a929d85b1936bd3f53283d61be95196dc2765dd1cf06e7188a720c9fc",
+    "scripts/remote-desktop/protected-microphone-phase3-bc/ReceiverBC.cs": "d55073e7abe6a28dcf7185bd249e3a06ef13ef0d458d2c756cc6639a51706095"
+  },
+  "syntax": "all A/BC MJS exit0",
+  "authorWindowsConnections": 0,
+  "mediaOpened": false
+}

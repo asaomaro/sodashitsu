@@ -59,3 +59,5 @@ B/Cの前には既存のfresh unlock復旧が使えることをrootが確認す�
 receipt はCreateNew後のJSON書込み中にも存在し得るため、armed/baseline/result/server-readyのpollはSyntaxErrorとENOENTだけ既存期限内で再読する。完全JSONは元のidentity/proof guardにそのまま渡し、access/busy/その他IOエラーは即拒否。`failureClass` は `syntax_error/io_missing/io_access/io_busy/other`、`failureEvidence.receiptLastErrorClass` は過去の読取エラー分類（最終原因の断定ではない）。C#と期限は変えず、新job/source manifestが必要。
 
 viewer WS が開いたら正式 `heartbeat` を1秒ごとに送る（frame ACKはkeepaliveの代用にならない）。OPENかつapproval期限内・issues無しだけで送信し、owned cleanupで必ず停止する。Providerの既存5秒 freshness/Relay12秒期限を延ばさない。これはprotocol維持の修正で、過去のunavailable原因の確定ではない。
+
+microphone_ticket到着時に専用laneを即attachする（native ready待ちで10秒のone-use ticketを失効させない）。native ready/protected proofと主viewerの正式microphone_readyを両方満たしてからstartを送る。owned attach promiseはcleanupで退役・有界待機し、未確認は成功不可。旧job/ticketの再利用・固定sleep・TTL延長は無し。

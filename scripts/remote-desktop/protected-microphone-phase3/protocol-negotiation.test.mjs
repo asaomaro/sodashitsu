@@ -33,7 +33,7 @@ for(const [file,alias] of [['protected-microphone-phase3/run-a.mjs','protocol'],
   assert(offered.includes(microphone));assert(offered.includes('features:protectedMicrophone'));
   assert.equal(options.features,true);assert.equal(options.microphone,true);
   for(const flag of ['elevatedRequested','microphoneRequested','protectedMicrophoneRequested'])assert.equal(accepted({[flag]:false}),false,flag+' remains required');
-  const lane=alias==='p'?/mic=await connect\(\[p.DESKTOP_MICROPHONE_PROTOCOL\]\)/:/mic=await connect\('\/desktop-share',\[protocol.DESKTOP_MICROPHONE_PROTOCOL\]\)/;
+  const lane=alias==='p'?/(?:mic=await |connect:\(\)=>)connect\(\[p.DESKTOP_MICROPHONE_PROTOCOL\]\)/:/(?:mic=await |connect:\(\)=>)connect\('\/desktop-share',\[protocol.DESKTOP_MICROPHONE_PROTOCOL\]\)/;
   assert.match(source,lane,'resource lane remains its dedicated single protocol');
  });
 }

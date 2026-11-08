@@ -52,3 +52,5 @@ stopfile→receiver self TTL/物理close＋owned child exit0→private server cl
 制御側の接続は `DESKTOP_MICROPHONE_PROTOCOL` に加え `DESKTOP_PROTECTED_PROTOCOL` と `protectedMicrophone` feature を提示する。`features:true` / `elevatedDesktop:true` だけでは Relay の `elevatedRequested` が成立しない。音声専用 lane は従来どおり microphone protocol 1個のみ。入力許可用 protocol はこの測定には追加しない。MJS 更新後は新しい job/source manifest を作り直す。C# source は変更していないため、この修正だけでは再コンパイル不要だが既存 source/binary seal の再確認は必要。
 
 Aと同じ、既存sealed shared run-aのkeepaliveを使いviewer-open直後から1秒ごと正式heartbeatを送る。OPEN/approval期限/issuesを確認しcleanupでown timerを停止。frame ACKでprovider freshnessは更新されない。製品5秒guard/全期限/採点は不変、新job/source manifestが必要。
+
+mic ticket受信callbackでnative ready待ちより先にattachを開始し、native proof＋主viewer microphone_ready両方の後だけstartする。one-use pairの10秒期限を変えず、owned pending connectの退役/有界settlementをcleanupに含む。ACK/closure/BC receiptの追加parity単位が揃うまで実測は開始しない。
