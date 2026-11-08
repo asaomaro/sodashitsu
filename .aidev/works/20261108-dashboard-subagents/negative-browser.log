@@ -1,0 +1,92 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+ExpectError: expect(locator).toHaveText(expected) failed
+
+Locator: locator('[data-dash-child-toggle="p"]')
+Expected: "▸2"
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toHaveText" locator('[data-dash-child-toggle="p"]') with timeout 5000ms
+  - waiting for locator('[data-dash-child-toggle="p"]')
+
+    at captureRawStack (/workspaces/sodashitsu-dashboard-subagents/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js:8588:17)
+    at callMatcherAsStep (/workspaces/sodashitsu-dashboard-subagents/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13310:57)
+    at Object.toHaveText (/workspaces/sodashitsu-dashboard-subagents/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/matchers/expect.js:13302:23)
+    at /workspaces/sodashitsu-dashboard-subagents/.aidev/works/20261108-dashboard-subagents/browser.mjs:10:394 {
+  matcherResult: {
+    name: 'toHaveText',
+    expected: '▸2',
+    message: 'expect(locator).toHaveText(expected) failed\n' +
+      '\n' +
+      `Locator: locator('[data-dash-child-toggle="p"]')\n` +
+      'Expected: "▸2"\n' +
+      'Timeout: 5000ms\n' +
+      'Error: element(s) not found\n' +
+      '\n' +
+      'Call log:\n' +
+      `  - Expect "toHaveText" locator('[data-dash-child-toggle="p"]') with timeout 5000ms\n` +
+      `  - waiting for locator('[data-dash-child-toggle="p"]')\n`,
+    pass: false,
+    actual: undefined,
+    log: [
+      `  - Expect "toHaveText" locator('[data-dash-child-toggle="p"]') with timeout 5000ms`,
+      `  - waiting for locator('[data-dash-child-toggle="p"]')`
+    ],
+    timeout: 5000,
+    ariaSnapshot: '- main:\n' +
+      '  - region "ダッシュボード":\n' +
+      '    - heading "ダッシュボード" [level=2]\n' +
+      '    - button "状況一覧" [pressed]\n' +
+      '    - button "利用分析"\n' +
+      '    - text: 並べ替え\n' +
+      '    - combobox "並べ替え":\n' +
+      '      - option "状態" [selected]\n' +
+      '      - option "コスト"\n' +
+      '      - option "トークン"\n' +
+      '      - option "名前"\n' +
+      '    - text: 種類\n' +
+      '    - combobox "種類":\n' +
+      '      - option "すべて" [selected]\n' +
+      '      - option "Codex"\n' +
+      '    - region "エージェントの状態の構成":\n' +
+      '      - article:\n' +
+      '        - img "待機中": ○\n' +
+      '        - text: 待機中\n' +
+      '        - strong: "1"\n' +
+      '    - region "アカウントの利用枠":\n' +
+      '      - heading "アカウントの利用枠" [level=3]\n' +
+      '      - paragraph: まだ値がありません\n' +
+      '    - region "エージェント":\n' +
+      '      - heading "エージェント1" [level=3]\n' +
+      '      - table "エージェントの利用状況":\n' +
+      '        - row "状態 種類 名前 モデル 場所 サブ トークン コスト コンテキスト 最後の動き":\n' +
+      '          - columnheader "状態"\n' +
+      '          - columnheader "種類"\n' +
+      '          - columnheader "名前"\n' +
+      '          - columnheader "モデル"\n' +
+      '          - columnheader "場所"\n' +
+      '          - columnheader "サブ"\n' +
+      '          - columnheader "トークン"\n' +
+      '          - columnheader "コスト"\n' +
+      '          - columnheader "コンテキスト"\n' +
+      '          - columnheader "最後の動き"\n' +
+      '        - row "generated-parent、Codex、Generated workspace / Generated tab、トークン 12.3k、コスト $7.25、コンテキスト —、Enter で開く":\n' +
+      '          - cell "待機中":\n' +
+      '            - img "待機中": ○\n' +
+      '          - cell "Codex"\n' +
+      '          - cell "generated-parent"\n' +
+      '          - cell "parent-model"\n' +
+      '          - cell "Generated workspace / Generated tab /generated"\n' +
+      '          - cell "2件"\n' +
+      '          - cell "12.3k累計"\n' +
+      '          - cell "$7.25"\n' +
+      '          - cell "—"\n' +
+      '          - cell "20765 日前"'
+  }
+}
+
+Node.js v24.15.0

@@ -1,0 +1,13 @@
+{
+  "head": "13617b2276cb3d707c71574a417b0ee78cf68b6e",
+  "trackedClean": true,
+  "webTypecheckSource": "9c98b169 (Web source unchanged)",
+  "webTypecheckExit": 0,
+  "tuiTypecheckExit": 0,
+  "tuiBuildExit": 0,
+  "tuiGridExit": 0,
+  "source": {
+    "packages/web/src/dashboard/DashboardView.vue": "d9675f56dc3ede017acce66fa3f0c2b6e998ef1be6f06a6f6d2dcbed605e3470",
+    "packages/tui/src/modes/UsageView.ts": "974f07f37e99df90168d62d9ba804c325a26016bfb39ee4e72b0f84838452505"
+  }
+}

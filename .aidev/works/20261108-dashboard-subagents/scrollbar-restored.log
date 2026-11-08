@@ -1,0 +1,13 @@
+
+> @sodashitsu/tui@0.1.0 test /workspaces/sodashitsu-dashboard-subagents/packages/tui
+> vitest run src/modes/UsageView.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-dashboard-subagents/packages/tui
+
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  10:33:41
+   Duration  1.36s (transform 78%, import 18%, tests 4%)
+

@@ -1,0 +1,59 @@
+
+> @sodashitsu/tui@0.1.0 test /workspaces/sodashitsu-dashboard-subagents/packages/tui
+> vitest run src/modes/UsageView.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-dashboard-subagents/packages/tui
+
+ ❯ src/modes/UsageView.test.ts (14 tests | 1 failed) 61ms
+   × dragging the variable-height child scrollbar to the bottom reveals and selects the final child 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/UsageView.test.ts > dragging the variable-height child scrollbar to the bottom reveals and selects the final child
+AssertionError: expected ' 利用状況 · s:並び順 name · a:アカウント · h:セッショ…' to contain 'Generated child 63'
+
+- Expected
++ Received
+
+- Generated child 63
++  利用状況 · s:並び順 name · a:アカウント · h:セッション履歴 · Space:子を展開 · ↑↓ / Enter:ペイン…   
++ ╭─ アカウントの利用枠 ────────────────────────────────────────────────────────────────────────────╮ 
++ │利用枠の情報がありません（aで一覧）                                                              │ 
++ ├─ エージェント ──────────────────────────────────────────────────────────────────────────────────┤ 
++ │  (?) Generated child 46                                                                         │░
++ │    actual-model                                                                                 │░
++ │  (?) Generated child 47                                                                         │░
++ │    actual-model                                                                                 │░
++ │  (?) Generated child 48                                                                         │░
++ │    actual-model                                                                                 │░
++ │  (?) Generated child 49                                                                         │░
++ │    actual-model                                                                                 │░
++ │  (?) Generated child 50                                                                         │░
++ │    actual-model                                                                                 │░
++ │  (?) Generated child 51                                                                         │░
++ │    actual-model                                                                                 │░
++ │  (?) Generated child 52                                                                         │░
++ │    actual-model                                                                                 │░
++ │  (?) Generated child 53                                                                         │█
++ │    actual-model                                                                                 │█
++ │  (?) Generated child 54                                                                         │█
++ │    actual-model                                                                                 │░
++ │                                                                                                 │░
++ ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯ 
++  1 エージェント · 56 / 65 行                                                                        
+
+ ❯ src/modes/UsageView.test.ts:267:88
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  10:33:39
+   Duration  1.48s (transform 77%, import 19%, tests 4%)
+
+/workspaces/sodashitsu-dashboard-subagents/packages/tui:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/tui@0.1.0 test: `vitest run src/modes/UsageView.test.ts`
+Exit status 1

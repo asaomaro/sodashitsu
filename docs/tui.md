@@ -423,3 +423,5 @@ CPU情報のコア数は、Web版と端末版の共通フッターに「物理�
 WSLではフッターの設定で「ホストメモリ使用量（WSL）」を選ぶと、Windowsホストの `ホストメモリ 使用量/合計 使用率` を表示できます。通常の「メモリ」は引き続きWSL側の値です。ホスト用のグラフと色も既存の表示設定に従い、初期状態ではこの項目は非表示です。Windows OSが利用可能な合計・空き物理メモリを固定のPowerShell経路から読み、10秒間キャッシュします。照会は非同期で同時に1本まで、失敗時は30秒後から再試行します。WSL以外では追加取得しません。Interop無効・標準のWindows実行パスが利用不能・旧サーバ等で未取得の場合はホスト項目を表示せず、WSLの値から推測しません。単位と定義は [Win32_OperatingSystem](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-operatingsystem) の TotalVisibleMemorySize / FreePhysicalMemory に従います。
 
 WSLでは「ホストCPU使用率（WSL）」も独立して選べます。Windowsの全体カウンター `Win32_PerfFormattedData_PerfOS_Processor` の `_Total` をホストメモリと同じ1回の照会で読みます。CPUとメモリは部分的に取得できた場合も各々表示し、0%は有効な測定値です。ホスト情報の照会間隔は10秒で、Task Managerの表示と常時同じ値になる保証はありません。WSL側はホスト取得の成否によらず `CPU(WSL)`・`メモリ(WSL)` と表示します。旧サーバはこの区別用情報がないため従来のラベルを保ちます。全体カウンターは [Microsoft WMIの性能監視例](https://devblogs.microsoft.com/scripting/hey-scripting-guy-how-can-i-control-the-data-returned-by-the-performance-monitor-tool/) に対応します。
+
+状況画面にも親子一覧があります。親行のSpaceまたは右端の開閉アイコンで子を展開し、上下キーで選択・Enterまたはクリックで子会話を開きます。セッション名を1行目、取得できたモデル/effortを2行目に出します。親の利用量へ子を再加算しません。

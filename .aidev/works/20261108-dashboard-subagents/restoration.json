@@ -1,0 +1,20 @@
+{
+  "negativeWeb": 1,
+  "negativeTui": 1,
+  "negativeBrowser": 1,
+  "files": {
+    "packages/web/src/dashboard/DashboardView.vue": {
+      "before": "d9675f56dc3ede017acce66fa3f0c2b6e998ef1be6f06a6f6d2dcbed605e3470",
+      "after": "d9675f56dc3ede017acce66fa3f0c2b6e998ef1be6f06a6f6d2dcbed605e3470",
+      "byteExact": true
+    },
+    "packages/tui/src/modes/UsageView.ts": {
+      "before": "371a8d8a619c677f797087dbc4a5a33895b22d33c497b5bf0aff891468c91b41",
+      "after": "371a8d8a619c677f797087dbc4a5a33895b22d33c497b5bf0aff891468c91b41",
+      "byteExact": true
+    }
+  },
+  "restoredWeb": 0,
+  "restoredTui": 0,
+  "restoredBrowser": 0
+}

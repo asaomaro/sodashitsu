@@ -1,0 +1,4 @@
+
+> @sodashitsu/tui@0.1.0 build /workspaces/sodashitsu-dashboard-subagents/packages/tui
+> tsc -b
+

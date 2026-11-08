@@ -1,0 +1,115 @@
+
+> @sodashitsu/web@0.1.0 test /workspaces/sodashitsu-dashboard-subagents/packages/web
+> vitest run src/dashboard/DashboardView.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-dashboard-subagents/packages/web
+
+ ❯ src/dashboard/DashboardView.test.ts (11 tests | 2 failed) 212ms
+   × shows membership as membership rather than a working count 18ms
+   × expands observed children without adding them to usage totals, and opens their own conversation 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/dashboard/DashboardView.test.ts > shows membership as membership rather than a working count
+Error: Unable to get [data-dash-row="p1"] .dash-child-toggle within: <section data-v-e04975bc="" class="dash dash-screen" data-dashboard="" data-dashboard-kind="screen" aria-label="ダッシュボード" tabindex="-1">
+  <header data-v-e04975bc="" class="dash-head">
+    <h2 data-v-e04975bc="" class="dash-title">ダッシュボード</h2><button data-v-e04975bc="" type="button" aria-pressed="true">状況一覧</button><button data-v-e04975bc="" type="button" aria-pressed="false" data-dash-analysis="">利用分析</button>
+    <div data-v-e04975bc="" class="dash-tools"><label data-v-e04975bc="" class="dash-tool"><span data-v-e04975bc="">並べ替え</span><select data-v-e04975bc="" class="dash-select" data-dash-sort="">
+          <option data-v-e04975bc="" value="state">状態</option>
+          <option data-v-e04975bc="" value="cost">コスト</option>
+          <option data-v-e04975bc="" value="tokens">トークン</option>
+          <option data-v-e04975bc="" value="name">名前</option>
+        </select></label><label data-v-e04975bc="" class="dash-tool"><span data-v-e04975bc="">種類</span><select data-v-e04975bc="" class="dash-select" data-dash-kind="">
+          <option data-v-e04975bc="" value="">すべて</option>
+          <option data-v-e04975bc="" value="agy">Antigravity CLI</option>
+        </select></label></div>
+  </header>
+  <p data-v-e04975bc="" class="dash-note" role="status" data-dash-loading="">読み込んでいます…</p><!-- アカウントの枠 -->
+  <section data-v-e04975bc="" class="dash-state-overview" aria-label="エージェントの状態の構成">
+    <div data-v-e04975bc="" class="dash-state-strip" aria-hidden="true"><i data-v-e04975bc="" data-state="idle" style="flex-grow: 1; flex-shrink: 1; flex-basis: 0%;"></i></div>
+    <div data-v-e04975bc="" class="dash-state-cards">
+      <article data-v-e04975bc=""><span data-v-e93665c8="" data-v-e04975bc="" class="state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span><span data-v-e04975bc="">待機中</span><strong data-v-e04975bc="">1</strong></article>
+    </div>
+  </section>
+  <section data-v-e04975bc="" class="dash-accounts" aria-label="アカウントの利用枠" data-dash-accounts="">
+    <h3 data-v-e04975bc="" class="dash-sub">アカウントの利用枠</h3>
+    <p data-v-e04975bc="" class="dash-muted" data-dash-no-accounts="">まだ値がありません</p>
+  </section><!-- 一覧 -->
+  <section data-v-e04975bc="" class="dash-list" aria-label="エージェント" data-dash-list="">
+    <h3 data-v-e04975bc="" class="dash-sub">エージェント<span data-v-e04975bc="" class="dash-count" data-dash-count="">1</span></h3>
+    <div data-v-e04975bc="" class="dash-table" role="table" aria-label="エージェントの利用状況">
+      <div data-v-e04975bc="" class="dash-row dash-row-head" role="row"><span data-v-e04975bc="" class="dash-c dash-c-state" role="columnheader">状態</span><span data-v-e04975bc="" class="dash-c dash-c-kind" role="columnheader">種類</span><span data-v-e04975bc="" class="dash-c dash-c-name" role="columnheader">名前</span><span data-v-e04975bc="" class="dash-c dash-c-model" role="columnheader">モデル</span><span data-v-e04975bc="" class="dash-c dash-c-place" role="columnheader">場所</span><span data-v-e04975bc="" class="dash-c dash-c-sub" role="columnheader">サブ</span><span data-v-e04975bc="" class="dash-c dash-c-tokens" role="columnheader">トークン</span><span data-v-e04975bc="" class="dash-c dash-c-cost" role="columnheader">コスト</span><span data-v-e04975bc="" class="dash-c dash-c-ctx" role="columnheader">コンテキスト</span><span data-v-e04975bc="" class="dash-c dash-c-ago" role="columnheader">最後の動き</span></div>
+      <div data-v-e04975bc="" class="dash-row dash-row-body" role="row" tabindex="0" aria-label="Claude Code、Antigravity CLI、repo / main、トークン —、コスト —、Enter で開く" data-dash-row="p1" data-dash-state="idle"><span data-v-e04975bc="" class="dash-c dash-c-state" role="cell"><span data-v-e93665c8="" data-v-e04975bc="" class="state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span></span><span data-v-e04975bc="" class="dash-c dash-c-kind" role="cell"><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">種類</span>Antigravity CLI</span><span data-v-e04975bc="" class="dash-c dash-c-name" role="cell" title="Claude Code">Claude Code</span><span data-v-e04975bc="" class="dash-c dash-c-model" role="cell"><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">モデル</span>—</span><span data-v-e04975bc="" class="dash-c dash-c-place" role="cell" title="/work/p1"><span data-v-e04975bc="" class="dash-place-ws">repo / main</span><span data-v-e04975bc="" class="dash-place-branch">（main）</span><span data-v-e04975bc="" class="dash-muted dash-place-cwd">/work/p1</span></span><span data-v-e04975bc="" class="dash-c dash-c-sub" role="cell"><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">サブ</span>3件</span><span data-v-e04975bc="" class="dash-c dash-c-tokens" role="cell" data-dash-tokens=""><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">トークン</span><span data-v-e04975bc="" class="dash-num">—</span>
+        <!--v-if-->
+        <!--v-if--></span><span data-v-e04975bc="" class="dash-c dash-c-cost" role="cell" data-dash-cost=""><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">コスト</span><span data-v-e04975bc="" class="dash-num">—</span>
+        <!--v-if--></span><span data-v-e04975bc="" class="dash-c dash-c-ctx" role="cell" data-dash-context=""><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">コンテキスト</span>
+        <!--v-if--><span data-v-e04975bc="" class="dash-num">—</span></span><span data-v-e04975bc="" class="dash-c dash-c-ago" role="cell" title="10/10/2026, 11:58:00 AM"><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">最後の動き</span>2 分前</span>
+      </div>
+    </div>
+  </section>
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/dashboard/DashboardView.test.ts:291:17
+    289| it("shows membership as membership rather than a working count",()=>{
+    290|  const {wrapper}=setup([pane("p1",agent({kind:"agy",subagents:{count:3…
+    291|  expect(wrapper.get('[data-dash-row="p1"] .dash-child-toggle').attribu…
+       |                 ^
+    292| });
+    293|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/dashboard/DashboardView.test.ts > expands observed children without adding them to usage totals, and opens their own conversation
+Error: Unable to get [data-dash-child-toggle="p1"] within: <section data-v-e04975bc="" class="dash dash-screen" data-dashboard="" data-dashboard-kind="screen" aria-label="ダッシュボード" tabindex="-1">
+  <header data-v-e04975bc="" class="dash-head">
+    <h2 data-v-e04975bc="" class="dash-title">ダッシュボード</h2><button data-v-e04975bc="" type="button" aria-pressed="true">状況一覧</button><button data-v-e04975bc="" type="button" aria-pressed="false" data-dash-analysis="">利用分析</button>
+    <div data-v-e04975bc="" class="dash-tools"><label data-v-e04975bc="" class="dash-tool"><span data-v-e04975bc="">並べ替え</span><select data-v-e04975bc="" class="dash-select" data-dash-sort="">
+          <option data-v-e04975bc="" value="state">状態</option>
+          <option data-v-e04975bc="" value="cost">コスト</option>
+          <option data-v-e04975bc="" value="tokens">トークン</option>
+          <option data-v-e04975bc="" value="name">名前</option>
+        </select></label><label data-v-e04975bc="" class="dash-tool"><span data-v-e04975bc="">種類</span><select data-v-e04975bc="" class="dash-select" data-dash-kind="">
+          <option data-v-e04975bc="" value="">すべて</option>
+          <option data-v-e04975bc="" value="codex">Codex</option>
+        </select></label></div>
+  </header>
+  <!--v-if-->
+  <!-- アカウントの枠 -->
+  <section data-v-e04975bc="" class="dash-state-overview" aria-label="エージェントの状態の構成">
+    <div data-v-e04975bc="" class="dash-state-strip" aria-hidden="true"><i data-v-e04975bc="" data-state="idle" style="flex-grow: 1; flex-shrink: 1; flex-basis: 0%;"></i></div>
+    <div data-v-e04975bc="" class="dash-state-cards">
+      <article data-v-e04975bc=""><span data-v-e93665c8="" data-v-e04975bc="" class="state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span><span data-v-e04975bc="">待機中</span><strong data-v-e04975bc="">1</strong></article>
+    </div>
+  </section>
+  <section data-v-e04975bc="" class="dash-accounts" aria-label="アカウントの利用枠" data-dash-accounts="">
+    <h3 data-v-e04975bc="" class="dash-sub">アカウントの利用枠</h3>
+    <p data-v-e04975bc="" class="dash-muted" data-dash-no-accounts="">まだ値がありません</p>
+  </section><!-- 一覧 -->
+  <section data-v-e04975bc="" class="dash-list" aria-label="エージェント" data-dash-list="">
+    <h3 data-v-e04975bc="" class="dash-sub">エージェント<span data-v-e04975bc="" class="dash-count" data-dash-count="">1</span></h3>
+    <div data-v-e04975bc="" class="dash-table" role="table" aria-label="エージェントの利用状況">
+      <div data-v-e04975bc="" class="dash-row dash-row-head" role="row"><span data-v-e04975bc="" class="dash-c dash-c-state" role="columnheader">状態</span><span data-v-e04975bc="" class="dash-c dash-c-kind" role="columnheader">種類</span><span data-v-e04975bc="" class="dash-c dash-c-name" role="columnheader">名前</span><span data-v-e04975bc="" class="dash-c dash-c-model" role="columnheader">モデル</span><span data-v-e04975bc="" class="dash-c dash-c-place" role="columnheader">場所</span><span data-v-e04975bc="" class="dash-c dash-c-sub" role="columnheader">サブ</span><span data-v-e04975bc="" class="dash-c dash-c-tokens" role="columnheader">トークン</span><span data-v-e04975bc="" class="dash-c dash-c-cost" role="columnheader">コスト</span><span data-v-e04975bc="" class="dash-c dash-c-ctx" role="columnheader">コンテキスト</span><span data-v-e04975bc="" class="dash-c dash-c-ago" role="columnheader">最後の動き</span></div>
+      <div data-v-e04975bc="" class="dash-row dash-row-body" role="row" tabindex="0" aria-label="parent-agent、Codex、repo / main、トークン 12.3k、コスト $7.25、コンテキスト —、Enter で開く" data-dash-row="p1" data-dash-state="idle"><span data-v-e04975bc="" class="dash-c dash-c-state" role="cell"><span data-v-e93665c8="" data-v-e04975bc="" class="state-icon" data-state="idle" data-symbols="on" role="img" aria-label="待機中" title="待機中">○</span></span><span data-v-e04975bc="" class="dash-c dash-c-kind" role="cell"><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">種類</span>Codex</span><span data-v-e04975bc="" class="dash-c dash-c-name" role="cell" title="parent-agent">parent-agent</span><span data-v-e04975bc="" class="dash-c dash-c-model" role="cell"><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">モデル</span>claude-sonnet-5-5</span><span data-v-e04975bc="" class="dash-c dash-c-place" role="cell" title="/work/p1"><span data-v-e04975bc="" class="dash-place-ws">repo / main</span><span data-v-e04975bc="" class="dash-place-branch">（main）</span><span data-v-e04975bc="" class="dash-muted dash-place-cwd">/work/p1</span></span><span data-v-e04975bc="" class="dash-c dash-c-sub" role="cell"><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">サブ</span>2件</span><span data-v-e04975bc="" class="dash-c dash-c-tokens" role="cell" data-dash-tokens=""><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">トークン</span><span data-v-e04975bc="" class="dash-num">12.3k</span><span data-v-e04975bc="" class="dash-muted dash-basis" title="会計の累計（記録の会計の行と、その後の記録の分）">累計</span>
+        <!--v-if--></span><span data-v-e04975bc="" class="dash-c dash-c-cost" role="cell" data-dash-cost=""><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">コスト</span><span data-v-e04975bc="" class="dash-num">$7.25</span>
+        <!--v-if--></span><span data-v-e04975bc="" class="dash-c dash-c-ctx" role="cell" data-dash-context=""><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">コンテキスト</span>
+        <!--v-if--><span data-v-e04975bc="" class="dash-num">—</span></span><span data-v-e04975bc="" class="dash-c dash-c-ago" role="cell" title="10/10/2026, 11:58:00 AM"><span data-v-e04975bc="" class="dash-cell-label" aria-hidden="true">最後の動き</span>2 分前</span>
+      </div>
+    </div>
+  </section>
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/dashboard/DashboardView.test.ts:297:136
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 9 passed (11)
+   Start at  10:27:30
+   Duration  2.38s (transform 71%, import 13%, tests 9%, environment 7%)
+
+/workspaces/sodashitsu-dashboard-subagents/packages/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/web@0.1.0 test: `vitest run src/dashboard/DashboardView.test.ts`
+Exit status 1

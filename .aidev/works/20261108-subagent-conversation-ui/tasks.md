@@ -14,5 +14,7 @@
 
 ## 追加依頼（元の残件を維持）
 
-- [ ] 小UI群: iframe/display scrollbarの共通テーマ伝播、mode toggleの間隔、指定theme表示名、bell feature適用漏れをまとめる
-- [ ] 状況画面（Web DashboardView/TUI UsageDashboard候補）の親子一覧をagents一覧と同じ表示・子会話選択へ揃える（親usageへ二重加算しない）
+- [x] 小UI群: iframe/display scrollbarの共通テーマ伝播、mode toggleの間隔、指定theme表示名、bell feature適用漏れをまとめる
+- [x] 状況画面（Web DashboardView/TUI UsageDashboard候補）の親子一覧をagents一覧と同じ表示・子会話選択へ揃える（親usageへ二重加算しない）
+
+状況runtime9c98b169/scrollbar再review13617b22、theme aeea2e39はroot独立reviewで指摘解消済み。正式direct・終了子history・子usageの未完は上の通り保持する。

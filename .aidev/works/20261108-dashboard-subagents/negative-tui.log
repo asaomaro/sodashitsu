@@ -1,0 +1,108 @@
+
+> @sodashitsu/tui@0.1.0 test /workspaces/sodashitsu-dashboard-subagents/packages/tui
+> vitest run src/modes/UsageView.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-dashboard-subagents/packages/tui
+
+ ❯ src/modes/UsageView.test.ts (13 tests | 2 failed) 48ms
+   × expands dashboard child rows with unchanged parent usage and routes selected children to their own conversation 7ms
+   × keeps expanded children navigable when their variable-height rows exceed the viewport and caps at 64 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/UsageView.test.ts > expands dashboard child rows with unchanged parent usage and routes selected children to their own conversation
+AssertionError: expected ' 利用状況 · s:並び順 name · a:アカウント · h:セッショ…' to contain '▸2'
+
+- Expected
++ Received
+
+- ▸2
++  利用状況 · s:並び順 name · a:アカウント · h:セッション履歴 · ↑↓ / Enter:ペインへ · Esc:基本                                                
++ ╭─ アカウントの利用枠 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
++ │利用枠の情報がありません（aで一覧）                                                                                                      │ 
++ ├─ エージェント ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
++ │○ Generated Parent · w1 / t1                                                                                                             │ 
++ │codex · parent-model · 累計 12,345 · $7.2500                                                                                             │ 
++ │文脈 [??????????] — · 更新 1970/1/1 9:00:00                                                                                              │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ │                                                                                                                                         │ 
++ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 
++  1 エージェント · 1 / 1                                                                                                                     
+
+ ❯ src/modes/UsageView.test.ts:251:246
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/modes/UsageView.test.ts > keeps expanded children navigable when their variable-height rows exceed the viewport and caps at 64
+AssertionError: expected ' 利用状況 · s:並び順 name · a:アカウント · h:セッショ…' to contain 'Generated child 63'
+
+- Expected
++ Received
+
+- Generated child 63
++  利用状況 · s:並び順 name · a:アカウント · h:セッション履歴 · ↑↓ / Enter:ペインへ · Esc:基本        
++ ╭─ アカウントの利用枠 ────────────────────────────────────────────────────────────────────────────╮ 
++ │利用枠の情報がありません（aで一覧）                                                              │ 
++ ├─ エージェント ──────────────────────────────────────────────────────────────────────────────────┤ 
++ │○ pane p1 · w1 / t1                                                                              │ 
++ │利用状況を取得できません                                                                         │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ │                                                                                                 │ 
++ ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯ 
++  1 エージェント · 1 / 1                                                                             
+
+ ❯ src/modes/UsageView.test.ts:258:281
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 11 passed (13)
+   Start at  10:27:33
+   Duration  1.42s (transform 79%, import 17%, tests 4%)
+
+/workspaces/sodashitsu-dashboard-subagents/packages/tui:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/tui@0.1.0 test: `vitest run src/modes/UsageView.test.ts`
+Exit status 1
