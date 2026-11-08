@@ -11,7 +11,7 @@ import { DesktopMicrophoneRequest, DESKTOP_MICROPHONE_HELLO, DESKTOP_MICROPHONE_
 /** B owns the endpoint, pipe name and lifetime. The viewer supplies fixed PCM or negotiated Opus; the helper receives PCM only. */
 export class DesktopMicrophone {
   private dead=false;private lastStart=-Infinity;
-  private current: {codec:"opus"|undefined;decoder?:OpusScript;id:string;name:string;socket?:Duplex;native?:NativeMicrophoneLease;seq:number;ready:boolean;busy:boolean;header:Buffer;timer?:ReturnType<typeof setTimeout>;retry?:ReturnType<typeof setTimeout>;at:number;tokens:number;rateAt:number;latest?:{seq:number;pcm:Buffer;at:number};packet?:Buffer}|undefined;
+  private current: {codec:"opus"|undefined;decoder?:OpusScript;id:string;name:string;socket?:Duplex;native?:NativeMicrophoneLease;seq:number;ready:boolean;busy:boolean;header:Buffer;timer?:ReturnType<typeof setTimeout>;retry?:ReturnType<typeof setTimeout>;at:number;tokens:number;rateAt:number;queue:{seq:number;pcm:Buffer;at:number}[];packet?:Buffer}|undefined;
   constructor(private hooks:{nativeOutput?:(name:string,active:()=>boolean)=>Promise<NativeMicrophoneLease>;bridge?:(active:()=>boolean)=>DesktopAudioPipe;allowOpus?:boolean;allowed():boolean;synthetic?:boolean;claim?(id:string):boolean;release?(id:string):void;write(value:unknown):void;send(value:DesktopMicrophoneResult):boolean}) {}
   fromViewer(raw:unknown) {
     const m=DesktopMicrophoneRequest.parse(raw);
@@ -22,7 +22,7 @@ export class DesktopMicrophone {
       if(this.hooks.claim&&!this.hooks.claim(m.id)){this.hooks.send({type:"microphone_status",id:m.id,state:"unavailable"});return;}
       this.lastStart=performance.now();
       const name="SodaDesktopMicrophone-"+randomUUID().replaceAll("-", "");
-      const c:NonNullable<DesktopMicrophone["current"]>=this.current={codec:m.codec,id:m.id,name,seq:0,ready:false,busy:false,header:Buffer.alloc(0),at:performance.now(),tokens:12,rateAt:performance.now()};
+      const c:NonNullable<DesktopMicrophone["current"]>=this.current={codec:m.codec,id:m.id,name,seq:0,ready:false,busy:false,header:Buffer.alloc(0),at:performance.now(),tokens:12,rateAt:performance.now(),queue:[]};
       this.hooks.send({type:"microphone_status",id:m.id,state:"starting"});
       const path=process.platform==="win32"?"\\\\.\\pipe\\"+name:join(tmpdir(),name+".sock");
       c.timer=setTimeout(()=>this.finish("unavailable"),2500);
@@ -36,21 +36,34 @@ export class DesktopMicrophone {
     let pcm:Buffer;
     try{const bytes=Buffer.from(m.data,"base64");if(m.type==="microphone_opus"){if(c.codec!=="opus"||!c.decoder||bytes.length<1||bytes.length>1275||bytes.toString("base64")!==m.data)throw Error("Opus packet");pcm=c.decoder.decode(bytes);}else{if(c.codec)throw Error("PCM packet on Opus stream");pcm=bytes;}if(pcm.length!==DESKTOP_MICROPHONE_BYTES){pcm.fill(0);throw Error("Microphone frame size");}}catch{this.finish("unavailable");return;}
     c.seq=m.seq;const frame={seq:m.seq,pcm,at:performance.now()};
-    if(c.busy){c.latest?.pcm.fill(0);c.latest=frame;return;}
-    this.flush(c,frame);
+    // Match the client's twelve outstanding frames; never coalesce legal bursts.
+    if(c.queue.length+(c.busy?1:0)>=12){frame.pcm.fill(0);this.finish("unavailable");return;}
+    c.queue.push(frame);this.flush(c);
   }
-  private flush(c:NonNullable<DesktopMicrophone["current"]>,frame:{seq:number;pcm:Buffer;at:number}) {
-    if(!this.allowed(c)){frame.pcm.fill(0);this.finish("unavailable");return;}
-    if(performance.now()-frame.at>100){frame.pcm.fill(0);if(!this.hooks.send({type:"microphone_ack",id:c.id,seq:frame.seq}))this.finish("unavailable");return;}
-    c.busy=true;clearTimeout(c.timer);c.timer=setTimeout(()=>this.finish("unavailable"),100);
-    const packet=c.packet=Buffer.allocUnsafe(12+frame.pcm.length);packet.writeUInt32LE(frame.seq);packet.writeDoubleLE(Date.now()+100,4);frame.pcm.copy(packet,12);frame.pcm.fill(0);
-    c.socket!.write(packet,error=>{
-      packet.fill(0);delete c.packet;if(this.current!==c)return;
-      if(error||!this.allowed(c)){this.finish("unavailable");return;}
-      c.busy=false;clearTimeout(c.timer);c.timer=setTimeout(()=>this.finish("unavailable"),2000);
-      if(!this.hooks.send({type:"microphone_ack",id:c.id,seq:frame.seq})){this.finish("unavailable");return;}
-      const latest=c.latest;delete c.latest;if(latest)this.flush(c,latest);
-    });
+  private flush(c:NonNullable<DesktopMicrophone["current"]>) {
+    if(c.busy)return;
+    while(this.current===c&&c.queue.length){
+      const frame=c.queue.shift()!;
+      if(!this.allowed(c)){frame.pcm.fill(0);if(this.current===c)this.finish("unavailable");return;}
+      // Reserve the slot through ACK emission as hooks can synchronously revoke.
+      c.busy=true;
+      if(performance.now()-frame.at>100){
+        frame.pcm.fill(0);
+        if(!this.hooks.send({type:"microphone_ack",id:c.id,seq:frame.seq})){if(this.current===c)this.finish("unavailable");return;}
+        if(this.current!==c)return;c.busy=false;continue;
+      }
+      clearTimeout(c.timer);c.timer=setTimeout(()=>this.finish("unavailable"),100);
+      const packet=c.packet=Buffer.allocUnsafe(12+frame.pcm.length);packet.writeUInt32LE(frame.seq);packet.writeDoubleLE(Date.now()+100,4);frame.pcm.copy(packet,12);frame.pcm.fill(0);
+      try{c.socket!.write(packet,error=>{
+        packet.fill(0);if(c.packet===packet)delete c.packet;if(this.current!==c)return;
+        if(error||!this.allowed(c)){if(this.current===c)this.finish("unavailable");return;}
+        clearTimeout(c.timer);c.timer=setTimeout(()=>this.finish("unavailable"),2000);
+        // Pipe-write completion/expired-frame retirement, never playback proof.
+        if(!this.hooks.send({type:"microphone_ack",id:c.id,seq:frame.seq})){if(this.current===c)this.finish("unavailable");return;}
+        if(this.current!==c)return;c.busy=false;this.flush(c);
+      });}catch{packet.fill(0);if(this.current===c)this.finish("unavailable");}
+      return;
+    }
   }
   private allowed(c:NonNullable<DesktopMicrophone["current"]>){return !this.dead&&this.current===c&&this.hooks.allowed();}
   private connect(c:NonNullable<DesktopMicrophone["current"]>,path:string) {
@@ -65,7 +78,7 @@ export class DesktopMicrophone {
     socket.on("data",bytes=>{if(this.current!==c||c.socket!==socket)return;if(!this.allowed(c)||c.ready||c.header.length+bytes.length>16){this.finish("unavailable");return;}c.header=Buffer.concat([c.header,bytes]);if(c.header.length!==16)return;if(!c.header.equals(Buffer.from(DESKTOP_MICROPHONE_HELLO))){this.finish("unavailable");return;}c.ready=true;clearTimeout(c.timer);c.timer=setTimeout(()=>this.finish("unavailable"),2000);if(!this.hooks.send({type:"microphone_status",id:c.id,state:"running"}))this.finish("unavailable");});
   }
   private finish(state:"stopped"|"unavailable") {
-    const c=this.current;if(!c)return;this.current=undefined;clearTimeout(c.timer);clearTimeout(c.retry);c.socket?.destroy();c.decoder?.delete();delete c.decoder;c.header.fill(0);c.latest?.pcm.fill(0);delete c.latest;c.packet?.fill(0);delete c.packet;
+    const c=this.current;if(!c)return;this.current=undefined;clearTimeout(c.timer);clearTimeout(c.retry);c.socket?.destroy();c.decoder?.delete();delete c.decoder;c.header.fill(0);for(const frame of c.queue)frame.pcm.fill(0);c.queue.length=0;c.packet?.fill(0);delete c.packet;
     if(!this.hooks.nativeOutput)this.hooks.write({type:"native_microphone",id:c.id,enabled:false});void c.native?.close().catch(()=>{});this.hooks.release?.(c.id);if(!this.dead)this.hooks.send({type:"microphone_status",id:c.id,state});
   }
   stop(){if(this.dead)return;this.dead=true;this.finish("stopped");}

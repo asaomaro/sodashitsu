@@ -29,13 +29,13 @@ it("rejects arbitrary formats, endpoints, sizes and commands before touching the
  const write=vi.fn(),mic=new DesktopMicrophone({synthetic:true,allowed:()=>true,write,send:()=>true});
  for(const m of [{type:"microphone_start",id,endpoint:"speaker"},{type:"microphone_frame",id,seq:0,data:tone().toString("base64")},{type:"microphone_frame",id,seq:1,data:"AAAA"},{type:"microphone_frame",id,seq:1,data:tone().toString("base64"),sampleRate:192000}])expect(()=>mic.fromViewer(m)).toThrow();expect(write).not.toHaveBeenCalled();mic.stop();
 });
-it.skipIf(process.platform==="win32")("coalesces a burst behind a pipe write to the latest frame without stopping the stream",async()=>{
+it.skipIf(process.platform==="win32")("preserves a burst behind a pipe write in FIFO order without stopping the stream",async()=>{
  let path="",client:Socket|undefined;const chunks:Buffer[]=[],send=vi.fn((_m:unknown)=>true);
  const server=createServer(socket=>{client=socket;socket.on("error",()=>{});socket.on("data",bytes=>chunks.push(Buffer.from(bytes)));socket.write(DESKTOP_MICROPHONE_HELLO);});
  const mic=new DesktopMicrophone({synthetic:true,allowed:()=>true,send,write:raw=>{const m=raw as any;if(m.enabled){path=m.pipePath;server.listen(path,()=>void chmod(path,0o600));}}});
  try{mic.fromViewer({type:"microphone_start",id});await expect.poll(()=>send.mock.calls.some(([m]:any)=>m.state==="running")).toBe(true);
  for(let seq=1;seq<=6;seq++)mic.fromViewer({type:"microphone_frame",id,seq,data:tone().toString("base64")});
- await expect.poll(()=>send.mock.calls.some(([m]:any)=>m.type==="microphone_ack"&&m.seq===6)).toBe(true);await expect.poll(()=>Buffer.concat(chunks).length).toBe(1932*2);const packet=Buffer.concat(chunks);expect(packet.readUInt32LE()).toBe(1);expect(packet.readUInt32LE(1932)).toBe(6);expect(send.mock.calls.some(([m]:any)=>m.state==="unavailable")).toBe(false);
+ await expect.poll(()=>send.mock.calls.some(([m]:any)=>m.type==="microphone_ack"&&m.seq===6)).toBe(true);await expect.poll(()=>Buffer.concat(chunks).length).toBe(1932*6);const packet=Buffer.concat(chunks);expect(Array.from({length:6},(_,n)=>packet.readUInt32LE(1932*n))).toEqual([1,2,3,4,5,6]);expect(send.mock.calls.some(([m]:any)=>m.state==="unavailable")).toBe(false);
  }finally{mic.stop();client?.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));if(path)await rm(path,{force:true});}
 });
 
