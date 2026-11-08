@@ -1,0 +1,7 @@
+// Pure quiet-window/normal receiver scope checks only. No COM/native/token/lock/UAC calls.
+using System;
+public static class Phase3BCGeneratedChecks {
+ static void Require(bool ok,string reason){if(!ok)throw new InvalidOperationException(reason);}
+ static SodaDesktopUserMicrophonePolicy.Facts Facts(int locked){return new SodaDesktopUserMicrophonePolicy.Facts{System=false,Elevated=false,Owner="generated-owner",Logon="generated-logon",Session=1,ActiveSession=1,LockState=locked};}
+ public static int Main(){try{var quiet=new Phase3Quiet();for(int i=0;i<100;i++)quiet.Accept(false,false,i*20);Require(quiet.met&&quiet.frames==100&&quiet.Wall==1980,"quiet-wall");quiet.Accept(true,false,2000);Require(quiet.postQuietToneFrames==1,"resurgence");var compressed=new Phase3Quiet();for(int i=0;i<100;i++)compressed.Accept(false,false,i);Require(!compressed.met,"compressed-quiet");var broken=new Phase3Quiet();for(int i=0;i<100;i++)broken.Accept(false,i==50,i*20);Require(!broken.met,"broken-quiet");Require(Phase3BC.SameToken(Facts(0),Facts(1),"B"),"B-transition-observation");Require(!Phase3BC.SameToken(Facts(0),Facts(0),"C"),"C-remains-unlocked");var elevated=Facts(1);elevated.Elevated=true;Require(!Phase3BC.SameToken(elevated,Facts(1),"B"),"no-elevated-receiver");Console.WriteLine("{\"ok\":true,\"generatedOnly\":true,\"nativeProbe\":false,\"endpointOpened\":false,\"lockOrUac\":false}");return 0;}catch{Console.WriteLine("{\"ok\":false,\"generatedOnly\":true}");return 2;}}
+}
