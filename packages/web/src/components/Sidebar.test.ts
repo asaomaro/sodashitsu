@@ -670,7 +670,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
 
   it("子の行を選ぶと親paneを操作せず専用会話を開く",async()=>{
     const model=setup(makeAgent({subagents:subs(2)}));model.clientId="generated-client";useViewStore(pinia).onConnectionState("open");
-    const p=model.panes.get("p1")!;model.paneUpserted({...p,agentSession:{kind:p.agent!.kind,sessionId:"generated-session",reportedAt:1}});
+    const p=model.panes.get("p1")!;model.paneUpserted({...p,agentSession:{kind:"claude",sessionId:"generated-session",reportedAt:1}});
     const {useChildConversationStore}=await import("../store/childConversation.js");const childWindow=useChildConversationStore(pinia);
     const conn=makeConnection(),w=mountSidebar(conn);await btn(w).trigger("click");
     const row=w.get(".sidebar-subagent-row");await row.trigger("keydown",{key:"Enter"});
