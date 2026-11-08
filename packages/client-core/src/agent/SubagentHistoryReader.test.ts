@@ -223,3 +223,4 @@ it.each(["missing-reset", "oversized-reset"])(
     expect(f.reader.state.items).toHaveLength(0);
   },
 );
+it("does not claim there is no history when the current page is empty but more pages remain",async()=>{const f=fixture(()=>page([],{offset:64,more:true}));await f.reader.refresh();expect(f.reader.state.more).toBe(true);expect(subagentHistoryMessage(f.reader.state)).not.toContain("ありません");});

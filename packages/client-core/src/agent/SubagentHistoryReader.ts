@@ -265,7 +265,7 @@ export function subagentHistoryMessage(s: SubagentHistoryState): string {
     return "終了した子の履歴を取得できません。0件を意味しません。";
   if (s.status === "pending" || s.loading) return "終了した子の履歴を確認しています…";
   if (s.incomplete) return "確認できた終了履歴だけを表示しています。一部は未取得です。";
-  return s.status === "ok" && s.items.length === 0 ? "終了した子の履歴はありません。" : "";
+  return s.status === "ok" && s.items.length === 0 && !s.more ? "終了した子の履歴はありません。" : "";
 }
 export function subagentTerminalLabel(status: SubagentHistoryItem["terminalStatus"]): string {
   return status === "completed" ? "完了" : status === "aborted" ? "中断" : "エラー";
