@@ -1,0 +1,76 @@
+// New phase3 A fixture. This is not a product command or an automatic elevation/unlock tool.
+import {readFile,writeFile,mkdir,lstat,rm,access,realpath} from 'node:fs/promises';import {resolve,dirname,join} from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';import {fork} from 'node:child_process';import {createRequire} from 'node:module';import {randomUUID} from 'node:crypto';
+import {FIXTURE_FILES} from './prepare.mjs';
+import {AbsolutePcm,generatedFrame} from './absolute-pcm.mjs';import {assertManifest,checkedFile,receipt,ownEnv,bounded,probe,sha} from './safety.mjs';
+const exists=p=>access(p).then(()=>true,()=>false),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+export async function runA(manifestPath){
+ if(process.platform!=='win32')throw Error('approved-Windows-slot-required');
+ const m=JSON.parse(await readFile(manifestPath,'utf8'));assertManifest(m);if(resolve(manifestPath)!==join(resolve(m.jobRoot),'manifest.json'))throw Error('exact-manifest-required');
+ const root=await lstat(m.jobRoot);if(!root.isDirectory()||root.isSymbolicLink()||await realpath(m.jobRoot)!==resolve(m.jobRoot))throw Error('own-directory-required');
+ await receipt(m.jobRoot,'claim.json',{jobId:m.jobId,controllerPid:process.pid});
+ let server,closed,viewer,mic,rpc,clock,pump,streamId,receiverOwned=false,serverRetired=false,receiverRetired=false,actor,actorRetired=false,measurementPassed=false,settingsBefore,settingsAfter,receiver;const issues=[];let baseline,receiverResult,cadence,post,pre;let sent=0,acked=0,expectedAck=0;const sockets=[];
+ const until=async(fn,ms,label)=>{const deadline=Date.now()+ms;while(true){if(Date.now()>=Date.parse(m.expiresAt)||issues.length)throw Error('fixture-retired');const value=await fn();if(value)return value;if(Date.now()>deadline)throw Error(label);await sleep(20);}};
+ const phase=async name=>receipt(m.jobRoot,'phase-'+name+'.json',{phase:name,at:new Date().toISOString()});
+ try{
+  await checkedFile(process.execPath,m.nodeExeSha256,256*1024*1024);await checkedFile(m.gitExe,m.gitExeSha256);
+  if(Object.keys(m.fixtureSha256??{}).length!==FIXTURE_FILES.length||!FIXTURE_FILES.every(name=>typeof m.fixtureSha256[name]==='string'))throw Error('complete-fixture-manifest-required');
+  for(const name of FIXTURE_FILES)await checkedFile(resolve(dirname(fileURLToPath(import.meta.url)),name),m.fixtureSha256[name]);
+  await checkedFile(join(m.fixtureBin,'compile-receipt.json'),m.compileReceiptSha256);const compiled=JSON.parse(await readFile(join(m.fixtureBin,'compile-receipt.json'),'utf8'));
+  for(const [path,expected] of Object.entries(compiled.source))await checkedFile(path,expected);
+  for(const name of ['receiver.exe','probe.exe'])await checkedFile(join(m.fixtureBin,name),m.binarySha256?.[name]);
+  if((await bounded(m.gitExe,['-C',m.productRoot,'rev-parse','HEAD'])).trim()!==m.productHead)throw Error('candidate-head-mismatch');
+  if((await bounded(m.gitExe,['-C',m.productRoot,'status','--porcelain','--untracked-files=no'])).trim())throw Error('candidate-source-dirty');
+  const owner=await probe(m,'owner');if(!owner.ok||!owner.owner.normal||!owner.owner.activeConsole)throw Error('normal-active-owner-required');
+  const cwd=join(m.jobRoot,'cwd'),stateDir=join(m.jobRoot,'state');await mkdir(cwd);await mkdir(stateDir,{mode:0o700});
+  await writeFile(join(stateDir,'desktop-permissions.json'),JSON.stringify({enabled:true,allowInput:false,allowClipboard:false,allowDisplayResize:false,allowElevated:true,allowMicrophone:true,allowProtectedMicrophone:true,microphoneEndpoint:m.renderEndpoint}),{flag:'wx',mode:0o600});
+  const config=join(m.jobRoot,'private-config.json');await writeFile(config,JSON.stringify({...m,cwd,stateDir}),{flag:'wx',mode:0o600});
+  // IPC requires fork; stdout/stderr are drained and discarded, not printed or archived.
+  server=fork(new URL('./private-server.mjs',import.meta.url),[config],{env:ownEnv(),windowsHide:true,stdio:['ignore','pipe','pipe','ipc'],execArgv:[]});for(const s of [server.stdout,server.stderr])s.on('data',()=>{});closed=new Promise(resolve=>server.once('exit',code=>resolve(code)));server.once('error',()=>issues.push('private-server-error'));
+  const ready=await until(async()=>{const p=join(m.jobRoot,'server-ready.json');return await exists(p)?JSON.parse(await readFile(p,'utf8')):undefined;},60000,'private-server-not-ready');if(ready.pid!==server.pid||ready.ownInitialPaneProof?.count!==1||!ready.ownInitialPaneProof.cwdMatches||!ready.ownInitialPaneProof.nodeShellMatches||!ready.ownInitialPaneProof.agentAbsent)throw Error('own-pane-proof');
+  const require=createRequire(join(m.productRoot,'packages/server/package.json')),WebSocket=require('ws'),protocol=await import(pathToFileURL(join(m.productRoot,'packages/protocol/dist/index.js')).href);
+  const origin='http://127.0.0.1:'+m.port;const local=JSON.parse(await readFile(join(stateDir,'local-auth.json'),'utf8'));if(local.pid!==server.pid)throw Error('private-auth-owner');
+  const login=await fetch(origin+'/api/local-login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({secret:local.secret}),signal:AbortSignal.timeout(3000)});if(login.status!==204)throw Error('private-login-failed');const cookie=login.headers.get('set-cookie')?.split(';')[0];if(!cookie)throw Error('private-cookie-missing');
+  async function connect(path,protocols=[]){const socket=new WebSocket(origin.replace('http','ws')+path,protocols,{headers:{origin,cookie},handshakeTimeout:3000,maxPayload:1048576});sockets.push(socket);socket.on('error',()=>issues.push('private-socket-error'));await new Promise((r,j)=>{socket.once('open',r);socket.once('error',j);});return socket;}
+  rpc=await connect('/ws');let sequence=0;const pending=new Map();rpc.on('message',(raw,binary)=>{if(binary)return;try{const v=JSON.parse(raw.toString());if(v.id){pending.get(v.id)?.(v);pending.delete(v.id);}}catch{issues.push('rpc-protocol');}});
+  const call=(method,params)=>new Promise((r,j)=>{const id=String(++sequence),timer=setTimeout(()=>{pending.delete(id);j(Error('rpc-timeout'));},5000);pending.set(id,v=>{clearTimeout(timer);v.error?j(Error('rpc-rejected')):r(v.result);});rpc.send(JSON.stringify({id,method,params}));});
+  await call('client.hello',{protocol:1,kind:'desktop'});settingsBefore=await call('desktop.settings.get',{});if(settingsBefore.permissions?.microphoneEndpoint!==m.renderEndpoint||settingsBefore.permissions?.allowProtectedMicrophone!==true)throw Error('private-settings-proof');
+  clock=new AbsolutePcm();await clock.ready();await phase('warm-armed');
+  // No media is started here. Supervisor performs one approved unlock/receiver launch externally.
+  const go=join(m.jobRoot,'go');await until(()=>exists(go),180000,'armed-timeout');assertManifest(m);pre=await probe(m,'preflight');if(!pre.ok)throw Error('endpoint-or-native-preflight');
+  const ownerNow=await probe(m,'owner');if(!ownerNow.ok||ownerNow.owner.startedTicks!==owner.owner.startedTicks||ownerNow.owner.exeSha256!==owner.owner.exeSha256||!ownerNow.owner.unlocked)throw Error('owner-changed');
+  await receipt(m.jobRoot,'receiver-manifest.json',{...m,controllerPid:process.pid,controllerStartedTicks:owner.owner.startedTicks,controllerExeSha256:owner.owner.exeSha256,receiverExeSha256:m.binarySha256['receiver.exe']});await phase('awaiting-elevated-receiver');
+  receiver=await until(async()=>{const file=join(m.jobRoot,'receiver-armed.json');return await exists(file)?JSON.parse(await readFile(file,'utf8')):undefined;},45000,'elevated-receiver-not-armed');
+  if(receiver.exeSha256!==m.binarySha256['receiver.exe']||!receiver.elevated||!receiver.sameScope)throw Error('receiver-identity');const receiverScope=await probe(m,'receiver',{receiverPid:receiver.pid,receiverStartedTicks:receiver.startedTicks,receiverExeSha256:receiver.exeSha256});if(!receiverScope.ok)throw Error('receiver-native-scope');receiverOwned=true;
+  viewer=await connect('/desktop-share',[protocol.DESKTOP_MICROPHONE_PROTOCOL,protocol.desktopFeaturesProtocol(['protectedMicrophone'])]);const events=[];let frames=0;
+  viewer.on('message',(raw,binary)=>{if(binary){try{const info=protocol.decodeDesktopFrame(new Uint8Array(raw)).info;frames++;viewer.send(JSON.stringify({type:'ack',seq:info.seq}));}catch{issues.push('image-protocol');}}else try{const v=JSON.parse(raw.toString());events.push(v);if(events.length>256)events.shift();if(v.type==='error'||v.type==='protected_desktop_failure')issues.push('desktop-protocol');}catch{issues.push('desktop-json');}});
+  viewer.send(JSON.stringify({type:'start',machineId:'local',options:{width:640,fps:2,quality:30,features:true,elevatedDesktop:true,protectedMicrophone:true,microphone:true}}));
+  const native=await until(()=>events.find(v=>v.type==='ready'),60000,'native-source-timeout');protocol.DesktopReady.parse(native);
+  if(native.backend!=='windows-gdi'||native.protectedDesktop!=='elevated-default'||native.secureDesktop!==true||native.protectedMicrophone!==true||native.microphone!==true||native.synthetic)throw Error('native-source-proof');
+  const ticket=await until(()=>events.find(v=>v.type==='microphone_ticket'),5000,'microphone-ticket');if(ticket.protectedMicrophone!==true)throw Error('protected-ticket');
+  mic=await connect('/desktop-share',[protocol.DESKTOP_MICROPHONE_PROTOCOL]);const micEvents=[];mic.on('message',(raw,binary)=>{if(binary){issues.push('microphone-binary');return;}try{const v=JSON.parse(raw.toString());micEvents.push(v);if(micEvents.length>64)micEvents.shift();if(v.type==='microphone_ack'){if(v.id!==streamId||v.seq<=expectedAck||v.seq>sent)issues.push('ack-order');expectedAck=v.seq;acked++;}if(v.state==='unavailable')issues.push('microphone-unavailable');}catch{issues.push('microphone-protocol');}});mic.send(JSON.stringify({type:'video_viewer',ticket:ticket.ticket}));
+  streamId=randomUUID();mic.send(JSON.stringify({type:'microphone_start',id:streamId}));await until(()=>micEvents.some(v=>v.type==='microphone_status'&&v.id===streamId&&v.state==='running'),50000,'actor-running-timeout');
+  actor=await probe(m,'actor',{serverPid:server.pid});if(!actor.ok||actor.actors?.length!==1||!actor.actors[0].identity.normal||!actor.actors[0].sameOwnerLogonSession)throw Error('actual-actor-proof');
+  const send=bytes=>{if(mic.readyState!==WebSocket.OPEN||mic.bufferedAmount>8192||issues.length)throw Error('microphone-send-not-live');mic.send(JSON.stringify({type:'microphone_frame',id:streamId,seq:++sent,data:bytes.toString('base64')}));};
+  // The only interval is baseline/post-tone zero PCM. It is cleared before absolute tone.
+  pump=setInterval(()=>{try{send(generatedFrame(0,true));}catch{issues.push('silence-pump');}},20);
+  await writeFile(join(m.jobRoot,'receiver-go'),JSON.stringify({actorPid:actor.actors[0].identity.pid,actorStartedTicks:actor.actors[0].identity.startedTicks,actorExeSha256:actor.actors[0].identity.exeSha256}),{flag:'wx'});baseline=await until(async()=>await exists(join(m.jobRoot,'baseline-ready.json'))?JSON.parse(await readFile(join(m.jobRoot,'baseline-ready.json'),'utf8')):undefined,4000,'baseline-failed');if(!baseline.ok)throw Error('baseline-not-silent');
+  clearInterval(pump);pump=undefined;cadence=await clock.run(bytes=>send(bytes));
+  pump=setInterval(()=>{try{send(generatedFrame(0,true));}catch{issues.push('silence-pump');}},20);await sleep(500);
+  receiverResult=await until(async()=>await exists(join(m.jobRoot,'receiver-result.json'))?JSON.parse(await readFile(join(m.jobRoot,'receiver-result.json'),'utf8')):undefined,5000,'receiver-exit-unknown');clearInterval(pump);pump=undefined;
+  mic.send(JSON.stringify({type:'microphone_stop',id:streamId}));await until(()=>micEvents.some(v=>v.type==='microphone_status'&&v.id===streamId&&v.state==='stopped'),5000,'actor-stop-unknown');
+  settingsAfter=await call('desktop.settings.get',{});if(JSON.stringify(settingsAfter.permissions)!==JSON.stringify(settingsBefore.permissions))issues.push('private-settings-changed');
+  measurementPassed=receiverResult.ok===true&&cadence.ok===true&&issues.length===0;await receipt(m.jobRoot,'measurement.json',{ok:measurementPassed,source:{backend:native.backend,mode:native.protectedDesktop,secureDesktop:true,protectedMicrophone:true},actorModuleSha256:actor.actors[0].moduleSha256,receiver:receiverResult,cadence,frames,sent,acked,issues,rawAudioStored:false,physicalMicrophoneUsed:false,modelCalls:0});
+ }catch{issues.push('fixture-failed-closed');}
+ finally{
+  if(pump)clearInterval(pump);if(clock)await clock.close();if(mic?.readyState===1&&streamId)mic.send(JSON.stringify({type:'microphone_stop',id:streamId}));if(viewer?.readyState===1)viewer.send(JSON.stringify({type:'stop'}));for(const socket of sockets)socket.close();
+  await writeFile(join(m.jobRoot,'stop'),'',{flag:'wx'}).catch(()=>{});
+  // Normal controller cannot assume it can kill elevated receiver; its self-TTL/stop file is authoritative.
+  if(receiverOwned){try{await until(async()=>{const retired=await probe(m,'retired',{ownedPid:receiver.pid,ownedStartedTicks:receiver.startedTicks});return retired.ok&&retired.retired;},5000,'receiver-still-alive');receiverRetired=await exists(join(m.jobRoot,'receiver-result.json'))&&JSON.parse(await readFile(join(m.jobRoot,'receiver-result.json'),'utf8')).physicalClosed===true;}catch{receiverRetired=false;}}
+  if(server?.connected){server.send('stop');serverRetired=await Promise.race([closed.then(code=>code===0),sleep(10000).then(()=>false)]);}else serverRetired=server?.exitCode===0;
+  if(actor&&serverRetired){try{const identity=actor.actors[0].identity;const after=await probe(m,'retired',{ownedPid:identity.pid,ownedStartedTicks:identity.startedTicks});actorRetired=after.ok&&after.retired;}catch{actorRetired=false;}}
+  if(serverRetired&&receiverRetired&&actorRetired){try{post=await probe(m,'preflight');if(!post.ok||post.capture.volume!==pre.capture.volume||post.render.volume!==pre.render.volume)issues.push('endpoint-postcheck');}catch{issues.push('postcheck-unavailable');}}
+  if(serverRetired&&receiverRetired&&actorRetired&&post?.ok&&issues.length===0)await rm(join(m.jobRoot,'state'),{recursive:true});
+  await receipt(m.jobRoot,'result.json',{ok:measurementPassed&&issues.length===0&&serverRetired&&receiverRetired&&actorRetired&&post?.ok===true,serverRetired,receiverRetired,actorRetired,privateStateCleaned:!await exists(join(m.jobRoot,'state')),issues,rawAudioStored:false,physicalMicrophoneUsed:false,modelCalls:0});
+ }
+}
+if(process.argv[1]===fileURLToPath(import.meta.url)){if(process.argv.length!==3)throw Error('exact-private-manifest-required');await runA(resolve(process.argv[2]));}

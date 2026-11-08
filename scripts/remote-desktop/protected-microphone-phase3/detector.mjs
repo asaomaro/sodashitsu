@@ -1,0 +1,22 @@
+// Pure reference/calibration for Receiver.cs. Frame arrays are ephemeral generated data.
+export const LIMITS=Object.freeze({baselineMs:2000,baselineRms:10,baselineTone:10,minToneRms:4000,maxToneRms:7000,minToneMagnitude:6500,maxToneMagnitude:9500,minTotal:290,minWallMs:5700,minStreak:280,minStreakWallMs:5500,maxGapMs:60});
+export function metrics(samples){
+ if(samples.length!==960||!samples.every(Number.isFinite))throw Error('window-shape');
+ let square=0,sin=0,cos=0,peak=0,clips=0;
+ for(let n=0;n<960;n++){const v=samples[n],angle=2*Math.PI*997*n/48000;square+=v*v;sin+=v*Math.sin(angle);cos+=v*Math.cos(angle);peak=Math.max(peak,Math.abs(v));if(Math.abs(v)>=32767)clips++;}
+ return{rms:Math.sqrt(square/960),magnitude:2*Math.hypot(sin,cos)/960,peak,clips};
+}
+export class Detector {
+ baseline=0;tone=0;firstTone;lastTone;previous;streak=0;streakStart=0;continuous=false;baselineBad=false;maxGap=0;discontinuities=0;maxLeftRms=0;maxRightRms=0;maxLeftTone=0;maxRightTone=0;clipped=0;
+ accept(left,right,wallMs,{baseline=false,discontinuity=false}={}){
+  if(!Number.isFinite(wallMs)||wallMs<0||this.previous!==undefined&&wallMs<this.previous)throw Error('wall-order');
+  const l=metrics(left),r=metrics(right),gap=this.previous===undefined?0:wallMs-this.previous;this.previous=wallMs;this.maxGap=Math.max(this.maxGap,gap);if(discontinuity)this.discontinuities++;
+  if(baseline){this.baseline++;if(Math.max(l.rms,r.rms)>10||Math.max(l.magnitude,r.magnitude)>10)this.baselineBad=true;this.streak=0;return;}
+  this.maxLeftRms=Math.max(this.maxLeftRms,l.rms);this.maxRightRms=Math.max(this.maxRightRms,r.rms);this.maxLeftTone=Math.max(this.maxLeftTone,l.magnitude);this.maxRightTone=Math.max(this.maxRightTone,r.magnitude);this.clipped+=l.clips+r.clips;
+  const tone=l.rms>=4000&&l.rms<=7000&&l.magnitude>=6500&&l.magnitude<=9500&&l.clips===0;
+  if(!tone||discontinuity||gap>60){this.streak=0;if(!tone)return;}
+  this.tone++;this.firstTone??=wallMs;this.lastTone=wallMs;if(this.streak++===0)this.streakStart=wallMs;
+  if(this.streak>=280&&wallMs-this.streakStart>=5500)this.continuous=true;
+ }
+ result(){const span=this.firstTone===undefined?0:this.lastTone-this.firstTone;return{ok:this.baseline>=90&&!this.baselineBad&&this.tone>=290&&span>=5700&&this.continuous&&this.clipped===0,baselineFrames:this.baseline,baselineBad:this.baselineBad,toneFrames:this.tone,toneWallSpanMs:span,continuousThresholdMet:this.continuous,maximumReadGapMs:this.maxGap,captureDiscontinuities:this.discontinuities,maxLeftRms:this.maxLeftRms,maxRightRms:this.maxRightRms,maxLeft997Magnitude:this.maxLeftTone,maxRight997Magnitude:this.maxRightTone,clipCount:this.clipped,rawAudioStored:false};}
+}
