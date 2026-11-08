@@ -64,7 +64,7 @@ const controlState = ref<SubagentControlSnapshot | null>(null);
 let control: SubagentConversationControl | null = null;
 const pending = computed(() => busy.value || controlState.value?.sending === true);
 const direct = computed(
-  () => controlState.value?.capability?.mode === "direct" && !controlState.value.deliveryUnknown,
+  () => !target.value?.historical && controlState.value?.capability?.mode === "direct" && !controlState.value.deliveryUnknown,
 );
 const controlNote = computed(() =>
   target.value?.historical

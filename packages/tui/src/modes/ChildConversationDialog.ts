@@ -225,7 +225,7 @@ export class ChildConversationDialog implements Overlay {
     return this.busy || this.control.state.sending;
   }
   private direct(): boolean {
-    return this.control.state.capability?.mode === "direct" && !this.control.state.deliveryUnknown;
+    return !this.historicalMode && this.control.state.capability?.mode === "direct" && !this.control.state.deliveryUnknown;
   }
   private async sendChild(): Promise<void> {
     const text = this.childDraft.value,
