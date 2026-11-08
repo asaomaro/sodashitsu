@@ -1,0 +1,32 @@
+✔ actual BC catch retains same frozen generated frame/timing metadata (1.767652ms)
+✔ arbitrary error/cause or forged metadata is never copied into BC evidence (0.811449ms)
+✔ B requires native lock while generating, exact epoch retirement, measured quiet and restored old-stream rejection (1.843165ms)
+✔ C requires actual UAC mode and own request/recovery, not Default or only ACK (0.170542ms)
+✔ only fixture B receiver may observe locked same scope; C stays unlocked; no SYSTEM/elevated/foreign identity (0.211669ms)
+✔ observer preserves begin return/arguments and only reports exact accepted microphone epoch (0.699228ms)
+✔ unreported or malformed measurement fields do not become zero/known success (0.233751ms)
+✔ observer bounds physical channels and refuses replacement epoch instead of transferring proof (0.282873ms)
+✔ native ready rejects synthetic true or malformed markers even with a windows-gdi label (0.228231ms)
+✔ original socket closure/rejection is independent from one-use ticket rejection; no reply remains unknown (0.251334ms)
+✔ actual clock rejects with immutable generated worker_late telemetry (3.855239ms)
+✔ actual clock rejects with immutable generated delivery_late telemetry (1.466111ms)
+✔ actual clock rejects with immutable generated delivery_order telemetry (0.894416ms)
+✔ actual clock rejects with immutable generated callback_late telemetry (3.585208ms)
+✔ actual clock rejects with immutable generated callback_async telemetry (1.40003ms)
+✔ actual clock rejects with immutable generated callback_ui_budget telemetry (1.321992ms)
+✔ actual clock rejects with immutable generated callback_send_not_live telemetry (1.2414ms)
+✔ actual clock rejects with immutable generated callback_other telemetry (1.380792ms)
+✔ actual clock rejects with immutable generated worker_error telemetry (0.758489ms)
+✔ actual clock rejects with immutable generated worker_exit telemetry (0.873427ms)
+✔ actual clock rejects with immutable generated timeout telemetry (0.640096ms)
+✔ actual clock rejects with immutable generated missing_frame telemetry (0.453164ms)
+✔ exact observed values bounded and rounded; zero received is not sent evidence (2.689199ms)
+✔ foreign errors cannot invent telemetry and actual A catch attaches only branded cadence (1.891355ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 82.665124

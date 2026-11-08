@@ -1,0 +1,7 @@
+{
+  "source": {
+    "scripts/remote-desktop/protected-microphone-phase3-bc/run-bc.mjs": "2864e6f3945b15398e62ee3664ceaff209f6aa5c5a98f32ade87d665bd13f376",
+    "scripts/remote-desktop/protected-microphone-phase3-bc/clock-failure.test.mjs": "e89c2f5e715f36a353b68335c939721b2a867c5280bcd5c69f7b1281db95d9d3"
+  },
+  "AUnchanged": true
+}
