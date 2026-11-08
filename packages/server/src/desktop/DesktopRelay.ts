@@ -68,6 +68,8 @@ import { unlockFailure } from "./unlockFailure.js";
 import { DesktopCursorStream } from "./DesktopCursorStream.js";
 import { DesktopVideoLanes } from "./DesktopVideoLanes.js";
 
+import {desktopStartFailureMessage} from "./DesktopStartFailure.js";
+
 class DesktopSetupRequired extends Error {}
 
 interface ViewerSocket {
@@ -543,7 +545,7 @@ export class DesktopRelay {
               type: "error",
               message: error instanceof DesktopSetupRequired
                 ? error.message
-                : "共有を開始できません。Bの補助プログラム設定・共有先の許可・接続状態を確認してください。",
+                : desktopStartFailureMessage(error),
             });
             this.stop(v);
           });

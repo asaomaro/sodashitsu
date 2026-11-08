@@ -1,3 +1,4 @@
+import {RpcError} from "@sodashitsu/protocol";
 import {decodeDesktopAudio} from "@sodashitsu/protocol";
 import {encodeDesktopFrame} from "@sodashitsu/protocol";
 import {desktopFeaturesProtocol,DESKTOP_FEATURES_PREFIX} from "@sodashitsu/protocol";
@@ -121,8 +122,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
                       : provider.capabilities()
                     : (providerStartCalls++, await provider.start(owner, m.params));
               onText(JSON.stringify({ id: m.id, result }));
-            } catch {
-              onText(JSON.stringify({ id: m.id, error: { message: "denied" } }));
+            } catch (error) {
+              onText(JSON.stringify({ id: m.id, error: error instanceof RpcError?error.toProtocolError():{ message: "denied" } }));
             }
           })();
         },
@@ -2065,4 +2066,14 @@ it('does not reuse owned virtual drag ready proof after reconnect to an old host
  first.send({type:'stop'});await expect.poll(()=>(f.provider as any).physicalHelpers.size).toBe(0);
  f.provider.configure({...configured,command:configured.command.filter((part:string)=>part!=='--virtual-native-drag-generated')});
  const second=await f.viewer(protocols);second.send(request);await expect.poll(()=>second.ws.readyState).toBe(WebSocket.CLOSED);expect(second.messages.some(m=>m.type==='ready')).toBe(false);
+});
+
+it.each(['local','remote'])('shows only the fixed cleanup restart explanation through authenticated %s RPC',async(machineId)=>{
+ const f=await fixture();vi.spyOn(f.provider,'start').mockRejectedValue(new RpcError('server_busy','接続先の入力解放を確認できません。接続先で共有設定を確認して再起動してください。'));
+ const v=await f.viewer();v.send({...start,machineId});await expect.poll(()=>v.messages.some(m=>m.type==='error')).toBe(true);
+ expect(v.messages.find(m=>m.type==='error')?.message).toBe('接続先PCで前の入力の解放を確認できないため、共有を停止しています。接続先PCのSodashitsuサーバーを再起動してから接続し直してください。');
+});
+it.each([new RpcError('server_busy','PRIVATE_PATH_OR_ERROR'),new RpcError('unauthorized','接続先の入力解放を確認できません。接続先で共有設定を確認して再起動してください。'),new Error('接続先の入力解放を確認できません。接続先で共有設定を確認して再起動してください。')])('keeps other start errors generic (%s)',async(error)=>{
+ const f=await fixture();vi.spyOn(f.provider,'start').mockRejectedValue(error);const v=await f.viewer();v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==='error')).toBe(true);
+ expect(v.messages.find(m=>m.type==='error')?.message).toBe('共有を開始できません。Bの補助プログラム設定・共有先の許可・接続状態を確認してください。');
 });

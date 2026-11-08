@@ -1,4 +1,5 @@
 import { RpcError, type MethodName, type ParamsOf, type ResultOf } from "@sodashitsu/protocol";
+import {desktopStartReplyError} from "./DesktopStartFailure.js";
 import type { LinkChannel } from "../machine/MachineLink.js";
 
 export class DesktopBridgeError extends Error {
@@ -11,7 +12,7 @@ export class DesktopBridgeRpc {
   private closed = false;
   private readonly pending = new Map<
     string,
-    { resolve(v: unknown): void; reject(e: Error): void; timer: ReturnType<typeof setTimeout> }
+    { method:MethodName; resolve(v: unknown): void; reject(e: Error): void; timer: ReturnType<typeof setTimeout> }
   >();
   constructor(
     private readonly channel: LinkChannel,
@@ -34,7 +35,7 @@ export class DesktopBridgeRpc {
         if (!p) return;
         clearTimeout(p.timer);
         this.pending.delete(msg.id);
-        if (msg.error) p.reject(new DesktopBridgeError("rejected", `リモートの${this.options.label ?? "デスクトップ"}要求が拒否されました`));
+        if (msg.error) p.reject((p.method==="desktop.start"?desktopStartReplyError(msg.error):undefined)??new DesktopBridgeError("rejected", `リモートの${this.options.label ?? "デスクトップ"}要求が拒否されました`));
         else p.resolve(msg.result);
       } catch {
         this.close();
@@ -58,7 +59,7 @@ export class DesktopBridgeRpc {
         if (this.options.closeOnTimeout !== false) this.close();
       }, Math.max(1, Math.min(35000, opts?.timeoutMs ?? 10000)));
       timer.unref();
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
+      this.pending.set(id, { method, resolve: resolve as (v: unknown) => void, reject, timer });
       this.channel.sendText(JSON.stringify({ id, method, params }));
     });
   }
