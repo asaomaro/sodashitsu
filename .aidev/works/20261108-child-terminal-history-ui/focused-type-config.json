@@ -1,0 +1,14 @@
+{
+  "extends": "/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core/tsconfig.typecheck.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "include": [
+    "/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core/src/agent/SubagentHistoryReader.ts",
+    "/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core/src/agent/SubagentHistoryReader.test.ts",
+    "/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core/src/agent/SubagentUsageReader.ts",
+    "/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core/src/agent/SubagentUsageReader.test.ts",
+    "/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core/src/sidebar/observedAgentModel.ts",
+    "/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core/src/sidebar/observedAgentModel.test.ts"
+  ]
+}

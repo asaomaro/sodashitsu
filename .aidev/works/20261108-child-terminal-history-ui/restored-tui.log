@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-terminal-history-ui/packages/tui
+
+
+ Test Files  5 passed (5)
+      Tests  215 passed (215)
+   Start at  13:40:48
+   Duration  7.02s (transform 62%, tests 22%, import 16%)
+
+  Transform  transforming modules took 11.31s · 62% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

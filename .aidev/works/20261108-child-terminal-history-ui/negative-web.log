@@ -1,0 +1,164 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-terminal-history-ui/packages/web
+
+ ❯ src/components/SubagentHistoryList.test.ts (11 tests | 1 failed) 166ms
+   × rejects an old row click after its source scope changes 19ms
+ ❯ src/components/ChildConversationWindow.test.ts (26 tests | 4 failed) 498ms
+   × uses only exact history methods for a historical selection, even with a same-id current child 40ms
+   × never retries an unavailable historical transcript through the current child route 13ms
+   × clears displayed history when its exact entry becomes unreadable 19ms
+   × clears displayed history when its exact entry becomes not_found 40ms
+stderr | src/components/ContextMenu.test.ts > keeps a zero-current history entry in the target pane menu, independent of the focused pane
+[Vue warn]: injection "Symbol(connection)" not found. 
+  at <ContextMenu ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ❯ src/components/ContextMenu.test.ts (47 tests | 1 failed) 840ms
+   × keeps a zero-current history entry in the target pane menu, independent of the focused pane 20ms
+ ❯ src/actions/ActionDispatcher.test.ts (241 tests | 1 failed) 1324ms
+   ❯ ActionDispatcher — D-7 の操作（20260927-cli-mode） (27)
+     ❯ showSubagents（show_subagents） (3)
+       × 0件や未取得でも終了履歴への入口を開き、エージェント/フォーカス不在では開かない 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — D-7 の操作（20260927-cli-mode） > showSubagents（show_subagents） > 0件や未取得でも終了履歴への入口を開き、エージェント/フォーカス不在では開かない
+AssertionError: expected null to match object { kind: 'subagents', paneId: 'p1' }
+
+- Expected:
+{
+  "kind": "subagents",
+  "paneId": "p1",
+}
+
++ Received:
+null
+
+ ❯ src/actions/ActionDispatcher.test.ts:3027:189
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/components/ChildConversationWindow.test.ts > uses only exact history methods for a historical selection, even with a same-id current child
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/ChildConversationWindow.test.ts:393:75
+    391|   for (const call of f.request.mock.calls)
+    392|     expect(call[1]).toMatchObject({ entryId: historicalRow.entryId });
+    393|   expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control…
+       |                                                                           ^
+    394|   await f.wrapper.get("footer>button").trigger("click");
+    395|   await f.wrapper
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/components/ChildConversationWindow.test.ts > never retries an unavailable historical transcript through the current child route
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/ChildConversationWindow.test.ts:417:75
+    415|   expect(f.request).toHaveBeenCalledTimes(1);
+    416|   expect(f.request.mock.calls[0]?.[0]).toBe("agent.subagent_history_tr…
+    417|   expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control…
+       |                                                                           ^
+    418|   f.wrapper.unmount();
+    419| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  src/components/ChildConversationWindow.test.ts > clears displayed history when its exact entry becomes unreadable
+AssertionError: expected 'Finished generated child 子の一覧・終了履歴 × …' not to contain 'REVOKED GENERATED HISTORY'
+
+Expected: "REVOKED GENERATED HISTORY"
+Received: "Finished generated child 子の一覧・終了履歴 ×  終了履歴 · 完了 親: Parent task · 子: Finished generated child · history-model発言REVOKED GENERATED HISTORY記録を読めません▸ 利用状況 終了した子の記録を表示しています。子へ直接送信せず、親へ依頼できます。 親へ依頼する下書き"
+
+ ❯ src/components/ChildConversationWindow.test.ts:453:34
+    451|     await vi.advanceTimersByTimeAsync(1500);
+    452|     await flush();
+    453|     expect(f.wrapper.text()).not.toContain("REVOKED GENERATED HISTORY"…
+       |                                  ^
+    454|     await vi.advanceTimersByTimeAsync(10000);
+    455|     expect(f.request).toHaveBeenCalledTimes(2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  src/components/ChildConversationWindow.test.ts > clears displayed history when its exact entry becomes not_found
+AssertionError: expected 'Finished generated child 子の一覧・終了履歴 × …' not to contain 'REVOKED GENERATED HISTORY'
+
+Expected: "REVOKED GENERATED HISTORY"
+Received: "Finished generated child 子の一覧・終了履歴 ×  終了履歴 · 完了 親: Parent task · 子: Finished generated child · history-model発言REVOKED GENERATED HISTORYこのサブエージェントの記録は、もう読めません（今までの表示は残してあります）▸ 利用状況 終了した子の記録を表示しています。子へ直接送信せず、親へ依頼できます。 親へ依頼する下書き"
+
+ ❯ src/components/ChildConversationWindow.test.ts:453:34
+    451|     await vi.advanceTimersByTimeAsync(1500);
+    452|     await flush();
+    453|     expect(f.wrapper.text()).not.toContain("REVOKED GENERATED HISTORY"…
+       |                                  ^
+    454|     await vi.advanceTimersByTimeAsync(10000);
+    455|     expect(f.request).toHaveBeenCalledTimes(2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  src/components/ContextMenu.test.ts > keeps a zero-current history entry in the target pane menu, independent of the focused pane
+AssertionError: expected undefined to be defined
+ ❯ src/components/ContextMenu.test.ts:716:508
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  src/components/SubagentHistoryList.test.ts > rejects an old row click after its source scope changes
+AssertionError: expected [ [ { id: 'child-1', …(8) } ] ] to be undefined
+
+- Expected:
+undefined
+
++ Received:
+[
+  [
+    {
+      "description": "Generated finished 1",
+      "entryId": "00000000-0000-4000-8000-000000000001",
+      "hasTranscript": true,
+      "id": "child-1",
+      "model": "observed-model",
+      "modelBasis": "turn",
+      "reasoningEffort": "low",
+      "reasoningEffortBasis": "turn",
+      "terminalStatus": "completed",
+    },
+  ],
+]
+
+ ❯ src/components/SubagentHistoryList.test.ts:182:39
+    180|   await old.trigger("click");
+    181|   await flush();
+    182|   expect(f.wrapper.emitted("select")).toBeUndefined();
+       |                                       ^
+    183|   expect(f.request).toHaveBeenCalledTimes(1);
+    184| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  4 failed | 2 passed (6)
+      Tests  7 failed | 363 passed (370)
+   Start at  13:40:01
+   Duration  5.86s (transform 61%, import 14%, tests 14%, environment 10%)
+
+  Transform  transforming modules took 14.75s · 61% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-child-terminal-history-ui/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/SubagentHistoryList.test.ts src/components/ChildConversationWindow.test.ts src/components/SubagentListDialog.test.ts src/actions/ActionDispatcher.test.ts src/components/ContextMenu.test.ts src/components/graph/SubagentTranscriptWindow.test.ts

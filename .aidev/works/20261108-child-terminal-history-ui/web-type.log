@@ -1,0 +1,11 @@
+
+> @sodashitsu/web@0.1.0 typecheck /workspaces/sodashitsu-child-terminal-history-ui/packages/web
+> vue-tsc --noEmit -p tsconfig.typecheck.json
+
+src/components/SubagentHistoryList.test.ts(54,16): error TS2352: Conversion of type '{ id: string; tabId: string; agent: { instanceId: string; kind: string; name: string; state: "idle"; subagents: { count: number; items: never[]; }; }; agentSession: { kind: "codex"; sessionId: string; reportedAt: number; }; }' to type 'Pane' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ id: string; tabId: string; agent: { instanceId: string; kind: string; name: string; state: "idle"; subagents: { count: number; items: never[]; }; }; agentSession: { kind: "codex"; sessionId: string; reportedAt: number; }; }' is missing the following properties from type 'Pane': label, cwd, shell, cols, and 6 more.
+src/components/SubagentHistoryList.vue(86,25): error TS2339: Property 'refresh' does not exist on type 'never'.
+src/components/SubagentHistoryList.vue(120,23): error TS2339: Property 'more' does not exist on type 'never'.
+/workspaces/sodashitsu-child-terminal-history-ui/packages/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/web@0.1.0 typecheck: `vue-tsc --noEmit -p tsconfig.typecheck.json`
+Exit status 2

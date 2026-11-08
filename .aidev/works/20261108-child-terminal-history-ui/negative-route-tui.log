@@ -1,0 +1,37 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-terminal-history-ui/packages/tui
+
+ ❯ src/modes/ChildConversationDialog.test.ts (34 tests | 1 failed | 33 skipped) 18ms
+   × stops an old peer historical read without current fallback 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/ChildConversationDialog.test.ts > stops an old peer historical read without current fallback
+AssertionError: expected 'agent.subagent_transcript' to be 'agent.subagent_history_transcript' // Object.is equality
+
+Expected: "agent.subagent_history_transcript"
+Received: "agent.subagent_transcript"
+
+ ❯ src/modes/ChildConversationDialog.test.ts:516:40
+    514|   await vi.advanceTimersByTimeAsync(10000);
+    515|   expect(f.request).toHaveBeenCalledTimes(1);
+    516|   expect(f.request.mock.calls[0]?.[0]).toBe("agent.subagent_history_tr…
+       |                                        ^
+    517|   expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control…
+    518|   f.dialog.dispose();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 skipped (5)
+      Tests  1 failed | 214 skipped (215)
+   Start at  13:40:33
+   Duration  4.01s (transform 79%, import 20%)
+
+  Transform  transforming modules took 10.75s · 79% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-child-terminal-history-ui/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/SubagentHistoryList.test.ts src/modes/ChildConversationDialog.test.ts src/modes/SubagentTranscript.test.ts src/app/TuiApp.subagents.test.ts src/actions/TuiDispatcher.test.ts --testNamePattern never retries an unavailable historical transcript|stops an old peer historical read

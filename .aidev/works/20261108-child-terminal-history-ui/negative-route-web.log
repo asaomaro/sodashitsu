@@ -1,0 +1,37 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-terminal-history-ui/packages/web
+
+ ❯ src/components/ChildConversationWindow.test.ts (26 tests | 1 failed | 25 skipped) 83ms
+   × never retries an unavailable historical transcript through the current child route 78ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/ChildConversationWindow.test.ts > never retries an unavailable historical transcript through the current child route
+AssertionError: expected 'agent.subagent_transcript' to be 'agent.subagent_history_transcript' // Object.is equality
+
+Expected: "agent.subagent_history_transcript"
+Received: "agent.subagent_transcript"
+
+ ❯ src/components/ChildConversationWindow.test.ts:416:40
+    414|   await vi.advanceTimersByTimeAsync(6000);
+    415|   expect(f.request).toHaveBeenCalledTimes(1);
+    416|   expect(f.request.mock.calls[0]?.[0]).toBe("agent.subagent_history_tr…
+       |                                        ^
+    417|   expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control…
+    418|   f.wrapper.unmount();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 5 skipped (6)
+      Tests  1 failed | 369 skipped (370)
+   Start at  13:40:27
+   Duration  4.43s (transform 72%, import 16%, environment 12%)
+
+  Transform  transforming modules took 14.66s · 72% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-child-terminal-history-ui/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/SubagentHistoryList.test.ts src/components/ChildConversationWindow.test.ts src/components/SubagentListDialog.test.ts src/actions/ActionDispatcher.test.ts src/components/ContextMenu.test.ts src/components/graph/SubagentTranscriptWindow.test.ts --testNamePattern never retries an unavailable historical transcript|stops an old peer historical read

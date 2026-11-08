@@ -1,0 +1,32 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-terminal-history-ui/packages/client-core
+
+ ❯ src/agent/SubagentHistoryReader.test.ts (15 tests | 1 failed) 51ms
+   × does not claim there is no history when the current page is empty but more pages remain 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/SubagentHistoryReader.test.ts > does not claim there is no history when the current page is empty but more pages remain
+AssertionError: expected '終了した子の履歴はありません。' not to contain 'ありません'
+
+Expected: "ありません"
+Received: "終了した子の履歴はありません。"
+
+ ❯ src/agent/SubagentHistoryReader.test.ts:226:271
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 30 passed (31)
+   Start at  13:42:15
+   Duration  1.63s (transform 71%, import 26%, tests 3%, worker 1%)
+
+  Transform  transforming modules took 2.10s · 71% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/SubagentHistoryReader.test.ts src/agent/SubagentUsageReader.test.ts src/sidebar/observedAgentModel.test.ts

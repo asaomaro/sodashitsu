@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-terminal-history-ui/packages/client-core
+
+
+ Test Files  3 passed (3)
+      Tests  31 passed (31)
+   Start at  13:42:18
+   Duration  1.46s (transform 73%, import 24%, tests 2%, worker 1%)
+

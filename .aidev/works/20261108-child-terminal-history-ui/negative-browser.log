@@ -1,0 +1,16 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 5000ms exceeded.
+Call log:
+[2m  - waiting for getByRole('menuitem', { name: 'サブエージェントの一覧', exact: true })[22m
+
+    at /workspaces/sodashitsu-child-terminal-history-ui/.aidev/works/20261108-child-terminal-history-ui/browser.mjs:16:278 {
+  log: [
+    "  - waiting for getByRole('menuitem', { name: 'サブエージェントの一覧', exact: true })"
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.15.0

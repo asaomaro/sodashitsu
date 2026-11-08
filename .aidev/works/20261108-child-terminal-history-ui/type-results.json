@@ -1,0 +1,14 @@
+{
+  "sourceHead": "0e2e2d160af6ef74461b683796484e6439a2189e",
+  "coreBuildExit": 0,
+  "coreFocusedChangedSixFileTypeExit": 0,
+  "tuiPackageTestInclusiveTypeExit": 0,
+  "webPackageTestInclusiveTypeExit": 0,
+  "coreRelatedPassed": 31,
+  "webRelatedPassed": 370,
+  "tuiRelatedPassed": 215,
+  "finalContextMenuPassed": 47,
+  "finalGeneratedBrowserExit": 0,
+  "realModelCalls": 0,
+  "windowsOperations": 0
+}

@@ -1,0 +1,12 @@
+- [x] 固定formal entryId/strict履歴RPC契約の先取込み
+- [x] readonly collection reader・scope/revision/保持上限
+- [x] Web all-ended入口/同窓selector/厳密な本文・利用状況
+- [x] TUI既存menu/key/同overlay selector・厳密な本文/利用状況
+- [x] historical直接入力なし・親checked明示送信のみ
+- [x] Info会話非表示/active・footer count非加算
+- [x] 旧入口/guard/routeの負例→11SHA完全復元・空page回帰の追加復元
+- [x] 生成4テーマ実DOMとGrid/マウス/thumb末尾
+- [x] core対象型/TUI全型・corebuild
+- [x] Web最終全型と固定検証証跡
+- [ ] 実装者以外による差分全体の独立レビュー（必須）
+- [ ] backend各providerの正式history実配線/実測（別担当。UIの生成fixture成功と区別）

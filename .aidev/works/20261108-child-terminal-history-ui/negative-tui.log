@@ -1,0 +1,146 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-terminal-history-ui/packages/tui
+
+ ❯ src/modes/ChildConversationDialog.test.ts (34 tests | 3 failed) 527ms
+   × routes a historical child to strict transcript and usage only, leaving input as an explicit parent draft 9ms
+   × stops an old peer historical read without current fallback 2ms
+   × clears old historical text and stops when the exact entry becomes unreadable 6ms
+ ❯ src/app/TuiApp.subagents.test.ts (27 tests | 2 failed) 2784ms
+   ❯ 端末版のサブエージェントの表示 (27)
+     × 現在の子が0件でもメニューと既存操作から終了一覧に到達し、badge/countを増やさない 69ms
+     × 開いている間に、エージェントが居なくなる・入れ替わる・pane が閉じると閉じる。同じ instanceId の更新では閉じず、一覧が更新される 76ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > 現在の子が0件でもメニューと既存操作から終了一覧に到達し、badge/countを増やさない
+AssertionError: expected undefined to be defined
+ ❯ src/app/TuiApp.subagents.test.ts:229:262
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > 開いている間に、エージェントが居なくなる・入れ替わる・pane が閉じると閉じる。同じ instanceId の更新では閉じず、一覧が更新される
+AssertionError: expected null to match object { kind: 'subagents', …(1) }
+
+- Expected:
+{
+  "instanceId": "other",
+  "kind": "subagents",
+}
+
++ Received:
+null
+
+ ❯ src/app/TuiApp.subagents.test.ts:249:36
+    247|     expect(h.app.ui.dialogContext).toBeNull();
+    248|     dispatcherOf(h.app).showSubagentsOf("p3"); // 現在の子が未取得でも、終了履歴への入口を…
+    249|     expect(h.app.ui.dialogContext).toMatchObject({kind:"subagents",ins…
+       |                                    ^
+    250|     h.app.ui.closeDialog();
+    251|     h.ws.event("pane.agent_status_changed", {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/modes/ChildConversationDialog.test.ts > routes a historical child to strict transcript and usage only, leaving input as an explicit parent draft
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/modes/ChildConversationDialog.test.ts:474:75
+    472|   for (const call of f.request.mock.calls)
+    473|     expect(call[1]).toMatchObject({ entryId: historyItem.entryId });
+    474|   expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control…
+       |                                                                           ^
+    475|   key(f, "Escape");
+    476|   key(f, "p");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/modes/ChildConversationDialog.test.ts > stops an old peer historical read without current fallback
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/modes/ChildConversationDialog.test.ts:517:75
+    515|   expect(f.request).toHaveBeenCalledTimes(1);
+    516|   expect(f.request.mock.calls[0]?.[0]).toBe("agent.subagent_history_tr…
+    517|   expect(f.rpc.mock.calls.some((c) => c[0] === "agent.subagent_control…
+       |                                                                           ^
+    518|   f.dialog.dispose();
+    519| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/modes/ChildConversationDialog.test.ts > clears old historical text and stops when the exact entry becomes unreadable
+AssertionError: expected '                                     …' not to contain 'REVOKED GENERATED HISTORY'
+
+- Expected
++ Received
+
+- REVOKED GENERATED HISTORY
++                                                                                                               
++  ┌─ サブエージェントの会話 ─────────────────────────────────────────────────────────────────────────────────┐ 
++  │ 親: parent-agent · 子: Finished generated child                                                          │ 
++  │ 終了履歴 · 完了                                                                                          │ 
++  │ 発言: REVOKED GENERATED HISTORY                                                                          │ 
++  │ 記録を読めません                                                                                         │ 
++  │ 終了した子は閲覧専用です。親へ依頼できます。                                                             │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │                                                                                                          │ 
++  │ P: 親への依頼を下書き · H:子の一覧・終了履歴 U: 利用状況 · ↑↓ · Esc: 閉じる                              │ 
++  └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘ 
++                                                                                                               
+
+ ❯ src/modes/ChildConversationDialog.test.ts:542:26
+    540|   expect(f.render()).toContain("REVOKED GENERATED HISTORY");
+    541|   await vi.advanceTimersByTimeAsync(1500);
+    542|   expect(f.render()).not.toContain("REVOKED GENERATED HISTORY");
+       |                          ^
+    543|   await vi.advanceTimersByTimeAsync(10000);
+    544|   expect(f.request).toHaveBeenCalledTimes(2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed | 3 passed (5)
+      Tests  5 failed | 210 passed (215)
+   Start at  13:40:09
+   Duration  6.84s (transform 62%, tests 22%, import 16%)
+
+  Transform  transforming modules took 10.78s · 62% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-child-terminal-history-ui/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/SubagentHistoryList.test.ts src/modes/ChildConversationDialog.test.ts src/modes/SubagentTranscript.test.ts src/app/TuiApp.subagents.test.ts src/actions/TuiDispatcher.test.ts

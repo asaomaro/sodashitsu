@@ -1,0 +1,4 @@
+
+> @sodashitsu/client-core@0.1.0 build /workspaces/sodashitsu-child-terminal-history-ui/packages/client-core
+> tsc -b
+

@@ -1,0 +1,53 @@
+{
+  "head": "f3767409b5e199aa9ee7cbd07851787ad0502f17",
+  "before": {
+    "packages/client-core/src/agent/SubagentHistoryReader.ts": "ee0eabedf47189ba494650a8179c74e2f51df00949bc9f19aa2061c542015b5d",
+    "packages/client-core/src/agent/SubagentUsageReader.ts": "a50485cbc9e66255576046f21fc923cb33fc100db470c866711a2e20ee3383cc",
+    "packages/web/src/components/graph/SubagentTranscriptWindow.vue": "deef8f8333c0cd9f7d3d29f99529b27c86378f70a2b4b1ed212e98b5b955507f",
+    "packages/web/src/components/ChildConversationWindow.vue": "d9c4b9ef7e1557a9a66ce2d490035ab97d3c531e269981e9afae8a73d4e43dfd",
+    "packages/web/src/components/SubagentHistoryList.vue": "8c1f4fd4aa368b0051acee24629780431a13056c530c676af683afa50611cfef",
+    "packages/web/src/actions/ActionDispatcher.ts": "8b1878062df31ae1e005c193e33f65e57f3872c7a315af87f553d92739ef5475",
+    "packages/web/src/components/ContextMenu.vue": "8aac4a8e7d4c16a8a01f48c57720f45bbfe5663c984ff3c979a147dc2ef61b02",
+    "packages/tui/src/modes/SubagentTranscript.ts": "ba9687152952d2e835a9c321e9c9f5c6b6d6a7e359af05f18671532557700ba4",
+    "packages/tui/src/modes/ChildConversationDialog.ts": "74459f3344544145819428870d2c22341d6ed9ada74359f07f8372ac40f536cb",
+    "packages/tui/src/actions/TuiDispatcher.ts": "0b8ee489c95fe9c0b952562b4e7674b14094c5ee2dd0e085c3d05ee5eda24842",
+    "packages/tui/src/modes/ContextMenu.ts": "e62c602b08aa2aaea414e9e95a2a2b581ced9fe817a12adfe3f5d328e34b6e2a"
+  },
+  "after": {
+    "packages/client-core/src/agent/SubagentHistoryReader.ts": "ee0eabedf47189ba494650a8179c74e2f51df00949bc9f19aa2061c542015b5d",
+    "packages/client-core/src/agent/SubagentUsageReader.ts": "a50485cbc9e66255576046f21fc923cb33fc100db470c866711a2e20ee3383cc",
+    "packages/web/src/components/graph/SubagentTranscriptWindow.vue": "deef8f8333c0cd9f7d3d29f99529b27c86378f70a2b4b1ed212e98b5b955507f",
+    "packages/web/src/components/ChildConversationWindow.vue": "d9c4b9ef7e1557a9a66ce2d490035ab97d3c531e269981e9afae8a73d4e43dfd",
+    "packages/web/src/components/SubagentHistoryList.vue": "8c1f4fd4aa368b0051acee24629780431a13056c530c676af683afa50611cfef",
+    "packages/web/src/actions/ActionDispatcher.ts": "8b1878062df31ae1e005c193e33f65e57f3872c7a315af87f553d92739ef5475",
+    "packages/web/src/components/ContextMenu.vue": "8aac4a8e7d4c16a8a01f48c57720f45bbfe5663c984ff3c979a147dc2ef61b02",
+    "packages/tui/src/modes/SubagentTranscript.ts": "ba9687152952d2e835a9c321e9c9f5c6b6d6a7e359af05f18671532557700ba4",
+    "packages/tui/src/modes/ChildConversationDialog.ts": "74459f3344544145819428870d2c22341d6ed9ada74359f07f8372ac40f536cb",
+    "packages/tui/src/actions/TuiDispatcher.ts": "0b8ee489c95fe9c0b952562b4e7674b14094c5ee2dd0e085c3d05ee5eda24842",
+    "packages/tui/src/modes/ContextMenu.ts": "e62c602b08aa2aaea414e9e95a2a2b581ced9fe817a12adfe3f5d328e34b6e2a"
+  },
+  "exact": {
+    "packages/client-core/src/agent/SubagentHistoryReader.ts": true,
+    "packages/client-core/src/agent/SubagentUsageReader.ts": true,
+    "packages/web/src/components/graph/SubagentTranscriptWindow.vue": true,
+    "packages/web/src/components/ChildConversationWindow.vue": true,
+    "packages/web/src/components/SubagentHistoryList.vue": true,
+    "packages/web/src/actions/ActionDispatcher.ts": true,
+    "packages/web/src/components/ContextMenu.vue": true,
+    "packages/tui/src/modes/SubagentTranscript.ts": true,
+    "packages/tui/src/modes/ChildConversationDialog.ts": true,
+    "packages/tui/src/actions/TuiDispatcher.ts": true,
+    "packages/tui/src/modes/ContextMenu.ts": true
+  },
+  "negative-coreExit": 1,
+  "negative-webExit": 1,
+  "negative-tuiExit": 1,
+  "negative-browserExit": 1,
+  "negative-route-webExit": 1,
+  "negative-route-tuiExit": 1,
+  "restored-core-buildExit": 0,
+  "restored-coreExit": 0,
+  "restored-webExit": 0,
+  "restored-tuiExit": 0,
+  "restored-browserExit": 0
+}

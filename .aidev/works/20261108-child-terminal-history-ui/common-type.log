@@ -1,0 +1,14 @@
+
+> @sodashitsu/client-core@0.1.0 typecheck /workspaces/sodashitsu-child-terminal-history-ui/packages/client-core
+> tsc --noEmit -p tsconfig.typecheck.json
+
+src/sidebar/observedAgentModel.test.ts(20,29): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type 'Pick<SubagentInfo, "model" | "modelBasis" | "reasoningEffort" | "reasoningEffortBasis">'.
+src/sidebar/observedAgentModel.test.ts(20,131): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type 'Pick<SubagentInfo, "reasoningEffort" | "reasoningEffortBasis">'.
+src/sidebar/observedAgentModel.test.ts(20,247): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type 'Pick<SubagentInfo, "model" | "modelBasis" | "reasoningEffort" | "reasoningEffortBasis">'.
+src/sidebar/observedAgentModel.test.ts(29,90): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type 'Pick<SubagentInfo, "model" | "modelBasis" | "reasoningEffort" | "reasoningEffortBasis">'.
+src/sidebar/observedAgentModel.test.ts(30,29): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type 'Pick<SubagentInfo, "model" | "modelBasis" | "reasoningEffort" | "reasoningEffortBasis">'.
+src/sidebar/observedAgentModel.test.ts(34,80): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type 'Pick<SubagentInfo, "model" | "modelBasis" | "reasoningEffort" | "reasoningEffortBasis">'.
+src/sidebar/observedAgentModel.test.ts(35,29): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type 'Pick<SubagentInfo, "model" | "modelBasis" | "reasoningEffort" | "reasoningEffortBasis">'.
+/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/client-core@0.1.0 typecheck: `tsc --noEmit -p tsconfig.typecheck.json`
+Exit status 2

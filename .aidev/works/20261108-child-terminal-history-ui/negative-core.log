@@ -1,0 +1,154 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-child-terminal-history-ui/packages/client-core
+
+ ❯ src/agent/SubagentUsageReader.test.ts (8 tests | 2 failed) 37ms
+   × never falls back to current usage for a historical selector 0 11ms
+   × never falls back to current usage for a historical selector 1 2ms
+ ❯ src/agent/SubagentHistoryReader.test.ts (14 tests | 5 failed) 57ms
+   × only reads formal terminal rows, preserves unknown dates and strips unexpected fields 22ms
+   × drops late history rows after scope changes 3ms
+   × clears already displayed rows immediately after scope revocation 2ms
+   × does not treat a changed next-page collection as a valid first page: missing-reset 4ms
+   × does not treat a changed next-page collection as a valid first page: oversized-reset 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/SubagentHistoryReader.test.ts > only reads formal terminal rows, preserves unknown dates and strips unexpected fields
+AssertionError: expected [ { id: 'child-1', …(8) }, …(1) ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ src/agent/SubagentHistoryReader.test.ts:68:32
+     66|   );
+     67|   await f.reader.refresh();
+     68|   expect(f.reader.state.items).toHaveLength(1);
+       |                                ^
+     69|   expect(f.reader.state.items[0]).not.toHaveProperty("privateBrain");
+     70|   expect(f.reader.state.items[0]).not.toHaveProperty("startedAt");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/agent/SubagentHistoryReader.test.ts > drops late history rows after scope changes
+AssertionError: expected [ { id: 'child-1', …(4) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/agent/SubagentHistoryReader.test.ts:139:32
+    137|   finish(page([row(1)]));
+    138|   await pending;
+    139|   expect(f.reader.state.items).toHaveLength(0);
+       |                                ^
+    140|   await vi.advanceTimersByTimeAsync(30000);
+    141|   expect(f.request).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/agent/SubagentHistoryReader.test.ts > clears already displayed rows immediately after scope revocation
+AssertionError: expected [ { id: 'child-1', …(4) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/agent/SubagentHistoryReader.test.ts:147:32
+    145|   await f.reader.refresh();
+    146|   f.invalidate();
+    147|   expect(f.reader.state.items).toHaveLength(0);
+       |                                ^
+    148|   expect(f.reader.state.status).toBe("unavailable");
+    149| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  src/agent/SubagentHistoryReader.test.ts > does not treat a changed next-page collection as a valid first page: missing-reset
+ FAIL  src/agent/SubagentHistoryReader.test.ts > does not treat a changed next-page collection as a valid first page: oversized-reset
+AssertionError: expected 'ok' to be 'failed' // Object.is equality
+
+Expected: "failed"
+Received: "ok"
+
+ ❯ src/agent/SubagentHistoryReader.test.ts:222:35
+    220|     await f.reader.refresh();
+    221|     await f.reader.more();
+    222|     expect(f.reader.state.status).toBe("failed");
+       |                                   ^
+    223|     expect(f.reader.state.items).toHaveLength(0);
+    224|   },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  src/agent/SubagentUsageReader.test.ts > never falls back to current usage for a historical selector 0
+AssertionError: expected [ 'agent.subagent_usage', …(1) ] to deeply equal [ Array(2) ]
+
+- Expected
++ Received
+
+  [
+-   "agent.subagent_history_usage",
++   "agent.subagent_usage",
+    {
+      "agentId": "child",
+-     "entryId": "00000000-0000-4000-8000-000000000001",
+      "paneId": "parent",
+    },
+  ]
+
+ ❯ src/agent/SubagentUsageReader.test.ts:126:35
+    124|     );
+    125|     await reader.refresh();
+    126|     expect(request.mock.calls[0]).toEqual([
+       |                                   ^
+    127|       "agent.subagent_history_usage",
+    128|       { paneId: "parent", agentId: "child", entryId },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  src/agent/SubagentUsageReader.test.ts > never falls back to current usage for a historical selector 1
+AssertionError: expected [ 'agent.subagent_usage', …(1) ] to deeply equal [ Array(2) ]
+
+- Expected
++ Received
+
+  [
+-   "agent.subagent_history_usage",
++   "agent.subagent_usage",
+    {
+      "agentId": "child",
+-     "entryId": "",
+      "paneId": "parent",
+    },
+  ]
+
+ ❯ src/agent/SubagentUsageReader.test.ts:126:35
+    124|     );
+    125|     await reader.refresh();
+    126|     expect(request.mock.calls[0]).toEqual([
+       |                                   ^
+    127|       "agent.subagent_history_usage",
+    128|       { paneId: "parent", agentId: "child", entryId },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  7 failed | 23 passed (30)
+   Start at  13:39:59
+   Duration  1.55s (transform 73%, import 22%, tests 4%, worker 1%)
+
+  Transform  transforming modules took 2.09s · 73% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-child-terminal-history-ui/packages/client-core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/SubagentHistoryReader.test.ts src/agent/SubagentUsageReader.test.ts src/sidebar/observedAgentModel.test.ts
