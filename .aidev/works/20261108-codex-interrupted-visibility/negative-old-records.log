@@ -1,0 +1,84 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-subagent-visibility
+
+ ❯ |@sodashitsu/server| src/agent/NativeSubagentRecords.test.ts (17 tests | 1 failed) 35ms
+   ❯ native subagent lifecycle records (17)
+     × preserves exact-parent ownership across interruption and rejoins only on a later formal interaction 6ms
+ ❯ |@sodashitsu/server| src/agent/NativeSubagentReader.test.ts (33 tests | 1 failed) 1511ms
+   ❯ owned native records reader (27)
+     × publishes interrupted children after exact-parent successful followup, while keeping namespace reset isolated 20ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/NativeSubagentReader.test.ts > owned native records reader > publishes interrupted children after exact-parent successful followup, while keeping namespace reset isolated
+AssertionError: expected undefined to match object { count: 1, countBasis: 'alive', …(1) }
+
+- Expected:
+{
+  "count": 1,
+  "countBasis": "alive",
+  "items": [
+    {
+      "state": "unknown",
+    },
+  ],
+}
+
++ Received:
+undefined
+
+ ❯ src/agent/NativeSubagentReader.test.ts:27:43
+     25|       expect(await reader.read(f.source)).toEqual({ count: 0, items: […
+     26|       await appendFile(f.file, JSON.stringify(event("interacted", "fol…
+     27|       expect(await reader.read(f.source)).toMatchObject({ count: 1, co…
+       |                                           ^
+     28|       reader.forget(f.source.paneId);
+     29|       await writeFile(f.file, JSON.stringify(event("interacted", "fres…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/NativeSubagentRecords.test.ts > native subagent lifecycle records > preserves exact-parent ownership across interruption and rejoins only on a later formal interaction
+AssertionError: expected undefined to match object { count: 3, countBasis: 'alive', …(1) }
+
+- Expected:
+{
+  "count": 3,
+  "countBasis": "alive",
+  "items": [
+    {
+      "state": "unknown",
+    },
+    {
+      "state": "unknown",
+    },
+    {
+      "state": "unknown",
+    },
+  ],
+}
+
++ Received:
+undefined
+
+ ❯ src/agent/NativeSubagentRecords.test.ts:90:29
+     88|     expect(fold.snapshot()).toEqual({count:0,items:[]});
+     89|     for(const row of starts)fold.consume(event(row,"interacted",row.pa…
+     90|     expect(fold.snapshot()).toMatchObject({count:3,countBasis:"alive",…
+       |                             ^
+     91|     expect(fold.snapshot()?.items.map(i=>i.startedAt)).toEqual(starts.…
+     92|     // Historical replay and delivery do not claim working, nor restor…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 48 passed (50)
+   Start at  11:58:41
+   Duration  2.66s (transform 44%, tests 44%, import 12%)
+
