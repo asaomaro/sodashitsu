@@ -1,0 +1,40 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-intake
+
+ ❯ |@sodashitsu/server| src/agent/CursorChildReports.test.ts (3 tests | 1 failed) 14ms
+   × keeps terminal identity but never promotes parent-common model/effort 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildReports.test.ts > keeps terminal identity but never promotes parent-common model/effort
+AssertionError: expected { type: 'cursor_child', …(13) } to match object { phase: 'stop', …(3) }
+(10 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "childId": "10000000-0000-4000-8000-000000000002",
+    "parentId": "10000000-0000-4000-8000-000000000001",
+    "phase": "stop",
+-   "settingsObserved": false,
++   "settingsObserved": true,
+  }
+
+ ❯ src/agent/CursorChildReports.test.ts:7:17
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  11:03:15
+   Duration  200ms (transform 57%, tests 18%, import 17%, worker 8%)
+

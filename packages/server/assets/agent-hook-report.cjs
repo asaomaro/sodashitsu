@@ -191,6 +191,7 @@ async function main() {
   const raw = await readStdin(kind === "cursor" ? 2*1024*1024 : undefined);
   let sessionId;
   let extra;
+  let childExtra;
   let executionSettings;
   let origin = {}; // 作業フォルダ・会話が始まった理由（サーバが、報告の持ち主を確かめる材料）・会話の記録の場所（利用状況の材料）
   try {
@@ -207,7 +208,32 @@ async function main() {
         transcriptPath: pathOf(payload.transcript_path),
       });
     }
-    if (payload && typeof payload === "object" && kind === "cursor" && payload.hook_event_name === "afterAgentResponse") {
+    if (payload && typeof payload === "object" && kind === "cursor" &&
+        (payload.hook_event_name === "subagentStop" || payload.hook_event_name === "afterAgentResponse" &&
+         (payload.subagent_id || payload.agent_id || payload.parent_conversation_id && payload.parent_conversation_id !== payload.conversation_id))) {
+      // A separate child channel preserves all of the parent-usage route's existing rejection rules.
+      const uuid=v=>typeof v==="string"&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
+      const stop=payload.hook_event_name==="subagentStop",parent=payload.parent_conversation_id;
+      const child=stop?payload.child_conversation_id:payload.conversation_id;
+      const rawContext=payload.conversation_id,context=uuid(rawContext)&&
+        (payload.session_id===undefined||payload.session_id===rawContext)&&(payload.sessionId===undefined||payload.sessionId===rawContext)?rawContext:undefined;
+      if(!uuid(child)||stop&&(!uuid(parent)||parent===child)||parent!==undefined&&(!uuid(parent)||parent===child)||
+        payload.child_conversation_id!==undefined&&payload.child_conversation_id!==child)return;
+      if(!stop&&context!==child)return;
+      const generation=payload.generation_id,validGeneration=typeof generation==="string"&&/^[a-zA-Z0-9_.:-]{1,128}$/.test(generation);
+      if(!stop&&!validGeneration||generation!==undefined&&!validGeneration)return;
+      const logical=typeof payload.subagent_id==="string"&&/^[a-zA-Z0-9_.:-]{1,128}$/.test(payload.subagent_id)?payload.subagent_id:undefined;
+      const childType=typeof payload.subagent_type==="string"&&payload.subagent_type.length>0&&payload.subagent_type.length<=200&&!/[\x00-\x1f\x7f-\x9f]/.test(payload.subagent_type)?payload.subagent_type:undefined;
+      if(stop&&(!logical||!childType||!["completed","aborted","error"].includes(payload.status)))return;
+      const params=Array.isArray(payload.model_params)&&payload.model_params.length<=32?payload.model_params.filter(p=>p&&p.id==="effort"):[];
+      const effort=params.length===1&&typeof params[0].value==="string"&&/^[a-zA-Z0-9_.-]{1,64}$/.test(params[0].value)?params[0].value:undefined;
+      const selected=payload.model_id||payload.model;
+      const model=typeof selected==="string"&&selected.length>0&&selected.length<=200&&!/[\x00-\x1f\x7f-\x9f]/.test(selected)?selected:undefined;
+      sessionId=stop?parent:child;origin={};
+      extra=compact({type:"cursor_child",phase:stop?"stop":"observation",parentId:parent,childId:child,contextSessionId:context,
+        generationId:validGeneration?generation:undefined,logicalId:stop?logical:undefined,childType:stop?childType:undefined,status:stop?payload.status:undefined,
+        model:context===child?model:undefined,reasoningEffort:context===child?effort:undefined});
+    } else if (payload && typeof payload === "object" && kind === "cursor" && payload.hook_event_name === "afterAgentResponse") {
       // A child has its own conversation; never attribute it by the parent's pane env alone.
       const conversation=payload.conversation_id;
       if(typeof conversation!=="string"||!conversation||payload.subagent_id||payload.agent_id||
@@ -223,6 +249,11 @@ async function main() {
         model:cut(payload.model_id||payload.model,200),reasoningEffort:effort,
         inputTokens:numeric(payload.input_tokens),outputTokens:numeric(payload.output_tokens),
         cacheReadTokens:numeric(payload.cache_read_tokens),cacheWriteTokens:numeric(payload.cache_write_tokens)});
+      const rawModel=payload.model_id||payload.model;
+      const ownModel=typeof rawModel==="string"&&rawModel.length>0&&rawModel.length<=200&&!/[\x00-\x1f\x7f-\x9f]/.test(rawModel)?rawModel:undefined;
+      // Independent metadata receipt: parent numeric validation stays unchanged,
+      // and child identifiers are never taken from trimmed/truncated usage labels.
+      childExtra=compact({type:"cursor_child",phase:"observation",generationId:generation,childId:conversation,contextSessionId:conversation,model:ownModel,reasoningEffort:effort});
     }
     if (payload && typeof payload === "object" && kind === "claude") {
       // Only the parent hook scope. Child-agent permission overrides must not be reported as the parent's.
@@ -236,10 +267,15 @@ async function main() {
   }
   if (!sessionId || typeof sessionId !== "string") return;
 
-  await new Promise((resolve) => {
+  const deadline = childExtra ? performance.now() + 1000 : undefined;
+  let agentPid, probed = false;
+  // Preserve the primary parent receipt first, within the original one-second total budget.
+  for (const fields of (childExtra ? [extra, childExtra] : [extra])) {
+    if (deadline !== undefined && performance.now() >= deadline) break;
+    await new Promise((resolve) => {
     const conn = net.connect(sock, () => {
-      const agentPid = agentPidOf(kind);
-      conn.end(`${JSON.stringify({ paneId, kind, sessionId, ...(agentPid !== undefined ? { agentPid } : {}), ...origin, ...extra, ...(executionSettings ? { executionSettings } : {}) })}\n`);
+      if (!probed) { agentPid = agentPidOf(kind); probed = true; }
+      conn.end(`${JSON.stringify({ paneId, kind, sessionId, ...(agentPid !== undefined ? { agentPid } : {}), ...origin, ...fields, ...(executionSettings ? { executionSettings } : {}) })}\n`);
     });
     conn.on("error", () => resolve()); // サーバが落ちている等 → 黙って諦める（report は best-effort）
     conn.on("close", () => resolve());
@@ -247,8 +283,9 @@ async function main() {
     setTimeout(() => {
       conn.destroy();
       resolve();
-    }, 1000).unref();
-  });
+    }, deadline === undefined ? 1000 : Math.max(1, deadline - performance.now())).unref();
+    });
+  }
 }
 
 main().catch(() => {

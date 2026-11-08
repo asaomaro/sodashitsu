@@ -1,4 +1,5 @@
 import { cursorTurnFields, type CursorTurnFields } from "../usage/cursorHookUsage.js";
+import { cursorChildReport, type CursorChildReport } from "./CursorChildReports.js";
 import type { AgentExecutionSettings } from "@sodashitsu/protocol";
 import { reportedSettings } from "../usage/executionSettings.js";
 import { createServer, type Server } from "node:net";
@@ -34,6 +35,7 @@ export type AgentReport = AgentReportBody & {
   transcriptPath?: string;
 };
 type AgentReportBody =
+  | CursorChildReport
   | { type: "session"; paneId: string; kind: string; sessionId: string }
   | ({ type: "cursor_turn_usage"; paneId: string; kind: string; sessionId: string } & CursorTurnFields)
   | { type: "subagent_pending"; paneId: string; kind: string; sessionId: string; description?: string; agentType?: string; background?: boolean; parentAgentId?: string; transcriptPath?: string }
@@ -216,6 +218,7 @@ function parseReport(v: unknown): AgentReport | undefined {
   };
   if (o.type === undefined) return { type: "session", ...base };
   switch (o.type) {
+    case "cursor_child": return cursorChildReport(o);
     case "subagent_pending": {
       const description = cut(o.description, MAX_DESCRIPTION);
       const agentType = cut(o.agentType, MAX_AGENT_TYPE);

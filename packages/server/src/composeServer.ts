@@ -1,3 +1,4 @@
+import { CursorChildObservations } from "./agent/CursorChildObservations.js";
 import { SubagentControlService } from "./agent/SubagentControlService.js";
 import {SubagentUsageService} from "./usage/SubagentUsageService.js";
 import {createSubagentUsageResolver} from "./usage/SubagentUsageResolver.js";
@@ -681,6 +682,7 @@ export async function composeServer(
     logger,
   });
   const claudeChildObservations = new ClaudeChildObservations({session,tracker:subagents});
+  const cursorChildObservations = new CursorChildObservations({session});
   const nativeSubagents = new NativeSubagentService({ session, bus, observeClaude: source => claudeChildObservations.read(source) });
   const subagentUsage=new SubagentUsageService({resolve:createSubagentUsageResolver({session,tracker:subagents,museChildSession:(pane,child)=>nativeSubagents.museChildSession(pane,child)})});
   // サブエージェントの記録を、読むだけで追う（20261008-graph-first の PR6c）。場所は、上の数え上げが持つ報告から、サーバが組み立てる。
@@ -763,6 +765,7 @@ export async function composeServer(
       agyUsageIntake.forgetPane(e.data.paneId);
       copilotUsageIntake.forgetPane(e.data.paneId);
       cursorUsageIntake.forgetPane(e.data.paneId);
+      cursorChildObservations.forget(e.data.paneId);
     }
   });
   const conversations=new ConversationService(id=>session.getPane(id),{activeSession:(kind,id)=>session.snapshot().panes.some(p=>p.agent?.kind===kind&&p.agentSession?.kind===kind&&p.agentSession.sessionId===id)});
@@ -1209,6 +1212,8 @@ export async function composeServer(
             if (report.type === "session") {
               // 連携の kind の全部（20261007-agent-hook-drift research X1）。報告したプロセスの確かめは `reportAgentSession` の中（20261009-agent-session-attribution）。
               if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId, report.agentPid, { cwd: report.cwd, source: report.source, transcriptPath: report.transcriptPath });
+            } else if(report.type==="cursor_child"){
+              cursorChildObservations.offer(report);
             } else if(report.type==="cursor_turn_usage"){
               const agent=session.getPane(report.paneId)?.agent;
               if(agent?.kind==="cursor")cursorUsageIntake.offer({...report,ownerInstanceId:agent.instanceId} as OwnedCursorUsageReport);
@@ -1357,7 +1362,7 @@ export async function composeServer(
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
-        usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();
+        usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();cursorChildObservations.close();
         subagentUsage.close();usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         assistantIdleStops.dispose(); assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
@@ -1415,7 +1420,7 @@ export async function composeServer(
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
-        usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();
+        usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();cursorChildObservations.close();
         subagentUsage.close();usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         assistantIdleStops.dispose(); assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
@@ -1462,7 +1467,7 @@ export async function composeServer(
           // Worker復旧では同じスレッドで旧コードを再構成する。保存失敗でも
           // 旧待ち受け・周期処理を残して新サーバと競合させない。
           graphEngine.stop();lineage.close();builtinViews.close();summarySub.dispose();summaries.close();await scheduler.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
-          usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();subagentUsage.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();nativeSubagents.close();subagentControl.close();
+          usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close(); cursorUsageIntake.close();cursorChildObservations.close();subagentUsage.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();nativeSubagents.close();subagentControl.close();
           remoteLinks.closeAll();await machines.stop().catch(()=>undefined);
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();
           await graph.close().catch(()=>undefined);

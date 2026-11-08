@@ -1,0 +1,57 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-intake
+
+ ❯ |@sodashitsu/server| src/agent/agentHookExecution.test.ts (3 tests | 2 failed) 622ms
+   × Cursor generated after-response fixture sends only scoped numeric/model/explicit effort metadata 374ms
+   × Cursor child hook channel retains formal Stop identity and only explicit child-self settings 54ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/agentHookExecution.test.ts > Cursor generated after-response fixture sends only scoped numeric/model/explicit effort metadata
+AssertionError: expected [] to have a length of 4 but got +0
+
+- Expected
++ Received
+
+- 4
++ 0
+
+ ❯ src/agent/agentHookExecution.test.ts:38:54
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/agent/agentHookExecution.test.ts > Cursor child hook channel retains formal Stop identity and only explicit child-self settings
+AssertionError: expected { type: 'session', …(3) } to match object { type: 'cursor_child', …(5) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "childId": "22222222-2222-4222-8222-222222222222",
+-   "parentId": "11111111-1111-4111-8111-111111111111",
+-   "phase": "stop",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+-   "settingsObserved": false,
+-   "type": "cursor_child",
++   "type": "session",
+  }
+
+ ❯ src/agent/agentHookExecution.test.ts:52:36
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  11:03:31
+   Duration  901ms (tests 81%, transform 16%, import 3%, worker 1%)
+

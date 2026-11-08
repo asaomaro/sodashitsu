@@ -1,0 +1,39 @@
+[
+  {
+    "name": "self-context",
+    "exitCode": 1
+  },
+  {
+    "name": "late-scope",
+    "exitCode": 1
+  },
+  {
+    "name": "whole-pair",
+    "exitCode": 1
+  },
+  {
+    "name": "dedup-bound",
+    "exitCode": 1
+  },
+  {
+    "name": "old-hook",
+    "exitCode": 1
+  },
+  {
+    "name": "old-installer",
+    "exitCode": 1
+  },
+  {
+    "name": "old-compose",
+    "exitCode": 1
+  },
+  {
+    "restoredSha256": {
+      "packages/server/src/agent/CursorChildReports.ts": "757daab9f0ce4fb51a5f5f402b3a3bb02f6e7cbea46b5f1eddc7d126c9a68f49",
+      "packages/server/src/agent/CursorChildObservations.ts": "ecefbf4f0789a053d11e7848c05f3c00656803a6ac146121dae309d36b414cc6",
+      "packages/server/assets/agent-hook-report.cjs": "b1c76be23de458aeb258ee3e62355eeba292c5e6164360646d46cf82485f0417",
+      "packages/server/src/agent/AgentIntegrationInstaller.ts": "b547e0c88b27551c06e22383ec818bbb29da52056cb17badc8ddad3141bba029",
+      "packages/server/src/composeServer.ts": "ff64e15a2bedbac9908caf37f15ecb3462efe5bb7b324b6d207b606296b0c9a3"
+    }
+  }
+]

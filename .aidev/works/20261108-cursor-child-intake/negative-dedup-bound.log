@@ -1,0 +1,39 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-intake
+
+ ❯ |@sodashitsu/server| src/agent/CursorChildObservations.test.ts (14 tests | 1 failed) 2565ms
+   × bounds deduplication to fixed digests and becomes incomplete instead of evicting IDs into a replay window 126ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildObservations.test.ts > bounds deduplication to fixed digests and becomes incomplete instead of evicting IDs into a replay window
+AssertionError: expected 4097 to be 4096 // Object.is equality
+
+- Expected
++ Received
+
+- 4096
++ 4097
+
+ ❯ src/agent/CursorChildObservations.test.ts:91:29
+     89|   for(let i=0;i<=4096;i++){c.offer(f.observation({generationId:`genera…
+     90|   const state=(Reflect.get(c,"states") as Map<string,{events:Map<strin…
+     91|   expect(state.events.size).toBe(4096);expect([...state.events.values(…
+       |                             ^
+     92|   expect(c.binding(f.pane.id,f.child)).toMatchObject({settings:{},inco…
+     93|   c.forget(f.pane.id);expect(state.events.size).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  11:03:27
+   Duration  2.96s (tests 92%, transform 7%, import 1%)
+

@@ -1,0 +1,38 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-cursor-child-intake
+
+ ❯ |@sodashitsu/server| src/agent/CursorChildObservations.test.ts (14 tests | 1 failed) 5309ms
+   × stores only exact child-self settings privately without manufacturing current membership or using DB fallback 3178ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/agent/CursorChildObservations.test.ts > stores only exact child-self settings privately without manufacturing current membership or using DB fallback
+AssertionError: expected { model: 'child-next', …(3) } to deeply equal { model: 'child-next', …(1) }
+
+- Expected
++ Received
+
+  {
+    "model": "child-next",
+    "modelBasis": "session",
++   "reasoningEffort": "high",
++   "reasoningEffortBasis": "session",
+  }
+
+ ❯ vi.waitFor.timeout src/agent/CursorChildObservations.test.ts:34:191
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  11:03:20
+   Duration  5.71s (tests 96%, transform 3%, import 1%)
+

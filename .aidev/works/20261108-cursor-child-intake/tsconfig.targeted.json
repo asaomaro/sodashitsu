@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "rootDir": "../../../packages/server/src"
+  },
+  "files": [
+    "../../../packages/server/src/agent/CursorChildReports.ts",
+    "../../../packages/server/src/agent/CursorChildObservations.ts",
+    "../../../packages/server/src/agent/CursorChildReports.test.ts",
+    "../../../packages/server/src/agent/CursorChildObservations.test.ts",
+    "../../../packages/server/src/agent/AgentReportSocket.ts",
+    "../../../packages/server/src/agent/AgentReportSocket.test.ts",
+    "../../../packages/server/src/agent/AgentIntegrationInstaller.test.ts",
+    "../../../packages/server/src/agent/agentHookExecution.test.ts"
+  ]
+}
