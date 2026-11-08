@@ -1,0 +1,7 @@
+{"ts":"2026-11-08T01:19:12.377Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T01:19:12.379Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T01:19:12.380Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T01:19:12.380Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T01:19:12.383Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-captain-reply-browser-hvhuDY/state/commands.json","count":0}
+{"ts":"2026-11-08T01:19:17.016Z","level":"error","msg":"agent judgment failed","paneId":"7a0aef81-0ac6-4e68-a33e-e1cacf9273bd","error":"Error: processInspector.foregroundJob timed out after 2000ms"}
+{"ok":true,"actualMain":true,"actualStoreAdapter":true,"ownedRealPty":true,"keyboard":true,"paste":true,"allInputToCaptain":true,"reconnect":true,"hashTamperBlocked":true,"normalHiddenFilterUnchanged":true,"pageErrors":[],"modelCalls":0}

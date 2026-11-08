@@ -1,0 +1,6 @@
+{"ts":"2026-11-08T01:18:25.127Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-08T01:18:25.129Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-08T01:18:25.130Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-08T01:18:25.130Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-08T01:18:25.132Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-captain-reply-browser-2WuPL3/state/commands.json","count":0}
+{"ok":false,"error":"Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: true\nReceived: false\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate","inputFrames":0,"guardFailure":true,"modelCalls":0}

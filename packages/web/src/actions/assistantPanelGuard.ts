@@ -2,6 +2,8 @@ import { assistantPanelTarget, assistantPanelPane, ordinaryAssistantUrl } from "
 import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
 export interface PanelPorts {
   focusedPane?(): string | null;
+  /** Present in the real window so changing its navigation capability fails closed. */
+  hash?():string;
   machine?(): string;
   switchMachine?(id: string): unknown;
   model(): {
@@ -54,6 +56,7 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
     block("アシスタントの表示先を確認できません。");
   }
   const check = () => {
+    if(ports.hash&&ports.hash()!==hash)throw Error("表示先が変更されました。通知から開き直してください。");
     if (!target || !ports.connected())
       throw Error(
         "通知の端末へ接続しています。ログインが必要な場合は通常の操舵室を開いてください。",

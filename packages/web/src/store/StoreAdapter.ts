@@ -1,3 +1,4 @@
+import {focusAssistantPanelView,type AssistantPinnedTarget} from "./assistantPanelView.js";
 import {useNormalSessionStore} from "./normalSession.js";
 import type { AgentInfo, AgentIntegrationStatusResult, AgentUsageChangedEvent, AskClosedEvent, AskOpenedEvent, DisplayMessageEvent, DisplayRemovedEvent, DisplayUpdatedEvent, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
@@ -9,6 +10,8 @@ import { useViewStore } from "./view.js";
 import { repairView } from "@sodashitsu/client-core";
 
 export interface StoreAdapterOptions {
+  /** Immutable, explicitly opened reply target; never used by the ordinary UI. */
+  assistantTarget?: AssistantPinnedTarget;
   pinia: Pinia;
   onAuthRequired: () => void;
   onConnectionState: (s: ConnectionState) => void;
@@ -94,7 +97,7 @@ export class StoreAdapter implements StorePort {
     );
     // `client.hello` のたび（初回・再接続のたび）に表示を復元する（design「フォーカスと表示」）。
     // `view.restoreView`（T16）はここまで呼び出し元が無かった——T26 で結線した。
-    useViewStore(this.opts.pinia).restoreView((workspaceId, tabId) => {
+    if(!this.opts.assistantTarget)useViewStore(this.opts.pinia).restoreView((workspaceId, tabId) => {
       const tab = session.normal.tabs.get(tabId);
       return tab && tab.workspaceId === workspaceId ? tab.focusedPaneId : null;
     }, useNormalSessionStore(this.opts.pinia).focus);
@@ -117,6 +120,10 @@ export class StoreAdapter implements StorePort {
   private applyViewRepair(successorHint?: string): void {
     const session = useSessionStore(this.opts.pinia);
     const view = useViewStore(this.opts.pinia);
+    if(this.opts.assistantTarget){
+      if(!focusAssistantPanelView(this.opts.assistantTarget,session,view))view.clearNormalView();
+      return;
+    }
     // グラフ画面（20260927-agent-graph）もダイアログと同じく、開いている間は「閉じたときに戻す先」を差し替える。
     const dialogOpen = view.modalOpen;
     const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.preGraphFocusPaneId ?? view.preAskFocusPaneId ?? view.preExtensionApprovalFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;

@@ -1,3 +1,4 @@
+import {focusAssistantPanelView} from "./store/assistantPanelView.js";
 import { assistantPanelTarget, ordinaryAssistantUrl } from "./actions/assistantPanelLink.js";
 import { assistantPanelGuard } from "./actions/assistantPanelGuard.js";
 import { useViewerTabsStore } from "./store/viewerTabs.js";
@@ -147,20 +148,22 @@ const assistantPinnedMachine = (() => {
   }
 })();
 const assistantView = new URLSearchParams(location.search).get("assistantView");
+const assistantReplyTarget=(()=>{try{return assistantView==="reply"?assistantPanelTarget(location.hash):null;}catch{return null;}})();
 const updateAssistantPanel = assistantPanelGuard({
   ...(assistantView === "main" ? {ready: (target: NonNullable<ReturnType<typeof assistantPanelTarget>>) => {
     if (target.assistantAsk) useAskStore(pinia).prefer(target.assistantAsk);
     history.replaceState(null, "", ordinaryAssistantUrl(location.href));
   }} : {}),
   focusedPane: () => view.focusedPaneId,
+  hash:()=>location.hash,
   machine: () => machines.selectedId,
   switchMachine: (id) => machineSwitcherBox.current?.switchTo(id),
   model: () => ({ panes: session.panes, tabs: session.tabs, workspaces: session.workspaces }),
   connected: () => view.connectionState === "open",
   focus: (pane, tab) => {
     view.setScreen("base");
-    view.setView(tab.workspaceId, tab.id);
-    view.focusPane(pane.id);
+    if(assistantReplyTarget)focusAssistantPanelView(assistantReplyTarget,session,view);
+    else {view.setView(tab.workspaceId, tab.id);view.focusPane(pane.id);}
     queueMicrotask(() => {
       if (view.focusedPaneId === pane.id) registryBox.current?.focus(pane.id);
     });
@@ -197,6 +200,7 @@ const sinkProxy: TerminalSinkPort = {
 
 const storeAdapter = new StoreAdapter({
   pinia,
+  ...(assistantReplyTarget?{assistantTarget:assistantReplyTarget}:{}),
   onAuthRequired: () => view.onAuthRequired(),
   onConnectionState: (s) => view.onConnectionState(s),
   onPaneExited: (_paneId, exitCode) => view.toast(`pane を閉じました（終了コード ${exitCode}）`),

@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "actualMain": true,
+  "actualStoreAdapter": true,
+  "ownedRealPty": true,
+  "keyboard": true,
+  "paste": true,
+  "allInputToCaptain": true,
+  "reconnect": true,
+  "hashTamperBlocked": true,
+  "normalHiddenFilterUnchanged": true,
+  "pageErrors": [],
+  "modelCalls": 0
+}

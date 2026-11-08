@@ -1,0 +1,25 @@
+{
+  "byteExact": true,
+  "sha256": {
+    "packages/web/src/main.ts": "d6168493b2cfec33514314516d9848b9d3d68c8340e77ee8a2ad824772d50dc2",
+    "packages/web/src/store/StoreAdapter.ts": "e14ccc848a50cb8cea4628552d72c02a874b773ee2addd9c293395929b062dfe",
+    "packages/web/src/actions/assistantPanelGuard.ts": "8894ef5501df41d27af2e9d07e0468220f937c0c42979c70defe64538e6999ce",
+    "packages/web/src/store/assistantPanelView.ts": "fc42ab7c19cd74f677337a53cc2b8b9ea3a00542ece966a0f110af80c15752e3",
+    "packages/web/src/store/assistantPanelView.test.ts": "78893fcd2a390482f35bab51b1f95c2ad027a8c7bf76cb94b032bf2a5bde5de5"
+  },
+  "negativeUnitExit": 1,
+  "negativeBrowserExit": 1,
+  "restoredUnitExit": 0,
+  "restoredBrowserExit": 0,
+  "focusedTypesExit": 0,
+  "cleanup": [
+    {
+      "run": "negative-browser.log",
+      "privateStateRemoved": true
+    },
+    {
+      "run": "restored-browser.log",
+      "privateStateRemoved": true
+    }
+  ]
+}
