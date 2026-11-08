@@ -72,17 +72,17 @@ it("bounds caller waiting and physical verifier slots, and discards late results
  }finally{for(const resolve of resolvers)resolve(true);await Promise.resolve();f.history.close();}
 });
 
-it("retires grants when the same child ID is replaced, even if the formal event label and public metadata stay equal",async()=>{
- const f=fixture();f.history.note(f.source,item(),"same-event",async()=>true);
+it("retires grants when a failed formal proof is replaced, even if the event label and metadata stay equal",async()=>{
+ const f=fixture();let original=true;f.history.note(f.source,item(),"same-event",async()=>true,{target:{},current:()=>original});
  const first=await f.history.grant(paneId,"child");expect(first?.current()).toBe(true);
- f.history.note(f.source,item(),"same-event",async()=>true);expect(first?.current()).toBe(false);
+ original=false;f.history.note(f.source,item(),"same-event",async()=>true,{target:{},current:()=>true});expect(first?.current()).toBe(false);
  const next=await f.history.grant(paneId,"child");expect(next?.current()).toBe(true);
  f.history.note(f.source,{...item(),startedAt:2000},"new-attempt",async()=>true);expect(next?.current()).toBe(false);
  const latest=await f.history.grant(paneId,"child");f.history.forget(paneId);f.history.note(f.source,item(),"new-state",async()=>true);expect(latest?.current()).toBe(false);f.history.close();
 });
 it("does not publish an old entry whose proof is replaced during asynchronous validation",async()=>{
- const f=fixture();let finish!:(value:boolean)=>void;f.history.note(f.source,item(),"same-event",()=>new Promise(resolve=>{finish=resolve;}));
- const reading=f.history.read({paneId});f.history.note(f.source,item(),"same-event",async()=>false);finish(true);
+ const f=fixture();let original=true,finish!:(value:boolean)=>void;f.history.note(f.source,item(),"same-event",()=>new Promise(resolve=>{finish=resolve;}),{target:{},current:()=>original});
+ const reading=f.history.read({paneId});original=false;f.history.note(f.source,item(),"same-event",async()=>false,{target:{},current:()=>true});finish(true);
  expect(await reading).toMatchObject({status:"pending",items:[],incomplete:true});f.history.close();
 });
 
@@ -100,4 +100,18 @@ it("retains private targets only behind current proofs and never serializes them
  const rows=await f.history.read({paneId});expect(JSON.stringify(rows)).not.toContain("privateRecord");
  const grant=await f.history.grantEntry(paneId,rows.items[0]!.entryId);expect(grant?.proof?.target).toBe(target);expect(grant?.current()).toBe(true);
  current=false;expect(grant?.current()).toBe(false);expect(await f.history.read({paneId})).toMatchObject({status:"pending",items:[]});f.history.close();
+});
+
+it("keeps existing grants and asynchronous pages valid across identical formal re-listing",async()=>{
+ const f=fixture(),target={record:"same"};let pause=false,finish!:(value:boolean)=>void;
+ const verify=()=>pause?new Promise<boolean>(resolve=>{finish=resolve;}):Promise.resolve(true);
+ f.history.note(f.source,item(),"same-event",verify,{target,current:()=>true});
+ const grant=await f.history.grant(paneId,"child");expect(grant?.current()).toBe(true);const selected=grant!.item.entryId;
+ pause=true;const reading=f.history.read({paneId});
+ f.history.note(f.source,item(),"same-event",async()=>true,{target:{record:"equivalent"},current:()=>true});
+ expect(grant?.current()).toBe(true);expect(grant?.proof?.target).toBe(target);finish(true);
+ expect(await reading).toMatchObject({status:"ok",items:[{entryId:selected}]});
+ pause=false;expect((await f.history.read({paneId})).items[0]?.entryId).toBe(selected);
+ f.history.note(f.source,{...item(),description:"new formal metadata"},"same-event",async()=>true);
+ expect(grant?.current()).toBe(false);expect((await f.history.read({paneId})).items[0]?.entryId).not.toBe(selected);f.history.close();
 });

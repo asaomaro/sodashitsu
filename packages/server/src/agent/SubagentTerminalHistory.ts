@@ -51,7 +51,10 @@ export class SubagentTerminalHistory<T=unknown> {
     if(publicItem.reasoningEffort&&(item.reasoningEffortBasis==="turn"||item.reasoningEffortBasis==="creation"||item.reasoningEffortBasis==="session"))publicItem.reasoningEffortBasis=item.reasoningEffortBasis;else delete publicItem.reasoningEffort;
     for(const key of ["startedAt","endedAt"] as const)if(typeof item[key]==="number"&&Number.isSafeInteger(item[key])&&item[key]!>=0)publicItem[key]=item[key];
     if(item.hasTranscript===true)publicItem.hasTranscript=true;
-    if(previous?.eventId===eventId&&same(previous.item,publicItem)){state.items.set(item.id,{item:publicItem,eventId,verify,...(proof?{proof}:{})});return true;}
+    // Re-listing the same live formal proof must not retire an in-flight read.
+    // Keep its original verifier/target too: replacing a callback alone cannot
+    // turn a previously issued grant into permission for another record.
+    if(previous?.eventId===eventId&&same(previous.item,publicItem)&&previous.proof?.current()!==false)return true;
     if(previous)publicItem.entryId=randomUUID();
     state.items.delete(item.id);state.items.set(item.id,{item:publicItem,eventId,verify,...(proof?{proof}:{})});state.revision=randomUUID();state.status="ok";
     while(state.items.size>256){state.items.delete(state.items.keys().next().value!);state.omittedBefore=true;}
