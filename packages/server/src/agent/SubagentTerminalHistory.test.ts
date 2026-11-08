@@ -71,3 +71,17 @@ it("bounds caller waiting and physical verifier slots, and discards late results
   for(const resolve of resolvers)resolve(true);await Promise.resolve();await Promise.resolve();expect(results.every(r=>r.items.length===0)).toBe(true);
  }finally{for(const resolve of resolvers)resolve(true);await Promise.resolve();f.history.close();}
 });
+
+it("retires grants when the same child ID is replaced, even if the formal event label and public metadata stay equal",async()=>{
+ const f=fixture();f.history.note(f.source,item(),"same-event",async()=>true);
+ const first=await f.history.grant(paneId,"child");expect(first?.current()).toBe(true);
+ f.history.note(f.source,item(),"same-event",async()=>true);expect(first?.current()).toBe(false);
+ const next=await f.history.grant(paneId,"child");expect(next?.current()).toBe(true);
+ f.history.note(f.source,{...item(),startedAt:2000},"new-attempt",async()=>true);expect(next?.current()).toBe(false);
+ const latest=await f.history.grant(paneId,"child");f.history.forget(paneId);f.history.note(f.source,item(),"new-state",async()=>true);expect(latest?.current()).toBe(false);f.history.close();
+});
+it("does not publish an old entry whose proof is replaced during asynchronous validation",async()=>{
+ const f=fixture();let finish!:(value:boolean)=>void;f.history.note(f.source,item(),"same-event",()=>new Promise(resolve=>{finish=resolve;}));
+ const reading=f.history.read({paneId});f.history.note(f.source,item(),"same-event",async()=>false);finish(true);
+ expect(await reading).toMatchObject({status:"pending",items:[],incomplete:true});f.history.close();
+});

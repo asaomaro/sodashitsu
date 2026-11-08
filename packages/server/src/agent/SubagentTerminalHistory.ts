@@ -49,7 +49,7 @@ export class SubagentTerminalHistory {
     for(const key of ["startedAt","endedAt"] as const)if(typeof item[key]==="number"&&Number.isSafeInteger(item[key])&&item[key]!>=0)publicItem[key]=item[key];
     if(item.hasTranscript===true)publicItem.hasTranscript=true;
     const state=this.state(source),previous=state.items.get(item.id);
-    if(previous?.eventId===eventId&&same(previous.item,publicItem)){previous.verify=verify;return true;}
+    if(previous?.eventId===eventId&&same(previous.item,publicItem)){state.items.set(item.id,{item:publicItem,eventId,verify});return true;}
     state.items.delete(item.id);state.items.set(item.id,{item:publicItem,eventId,verify});state.revision=randomUUID();state.status="ok";
     while(state.items.size>256){state.items.delete(state.items.keys().next().value!);state.omittedBefore=true;}
     return true;
@@ -66,7 +66,7 @@ export class SubagentTerminalHistory {
     const current=()=>active&&allowed()&&this.current(source)&&this.states.get(paneId)===state&&state.items.get(id)===entry;
     try{
       const valid=await Promise.race([this.verify(entry,current),new Promise<false>(resolve=>{timer=setTimeout(()=>{active=false;resolve(false);},1500);})]);
-      if(valid&&current())return{source,item:{...entry.item},current:()=>allowed()&&this.current(source)&&this.states.get(paneId)===state&&state.items.has(id)};
+      if(valid&&current())return{source,item:{...entry.item},current:()=>allowed()&&this.current(source)&&this.states.get(paneId)===state&&state.items.get(id)===entry};
     }finally{active=false;if(timer)clearTimeout(timer);}
   }
   async read(params:AgentSubagentHistoryParams,allowed:()=>boolean=()=>true):Promise<AgentSubagentHistoryResult>{
@@ -80,7 +80,7 @@ export class SubagentTerminalHistory {
     const current=()=>active&&allowed()&&this.current(source)&&this.states.get(params.paneId)===state&&state.revision===revision;
     const work=async()=>{
       while(position<end&&current()){
-        const entry=all[position]!;const valid=await this.verify(entry,current);
+        const entry=all[position]!;const valid=await this.verify(entry,()=>current()&&state.items.get(entry.item.id)===entry);
         if(!current())return;
         if(valid)items.push({...entry.item});else failed=true;
         position++;
