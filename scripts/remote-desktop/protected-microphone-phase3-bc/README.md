@@ -10,7 +10,7 @@ Bは実lockの後も専用固定CABLE capture receiverだけを観測目的で�
 
 captureの実IAudioClient.GetBufferSizeをreadonlyで取得する。render側の実buffer長は製品actorから未公開なので、要求100msや時刻を「実buffer長」として扱わない。Bは実際の最後signal・quiet開始・capture buffer frames・停止遅延を記録し、固定2500ms＋実capturebuffer分までにquietへ達し、同一quiet100窓/1980msを要求する。この上限は検証fixtureの事前上限でありゼロ遅延停止の主張ではない。render実buffer測定は未取得と残す。quietは997Hz非検出だけでなく左右RMS/997magnitude各10以下、gap60ms/断絶で連続をresetする。quiet後の再signalは失敗。
 
-CはWTS unlockedを維持し、通常receiverはInputDesktop=Defaultを要求しない。実mode証拠はrootが確認したown UAC対象と、正式readyの`windows-gdi/elevated-uac/secureDesktop/protectedMicrophone`の一致。Default成功、他のUAC、ACKだけ、source未達をUAC受信成功にしない。997Hz300frames/絶対20ms/6秒、baseline2秒、同一streak280+5500ms/総290+5700ms/gap60ms等はAの固定detectorを使う。
+CはWTS unlockedを維持し、通常receiverはInputDesktop=Defaultを要求しない。実mode証拠はrootが確認したown UAC対象と、正式readyの`windows-gdi/elevated-uac/secureDesktop/protectedMicrophone`の一致。Default成功、他のUAC、ACKだけ、source未達をUAC受信成功にしない。synthetic=trueや不明なsynthetic型は拒否し非合成証拠を明示する。997Hz300frames/絶対20ms/6秒、baseline2秒、同一streak280+5500ms/総290+5700ms/gap60ms等はAの固定detectorを使う。
 
 ## compileと純粋checks
 
@@ -25,7 +25,7 @@ CはWTS unlockedを維持し、通常receiverはInputDesktop=Defaultを要求し
 1. rootが候補HEAD/clean/build/非admin session1/同SID-logon-activeconsole/固定未使用CABLE pair/既定でない/unmuted/volumeを確認し、既存の正式なmemory-only解除/own UAC取消が使えることを確認する。未確認ならB/Cを開始しない。古いclaim/go/PIDを流用しない。
 2. prepare.mjsへscenario BまたはC、productRoot/productHead/fixtureBin/gitExe/jobRoot/port18000..18999/固定capture/renderをseedで渡す。新jobdirにapproved:false/expiresAt:nullを作るだけ。root実行直前に4分以内expiryとapprovedを設定する。PIN/credential/tokenをmanifestへ入れない。
 3. 通常user hidden Nodeでrun-bc.mjsを起動。own1pane/NodeREPL/cwd/agentnull/assistant0/履歴preload無効・loopback private state/authを先にwarmし、Workerもprewarmする（lock中でもendpointは開かない）。media0のwarm-armedでrootが必要な解除を正式経路で一回だけ行い、`go`をCreateNew。fresh unlocked/Default後に通常receiverを起動し、両endpoint未使用/own identityを確認してarmed。ここまでlock/UAC/画像保存は無し。
-4. rootはreceiver-manifest.jsonのcontrollerPid/startticks/binarySHAを確認し、既存復旧経路確認の `recovery-ready.json` を `{ready:true,controllerPid,atMs}` で30秒以内に作る。同jobの `operator-go` をCreateNewした後に、固定operator-bc.exeへこのmanifest pathだけを渡して明示起動する。rootの所有確認の代わりにこのfileの有無だけで復旧可能と推測しない。
+4. rootはreceiver-manifest.jsonのcontrollerPid/startticks/binarySHAを確認し、既存復旧経路確認の `recovery-ready.json` を `{ready:true,controllerPid,atMs}` で30秒以内に作る。同jobの `operator-go` をCreateNewした後に、operator-ready.json（Bはsource/actor/baseline準備後、Cはown source要求前）の到達後だけ固定operator-bc.exeへこのmanifest pathを渡して明示起動する。cold source待ちの前には起動しない。rootの所有確認の代わりにこのfileの有無だけで復旧可能と推測しない。
 
 ### B
 
@@ -33,7 +33,7 @@ operatorは同user/通常権限/activeconsole/unlocked/Default/ownerPID+start+SH
 
 receiverはself/owner WTS0、実signal消失/quietを観測。runnerは同resource grant invalidationとactor PID/startの実退役を **自分のcleanup前** に確認する。lockが最後tone生成から500ms以上前であることを要求し、単に6秒producerが終わっただけの無音をlock停止としない。transport閉鎖後も生成時計は予定どおり進み、送信したふりはせず生成終了時刻と区別する。
 
-request-restore.json後はrootが既存の正式memory-only経路で解除する。runnerはnative-restoredを待ちfresh unlocked/Defaultを再確認。旧ticket/streamへ生成frameを実際に再提示しclosed/rejectedを観測し、新actorが現れず、その後も2秒quietを保つことを要求する。current streamを新造して代用しない。unknown/復帰/受音再発は失敗で状態を保持する。
+request-restore.json後はrootが既存の正式memory-only経路で解除する。runnerはnative-restoredを待ちfresh unlocked/Defaultを再確認。元mic socketの実closedを個別観測する。まだopenなら同じ旧idへ生成非zero frameを再提示し正式stopped/unavailable/closeを観測し、無応答はunknown failureとする。その後、新socketへ使用済み旧ticketも再提示して拒否を別に観測し、新actorが現れず、その後も2秒quietを保つことを要求する。current streamを新造して代用しない。unknown/復帰/受音再発は失敗で状態を保持する。
 
 ### C
 
