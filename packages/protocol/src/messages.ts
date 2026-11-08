@@ -1,7 +1,7 @@
 import { AgentSubagentControlParams, AgentSubagentSendParams, type AgentSubagentControlResult, type AgentSubagentSendResult } from "./subagentControl.js";
 import {AgentSubagentUsageParams,type AgentSubagentUsageResult} from "./subagentUsage.js";
 import {NotificationSummaryParams,type NotificationWorkSummary} from "./conversation.js";
-import {AgentSubagentHistoryParams,type AgentSubagentHistoryResult,type SubagentTerminalStatus} from "./subagentHistory.js";
+import {AgentSubagentHistoryParams,AgentSubagentHistoryTranscriptParams,AgentSubagentHistoryUsageParams,type AgentSubagentHistoryResult,type AgentSubagentHistoryTranscriptResult,type AgentSubagentHistoryUsageResult,type SubagentTerminalStatus} from "./subagentHistory.js";
 import {AssistantModelCatalogParams,type AssistantModelCatalog} from "./desktopAssistant.js";
 import {UsageInsightsParams,type UsageInsights} from "./usageInsights.js";
 import {VoiceCoreCancelParams,VoiceCoreCallParams,type VoiceCoreResult} from "./voiceCore.js";
@@ -1643,6 +1643,8 @@ export const METHOD_SCHEMAS = {
   "agent.subagent_usage": AgentSubagentUsageParams,
   "agent.subagent_transcript": AgentSubagentTranscriptParams,
   "agent.subagent_history": AgentSubagentHistoryParams,
+  "agent.subagent_history_transcript": AgentSubagentHistoryTranscriptParams,
+  "agent.subagent_history_usage": AgentSubagentHistoryUsageParams,
   "notification.test": NotificationStateParams,
   "notification.state": NotificationStateParams,
   "notification.summary": NotificationSummaryParams,
@@ -1855,6 +1857,8 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "agent.subagent_usage": AgentSubagentUsageResult;
   "agent.subagent_transcript": AgentSubagentTranscriptResult;
   "agent.subagent_history": AgentSubagentHistoryResult;
+  "agent.subagent_history_transcript": AgentSubagentHistoryTranscriptResult;
+  "agent.subagent_history_usage": AgentSubagentHistoryUsageResult;
   "notification.test": { ok: true };
   "notification.state": NotificationState;
   "notification.summary": NotificationWorkSummary;
