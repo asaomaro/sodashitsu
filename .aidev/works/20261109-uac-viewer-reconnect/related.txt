@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-uac-viewer-reconnect/packages/web
+
+
+ Test Files  5 passed (5)
+      Tests  27 passed (27)
+   Start at  15:06:52
+   Duration  2.19s (transform 66%, import 15%, environment 11%, tests 8%)
+
+  Transform  transforming modules took 6.45s · 66% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

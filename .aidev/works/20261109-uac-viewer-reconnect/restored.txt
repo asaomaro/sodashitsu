@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-uac-viewer-reconnect/packages/web
+
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  15:11:56
+   Duration  2.03s (transform 66%, tests 13%, import 12%, environment 8%)
+

@@ -1,0 +1,9 @@
+{
+  "sourceCommit": "a3a988136205c7df2c6915d06025a0b56d0b0b7c",
+  "files": {
+    "packages/web/src/components/RemoteDesktopWindow.vue": "9714ba3b95ac332addc6d38b0851540f8d955bb71df8f54152f0875e8d692634",
+    "packages/web/src/components/RemoteDesktopReconnect.test.ts": "65360907270300b88fcb146bad60e357c2a6420d81f60ac5152ccf458075bc46",
+    "docs/remote-desktop.md": "098a8bd0dbb5bc370dd9d84207a71a4d4784a8fa6210235b01965709a8e5c97f",
+    ".aidev/works/20261109-uac-viewer-reconnect/browser.mjs": "6ed06c447827b4fc50c42594de85c86f08739c53a6cd09e0bbafecd9045a48ee"
+  }
+}

@@ -1,0 +1,121 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-uac-viewer-reconnect/packages/web
+
+ ❯ src/components/RemoteDesktopReconnect.test.ts (11 tests | 9 failed) 197ms
+   × reconnects opted-in protected source as viewing after typed change and needs fresh frame and explicit grant 59ms
+   × reconnects opted-in protected source as viewing after legacy change and needs fresh frame and explicit grant 24ms
+   × exposes direct normal return outside details and cancels scheduled retry 12ms
+   × never auto-selects protected for generic errors or absent permission; explicit retry remains 13ms
+   × bounds automatic retry and preserves manual viewing action; close cancels pending work 14ms
+   × checkbox starts one connection and apply cannot start another while it is pending 8ms
+   × does not retry denied or malformed protected failures 19ms
+   × does not retry denied or malformed protected failures 11ms
+   × late old-source decode cannot restore a stale image or ACK after protected scope change 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > reconnects opted-in protected source as viewing after typed change and needs fresh frame and explicit grant
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > reconnects opted-in protected source as viewing after legacy change and needs fresh frame and explicit grant
+AssertionError: expected [ { type: 'start', …(2) }, …(2) ] to deep equally contain { type: 'control', enabled: false }
+
+- Expected:
+{
+  "enabled": false,
+  "type": "control",
+}
+
++ Received:
+[
+  {
+    "machineId": "generated",
+    "options": {
+      "adaptive": false,
+      "deltas": true,
+      "elevatedDesktop": true,
+      "features": true,
+      "fps": 10,
+      "image": {
+        "colorMode": "full",
+        "showCursor": true,
+      },
+      "quality": 65,
+      "width": 1280,
+    },
+    "type": "start",
+  },
+  {
+    "seq": 1,
+    "type": "ack",
+  },
+  {
+    "enabled": true,
+    "type": "control",
+  },
+]
+
+ ❯ src/components/RemoteDesktopReconnect.test.ts:8:622
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > exposes direct normal return outside details and cancels scheduled retry
+TypeError: Cannot read properties of undefined (reading 'trigger')
+ ❯ src/components/RemoteDesktopReconnect.test.ts:9:331
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > never auto-selects protected for generic errors or absent permission; explicit retry remains
+TypeError: Cannot read properties of undefined (reading 'trigger')
+ ❯ src/components/RemoteDesktopReconnect.test.ts:10:641
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > bounds automatic retry and preserves manual viewing action; close cancels pending work
+AssertionError: expected '管理者画面・閲覧中' to be '停止' // Object.is equality
+
+Expected: "停止"
+Received: "管理者画面・閲覧中"
+
+ ❯ src/components/RemoteDesktopReconnect.test.ts:11:557
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > checkbox starts one connection and apply cannot start another while it is pending
+AssertionError: expected undefined to be defined
+ ❯ src/components/RemoteDesktopReconnect.test.ts:12:258
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > does not retry denied or malformed protected failures
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > does not retry denied or malformed protected failures
+AssertionError: expected '管理者画面・閲覧中' to be '停止' // Object.is equality
+
+Expected: "停止"
+Received: "管理者画面・閲覧中"
+
+ ❯ src/components/RemoteDesktopReconnect.test.ts:13:487
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > late old-source decode cannot restore a stale image or ACK after protected scope change
+AssertionError: expected '1' to be '0' // Object.is equality
+
+Expected: "0"
+Received: "1"
+
+ ❯ src/components/RemoteDesktopReconnect.test.ts:14:598
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed | 2 passed (11)
+   Start at  15:11:52
+   Duration  1.75s (transform 66%, import 13%, tests 12%, environment 9%)
+

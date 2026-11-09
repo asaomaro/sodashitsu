@@ -1,0 +1,18 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  assert(await page.getByRole('button',{name:'適用して再接続',exact:true}).isDisabled())
+
+    at file:///workspaces/sodashitsu-uac-viewer-reconnect/.aidev/works/20261109-uac-viewer-reconnect/browser.mjs:11:456 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.15.0

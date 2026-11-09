@@ -1,0 +1,18 @@
+{
+  "sourceCommit": "a3a988136205c7df2c6915d06025a0b56d0b0b7c",
+  "nodeBuildVersion": "24.15.0",
+  "webStrictTypeAndViteExit": 0,
+  "noCheckUsed": false,
+  "relatedTestFiles": 5,
+  "relatedTestsPassed": 28,
+  "negativeTestsFailed": 9,
+  "negativeTestsPassed": 2,
+  "restoredTestsPassed": 11,
+  "oldBrowserExit": 1,
+  "restoredBrowserExit": 0,
+  "webIndexAsset": "assets/index-BeCCmDX7.js",
+  "webIndexAssetSha256": "7b34c1f2d72453a40c78a5a3ea15f4286e5899f5788d907f71b107664f310907",
+  "windowsExecuted": false,
+  "realModelCalls": 0,
+  "ownDependencySymlinksRemoved": true
+}

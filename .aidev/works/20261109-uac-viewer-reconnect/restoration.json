@@ -1,0 +1,9 @@
+{
+  "negativeExit": 1,
+  "negativeBrowserExit": 1,
+  "restoredExit": 0,
+  "restoredBrowserExit": 0,
+  "byteExact": true,
+  "sha256": "9714ba3b95ac332addc6d38b0851540f8d955bb71df8f54152f0875e8d692634",
+  "sourceCommit": "a3a98813"
+}

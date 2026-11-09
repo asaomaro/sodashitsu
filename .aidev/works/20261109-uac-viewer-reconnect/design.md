@@ -1,0 +1,14 @@
+# UAC source切替後の閲覧再接続
+
+base1006、新ownedtree。サーバ/nativeは別担当、NativeAudio候補やWindows本番に触れない。
+
+UIの独立不具合は、protected選択中のcloseを停止へ固定し、直接再接続buttonを!elevatedScreenで隠していたこと。唯一のapplyは閉じた画質details内だった。またcheckbox変更時点でconnectしており、直後applyが二重connectを作れる。global server faultの因果はこれだけでは断定しない。
+
+- 停止/未ready時、情報panel内外に同purposeの「閲覧で接続し直す」。protected時は明示「通常画面へ戻って閲覧」も出す。既知sharedProtectedAvailableがある場合のみ、未選択modeへの明示protected選択buttonを出す。自動scope拡張はしない。
+- strict DesktopProtectedFailure(source_changed)と、旧peerのexact2field固定messageを、既にuserがprotectedをopt-inした場合だけ750ms/max3回の閲覧再接続へ。not_allowed/不正/未知errorは自動retryしない。raw errorから許可を推測しない。
+- formal lock/session transitionも同じepoch付きtimerへ。manual/close/unmountはtimerを破棄。explicit normal returnは権限を減らすuser操作。protected checkboxが既に接続を始めることを表示し、pending中applyをdisabledにする。明示retryは残す。
+- stop/transitionでoldframe count/info/chain/権利を破棄。errorはRelayでもstopする契約なのでUIもclose待ちせず即clear。source切替/retry後は新readyだけでcontrolを受け入れず、新fullframe＋userの明示control要求が必要。既lockcoverの固定dismiss経路はそのまま。
+- 初回接続の既存legacy grant互換は維持（既存Agent回帰）。この変更は旧sourceのgrantを新sourceへ継承しないためのfreshControlRequired latchを対象にする。
+- sourceChanged後のpendingdecode/oldsocket通知はepochで失効。clip/agent/mic等は既stop/relinquish経路で解除。Backendの旧inputcleanup不明をclearしたり、入力fenceを緩和したりしない。
+
+生成Chrome E2Eは実Vue/画像decode/canvas/DOM/送信フレーム観測、transportだけgenerated。実UAC/OSの合格とは数えない。最終独立reviewは実装作者以外、Web型+Vite1回。旧1006source負例は自分のsourceのみdurablebytesへ保存後、完全復元する。
