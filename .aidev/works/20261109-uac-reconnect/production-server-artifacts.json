@@ -1,0 +1,22 @@
+{
+  "sourceHead": "2ac407116acb67c18cd03bb431a76f9e523a0d28",
+  "artifactRoot": "/workspaces/sodashitsu-uac-fresh-reconnect/packages/server/dist",
+  "fileCount": 1868,
+  "mapSha256": "c01ce37171ae36f66c613a6e1e2b1be6389a012a64a8d709ba98bb13eb86a3fd",
+  "comparisonRoot": "/workspaces/sodashitsu-main-live-assistant-agents/packages/server/dist",
+  "differentFiles": [
+    "desktop/DesktopInteractiveOwner.d.ts",
+    "desktop/DesktopInteractiveOwner.d.ts.map",
+    "desktop/DesktopInteractiveOwner.js",
+    "desktop/DesktopInteractiveOwner.js.map",
+    "desktop/DesktopProvider.d.ts",
+    "desktop/DesktopProvider.d.ts.map",
+    "desktop/DesktopProvider.js",
+    "desktop/DesktopProvider.js.map",
+    "desktop/DesktopRelay.js",
+    "desktop/DesktopRelay.js.map",
+    "desktop/DesktopResourceChannel.d.ts.map",
+    "desktop/DesktopResourceChannel.js",
+    "desktop/DesktopResourceChannel.js.map"
+  ]
+}

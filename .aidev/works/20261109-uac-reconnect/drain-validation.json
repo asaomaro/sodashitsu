@@ -1,0 +1,29 @@
+{
+  "sourceHead": "2ac407116acb67c18cd03bb431a76f9e523a0d28",
+  "generatedOnly": true,
+  "windowsExecuted": false,
+  "nativeCompiled": false,
+  "strictType": {
+    "exit": 0,
+    "command": "NODE_OPTIONS=--max-old-space-size=8192 node node_modules/typescript/bin/tsc --noEmit --strict --target ES2023 --module NodeNext --moduleResolution NodeNext --esModuleInterop --skipLibCheck --types node packages/server/src/desktop/DesktopInteractiveOwner.ts packages/server/src/desktop/DesktopProvider.ts packages/server/src/desktop/DesktopResourceChannel.ts packages/server/src/desktop/DesktopRelay.ts packages/server/src/desktop/DesktopProvider.retirement.test.ts packages/server/src/desktop/DesktopResourceChannel.test.ts packages/server/src/desktop/DesktopProvider.controlReservation.test.ts"
+  },
+  "relatedTs": {
+    "exit": 0,
+    "passed": 42
+  },
+  "nativeSourceBound": {
+    "exit": 0,
+    "passed": 3,
+    "notCSharpExecution": true
+  },
+  "additionalCallerWS": {
+    "exit": 0,
+    "passed": 32,
+    "skippedUnrelated": 302
+  },
+  "sourceReview": {
+    "reviewer": "review_audio_integration",
+    "must": 0,
+    "should": 0
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "sourceHead": "2ac407116acb67c18cd03bb431a76f9e523a0d28",
+  "node": "v24.22.2",
+  "maxOldSpaceMiB": 8192,
+  "commands": [
+    {
+      "command": [
+        "node",
+        "/workspaces/sodashitsu-uac-fresh-reconnect/node_modules/typescript/bin/tsc",
+        "-b"
+      ],
+      "exit": 0,
+      "elapsedSeconds": 232.217
+    },
+    {
+      "command": [
+        "node",
+        "../desktop-assistant/scripts/build-host.mjs"
+      ],
+      "exit": 0,
+      "elapsedSeconds": 0.354
+    },
+    {
+      "command": [
+        "node",
+        "scripts/prune-retired-features.mjs"
+      ],
+      "exit": 0,
+      "elapsedSeconds": 0.03
+    }
+  ],
+  "elapsedSeconds": 232.607,
+  "success": true
+}
