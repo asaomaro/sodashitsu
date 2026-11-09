@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-uac-fresh-reconnect
+
+
+ Test Files  1 passed (1)
+      Tests  32 passed | 302 skipped (334)
+   Start at  15:40:45
+   Duration  9.95s (tests 84%, transform 13%, import 3%)
+

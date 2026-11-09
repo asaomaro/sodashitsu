@@ -11,6 +11,8 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.ServiceProcess;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Web.Script.Serialization;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
 
@@ -543,6 +545,12 @@ public static class SodaDesktopUnlock {
     static bool CurrentProtectedWorker(long generation,Guid nonce){
         if(!Live())return false;lock(Gate){try{return generation==Generation&&nonce==WorkerNonce&&Job!=IntPtr.Zero&&Worker!=null&&!Worker.HasExited&&LockStateOf((uint)Session)==1;}catch{return false;}}
     }
+    // This is origin proof for already-produced cleanup metadata, not a grant.
+    // Retained handles/pipe + nonce/generation survive worker exit; changed
+    // desktop/lock state must never resurrect frames, input or ordinary ACKs.
+    static bool ProtectedRetirementCurrent(long generation,Guid nonce,Process worker,IntPtr handle,NamedPipeServerStream pipe,Process client,long clientStarted){
+        if(!Live())return false;lock(Gate){try{return generation==Generation&&nonce!=Guid.Empty&&nonce==WorkerNonce&&Job!=IntPtr.Zero&&Object.ReferenceEquals(Worker,worker)&&worker!=null&&worker.Handle==handle&&handle!=IntPtr.Zero&&Object.ReferenceEquals(WorkerPipe,pipe)&&!client.HasExited&&client.StartTime.ToUniversalTime().Ticks==clientStarted;}catch{return false;}}
+    }
     public static void VerifyLeasePurposes(){
         int unlock=ParseBrokerPurpose(new[]{"pid","ticks"}),virtualOnly=ParseBrokerPurpose(new[]{"pid","ticks","virtual"}),both=ParseBrokerPurpose(new[]{"pid","ticks","both"});
         Require(AllowsBrokerRequest(unlock,"share")&&!AllowsBrokerRequest(unlock,"virtual"));
@@ -606,9 +614,9 @@ public static class SodaDesktopUnlock {
                     Require(request=="share"||protectedWorker);
                     try {
                         Guid nonce=protectedWorker?Guid.NewGuid():Guid.Empty;
-                        long generation=StartWorker(protectedWorker?request:null,nonce);Accept(WorkerPipe);
-                        using(var peer=Peer(WorkerPipe))using(var identity=Identity(peer))Require(peer.Id==Worker.Id&&identity.IsSystem&&peer.SessionId==Session);
-                        using(var workerReader=Reader(WorkerPipe))using(var workerWriter=Writer(WorkerPipe)) {
+                        long generation=StartWorker(protectedWorker?request:null,nonce);var boundPipe=WorkerPipe;var boundWorker=Worker;IntPtr boundHandle=boundWorker.Handle;Accept(boundPipe);
+                        using(var peer=Peer(boundPipe))using(var identity=Identity(peer))Require(peer.Id==Worker.Id&&identity.IsSystem&&peer.SessionId==Session);
+                        using(var workerReader=Reader(boundPipe))using(var workerWriter=Writer(boundPipe)) {
                             if(protectedWorker){
                                 var type=ProtectedWorkerType();string prefix;
                                 using(var broker=Process.GetCurrentProcess())prefix=(string)type.GetMethod("Create").Invoke(null,new object[]{BrokerPurpose,request,Owner,Logon,Session,generation,nonce,broker.Id,broker.StartTime.ToUniversalTime().Ticks,Worker.Id,Worker.StartTime.ToUniversalTime().Ticks});
@@ -616,14 +624,20 @@ public static class SodaDesktopUnlock {
                                 type.GetMethod("Broker").Invoke(null,new object[]{prefix,workerReader,workerWriter,current,(Action)(()=>EndWorker(generation))});
                                 Require(current());
                             }
-                            var forwarding=new Thread(()=>{try{Copy(reader,workerWriter,65536);}catch{}finally{EndWorker(generation);}}){IsBackground=true};forwarding.Start();
+                            var drain=protectedWorker?new SodaDesktopProtectedOutput():null;
+                            using(var deadline=new System.Threading.Timer(_=>{try{boundPipe.Dispose();}catch{}EndWorker(generation);},null,Timeout.Infinite,Timeout.Infinite)){
+                            var forwarding=new Thread(()=>{try{if(!protectedWorker)Copy(reader,workerWriter,65536);else{string input;while((input=Line(reader,65536))!=null)if(drain.Input(input))workerWriter.WriteLine(input);}}catch{}finally{EndWorker(generation);}}){IsBackground=true};forwarding.Start();
                             bool outputSeen=false;string output;while((output=Line(workerReader,3*1024*1024))!=null) {
-                                if(protectedWorker)Require(CurrentProtectedWorker(generation,nonce)&&!client.HasExited);
+                                if(protectedWorker){
+                                    bool notice;bool forward=drain.Output(output,CurrentProtectedWorker(generation,nonce)&&!client.HasExited,ProtectedRetirementCurrent(generation,nonce,boundWorker,boundHandle,boundPipe,client,clientStarted),Now,out notice);
+                                    if(notice){deadline.Change(750,Timeout.Infinite);writer.WriteLine("{\"type\":\"protected_desktop_failure\",\"code\":\"source_changed\"}");outputSeen=true;}
+                                    if(drain.Ended)break;if(!forward)continue;
+                                }
                                 outputSeen=true;
                                 if(output=="{\"type\":\"sas_request\"}") {Require(!protectedWorker);SendSecureAttention();continue;}
                                 writer.WriteLine(output);
                             }
-                            if(!outputSeen&&Live())WorkerFailure(writer,"worker_no_output");
+                            if(!outputSeen&&Live())WorkerFailure(writer,"worker_no_output");}
                         }
                     }catch{WorkerFailure(writer,"worker_start_or_connection");throw;}
                 }
@@ -789,4 +803,41 @@ public static class SodaDesktopUnlock {
         protected override void OnStart(string[] args){StartService(args);watch=new System.Threading.Timer(o=>{if(Finished)Stop();},null,500,500);}
         protected override void OnStop(){if(watch!=null)watch.Dispose();Shutdown();}
     }
+}
+
+// Private broker retirement metadata only. Content and input retain their live
+// scope checks; a terminal ACK is not permission to use a changed desktop.
+public sealed class SodaDesktopProtectedOutput {
+    readonly object gate=new object();readonly Dictionary<string,string> epochs=new Dictionary<string,string>();readonly HashSet<string> delivered=new HashSet<string>();
+    bool retiring,ended;long started=-1,last=-1;int records,bytes;
+    static Dictionary<string,object> Record(string wire,string type,string[] keys){
+        if(wire==null||wire.Length>512)return null;
+        try{
+            var data=new JavaScriptSerializer{MaxJsonLength=512}.Deserialize<Dictionary<string,object>>(wire);
+            if(data==null||data.Count!=keys.Length||!data.ContainsKey("type")||!Object.Equals(data["type"],type))return null;
+            var raw=Regex.Matches(wire,@"(""(?:[^""\\]|\\.)*"")\s*:");if(raw.Count!=keys.Length)return null;
+            var seen=new HashSet<string>();foreach(Match item in raw){string key=item.Groups[1].Value;if(Array.IndexOf(keys,key.Substring(1,key.Length-2))<0||!seen.Add(key))return null;}
+            foreach(string key in keys)if(!data.ContainsKey(key))return null;return data;
+        }catch{return null;}
+    }
+    static string Id(Dictionary<string,object> data){if(data==null||!data.ContainsKey("id"))return null;string id=data["id"]as string;Guid parsed;return Guid.TryParseExact(id,"D",out parsed)&&parsed!=Guid.Empty&&parsed.ToString("D")==id?id:null;}
+    static bool TerminalCandidate(string wire){if(wire==null||wire.Length>512)return false;try{var data=new JavaScriptSerializer{MaxJsonLength=512}.Deserialize<Dictionary<string,object>>(wire);return data!=null&&data.ContainsKey("type")&&Object.Equals(data["type"],"resource_fence_ack")&&data.ContainsKey("terminal")&&Object.Equals(data["terminal"],true);}catch{return false;}}
+    // Called before the corresponding write on this authenticated connection.
+    // The actual write remains outside the gate so a full pipe cannot block ACK reads.
+    public bool Input(string wire){lock(gate){if(retiring||ended)return false;var data=Record(wire,"resource_epoch",new[]{"type","id","resource"});string id=Id(data);if(id!=null){string resource=data["resource"]as string;if(resource=="control"||resource=="clipboard"||resource=="microphone")epochs[resource]=id;}return true;}}
+    public bool Retiring{get{lock(gate)return retiring;}}
+    public bool Ended{get{lock(gate)return ended;}}
+    public bool Output(string wire,bool current,bool provenance,long now,out bool notice){lock(gate){
+        notice=false;if(ended)return false;if(!provenance||now<0||now<last){ended=true;return false;}last=now;
+        var ack=Record(wire,"resource_fence_ack",new[]{"type","id","terminal"});string id=Id(ack);
+        bool terminal=ack!=null&&Object.Equals(ack["terminal"],true)&&id!=null&&epochs.ContainsValue(id)&&!delivered.Contains(id);
+        if(TerminalCandidate(wire)&&!terminal){if(!retiring){if(!current)ended=true;return false;}}
+        if(!retiring&&(!current||terminal)){retiring=true;started=now;notice=true;}
+        if(retiring){
+            records++;bytes+=System.Text.Encoding.UTF8.GetByteCount(wire);
+            if(now-started>=750||records>32||bytes>4*1024*1024){ended=true;notice=false;return false;}
+            if(terminal){delivered.Add(id);return true;}return false;
+        }
+        return current;
+    }}
 }

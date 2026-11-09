@@ -1,0 +1,11 @@
+✔ buffered terminal provenance survives worker exit and lock transition without weakening content scope (4.736851ms)
+✔ broker drains only known exact terminal records with notice before first ACK and captured generation deadline (0.390958ms)
+✔ existing generated C# pure entry covers terminal replay, schema, source, budgets and clock without native execution (0.149863ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 51.031894

@@ -1,0 +1,8 @@
+{
+  "packages/server/src/desktop/DesktopResourceChannel.ts": "874e4bae11be8a76f682410cfcd51456daaca9948aa34b42338d662fb630b672",
+  "scripts/remote-desktop/WindowsDesktopUnlock.cs": "1f0ba1db1d29d1df338b4aeaa32d6ffb1544748f9b4b5b4cdd4e19415cedef60",
+  "packages/server/src/desktop/DesktopResourceChannel.test.ts": "c93303d78e8d0ce283a648b9e3426e59d9001a650d7e5aad4614f0e3031fdcfe",
+  "packages/server/src/desktop/DesktopProvider.retirement.test.ts": "6ec391e2f5fa339ff4c8340fe8489fa42e6219c19d430565ab7cf147e4d9c11f",
+  "scripts/remote-desktop/WindowsProtectedScopeChecks.cs": "e4239eb6a93f21548c278d10bda9e8ed9775e5af03f04372ec8a6293fb868f7d",
+  "scripts/remote-desktop/protected-retirement.test.mjs": "846d598497fbb543e446250e6b864cb80880befb7bef00ae117cea0f7ab0b8c2"
+}

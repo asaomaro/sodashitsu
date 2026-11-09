@@ -1,0 +1,169 @@
+✖ buffered terminal provenance survives worker exit and lock transition without weakening content scope (2.44771ms)
+✖ broker drains only known exact terminal records with notice before first ACK and captured generation deadline (1.035525ms)
+✔ existing generated C# pure entry covers terminal replay, schema, source, budgets and clock without native execution (0.365099ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 51.240437
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-retirement.test.mjs:13:1
+✖ buffered terminal provenance survives worker exit and lock transition without weakening content scope (2.44771ms)
+  AssertionError [ERR_ASSERTION]: native method present
+      at nativeReturn (file:///workspaces/sodashitsu-uac-fresh-reconnect/scripts/remote-desktop/protected-retirement.test.mjs:7:81)
+      at evaluate (file:///workspaces/sodashitsu-uac-fresh-reconnect/scripts/remote-desktop/protected-retirement.test.mjs:10:19)
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-uac-fresh-reconnect/scripts/remote-desktop/protected-retirement.test.mjs:15:15)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-retirement.test.mjs:18:1
+✖ broker drains only known exact terminal records with notice before first ACK and captured generation deadline (1.035525ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /drain\.Input\(input\)\)workerWriter\.WriteLine\(input\)/. Input:
+  
+  '// Installed, administrator-protected broker. No network listeners or policy changes.\n' +
+    '// Compile together with WindowsDesktopHost.cs, targeting the 64-bit .NET Framework.\n' +
+    'using System;\n' +
+    'using System.Collections.Concurrent;\n' +
+    'using System.Collections.Generic;\n' +
+    'using System.Diagnostics;\n' +
+    'using System.IO;\n' +
+    'using System.IO.Pipes;\n' +
+    'using System.Runtime.InteropServices;\n' +
+    'using System.Security.AccessControl;\n' +
+    'using System.Security.Principal;\n' +
+    'using System.ServiceProcess;\n' +
+    'using System.Text;\n' +
+    'using System.Threading;\n' +
+    'using Microsoft.Win32.SafeHandles;\n' +
+    '\n' +
+    'public static class SodaDesktopUnlock {\n' +
+    '    // Replaced by installer at compile time, never loaded from writable configuration.\n' +
+    '    public const string Owner = "__OWNER_SID__";\n' +
+    '    public const string Name = "__SERVICE_NAME__";\n' +
+    '    static readonly object Gate = new object();\n' +
+    '    static volatile bool End;\n' +
+    '    static readonly CancellationTokenSource ShutdownToken=new CancellationTokenSource();\n' +
+    '    static long Beat;\n' +
+    '    static Process OwnerProcess;\n' +
+    '    static string Logon;\n' +
+    '    static int Session;\n' +
+    '    static NamedPipeServerStream LeasePipe, SharePipe, WorkerPipe;\n' +
+    '    static IntPtr Job;\n' +
+    '    static Process Worker;\n' +
+    '    static long Generation;\n' +
+    '    static Guid WorkerNonce;\n' +
+    '    const uint DataRights = 0x12019b; // Deliberately excludes FILE_CREATE_PIPE_INSTANCE (4).\n' +
+    '    const uint QueryToken = 8;\n' +
+    '\n' +
+    '    [StructLayout(LayoutKind.Sequential)] struct SA { public int length; public IntPtr descriptor; public int inherit; }\n' +
+    '    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct STARTUPINFO {\n' +
+    '        public int cb; public string reserved,desktop,title; public uint x,y,w,h,cx,cy,fill,flags; public short show,cbReserved; public IntPtr lpReserved,input,output,error;\n' +
+    '    }\n' +
+    '    [StructLayout(LayoutKind.Sequential)] struct PI { public IntPtr process,thread; public uint pid,tid; }\n' +
+    '    [StructLayout(LayoutKind.Sequential)] struct BASIC_LIMIT { public long perProcess,perJob;public uint flags;public UIntPtr min,max;public uint active;public UIntPtr affinity;public uint priority,scheduling; }\n' +
+    '    [StructLayout(LayoutKind.Sequential)] struct IO { public ulong a,b,c,d,e,f; }\n' +
+    '    [StructLayout(LayoutKind.Sequential)] struct JOB_LIMIT { public BASIC_LIMIT basic;public IO io;public UIntPtr processMemory,jobMemory,peakProcess,peakJob; }\n' +
+    '    [StructLayout(LayoutKind.Sequential)] struct SERVICE_STATUS { public uint type,state,accepted,exitCode,specificExit,checkpoint,waitHint,pid,flags; }\n' +
+    '    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct LEVEL1 {\n' +
+    '        public uint session,state;public int flags;\n' +
+    '        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=33)]public string station;\n' +
+    '        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=21)]public string user;\n' +
+    '        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=18)]public string domain;\n' +
+    '        public long logon,connect,disconnect,lastInput,current; public uint incoming,outgoing,inFrames,outFrames,inCompressed,outCompressed;\n' +
+    '    }\n' +
+    '    [StructLayout(LayoutKind.Sequential)] struct INFOEX { public uint level; public LEVEL1 data; }\n' +
+    '    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern SafePipeHandle CreateNamedPipe(string name,uint open,uint mode,uint max,uint output,uint input,uint timeout,ref SA attributes);\n' +
+    '    [DllImport("kernel32.dll",SetLastError=true)]static extern bool ConnectNamedPipe(SafePipeHandle pipe,IntPtr overlapped);\n' +
+    '    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern SafePipeHandle CreateFile(string name,uint access,uint share,IntPtr sa,uint creation,uint flags,IntPtr template);\n' +
+    '    [DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr OpenProcess(uint access,bool inherit,int pid);\n' +
+    '    [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe,out uint pid);\n' +
+    '    [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe,out uint pid);\n' +
+    '    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool QueryFullProcessImageName(IntPtr process,uint flags,StringBuilder text,ref uint length);\n' +
+    '    [DllImport("advapi32.dll",SetLastError=true)]static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);\n' +
+    '    [DllImport("advapi32.dll",SetLastError=true)]static extern bool DuplicateTokenEx(IntPtr token,uint access,IntPtr sa,int level,int type,out IntPtr duplicate);\n' +
+    '    [DllImport("advapi32.dll",SetLastError=true)]static extern bool SetTokenInformation(IntPtr token,int kind,ref int value,int size);\n' +
+    '    [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool CreateProcessAsUser(IntPtr token,string app,StringBuilder args,IntPtr psa,IntPtr tsa,bool inherit,uint flags,IntPtr env,string cwd,ref STARTUPINFO startup,out PI process);\n' +
+    '    [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string text,uint revision,out IntPtr descriptor,out uint size);\n' +
+    '    [DllImport("kernel32.dll")]static extern IntPtr LocalFree(IntPtr memory);\n' +
+    '    [DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr handle);\n' +
+    '    [DllImport("kernel32.dll")]static extern uint WTSGetActiveConsoleSessionId();\n' +
+    '    [DllImport("wtsapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool WTSQuerySessionInformation(IntPtr server,uint session,int kind,out IntPtr buffer,out uint size);\n' +
+    '    [DllImport("wtsapi32.dll")]static extern void WTSFreeMemory(IntPtr buffer);\n' +
+    '    [DllImport("user32.dll",SetLastError=true)]static extern IntPtr OpenInputDesktop(uint flags,bool inherit,uint access);\n' +
+    '    [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern bool GetUserObjectInformation(IntPtr handle,int kind,StringBuilder name,uint size,out uint needed);\n' +
+    '    [DllImport("user32.dll")]static extern bool CloseDesktop(IntPtr handle);\n' +
+    '    [DllImport("user32.dll")]static extern IntPtr GetForegroundWindow();\n' +
+    '    [DllImport("user32.dll")]static extern uint GetWindowThreadProcessId(IntPtr window,out uint pid);\n' +
+    '    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]static extern uint GetWindowsDirectory(StringBuilder directory,uint size);\n' +
+    '    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateJobObject(IntPtr sa,string name);\n' +
+    '    [DllImport("kernel32.dll")]static extern bool SetInformationJobObject(IntPtr job,int kind,ref JOB_LIMIT limits,uint length);\n' +
+    '    [DllImport("kernel32.dll")]static extern bool AssignProcessToJobObject(IntPtr job,IntPtr process);\n' +
+    '    [DllImport("kernel32.dll")]static extern uint ResumeThread(IntPtr thread);\n' +
+    '    [DllImport("advapi32.dll",CharSet=CharSet.Unicode)]static extern IntPtr OpenSCManager(string machine,string db,uint access);\n' +
+    '    [DllImport("advapi32.dll",CharSet=CharSet.Unicode)]static extern IntPtr OpenService(IntPtr manager,string name,uint access);\n' +
+    '    [DllImport("advapi32.dll")]static extern bool QueryServiceStatusEx(IntPtr service,int kind,out SERVICE_STATUS status,int size,out int needed);\n' +
+    '    [DllImport("advapi32.dll")]static extern bool CloseServiceHandle(IntPtr service);\n' +
+    '    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]\n' +
+    '    [DllImport("sas.dll")]static extern void SendSAS(bool asUser);\n' +
+    '\n' +
+    '    [StructLayout(LayoutKind.Sequential)]struct PRIVILEGE {public uint count,low;public int high;public uint attributes;}\n' +
+    '    [DllImport("advapi32.dll",CharSet=CharSet.Unicode)]static extern bool LookupPrivilegeValue(string machine,string name,out long luid);\n' +
+    '    [DllImport("advapi32.dll",SetLastError=true)]static extern bool AdjustTokenPrivileges(IntPtr token,bool disable,ref PRIVILEGE privileges,uint size,IntPtr previous,IntPtr returned);\n' +
+    '    [DllImport("advapi32.dll",SetLastError=true)]static extern bool GetKernelObjectSecurity(IntPtr handle,uint information,byte[] descriptor,uint size,out uint needed);\n' +
+    '    [DllImport("advapi32.dll",SetLastError=true)]static extern bool SetKernelObjectSecurity(IntPtr handle,uint information,byte[] descriptor);\n' +
+    '    static byte[] ProcessDacl(IntPtr handle) {\n' +
+    '        uint needed;GetKernelObjectSecurity(handle,4,null,0,out needed);\n' +
+    '        Require(needed>0&&needed<65536);\n' +
+    '        var bytes=new byte[needed];Require(GetKernelObjectSecurity(handle,4,bytes,needed,out needed));return bytes;\n' +
+    '    }\n' +
+    '    static byte[] AddProcessQuery(byte[] bytes,string logon) {\n' +
+    '        Require(logon!=null&&logon.StartsWith("S-1-5-5-",StringComparison.Ordinal));\n' +
+    '        var descriptor=new RawSecurityDescriptor(bytes,0);\n' +
+    '        Require((descriptor.ControlFlags&ControlFlags.DiscretionaryAclPresent)!=0&&descriptor.DiscretionaryAcl!=null);\n' +
+    '        var acl=descriptor.DiscretionaryAcl;\n' +
+    '        Require(new DiscretionaryAcl(false,false,acl).IsCanonical);\n' +
+    "        // Preserve every existing ACE, adding only this logon's limited query right.\n" +
+    '        // Explicit allows precede inherited ACEs; existing explicit denies retain priority.\n' +
+    '        int index=0;while(index<acl.Count&&(acl[index].AceFlags&AceFlags.Inherited)==0)index++;\n' +
+    '        acl.InsertAce(index,new CommonAce(AceFlags.None,AceQualifier.AccessAllowed,0x1000,new SecurityIdentifier(logon),false,null));\n' +
+    '        var result=new byte[descriptor.BinaryLength];descriptor.GetBinaryForm(result,0);return result;\n' +
+    '    }\n' +
+    '    static void GrantProcessQuery(IntPtr handle,string logon) {\n' +
+    '        Require(SetKernelObjectSecurity(handle,4,AddProcessQuery(ProcessDacl(handle),logon)));\n' +
+    '    }\n' +
+    '    static void EnableSessionPrivilege() {\n' +
+    '        IntPtr token;Require(OpenProcessToken(Process.GetCurrentProcess().Handle,0x28,out token));\n' +
+    '        try {long luid;Require(LookupPrivilegeValue(null,"SeTcbPrivilege",out luid));var privilege=new PRIVILEGE{count=1,low=(uint)luid,high=(int)(luid>>32),attributes=2};\n' +
+    '            Require(AdjustTokenPrivileges(token,false,ref privilege,0,IntPtr.Zero,IntPtr.Zero)&&Marshal.GetLastWin32Error()==0);\n' +
+    '        }finally{CloseHandle(token);}\n' +
+    '    }\n' +
+    '    static void Require(bool value) { if(!value)throw new Invali'... 53077 more characters
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-uac-fresh-reconnect/scripts/remote-desktop/protected-retirement.test.mjs:19:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: `// Installed, administrator-protected broker. No network listeners or policy changes.\n// Compile together with WindowsDesktopHost.cs, targeting the 64-bit .NET Framework.\nusing System;\nusing System.Collections.Concurrent;\nusing System.Collections.Generic;\nusing System.Diagnostics;\nusing System.IO;\nusing System.IO.Pipes;\nusing System.Runtime.InteropServices;\nusing System.Security.AccessControl;\nusing System.Security.Principal;\nusing System.ServiceProcess;\nusing System.Text;\nusing System.Threading;\nusing Microsoft.Win32.SafeHandles;\n\npublic static class SodaDesktopUnlock {\n    // Replaced by installer at compile time, never loaded from writable configuration.\n    public const string Owner = "__OWNER_SID__";\n    public const string Name = "__SERVICE_NAME__";\n    static readonly object Gate = new object();\n    static volatile bool End;\n    static readonly CancellationTokenSource ShutdownToken=new CancellationTokenSource();\n    static long Beat;\n    static Process OwnerProcess;\n    static string Logon;\n    static int Session;\n    static NamedPipeServerStream LeasePipe, SharePipe, WorkerPipe;\n    static IntPtr Job;\n    static Process Worker;\n    static long Generation;\n    static Guid WorkerNonce;\n    const uint DataRights = 0x12019b; // Deliberately excludes FILE_CREATE_PIPE_INSTANCE (4).\n    const uint QueryToken = 8;\n\n    [StructLayout(LayoutKind.Sequential)] struct SA { public int length; public IntPtr descriptor; public int inherit; }\n    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct STARTUPINFO {\n        public int cb; public string reserved,desktop,title; public uint x,y,w,h,cx,cy,fill,flags; public short show,cbReserved; public IntPtr lpReserved,input,output,error;\n    }\n    [StructLayout(LayoutKind.Sequential)] struct PI { public IntPtr process,thread; public uint pid,tid; }\n    [StructLayout(LayoutKind.Sequential)] struct BASIC_LIMIT { public long perProcess,perJob;public uint flags;public UIntPtr min,max;public uint active;public UIntPtr affinity;public uint priority,scheduling; }\n    [StructLayout(LayoutKind.Sequential)] struct IO { public ulong a,b,c,d,e,f; }\n    [StructLayout(LayoutKind.Sequential)] struct JOB_LIMIT { public BASIC_LIMIT basic;public IO io;public UIntPtr processMemory,jobMemory,peakProcess,peakJob; }\n    [StructLayout(LayoutKind.Sequential)] struct SERVICE_STATUS { public uint type,state,accepted,exitCode,specificExit,checkpoint,waitHint,pid,flags; }\n    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct LEVEL1 {\n        public uint session,state;public int flags;\n        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=33)]public string station;\n        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=21)]public string user;\n        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=18)]public string domain;\n        public long logon,connect,disconnect,lastInput,current; public uint incoming,outgoing,inFrames,outFrames,inCompressed,outCompressed;\n    }\n    [StructLayout(LayoutKind.Sequential)] struct INFOEX { public uint level; public LEVEL1 data; }\n    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern SafePipeHandle CreateNamedPipe(string name,uint open,uint mode,uint max,uint output,uint input,uint timeout,ref SA attributes);\n    [DllImport("kernel32.dll",SetLastError=true)]static extern bool ConnectNamedPipe(SafePipeHandle pipe,IntPtr overlapped);\n    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern SafePipeHandle CreateFile(string name,uint access,uint share,IntPtr sa,uint creation,uint flags,IntPtr template);\n    [DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr OpenProcess(uint access,bool inherit,int pid);\n    [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe,out uint pid);\n    [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe,out uint pid);\n    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool QueryFullProcessImageName(IntPtr process,uint flags,StringBuilder text,ref uint length);\n    [DllImport("advapi32.dll",SetLastError=true)]static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);\n    [DllImport("advapi32.dll",SetLastError=true)]static extern bool DuplicateTokenEx(IntPtr token,uint access,IntPtr sa,int level,int type,out IntPtr duplicate);\n    [DllImport("advapi32.dll",SetLastError=true)]static extern bool SetTokenInformation(IntPtr token,int kind,ref int value,int size);\n    [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool CreateProcessAsUser(IntPtr token,string app,StringBuilder args,IntPtr psa,IntPtr tsa,bool inherit,uint flags,IntPtr env,string cwd,ref STARTUPINFO startup,out PI process);\n    [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string text,uint revision,out IntPtr descriptor,out uint size);\n    [DllImport("kernel32.dll")]static extern IntPtr LocalFree(IntPtr memory);\n    [DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr handle);\n    [DllImport("kernel32.dll")]static extern uint WTSGetActiveConsoleSessionId();\n    [DllImport("wtsapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool WTSQuerySessionInformation(IntPtr server,uint session,int kind,out IntPtr buffer,out uint size);\n    [DllImport("wtsapi32.dll")]static extern void WTSFreeMemory(IntPtr buffer);\n    [DllImport("user32.dll",SetLastError=true)]static extern IntPtr OpenInputDesktop(uint flags,bool inherit,uint access);\n    [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern bool GetUserObjectInformation(IntPtr handle,int kind,StringBuilder name,uint size,out uint needed);\n    [DllImport("user32.dll")]static extern bool CloseDesktop(IntPtr handle);\n    [DllImport("user32.dll")]static extern IntPtr GetForegroundWindow();\n    [DllImport("user32.dll")]static extern uint GetWindowThreadProcessId(IntPtr window,out uint pid);\n    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]static extern uint GetWindowsDirectory(StringBuilder directory,uint size);\n    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateJobObject(IntPtr sa,string name);\n    [DllImport("kernel32.dll")]static extern bool SetInformationJobObject(IntPtr job,int kind,ref JOB_LIMIT limits,uint length);\n    [DllImport("kernel32.dll")]static extern bool AssignProcessToJobObject(IntPtr job,IntPtr process);\n    [DllImport("kernel32.dll")]static extern uint ResumeThread(IntPtr thread);\n    [DllImport("advapi32.dll",CharSet=CharSet.Unicode)]static extern IntPtr OpenSCManager(string machine,string db,uint access);\n    [DllImport("advapi32.dll",CharSet=CharSet.Unicode)]static extern IntPtr OpenService(IntPtr manager,string name,uint access);\n    [DllImport("advapi32.dll")]static extern bool QueryServiceStatusEx(IntPtr service,int kind,out SERVICE_STATUS status,int size,out int needed);\n    [DllImport("advapi32.dll")]static extern bool CloseServiceHandle(IntPtr service);\n    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]\n    [DllImport("sas.dll")]static extern void SendSAS(bool asUser);\n\n    [StructLayout(LayoutKind.Sequential)]struct PRIVILEGE {public uint count,low;public int high;public uint attributes;}\n    [DllImport("advapi32.dll",CharSet=CharSet.Unicode)]static extern bool LookupPrivilegeValue(string machine,string name,out long luid);\n    [DllImport("advapi32.dll",SetLastError=true)]static extern bool AdjustTokenPrivileges(IntPtr token,bool disable,ref PRIVILEGE privileges,uint size,IntPtr previous,IntPtr returned);\n    [DllImport("advapi32.dll",SetLastError=true)]static extern bool GetKernelObjectSecurity(IntPtr handle,uint information,byte[] descriptor,uint size,out uint needed);\n    [DllImport("advapi32.dll",SetLastError=true)]static extern bool SetKernelObjectSecurity(IntPtr handle,uint information,byte[] descriptor);\n    static byte[] ProcessDacl(IntPtr handle) {\n        uint needed;GetKernelObjectSecurity(handle,4,null,0,out needed);\n        Require(needed>0&&needed<65536);\n        var bytes=new byte[needed];Require(GetKernelObjectSecurity(handle,4,bytes,needed,out needed));return bytes;\n    }\n    static byte[] AddProcessQuery(byte[] bytes,string logon) {\n        Require(logon!=null&&logon.StartsWith("S-1-5-5-",StringComparison.Ordinal));\n        var descriptor=new RawSecurityDescriptor(bytes,0);\n        Require((descriptor.ControlFlags&ControlFlags.DiscretionaryAclPresent)!=0&&descriptor.DiscretionaryAcl!=null);\n        var acl=descriptor.DiscretionaryAcl;\n        Require(new DiscretionaryAcl(false,false,acl).IsCanonical);\n        // Preserve every existing ACE, adding only this logon's limited query right.\n        // Explicit allows precede inherited ACEs; existing explicit denies retain priority.\n        int index=0;while(index<acl.Count&&(acl[index].AceFlags&AceFlags.Inherited)==0)index++;\n        acl.InsertAce(index,new CommonAce(AceFlags.None,AceQualifier.AccessAllowed,0x1000,new SecurityIdentifier(logon),false,null));\n        var result=new byte[descriptor.BinaryLength];descriptor.GetBinaryForm(result,0);return result;\n    }\n    static void GrantProcessQuery(IntPtr handle,string logon) {\n        Require(SetKernelObjectSecurity(handle,4,AddProcessQuery(ProcessDacl(handle),logon)));\n    }\n    static void EnableSessionPrivilege() {\n        IntPtr token;Require(OpenProcessToken(Process.GetCurrentProcess().Handle,0x28,out token));\n        try {long luid;Require(LookupPrivilegeValue(null,"SeTcbPrivilege",out luid));var privilege=new PRIVILEGE{count=1,low=(uint)luid,high=(int)(luid>>32),attributes=2};\n            Require(AdjustTokenPrivileges(token,false,ref privilege,0,IntPtr.Zero,IntPtr.Zero)&&Marshal.GetLastWin32Error()==0);\n        }finally{CloseHandle(token);}\n    }\n    static void Require(bool value) { if(!value)throw new Invali`... 53077 more characters,
+    expected: /drain\.Input\(input\)\)workerWriter\.WriteLine\(input\)/,
+    operator: 'match',
+    diff: 'simple'
+  }

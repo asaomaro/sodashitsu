@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-uac-fresh-reconnect
+
+ ❯ packages/server/src/desktop/DesktopResourceChannel.test.ts (5 tests | 1 failed) 164ms
+   × drops queued revoked writes without killing terminal ACK drain for other resources 54ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/desktop/DesktopResourceChannel.test.ts > drops queued revoked writes without killing terminal ACK drain for other resources
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array []
+
+
+Number of calls: 1
+
+ ❯ packages/server/src/desktop/DesktopResourceChannel.test.ts:133:26
+    131|   await new Promise(resolve=>setImmediate(resolve));
+    132|   expect(child.commands.some(v=>v.type==="old-input"||v.type==="resour…
+    133|   expect(child.kill).not.toHaveBeenCalled();expect(child.ended).toBe(f…
+       |                          ^
+    134|   child.send({type:"resource_fence_ack",id:clipboard,terminal:true});
+    135|   await vi.waitFor(()=>expect(child.ended).toBe(true));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  15:38:48
+   Duration  301ms (tests 75%, transform 17%, import 7%, worker 1%)
+

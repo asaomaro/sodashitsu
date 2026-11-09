@@ -114,3 +114,25 @@ it("accepts terminal cleanup only for the current ownership epoch and blocks lat
   expect(ack).toHaveBeenCalledWith(channel, id);
   channel.kill();
 });
+
+it("drops queued revoked writes without killing terminal ACK drain for other resources", async () => {
+  const child = new Helper(), ack = vi.fn(), channel = new DesktopResourceChannel(child, { ack, close: () => {} });
+  child.send({ type: "ready", resourceFences: true });
+  const control = randomUUID(), clipboard = randomUUID();
+  channel.begin(control);channel.begin(clipboard, "clipboard");
+  channel.stdin.write('{"type":"blocked"}\n');
+  channel.stdin.write('{"type":"old-input"}\n');
+  const first=randomUUID(),second=randomUUID();
+  expect(channel.fence(first)).toBe(true);expect(channel.fence(second,"clipboard")).toBe(true);
+  channel.stdin.end();
+  await vi.waitFor(()=>expect(child.blocked).toBeTypeOf("function"));
+  child.send({type:"resource_fence_ack",id:control,terminal:true});
+  child.blocked!();
+  await new Promise(resolve=>setImmediate(resolve));
+  expect(child.commands.some(v=>v.type==="old-input"||v.type==="resource_fence")).toBe(false);
+  expect(child.kill).not.toHaveBeenCalled();expect(child.ended).toBe(false);
+  child.send({type:"resource_fence_ack",id:clipboard,terminal:true});
+  await vi.waitFor(()=>expect(child.ended).toBe(true));
+  expect(ack.mock.calls.map(v=>v[1])).toEqual([first,second]);
+  channel.kill();
+});

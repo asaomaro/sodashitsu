@@ -31,10 +31,14 @@ export class DesktopResourceChannel extends EventEmitter implements DesktopHelpe
     this.stderr = child.stderr;
     this.stdin = new Writable({
       write: (chunk, encoding, done) => {
-        if (this.closed || this.terminal.size > 0) {
+        if (this.closed) {
           done(Error("Desktop helper closed"));
           return;
         }
+        // A terminal ACK revokes this helper forever. Discard queued old
+        // operations without killing the transport that is still draining the
+        // other resources' terminal ACKs. Missing ACKs retain their timers.
+        if (this.terminal.size > 0) { done(); return; }
         child.stdin.write(chunk, encoding, done);
       },
       final: (done) => {

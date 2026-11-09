@@ -1,0 +1,14 @@
+[
+  {
+    "path": "scripts/remote-desktop/WindowsDesktopUnlock.cs",
+    "negativeExit": 1,
+    "restoredSha256": "1f0ba1db1d29d1df338b4aeaa32d6ffb1544748f9b4b5b4cdd4e19415cedef60",
+    "byteExact": true
+  },
+  {
+    "path": "packages/server/src/desktop/DesktopResourceChannel.ts",
+    "negativeExit": 1,
+    "restoredSha256": "874e4bae11be8a76f682410cfcd51456daaca9948aa34b42338d662fb630b672",
+    "byteExact": true
+  }
+]
