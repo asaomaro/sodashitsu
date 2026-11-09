@@ -1,0 +1,34 @@
+{
+  "sourceHead": "beaada93c35b3cc3e972ac0bf4cb077a2857b0f8",
+  "node": "v24.22.2",
+  "maxOldSpaceMiB": 8192,
+  "commands": [
+    {
+      "command": [
+        "node",
+        "/workspaces/sodashitsu-desktop-first-control-input/node_modules/typescript/bin/tsc",
+        "-b"
+      ],
+      "exit": 0,
+      "elapsedSeconds": 222.441
+    },
+    {
+      "command": [
+        "node",
+        "../desktop-assistant/scripts/build-host.mjs"
+      ],
+      "exit": 0,
+      "elapsedSeconds": 0.278
+    },
+    {
+      "command": [
+        "node",
+        "scripts/prune-retired-features.mjs"
+      ],
+      "exit": 0,
+      "elapsedSeconds": 0.021
+    }
+  ],
+  "elapsedSeconds": 222.745,
+  "success": true
+}

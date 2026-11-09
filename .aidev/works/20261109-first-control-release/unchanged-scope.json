@@ -1,0 +1,44 @@
+{
+  "base": "902349eb650ad63dad24f2ed7fbae3554bfef941",
+  "sourceTrees": {
+    "scripts/remote-desktop": {
+      "base902Tree": "73bb38a7589634d75bc5bdb0cc005f83e534788d",
+      "currentTree": "73bb38a7589634d75bc5bdb0cc005f83e534788d",
+      "unchanged": true
+    },
+    "packages/web": {
+      "base902Tree": "bc5c6dd1e22ea434bbbf89d9e258455d65cc9349",
+      "currentTree": "bc5c6dd1e22ea434bbbf89d9e258455d65cc9349",
+      "unchanged": true
+    },
+    "packages/desktop-assistant": {
+      "base902Tree": "02c7ff95c011bd0110acf1e4fe0570f8fd48eda9",
+      "currentTree": "02c7ff95c011bd0110acf1e4fe0570f8fd48eda9",
+      "unchanged": true
+    },
+    "packages/protocol": {
+      "base902Tree": "f5b7a1afb447ce9d86f5b56c8a5697cfb026c1e6",
+      "currentTree": "f5b7a1afb447ce9d86f5b56c8a5697cfb026c1e6",
+      "unchanged": true
+    },
+    "packages/client-core": {
+      "base902Tree": "ee246247693ab130705d3bf263fe9ea32438cb70",
+      "currentTree": "ee246247693ab130705d3bf263fe9ea32438cb70",
+      "unchanged": true
+    },
+    "packages/tui": {
+      "base902Tree": "ee0b19be6be33b06f6530cc5dd897aae2d68d9ba",
+      "currentTree": "ee0b19be6be33b06f6530cc5dd897aae2d68d9ba",
+      "unchanged": true
+    },
+    "packages/cli": {
+      "base902Tree": "5e466fee94b58cb85953018b7454a8a592e4b5bb",
+      "currentTree": "5e466fee94b58cb85953018b7454a8a592e4b5bb",
+      "unchanged": true
+    }
+  },
+  "productionWebExpected37Matched": true,
+  "nativeCompileOrInstallNeeded": false,
+  "nativeSourceModified": false,
+  "unit2Modified": false
+}

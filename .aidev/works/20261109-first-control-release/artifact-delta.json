@@ -1,0 +1,23 @@
+{
+  "baseSourceHead": "902349eb650ad63dad24f2ed7fbae3554bfef941",
+  "sourceHead": "beaada93c35b3cc3e972ac0bf4cb077a2857b0f8",
+  "files": 1868,
+  "delta": [
+    {
+      "path": "desktop/DesktopProvider.d.ts.map",
+      "beforeSha256": "d50ceae57c4a3b91bb4e53575ce8b0d487e0103059d6679f51d670f97cad4317",
+      "afterSha256": "eed1f200f66d7c0d1295daf97d0e8ca64f3044c5b90620b85d1c70635e910c25"
+    },
+    {
+      "path": "desktop/DesktopProvider.js",
+      "beforeSha256": "1a9ead75eefe33a7f4892b0cfdbb7ef6b04eac4956b0421dcf5cffe3817a0575",
+      "afterSha256": "08c7c771a0e819f52bdd9f8f3c4d44c0d181817c3a9da3a906b56408736024b3"
+    },
+    {
+      "path": "desktop/DesktopProvider.js.map",
+      "beforeSha256": "875f52107ca4d5dbd7d5e0edc3d1bc70ebbb2165c01b5bd8713eb5582d4783bb",
+      "afterSha256": "bf0be85e0e9a2bb8eb091bddcf54d11ac6d6bf7491954b4943683fd5b8e70e59"
+    }
+  ],
+  "allOtherArtifactBytesUnchanged": true
+}
