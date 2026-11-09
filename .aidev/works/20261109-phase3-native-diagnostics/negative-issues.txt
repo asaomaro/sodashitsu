@@ -1,0 +1,40 @@
+✔ fromViewer preserves this, exact arguments, identity return/promise and original throw; tracking is bounded (2.587772ms)
+✔ closed gate and exact latest id; bounded wait for confirmed-retirement accessor without inventing zero (0.507457ms)
+✔ missing/throwing/saturated/invalid stats remain unknown; poll stops at2s (7.433113ms)
+✔ stats projection is exact closed bounded shape, absent fields never zero (0.424411ms)
+✔ wx conflict/collection exception does not publish success or change control result (0.277865ms)
+✔ actual stop work is shared and original server close precedes collection and server-closed marker (6.081824ms)
+✔ normally returned but rejected restart is only a candidate; unknown never copied from earlier stream (0.545288ms)
+✔ read interval field is unknown for fewer than two reads and finite otherwise (0.119225ms)
+✖ actual runner diagnostics missing/invalid/read/write error cannot change retirement, issues or measurement (4.763906ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 8
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 70.751817
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/native-diagnostics.test.mjs:13:1
+✖ actual runner diagnostics missing/invalid/read/write error cannot change retirement, issues or measurement (4.763906ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      'existing',
+  +   'diagnostic-unavailable'
+    ]
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-native-stats-observer/scripts/remote-desktop/protected-microphone-phase3/native-diagnostics.test.mjs:13:1332)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'existing', 'diagnostic-unavailable' ],
+    expected: [ 'existing' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

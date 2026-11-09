@@ -1,0 +1,123 @@
+✔ actual clock rejects with immutable generated worker_late telemetry (8.838714ms)
+✔ actual clock rejects with immutable generated delivery_late telemetry (1.943576ms)
+✔ actual clock rejects with immutable generated delivery_order telemetry (2.028086ms)
+✔ actual clock rejects with immutable generated callback_late telemetry (7.410352ms)
+✔ actual clock rejects with immutable generated callback_async telemetry (3.369729ms)
+✔ actual clock rejects with immutable generated callback_ui_budget telemetry (3.564112ms)
+✔ actual clock rejects with immutable generated callback_send_not_live telemetry (2.299989ms)
+✔ actual clock rejects with immutable generated callback_other telemetry (2.482442ms)
+✔ actual clock rejects with immutable generated worker_error telemetry (2.438855ms)
+✔ actual clock rejects with immutable generated worker_exit telemetry (1.430329ms)
+✔ actual clock rejects with immutable generated timeout telemetry (1.177382ms)
+✔ actual clock rejects with immutable generated missing_frame telemetry (0.969609ms)
+✔ exact observed values bounded and rounded; zero received is not sent evidence (4.154047ms)
+✔ foreign errors cannot invent telemetry and actual A catch attaches only branded cadence (5.013705ms)
+✔ same-streak max frames/wall and broken reset timing cannot become qualifying merged runs (94.382362ms)
+✔ non-tone midstream and trailing silence are visible; zero streak does not count repeated resets (50.21922ms)
+✔ baseline broken flag cannot be mislabeled a tone interruption; packet flags1/4 independent by phase (42.371115ms)
+✔ read gap keeps original failure and separate reset evidence (45.259714ms)
+✔ C# capture metadata observer preserves flags reset and old detector predicates verbatim (0.626652ms)
+✔ actual intake wait failure yields only fixed stage (12.24103ms)
+✔ actual intake identity failure yields only fixed stage (2.134156ms)
+✔ actual intake native_probe failure yields only fixed stage (3.301722ms)
+✔ actual intake native_scope failure yields only fixed stage (2.089164ms)
+✔ actual intake source_connect failure yields only fixed stage (2.911794ms)
+✔ successful generated intake preserves ownership (2.687856ms)
+✔ operator receiver-arm budget is90s inside unchanged overall expiry (2.299654ms)
+✔ actual A sender fails lab measurement where Web would drop13th pending frame (9.197363ms)
+✔ actual BC sender fails lab measurement where Web would drop13th pending frame (2.555781ms)
+✔ actual B closure requires formal own lock proof; scenario or tone flag alone does not grant expected end (20.343444ms)
+✔ actual explicit cleanup/media-end is expected without granting a B proof or querying a foreign source (4.235744ms)
+✔ actual monitor never sends before matching running; foreign identity is ignored after real schema parse (2.484257ms)
+✔ twelve pending bounds match Web client and rejected frame does not consume its sequence (1.035845ms)
+✔ cumulative ACK frees all lower pending; unknown/stale/foreign ACK cannot free newer frames (0.370119ms)
+✔ oldest pending expires at strict500ms despite a later sent frame (0.409742ms)
+✔ ACK advances deadline only to oldest remaining send, never receipt time (0.16983ms)
+✔ formal schema failures stop monitor instead of accepting unknown state/invalid seq/extra field (1.063296ms)
+✔ sent sequence cannot be duplicated or move backwards (0.30227ms)
+✔ matching terminal states stop frame admission; owned close clears deadline without a spurious failure (0.396017ms)
+✔ only explicit retiring cleanup or formally expected B invalidation classifies closure as expected (0.322719ms)
+✔ actual BC server-ready polling defers visible partial/missing receipt and keeps hard IO errors hard (28.321874ms)
+✔ actual caller defaults create and close monitor without injected clock/timers (2.397884ms)
+✔ actual BC closure rejects pre-tone B, any A/C, and transport errors without waiting for a lock proof (10.205336ms)
+✔ actual B late formal proof holds PCM while pending, then classifies only that valid lock as expected (4.015032ms)
+✔ actual B closure never accepts missing/stale/future/nonlocked evidence as expected retirement (11.500374ms)
+✔ actual C explicit media retirement and owned cleanup permit closure without inventing a B proof (6.419653ms)
+✔ closed B stream cannot incur an ACK timeout while its bounded formal-lock proof is pending (2.875164ms)
+node:internal/modules/cjs/loader:1476
+  const err = new Error(message);
+              ^
+
+Error: Cannot find module 'typescript'
+Require stack:
+- /workspaces/sodashitsu-phase3-native-stats-observer/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1476:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1049:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1073:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1094:12)
+    at Module._load (node:internal/modules/cjs/loader:1262:25)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1576:12)
+    at require (node:internal/modules/helpers:153:16)
+    at file:///workspaces/sodashitsu-phase3-native-stats-observer/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:4:49 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/workspaces/sodashitsu-phase3-native-stats-observer/scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs'
+  ]
+}
+
+Node.js v24.15.0
+✖ scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs (72.904727ms)
+✔ fromViewer preserves this, exact arguments, identity return/promise and original throw; tracking is bounded (8.095217ms)
+✔ closed gate and exact latest id; bounded wait for confirmed-retirement accessor without inventing zero (1.276808ms)
+✔ missing/throwing/saturated/invalid stats remain unknown; poll stops at2s (10.196513ms)
+✔ stats projection is exact closed bounded shape, absent fields never zero (0.828052ms)
+✔ wx conflict/collection exception does not publish success or change control result (0.615892ms)
+✔ actual stop work is shared and original server close precedes collection and server-closed marker (18.071695ms)
+✔ normally returned but rejected restart is only a candidate; unknown never copied from earlier stream (0.876403ms)
+✔ read interval field is unknown for fewer than two reads and finite otherwise (0.283204ms)
+✔ actual pipeline ready fails at fixed protected_source_ready (3.137494ms)
+✔ actual pipeline schema fails at fixed protected_source_schema (1.830573ms)
+✔ actual pipeline proof fails at fixed protected_source_proof (1.438669ms)
+✔ actual pipeline ticket fails at fixed microphone_ticket_wait (2.31264ms)
+✔ actual pipeline ticket_proof fails at fixed microphone_ticket_proof (2.644711ms)
+✔ actual pipeline lane fails at fixed microphone_lane_connect (2.001048ms)
+✔ actual pipeline start fails at fixed microphone_start_send (3.22377ms)
+✔ actual pipeline running fails at fixed microphone_running_wait (2.555518ms)
+✔ generated successful pipeline is unchanged (3.787721ms)
+✔ diagnostic evidence adopts only schema parsed fields; generic error code/message never copied (2.397242ms)
+✔ protected-microphone-phase3/run-a.mjs: viewer offers elevated+protected PCM prerequisites while lane stays microphone-only (19.148577ms)
+✔ protected-microphone-phase3-bc/session.mjs: viewer offers elevated+protected PCM prerequisites while lane stays microphone-only (9.343926ms)
+✔ generated997Hz calibrated amplitude and energy, no real audio (56.039569ms)
+✔ same streak frames+wall required; baseline contamination/gaps/discontinuity/condensed delivery fail (251.739234ms)
+✔ absolute100 silent ticks, synchronous delivery and bounded worker cleanup (2115.787176ms)
+✔ async or blocking sender is a diagnostic failure, never a successful cadence (209.525026ms)
+✔ full300 generated tone cadence retains all frames over6sec, main event loop remains live (6071.886294ms)
+✔ long wall and long frame streaks cannot be combined across different intervals (46.595258ms)
+✔ approval/default endpoints/expiry remain failclosed and child environment excludes preload/history (1.685911ms)
+✔ private child cannot inherit custom desktop commands or change parent environment (0.106912ms)
+✔ actual receiver-armed.json callback waits for complete publication and ENOENT (13.618378ms)
+✔ actual baseline-ready.json callback waits for complete publication and ENOENT (12.448124ms)
+✔ actual receiver-result.json callback waits for complete publication and ENOENT (10.946852ms)
+✔ only SyntaxError/ENOENT retry; access/busy/other failures remain hard errors with fixed classes (1.054099ms)
+✔ complete foreign armed identity still fails actual guard, never skipped to accepted ownership (1.965848ms)
+✔ silent packets counted separately without inventing discontinuities or flags (21.452982ms)
+✔ reset records bounded scalar window evidence and actual preceding streak; result remains failed (89.022153ms)
+✔ phase cancellation differs from silence in metrics; right-channel diagnostics do not become scoring input (99.444245ms)
+✔ broken/gap are separate failure bits and evidence cap is eight with omitted count (61.156744ms)
+✔ protected-microphone-phase3/run-a.mjs: real5s admission kept fresh by formal1s heartbeat then owned cleanup (18.394472ms)
+✔ protected-microphone-phase3-bc/session.mjs: real5s admission kept fresh by formal1s heartbeat then owned cleanup (4.958614ms)
+ℹ tests 86
+ℹ suites 0
+ℹ pass 85
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8869.56687
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs:1:1
+✖ scripts/remote-desktop/protected-microphone-phase3/microphone-lane.test.mjs (72.904727ms)
+  'test failed'

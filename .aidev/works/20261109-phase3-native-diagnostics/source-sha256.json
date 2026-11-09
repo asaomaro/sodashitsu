@@ -1,0 +1,9 @@
+{
+  "runtimeCommit": "bed5639b",
+  "files": {
+    "scripts/remote-desktop/protected-microphone-phase3/private-server.mjs": "92c19d6341be334d55e7c479127126e84c240f87d526ac0b1eb87cd751300996",
+    "scripts/remote-desktop/protected-microphone-phase3/run-a.mjs": "ea950eaf3305ecfd47a197501a44d7a155fc27041b05adb27ad94edaf09a859b",
+    "scripts/remote-desktop/protected-microphone-phase3/native-diagnostics.test.mjs": "51856db83c821bf32ca672ecc18a981f761871a7b0867e0cfaeec039ab1c5b3a",
+    "scripts/remote-desktop/protected-microphone-phase3/README.md": "8de9493690f70bf73e14fba67981ed4088aec6263de9388c564a5f125b25c470"
+  }
+}

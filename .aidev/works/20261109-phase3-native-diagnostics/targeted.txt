@@ -1,0 +1,22 @@
+✔ protected-microphone-phase3/run-a.mjs: delayed-provider needs immediate attach and formal ready before start (5.071676ms)
+✔ protected-microphone-phase3/run-a.mjs: cold-native-source needs immediate attach and formal ready before start (2.098228ms)
+✔ protected-microphone-phase3-bc/session.mjs: delayed-provider needs immediate attach and formal ready before start (2.351787ms)
+✔ protected-microphone-phase3-bc/session.mjs: cold-native-source needs immediate attach and formal ready before start (1.738029ms)
+✔ owned ticket attachment retirement blocks delayed open from sending hello or reusing a ticket (0.288785ms)
+✔ fromViewer preserves this, exact arguments, identity return/promise and original throw; tracking is bounded (2.047492ms)
+✔ closed gate and exact latest id; bounded wait for confirmed-retirement accessor without inventing zero (0.353286ms)
+✔ missing/throwing/saturated/invalid stats remain unknown; poll stops at2s (3.671566ms)
+✔ stats projection is exact closed bounded shape, absent fields never zero (0.283264ms)
+✔ wx conflict/collection exception does not publish success or change control result (0.280429ms)
+✔ actual stop work is shared and original server close precedes collection and server-closed marker (6.244538ms)
+✔ normally returned but rejected restart is only a candidate; unknown never copied from earlier stream (0.332306ms)
+✔ read interval field is unknown for fewer than two reads and finite otherwise (0.077466ms)
+✔ actual runner diagnostics missing/invalid/read/write error cannot change retirement, issues or measurement (3.401987ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 264.099662

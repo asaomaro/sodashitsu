@@ -1,0 +1,17 @@
+✔ fromViewer preserves this, exact arguments, identity return/promise and original throw; tracking is bounded (2.215129ms)
+✔ closed gate and exact latest id; bounded wait for confirmed-retirement accessor without inventing zero (0.368735ms)
+✔ missing/throwing/saturated/invalid stats remain unknown; poll stops at2s (7.278682ms)
+✔ stats projection is exact closed bounded shape, absent fields never zero (0.301077ms)
+✔ wx conflict/collection exception does not publish success or change control result (0.228251ms)
+✔ actual stop work is shared and original server close precedes collection and server-closed marker (6.127079ms)
+✔ normally returned but rejected restart is only a candidate; unknown never copied from earlier stream (0.581788ms)
+✔ read interval field is unknown for fewer than two reads and finite otherwise (0.142499ms)
+✔ actual runner diagnostics missing/invalid/read/write error cannot change retirement, issues or measurement (4.062754ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 67.635899

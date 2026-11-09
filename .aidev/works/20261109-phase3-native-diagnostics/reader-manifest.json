@@ -1,0 +1,14 @@
+{
+  "files": {
+    "ops.mjs": "a9ba51dd1a65a61cc83bfdd1136f57fd80ab1aee43c1eb102ad64dea7aa6ecbb",
+    "remote.mjs": "0d16ebdd94755081cd9a1908f83b653f0150ed5891635f71c6151fe88de67361",
+    "expected.json": "d3e1d581d8dd540d3d49765b11fb75fce2d875477accba8290f3010d920e1749",
+    "checks.mjs": "88f8a7633417cb484ecb50c181f7de9d26935a4bf821f47aa7903ff371889ed9",
+    "README.md": "9b6fe4b8c57cc02039eab5925353ca67616c4c1ae0cc4e5c8fb1849551c3a7ad",
+    "checks.txt": "2def36c6fc18281dcb27b2463f6ea45b1b2763f1b8faa89a52de562a90a359e8",
+    "negative.txt": "3d1bd82a8e62d9547063a7592f46dd49942502e504647206f09af7c617175df1",
+    "restoration.json": "98d168ca5b068de2cecd014852285eab98be8eb28bb23c8266712ed59ac80b61",
+    "source-origin.json": "92a5ff4865387e8afab12f2218b767bd3a63b43b2d1d55996cd7d1951d609afd"
+  },
+  "windowsExecuted": false
+}
