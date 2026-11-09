@@ -190,6 +190,11 @@ const adaptive = ref(savedSettings.adaptive),
   allowMedia = ref(false),
   allowClipboard = ref(false);
 const mediaNotice = ref("");
+let lastStartedMediaId: string | undefined;
+function mediaStarted(id: string) {
+  if (lastStartedMediaId !== id) mediaNotice.value = "";
+  lastStartedMediaId = id;
+}
 const mediaState = ref("images"),
   mediaAudio = ref(false),
   sound = ref(false),
@@ -387,7 +392,7 @@ async function requestVideo() {
   if(!dead&&version===epoch&&request===mediaRequestSeq)send({type:"media",enabled:true,settings});
 }
 function stopVideo() {
-  mediaNotice.value="";
+  mediaNotice.value="";lastStartedMediaId=undefined;
   mediaRequestSeq++;soundRequestSeq++;nativeAudioState.value="";mediaAudio.value=false;
   send({ type: "media", enabled: false });
   receiver?.stop();
@@ -503,7 +508,7 @@ function stop(preserveCapabilities=false) {
   receiver?.stop();
   receiver = undefined;
   mediaState.value = "images";
-  mediaNotice.value = "";
+  mediaNotice.value = "";lastStartedMediaId=undefined;
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
@@ -822,7 +827,7 @@ function connect(automatic = false) {
           const state = DesktopMediaStatus.parse(m);
           if(state.state==="images" && receiver && receiver.id!==state.id)return;
           mediaState.value = state.state;
-          if(["native","rtc","relay"].includes(state.state))mediaNotice.value="";
+          if(["native","rtc","relay"].includes(state.state))mediaStarted(state.id);
           if(state.state==="negotiating")nativeActualCodec.value=undefined;if(state.codecRequested)nativeRequestedCodec.value=state.codecRequested;if(state.codec)nativeActualCodec.value=state.codec;nativeCodecFallback.value=state.codecFallback??"";
           mediaAudio.value = state.audio||(state.nativeAudio===true&&nativeAudioState.value==="running");nativeUdpActive.value=state.datagrams===true;
           if (state.state === "images") {
@@ -861,7 +866,7 @@ function connect(automatic = false) {
               },
               (value) => {
                 mediaState.value = value;
-                if(["native","rtc","relay"].includes(value))mediaNotice.value="";
+                if(["native","rtc","relay"].includes(value)&&!dead&&version===epoch&&receiver?.id===state.id)mediaStarted(state.id);
                 if (value === "images") {
                   if(mediaTransport.value==="native")error.value="GPU動画を利用できないため画像配信に戻しました";
                   restoreImage();
