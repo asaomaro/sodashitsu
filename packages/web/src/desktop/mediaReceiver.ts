@@ -107,7 +107,8 @@ export class DesktopMediaReceiver {
         if(this.udp)this.datagramFailure();else this.fail();
         return;
       }
-      if(this.native||this.udp)return;
+      // Legacy feedback belongs only to a confirmed legacy stream, never native startup.
+      if(this.native||this.nativeFormat||this.udp||(!this.source&&!this.video.srcObject))return;
       if (now - this.feedbackAt < 2000) return;
       this.feedbackAt = now;
       const ranges = this.video.buffered,

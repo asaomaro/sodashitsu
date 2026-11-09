@@ -189,6 +189,7 @@ const adaptive = ref(savedSettings.adaptive),
   dynamicQuality = ref(false),
   allowMedia = ref(false),
   allowClipboard = ref(false);
+const mediaNotice = ref("");
 const mediaState = ref("images"),
   mediaAudio = ref(false),
   sound = ref(false),
@@ -386,6 +387,7 @@ async function requestVideo() {
   if(!dead&&version===epoch&&request===mediaRequestSeq)send({type:"media",enabled:true,settings});
 }
 function stopVideo() {
+  mediaNotice.value="";
   mediaRequestSeq++;soundRequestSeq++;nativeAudioState.value="";mediaAudio.value=false;
   send({ type: "media", enabled: false });
   receiver?.stop();
@@ -501,6 +503,7 @@ function stop(preserveCapabilities=false) {
   receiver?.stop();
   receiver = undefined;
   mediaState.value = "images";
+  mediaNotice.value = "";
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
@@ -819,6 +822,7 @@ function connect(automatic = false) {
           const state = DesktopMediaStatus.parse(m);
           if(state.state==="images" && receiver && receiver.id!==state.id)return;
           mediaState.value = state.state;
+          if(["native","rtc","relay"].includes(state.state))mediaNotice.value="";
           if(state.state==="negotiating")nativeActualCodec.value=undefined;if(state.codecRequested)nativeRequestedCodec.value=state.codecRequested;if(state.codec)nativeActualCodec.value=state.codec;nativeCodecFallback.value=state.codecFallback??"";
           mediaAudio.value = state.audio||(state.nativeAudio===true&&nativeAudioState.value==="running");nativeUdpActive.value=state.datagrams===true;
           if (state.state === "images") {
@@ -857,6 +861,7 @@ function connect(automatic = false) {
               },
               (value) => {
                 mediaState.value = value;
+                if(["native","rtc","relay"].includes(value))mediaNotice.value="";
                 if (value === "images") {
                   if(mediaTransport.value==="native")error.value="GPU動画を利用できないため画像配信に戻しました";
                   restoreImage();
@@ -880,7 +885,7 @@ function connect(automatic = false) {
         } else if(m.type==="native_video_stats") {
           const stats=DesktopNativeVideoStats.parse(m);if(receiver?.id===stats.id)nativeStats.value=stats;
         } else if (m.type === "media_unavailable")
-          error.value = "Bのメディア補助画面と共有許可を確認してください";
+          mediaNotice.value = "接続先のメディア補助画面と共有許可を確認してください";
         else if (m.type === "clipboard_state") {
           clipboardGranted.value = m.enabled === true;
           if (!clipboardGranted.value) clearClipboard();
@@ -1227,8 +1232,9 @@ onBeforeUnmount(() => {
           :title="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
           @dblclick.stop @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
       </header>
-      <div v-if="!infoOpen&&(error||!ready)" class="desktop-alert">
+      <div v-if="!infoOpen&&(error||mediaNotice||!ready)" class="desktop-alert">
       <p v-if="error" role="alert">{{ error }}</p>
+      <p v-if="mediaNotice" role="alert" data-media-notice>{{ mediaNotice }}</p>
       <div v-if="!ready" data-desktop-reconnect>
         <button data-assistant-action @click="reconnectViewing">閲覧で接続し直す</button>
         <button data-assistant-action v-if="elevatedScreen" @click="reconnectNormalViewing">通常画面へ戻って閲覧</button>
@@ -1244,6 +1250,7 @@ onBeforeUnmount(() => {
       </div>
       <div v-show="infoOpen" class="desktop-controls">
         <p v-if="error" role="alert">{{ error }}</p>
+        <p v-if="mediaNotice" role="alert" data-media-notice>{{ mediaNotice }}</p>
         <div v-if="!ready" data-desktop-reconnect>
           <button data-assistant-action @click="reconnectViewing">閲覧で接続し直す</button>
           <button data-assistant-action v-if="elevatedScreen" @click="reconnectNormalViewing">通常画面へ戻って閲覧</button>
