@@ -72,7 +72,7 @@ microphone_ticket到着時に専用laneを即attachする（native ready待ち�
 
 ### private server内のNative aggregate観測
 
-fixtureの `private-server.mjs` 内だけで `DesktopProtectedMicrophone.fromViewer` を観測する。元のthis・全引数・返り値・例外は変えず、正常returnしたstart候補のUUIDだけ最大4instance、各instanceの最新候補1件を保持する。正常returnはstart成功の証明ではない。拒否restart候補で旧idが置き換わった場合も、getterのexact idに合わなければ未取得に倒す。
+fixtureの `private-server.mjs` 内だけで `DesktopProtectedMicrophone.fromViewer` を観測する。元のthis・全引数・返り値・例外は変えず、正常returnしたstart候補のUUIDだけ最大4instance、各instanceの最新候補1件を保持する。正常returnはstart成功の証明ではない。同instanceでstart候補を複数回観測したら、同じid・異なるid・id循環のいずれも永久に未取得へ倒す。getterにgeneration引数はなく同id再利用後の別runの統計を返し得るため、exact idだけで複数runを同一視しない。fixtureの正常経路は1streamだけである。
 
 `server.close()` 完了後、内部 `readNativeDiagnostics(expectedId)` を最大2秒だけ待つ。この時間は元のserver退役待ち10秒の内側で、deadline延長はしない。accessorは正式closed receipt・child物理close・binary close・resource release成功後だけ返す契約で、live・未確認・saturated・期限切れ・次startは未取得。公開RPC/マイクwire schemaへは追加しない。
 
