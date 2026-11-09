@@ -3,7 +3,7 @@ import {DESKTOP_FOLDERS_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
 import {DESKTOP_FILE_CHECKPOINTS_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopEndpointAgentPeers,DesktopEndpointAgentTicket,DesktopEndpointAgentError,parseDesktopAgentGrant} from "@sodashitsu/protocol";
-import {DesktopProtectedFilesReady,DesktopSigninRequired,desktopFeaturesProtocol} from "@sodashitsu/protocol";
+import {DesktopProtectedFilesReady,DesktopProtectedFailure,desktopProtectedFailureMessage,DesktopSigninRequired,desktopFeaturesProtocol} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CLIPBOARD_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CURSOR_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_MICROPHONE_PROTOCOL} from "@sodashitsu/protocol";
@@ -223,7 +223,7 @@ function changeSharedMonitors(){monitorDevice.value=undefined;changeMonitor();}
 function changeSharedDeltas(){releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function changeSharedClipboard(){releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function changeSharedCursor(){releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
-function changeElevatedScreen(){virtualPhysicalSwitch=false;if(elevatedScreen.value){virtualScreen.value=false;if(!sharedProtectedAvailable.value)sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeElevatedScreen(){freshControlRequired.value=true;virtualPhysicalSwitch=false;if(elevatedScreen.value){virtualScreen.value=false;if(!sharedProtectedAvailable.value)sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
 function changeMonitor(){if(virtualScreen.value){const selected=monitorDevice.value;if(!selected||selected==="all"||selected===monitorLayout.value?.selected)return;virtualScreen.value=false;virtualMode.value="";virtualPhysicalSwitch=true;if(sharedScreen.value){sharedMonitorsScreen.value=true;sharedMonitorDevice.value=selected;if(independentAvailable.value)independentScreen.value=true;}}if(!props.monitorWindow)localMonitor.value="";if(sharedScreen.value&&sharedMonitorsScreen.value)sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 const virtualNativeDragRequested=ref(false),virtualNativeDragReady=ref(false);
@@ -442,6 +442,8 @@ let ws: WebSocket | undefined,
   decoding = false;
 let chain = new DesktopFrameChain();
 let startupRetries = 0;
+let sourceReconnectTimer:ReturnType<typeof setTimeout>|undefined;
+const freshControlRequired=ref(false);
 const inputs = new Map<number, number>();
 const inputSender = new DesktopInputSender(sendInput);
 const escapePress = new DesktopEscape(), mouseButtons = new DesktopButtons(), modifiers = new DesktopModifiers();
@@ -489,6 +491,7 @@ let microphoneSocket:WebSocket|undefined,microphoneClient:DesktopMicrophoneClien
 function resetMicrophone(){protectedMicrophone.value=false;microphoneClient?.stop();microphoneClient=undefined;microphoneSocket?.close();microphoneSocket=undefined;microphoneAvailable.value=false;microphonePipeReady.value=false;microphoneState.value="stopped";}
 function startMicrophone(){if(ready.value&&microphoneAvailable.value&&microphonePipeReady.value&&(!secureDesktop.value||protectedMicrophone.value&&!!protectedMode.value))void microphoneClient?.start();}
 function stop(preserveCapabilities=false) {
+  clearTimeout(sourceReconnectTimer);sourceReconnectTimer=undefined;
   resetMicrophone();
   clearTimeout(signinTimer);signinOffer.value=undefined;signinSession.value=false;
   epoch++;
@@ -532,7 +535,7 @@ function stop(preserveCapabilities=false) {
   agentTicket.value = "";
   endpointAgentAvailable.value=false;endpointAgentPeers.value=[];endpointAgentSelected.value="";endpointAgentNotice.value="";endpointAgentBusy.value=false;
   agentExpires.value = 0;
-  info.value = null;
+  info.value = null;rendered.value=lastDrawn=0;
   canvas.value?.getContext("2d")?.clearRect(0, 0, canvas.value.width, canvas.value.height);
 }
 function close() {
@@ -579,6 +582,18 @@ function preset(event: Event) {
   showCursor.value = value.image.showCursor;
   (event.target as HTMLSelectElement).value = "";
 }
+function reconnectViewing(){freshControlRequired.value=true;connect();}
+function reconnectNormalViewing(){elevatedScreen.value=false;reconnectViewing();}
+function reconnectProtectedViewing(){if(!sharedProtectedAvailable.value)return;freshControlRequired.value=true;elevatedScreen.value=true;changeElevatedScreen();}
+function sourceChanged(message:string){
+  const exhausted=++startupRetries>3;
+  maximumDisplay.value=false;requestedDisplay=undefined;text.value="";freshControlRequired.value=true;
+  stop(true);
+  if(exhausted){status.value="停止";error.value="画面の切替が安定しないため再接続を停止しました。閲覧で接続し直してください。";return;}
+  status.value=message;error.value="";
+  const reconnectEpoch=epoch;
+  sourceReconnectTimer=setTimeout(()=>{sourceReconnectTimer=undefined;if(!dead&&epoch===reconnectEpoch)connect(true);},750);
+}
 function connect(automatic = false) {
   if(dead)return;
   if (automatic !== true) startupRetries = 0;
@@ -597,13 +612,14 @@ function connect(automatic = false) {
     : "このブラウザに設定を保存できませんでした。今回の接続には反映します。";
   activeSettings.value = options;
   const switchingFromVirtual=virtualPhysicalSwitch;virtualPhysicalSwitch=false;
+  if(ready.value||control.value||controlPending||info.value)freshControlRequired.value=true;
   stop();
   error.value = "";
   status.value = "接続中";
   title.value = "";
   synthetic.value = false;
   rendered.value = lastDrawn = 0;
-  controlPending=controlCancelled=false;
+  controlPending=false;controlCancelled=freshControlRequired.value;
   seq = 0;
   chain = new DesktopFrameChain();
   sourceCanvas = document.createElement("canvas");
@@ -702,7 +718,7 @@ function connect(automatic = false) {
         else if(m.type==="clipboard_busy"){clipboardNotice.value="他の窓がクリップボードを共有中です。その窓で解除してから許可してください。";}
         else if(m.type==="shared_clipboard_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid shared clipboard capability");sharedClipboardAvailable.value=m.enabled;if(!m.enabled)sharedClipboardScreen.value=false;}
         else if(m.type==="shared_cursor_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid shared cursor capability");sharedCursorAvailable.value=m.enabled;if(!m.enabled)sharedCursorScreen.value=false;}
-        else if(m.type==="monitor_topology_changed"){monitorChanged=true;sharedMonitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;monitorDevice.value=undefined;ready.value=false;control.value=false;error.value="接続先のモニター構成が変更されました。接続し直してください。";stop();status.value="停止";}
+        else if(m.type==="monitor_topology_changed"){monitorChanged=true;freshControlRequired.value=true;sharedMonitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;monitorDevice.value=undefined;ready.value=false;control.value=false;error.value="接続先のモニター構成が変更されました。接続し直してください。";stop();status.value="停止";}
         else if(m.type==="microphone_ticket"){
           if(microphoneSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid microphone attachment");
           const pipe=microphoneSocket=desktopSockets.open(url,DESKTOP_MICROPHONE_PROTOCOL);
@@ -798,19 +814,7 @@ function connect(automatic = false) {
           if (!secureDesktop.value) scheduleDisplay();
           status.value = signinSession.value ? "サインイン画面・閲覧中" : protectedMode.value ? "管理者画面・閲覧中" : secureDesktop.value ? "ロック画面・閲覧中" : "閲覧中";
         } else if ((m.type === "session_unlocked" && secureDesktop.value) || (m.type === "session_locked" && !secureDesktop.value) || (m.type === "lock_screen_changed" && (secureDesktop.value || !ready.value))) {
-          const exhausted = ++startupRetries > 3;
-          maximumDisplay.value = false;
-          requestedDisplay = undefined;
-          text.value = "";
-          stop();
-          if (exhausted) {
-            status.value = "停止";
-            error.value = "共有元のロック画面が安定しないため再接続を停止しました。少し待ってから接続し直してください。";
-            return;
-          }
-          status.value = m.type === "session_locked" || m.type === "lock_screen_changed" ? "ロック画面に再接続中" : "解除しました。通常画面に再接続中";
-          const reconnectEpoch = epoch;
-          setTimeout(() => { if (!dead && epoch === reconnectEpoch) connect(true); }, 750);
+          sourceChanged(m.type === "session_locked" || m.type === "lock_screen_changed" ? "ロック画面に閲覧で再接続中" : "解除しました。通常画面に閲覧で再接続中");
         } else if (m.type === "media_status") {
           const state = DesktopMediaStatus.parse(m);
           if(state.state==="images" && receiver && receiver.id!==state.id)return;
@@ -901,7 +905,7 @@ function connect(automatic = false) {
           cursorRenderer?.clearPrediction();
           status.value = agentActive.value ? "エージェント操作中" : "閲覧中";
         } else if (m.type === "control") {
-          const requestedControl=controlPending||control.value||!controlCancelled;
+          const requestedControl=controlPending||control.value||(!freshControlRequired.value&&!controlCancelled);
           if(m.enabled!==true&&(controlPending||control.value))controlCancelled=true;
           controlPending=false;
           inputSender.clear();
@@ -942,14 +946,19 @@ function connect(automatic = false) {
             inputAckMs.value = performance.now() - at;
             inputs.delete(m.seq);
           }
+        } else if(m.type==="protected_desktop_failure"){
+          const failure=DesktopProtectedFailure.safeParse(m);
+          if(failure.success&&failure.data.code==="source_changed"&&elevatedScreen.value){sourceChanged("管理者画面の切替を待って閲覧で再接続中");}
+          else{const message=failure.success?desktopProtectedFailureMessage(failure.data.code):"管理者画面の状態を確認できません。閲覧で接続し直してください。";freshControlRequired.value=true;stop(true);status.value="停止";error.value=message;}
         } else if (m.type === "error") {
-          error.value = typeof m.message === "string" ? m.message : "共有を開始できません";
+          if(elevatedScreen.value&&Object.keys(m).length===2&&m.message===desktopProtectedFailureMessage("source_changed")){sourceChanged("管理者画面の切替を待って閲覧で再接続中");return;}
+          const message=typeof m.message === "string" ? m.message : "共有を開始できません";freshControlRequired.value=true;stop(true);status.value="停止";error.value=message;
         }
       }
     } catch (e) {
       if(dead||version!==epoch)return;
       error.value = e instanceof Error ? e.message : "表示に失敗しました";
-      stop();
+      freshControlRequired.value=true;stop();
       status.value = "停止";
     }
   };
@@ -958,7 +967,7 @@ function connect(automatic = false) {
     endpointEncrypted.value=desktopSockets.encrypted;
     if(endpointEncrypted.value&&event.reason&&!error.value)error.value=event.reason;
     const wasReady = ready.value;
-    stop(true);
+    freshControlRequired.value=true;stop(true);
     status.value = "終了";
     if(monitorChanged){status.value="停止";return;}
     if(!wasReady&&switchingFromVirtual){status.value="停止";error.value=(error.value?error.value+" ":"")+"指定した物理モニターへ切り替えられません。他の共有窓を閉じ、接続先のモニター構成と許可を確認してから接続し直してください。";return;}
@@ -1084,6 +1093,7 @@ function dismissLockScreen() {
   }
 }
 function toggleControl() {
+  if(!control.value&&freshControlRequired.value&&(!ready.value||!allowed.value||(!lockScreenCover.value&&lastDrawn<=0)))return;
   startupRetries = 0;
   send({ type: "control", enabled: !control.value });
 }
@@ -1194,7 +1204,7 @@ onBeforeUnmount(() => {
         <strong>{{ label }} — デスクトップ</strong><span data-desktop-status>{{ status }}</span>
         <span v-if="platformIdle" data-native-idle :data-idle-counter="platformIdleCounter">新しい画像待ち（最終画像を表示）</span>
         <button data-assistant-action
-          :disabled="!ready || !allowed"
+          :disabled="!ready || !allowed || (!control && freshControlRequired && !lockScreenCover && rendered===0)"
           @pointerdown.prevent
           @click="toggleControl"
         >
@@ -1217,8 +1227,15 @@ onBeforeUnmount(() => {
           :title="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
           @dblclick.stop @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
       </header>
-      <p v-if="error&&!infoOpen" class="desktop-alert" role="alert">{{ error }}</p>
-      <button data-assistant-action v-if="!ready&&error&&!elevatedScreen&&!infoOpen" @click="resetMonitor">既定のモニターで接続し直す</button>
+      <div v-if="!infoOpen&&(error||!ready)" class="desktop-alert">
+      <p v-if="error" role="alert">{{ error }}</p>
+      <div v-if="!ready" data-desktop-reconnect>
+        <button data-assistant-action @click="reconnectViewing">閲覧で接続し直す</button>
+        <button data-assistant-action v-if="elevatedScreen" @click="reconnectNormalViewing">通常画面へ戻って閲覧</button>
+        <button data-assistant-action v-else-if="sharedProtectedAvailable" @click="reconnectProtectedViewing">管理者画面へ切り替えて閲覧</button>
+        <button data-assistant-action v-if="error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
+      </div>
+      </div>
       <div v-if="signinOffer" data-desktop-signin-consent role="group" aria-label="サインイン画面への接続許可">
         <p>Windowsのサインイン画面に接続します。今回の接続だけ許可し、最長120秒で終了します。ログインや画面構成の変更後は接続し直してください。</p>
         <button data-assistant-action @click="grantSignin(false)">閲覧だけ許可</button>
@@ -1227,7 +1244,12 @@ onBeforeUnmount(() => {
       </div>
       <div v-show="infoOpen" class="desktop-controls">
         <p v-if="error" role="alert">{{ error }}</p>
-        <button data-assistant-action v-if="!ready&&error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
+        <div v-if="!ready" data-desktop-reconnect>
+          <button data-assistant-action @click="reconnectViewing">閲覧で接続し直す</button>
+          <button data-assistant-action v-if="elevatedScreen" @click="reconnectNormalViewing">通常画面へ戻って閲覧</button>
+          <button data-assistant-action v-else-if="sharedProtectedAvailable" @click="reconnectProtectedViewing">管理者画面へ切り替えて閲覧</button>
+          <button data-assistant-action v-if="error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
+        </div>
         <p v-if="ready&&endpointEncrypted" data-endpoint-encrypted>暗号化接続（相手の指紋を確認済み）</p>
         <DesktopEndpointPairing :machine-id="props.machineId" @reconnect="connect()" @plain="usePlainDesktop()" />
       <p v-if="title" class="target">
@@ -1258,7 +1280,8 @@ onBeforeUnmount(() => {
       <label v-if="sharedScreen&&!elevatedScreen&&sharedCursorAvailable" data-shared-cursor><input v-model="sharedCursorScreen" :disabled="!showCursor" type="checkbox" @change="changeSharedCursor" />独立カーソルを共有（全ての窓で同じ選択が必要）</label>
       <p v-if="sharedScreen" data-desktop-shared>{{ protectedMode ? "許可済みの管理者画面を画像で共有しています。" : nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}<template v-if="independentScreen">モニターごとに画質を選び、全体で最大8窓まで接続できます。</template><template v-else>同じ画質設定で最大8窓まで接続できます。</template>操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。<template v-if="!protectedMode&&!platformBackend">対応する接続先ではシステム音声も共有でき、動画の解像度も各窓の希望を集約して調整します。固定設定の窓がある間は、その解像度を維持します。</template><template v-if="sharedClipboardScreen&&!elevatedScreen">クリップボードは別に1窓だけへ許可でき、操作権とは独立です。他の窓の許可は奪えません。</template><template v-else>クリップボードは利用できません。</template>OSの解像度変更は利用できません。<template v-if="!platformBackend">動画で遅れた窓は次のキーフレームから復帰します。</template><template v-else-if="platformBackend==='linux-portal'">静止中に新しい窓を開いた場合は、共有元から次の実画像が届くのを待ちます。</template></p>
       </template>
-      <label v-if="!platformBackend&&!signinSession"><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
+      <label v-if="!platformBackend&&!signinSession" data-protected-desktop-option><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
+      <small v-if="!platformBackend&&!signinSession">画面の種類を選ぶと再接続します。切替後は新しい画像を確認して、操作を許可し直してください。</small>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
       <label v-if="(!platformBackend||platformBackend==='linux-portal')&&!signinSession" data-virtual-desktop-option><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
       <p v-if="sharedVirtualAvailable&&!platformBackend" data-shared-virtual-available>仮想画面を複数の窓で共有できます。</p>
@@ -1318,7 +1341,7 @@ onBeforeUnmount(() => {
             適用すると共有へ再接続し、操作とエージェント許可を解除します。設定はこのブラウザで{{props.monitorWindow?.independent?"モニター":"マシン"}}ごとに記憶します。
           </p>
           <p v-if="settingNotice" role="status">{{ settingNotice }}</p>
-          <button data-assistant-action @click="connect()">適用して再接続</button>
+          <button data-assistant-action :disabled="!ready&&!error&&status==='接続中'" @click="reconnectViewing">適用して再接続</button>
         </details>
       </nav>
       <details v-if="ready && (allowMedia || nativeVideo)" data-desktop-media>
@@ -1577,6 +1600,8 @@ onBeforeUnmount(() => {
 .desktop-controls { top: 48px; right: 8px; width: min(640px, calc(100% - 34px)); max-height: calc(100% - 150px); overflow: auto; display: flex; flex-direction: column; gap: 6px; }
 .desktop-input { left: 8px; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
 .desktop-alert { top: 48px; left: 8px; max-width: calc(100% - 34px); }
+[data-desktop-reconnect] { display: flex; flex-wrap: wrap; gap: 6px; }
+.desktop-alert p + [data-desktop-reconnect] { margin-top: 6px; }
 .desktop-window > header { flex: 0 0 auto; z-index: 3; }
 .desktop-window.maximized { padding: 0; gap: 0; border: 0; }
 .desktop-window.maximized > header { position: absolute; top: 8px; right: 8px; max-width: calc(100% - 32px); padding: 4px 8px; background: var(--soda-bg, #161b22); border-radius: 4px; cursor: default; }
