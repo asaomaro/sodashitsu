@@ -2,7 +2,7 @@
 
 base: f3299ae539ac13e00e1c3c0344b772507ef52a25
 
-Receiverの500ms timerは、native/UDPオブジェクトの生成前にlegacy media_feedbackを送信し得た。native交渉中のIDはlegacy companionに存在せず、media_unavailableを生じ得る。実機での当該因果は未実測。確定したlegacy MSE/RTC streamだけ旧feedbackを送り、既存native/UDP処理は変更しない。
+Receiverの500ms timerは、native receiverの生成前にlegacy media_feedbackを送信し得た（UDPは従来から抑止）。native交渉中のIDはlegacy companionに存在せず、media_unavailableを生じ得る。実機での当該因果は未実測。確定したlegacy MSE/RTC streamだけ旧feedbackを送り、既存native/UDP処理は変更しない。
 
 media_unavailableは別の正当な拒否にも使われるので無視しない。警告をmedia専用に分離し、新しいIDの正常media開始時だけ解消する。他のエラーは保持する。文言のBを接続先へ変更。
 
