@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-media-permission-notice/packages/web
+
+
+ Test Files  6 passed (6)
+      Tests  50 passed (50)
+   Start at  20:59:10
+   Duration  1.98s (transform 65%, import 15%, environment 14%, tests 5%)
+
+  Transform  transforming modules took 6.22s · 65% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

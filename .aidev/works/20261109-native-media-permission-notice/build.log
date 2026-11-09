@@ -1,0 +1,29 @@
+
+> @sodashitsu/web@0.1.0 build /workspaces/sodashitsu-native-media-permission-notice/packages/web
+> vue-tsc --noEmit -p tsconfig.typecheck.json && vite build
+
+vite v8.3.0 building client environment for production...
+transforming...
+✓ 891 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                1.14 kB │ gzip:   0.60 kB
+dist/assets/microphoneWorklet-VenRQAVr.js      1.33 kB
+dist/assets/navigation-C-MNCnjE.css            2.46 kB │ gzip:   0.89 kB
+dist/assets/DashboardView-BE5v8w_4.css         6.67 kB │ gzip:   1.65 kB
+dist/assets/UsageAnalytics-CHFR4FLi.css       19.10 kB │ gzip:   3.67 kB
+dist/assets/index-DbvfMrDJ.css               203.22 kB │ gzip:  31.97 kB
+dist/assets/dist-C1v1aip9.js                   0.17 kB │ gzip:   0.15 kB
+dist/assets/DashboardView-CHe7dmms.js         14.31 kB │ gzip:   5.41 kB
+dist/assets/UsageAnalytics-BgSXKni-.js        49.97 kB │ gzip:  17.33 kB
+dist/assets/navigation-DZtoLchi.js            58.50 kB │ gzip:  19.45 kB
+dist/assets/dashboardModel-qod7FqY4.js       200.60 kB │ gzip:  71.50 kB
+dist/assets/dist--NqKuZCs.js                 218.58 kB │ gzip:  66.51 kB
+dist/assets/index-C5X_uLU7.js              1,726.29 kB │ gzip: 511.37 kB
+
+✓ built in 1.78s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

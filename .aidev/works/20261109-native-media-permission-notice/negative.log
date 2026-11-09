@@ -1,0 +1,70 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-media-permission-notice/packages/web
+
+ ❯ src/desktop/mediaReceiver.feedback.test.ts (4 tests | 1 failed) 15ms
+   × does not send legacy feedback during delayed native startup or after native format starts 9ms
+ ❯ src/components/RemoteDesktopMediaNotice.test.ts (2 tests | 2 failed) 70ms
+   × clears only the media permission notice when GPU starts, preserving unrelated error 54ms
+   × still displays a real rejection without a successful media start, including a rejected new request while native runs 14ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/RemoteDesktopMediaNotice.test.ts > clears only the media permission notice when GPU starts, preserving unrelated error
+AssertionError: expected 'Generated — デスクトップ閲覧中操作するIME ONIME OF…' to contain '接続先のメディア補助画面'
+
+Expected: "接続先のメディア補助画面"
+Received: "Generated — デスクトップ閲覧中操作するIME ONIME OFF情報・設定最大化閉じる▴Bのメディア補助画面と共有許可を確認してくださいBのメディア補助画面と共有許可を確認してください暗号化接続 接続先PCのlocalhost設定で鍵を作成し、このブラウザの指紋を許可してください。接続先で「暗号化接続を必須にする」を有効にします。  このブラウザの鍵を作成 接続先PCで確認した指紋接続先PCのlocalhost画面に表示された指紋と一致することを確認しました この接続先を記憶して暗号化で接続  指紋の不一致や鍵を読み取れない場合は停止します。通常接続へは自動で戻りません。ブラウザへ配信されるプログラムと両端のPCは信頼する必要があります。 Generated  画像設定: 幅上限1280 / 10fps上限 / JPEG 65 / フルカラー複数viewerで同じ画面を共有管理者権限のアプリ・UAC画面を共有画面の種類を選ぶと再接続します。切替後は新しい画像を確認して、操作を許可し直してください。一時的な仮想画面を使う再同期共有停止画面に合わせる画質・計測プリセット選択…低帯域標準高画質送信幅の上限fps上限JPEG品質色フルカラー約6.5万色256色16階調グレー差分転送自動画質調整共有元のカーソルを表示 幅は縦横比を保った上限、fpsは目標上限です。JPEG品質を下げると文字がにじむ場合があります。  減色は細かな色の違いを失い、エージェントの画像認識にも影響します。差分PNGにも適用されます。  適用すると共有へ再接続し、操作とエージェント許可を解除します。設定はこのブラウザでマシンごとに記憶します。 適用して再接続動画・音声接続先のGPUでH.264へ圧縮します。この接続では音声は含みません。利用できない場合は画像配信へ戻ります。システム音声を要求経路GPU動画（音声なし）映像ビットレートの目標(kbps)動画共有を依頼動画・音声を停止画像配信エージェント連携 この共有画面の取得・PC操作を最大2分許可します。取得画像をモデルへ渡す用途を含みます。発行コードは30秒以内・1回だけ使用できます。  エージェントへの画面提供・操作を許可 閲覧中 — Bのメディア補助画面と共有許可を確認してください文字を送る▾閲覧専用。操作にはBの事前許可が必要です。0.0 fps · 0.00 Mbps · relay→描画ACK p95 0 ms · 取得 — / encode — / 描画 0.0 ms · 入力ACK 0 ms"
+
+ ❯ src/components/RemoteDesktopMediaNotice.test.ts:8:391
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/components/RemoteDesktopMediaNotice.test.ts > still displays a real rejection without a successful media start, including a rejected new request while native runs
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/components/RemoteDesktopMediaNotice.test.ts:9:437
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/desktop/mediaReceiver.feedback.test.ts > does not send legacy feedback during delayed native startup or after native format starts
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "bufferedMs": 0,
+        "congested": false,
+        "id": "generated",
+        "type": "media_feedback",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/desktop/mediaReceiver.feedback.test.ts:5:245
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 3 passed (6)
+   Start at  20:53:26
+   Duration  1.86s (transform 72%, import 14%, environment 11%, tests 3%)
+
+  Transform  transforming modules took 2.35s · 72% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

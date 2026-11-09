@@ -1,0 +1,28 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-media-permission-notice/packages/web
+
+ ❯ src/components/RemoteDesktopMediaNotice.test.ts (2 tests | 1 failed) 84ms
+   × still displays a real rejection without a successful media start, including a rejected new request while native runs 29ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/RemoteDesktopMediaNotice.test.ts > still displays a real rejection without a successful media start, including a rejected new request while native runs
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/components/RemoteDesktopMediaNotice.test.ts:9:900
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  20:59:03
+   Duration  1.68s (transform 70%, import 13%, environment 11%, tests 5%)
+
