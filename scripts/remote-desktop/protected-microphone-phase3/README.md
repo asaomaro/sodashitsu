@@ -63,3 +63,9 @@ viewer WS が開いたら正式 `heartbeat` を1秒ごとに送る（frame ACK�
 microphone_ticket到着時に専用laneを即attachする（native ready待ちで10秒のone-use ticketを失効させない）。native ready/protected proofと主viewerの正式microphone_readyを両方満たしてからstartを送る。owned attach promiseはcleanupで退役・有界待機し、未確認は成功不可。旧job/ticketの再利用・固定sleep・TTL延長は無し。
 
 生成senderも実Web同様にDesktopMicrophoneResultのschema/id/pending ACK membershipを確認し、累積ACKで下位を解放、pending最大12・最古500msを維持する。Webがdropする場合、実験は完全6秒を偽らず失敗する。未要求close/stopped/unavailable後はPCM禁止、明示stopExpected/cleanupだけを区別する。monitorの所有timerをcleanupで退役する。
+
+### 連続性の窓ごとの診断（fixture限定）
+
+`continuity.resetObservations` は、既存のstreakが実際にresetする窓だけ最大8件を保持し、超過件数を `resetObservationsOmitted` に出す。終端のsilenceによるresetも含む。各行は相対 `wallMs`、直前の `precedingStreakFrames` / `precedingStreakWallMs`、左右のRMS / 997Hz magnitude / clip件数、`failureMask` の10数値だけ。PCM・endpoint・プロセス情報は保存しない。maskは1/2=左RMS下限未満/上限超過、4/8=左997成分下限未満/上限超過、16=左clipあり、32=broken、64=gap>60ms。右の数値は診断だけで既存の採点対象を変えない。
+
+`baselineSilentPackets` / `toneSilentPackets` は正式capture packetのSILENT bit2件数を期別に数える。未観測はnull、観測済みで該当なしは0。既存flags1/4件数、used/reset、tone/streak、壁時計、合否閾値は変えない。これらは実測失敗をPASSへ読み替えるための情報ではない。
