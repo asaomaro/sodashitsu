@@ -214,6 +214,38 @@ it("rejects headless capture on locked or disabled shared sources",async()=>{
  const locked=await fixture(true,false,true,true);
  await expect(locked.relay.openHeadless("locked",false,()=>true)).rejects.toThrow();
 });
+it.each(["normal","shared","elevated-default","elevated-uac"] as const)("keeps fresh %s control across browser focus-release before first wire pointer",async mode=>{
+ const ordinary=mode==="normal"||mode==="shared",f=ordinary?await fixture():await protectedFixture({mode,allowed:true});
+ if(ordinary){const cfg=(f.provider as any).config;f.provider.configure({...cfg,fileRoot:dirname(f.record),command:[...cfg.command,"--pointer-witness-generated"]});}
+ const v=await f.viewer(mode==="shared"?"shared":mode==="normal"?"extended":"protected");
+ v.send(mode==="shared"?{...start,options:{...start.options,features:true,sharedDesktop:true}}:mode==="normal"?start:protectedStart);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
+ const state=f.provider as any,share=mode==="shared"?[...state.shared][0]:state.active,writes=vi.spyOn(share.process.resourceChannel.stdin,"write");
+ expect(state.resources.identity(share,"control")).toBeUndefined();
+ let released=false;const listener=(raw:unknown)=>{try{if(JSON.parse(String(raw)).type==="release")released=true;}catch{}};share.ws.on("message",listener);
+ // Mirrors the browser's toolbar/window→canvas focus transfer after control ACK.
+ v.send({type:"release"});await expect.poll(()=>released).toBe(true);share.ws.off("message",listener);
+ expect(share.control).toBe(true);expect(state.resources.faulted).toBe(false);expect(state.resources.identity(share,"control")).toBeUndefined();
+ expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch")).toBe(false);
+ v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
+ await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ const commands=writes.mock.calls.map(([value])=>JSON.parse(String(value))).filter(m=>["resource_epoch","control","input"].includes(m.type));expect(commands.slice(0,3).map(m=>m.type)).toEqual(["resource_epoch","control","input"]);
+ expect(commands[0]).toMatchObject({resource:"control"});expect(commands[1]).toMatchObject({enabled:true});expect(state.resources.identity(share,"control").epoch).toBe(commands[0].id);
+ if(ordinary)expect(share.pointerWitness).toMatchObject({seq:1,source:share.process.resourceChannel,point:{epoch:commands[0].id}});else expect(share.pointerWitness).toBeUndefined();
+ v.send({type:"input",seq:2,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"up",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);writes.mockRestore();
+});
+it.each(["normal","elevated-default","elevated-uac"] as const)("still cancels unused %s control explicitly without native activation",async mode=>{
+ const f=mode==="normal"?await fixture():await protectedFixture({mode,allowed:true}),v=await f.viewer(mode==="normal"?"extended":"protected");v.send(mode==="normal"?start:protectedStart);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
+ const state=f.provider as any,share=state.active,writes=vi.spyOn(share.process.stdin,"write");v.send({type:"control",enabled:false});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);expect(state.resources.owns(share,"control")).toBe(false);
+ v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});v.send({type:"release"});let observed=false;share.ws.once("message",()=>{observed=true;});v.send({type:"heartbeat"});await expect.poll(()=>observed).toBe(true);
+ expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch"||m.type==="input")).toBe(false);expect(state.resources.faulted).toBe(false);writes.mockRestore();
+});
+it.each(["stop","close","timeout","source_changed"] as const)("releases unused control reservation after focus-release on %s",async ending=>{
+ const f=await protectedFixture({mode:"elevated-uac",allowed:true}),v=await f.viewer("protected");v.send(protectedStart);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
+ const state=f.provider as any,share=state.active,writes=vi.spyOn(share.process.stdin,"write");let released=false;share.ws.on("message",(data:unknown)=>{try{if(JSON.parse(String(data)).type==="release")released=true;}catch{}});v.send({type:"release"});await expect.poll(()=>released).toBe(true);expect(state.resources.owns(share,"control")).toBe(true);
+ if(ending==="stop")v.send({type:"stop"});else if(ending==="close")v.ws.close();else if(ending==="timeout"){share.lastSeen=performance.now()-13000;share.timer._onTimeout();}else await writeFile(f.endedMarker,"generated ended scope");
+ await expect.poll(()=>state.resources.owns(share,"control")).toBe(false);expect(state.resources.faulted).toBe(false);expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch"||m.type==="input")).toBe(false);writes.mockRestore();
+});
 it("shares and controls the local desktop without opening a machine channel, and releases its helper",async()=>{
  const f=await fixture(),v=await f.viewer("extended");
  v.send({...start,machineId:"local"});

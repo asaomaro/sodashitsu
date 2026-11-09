@@ -1,0 +1,39 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-first-control-input
+
+ ❯ packages/server/src/desktop/DesktopRelay.test.ts (345 tests | 4 failed | 338 skipped) 1401ms
+   × keeps fresh normal control across browser focus-release before first wire pointer 241ms
+   × keeps fresh shared control across browser focus-release before first wire pointer 156ms
+   × keeps fresh elevated-default control across browser focus-release before first wire pointer 211ms
+   × keeps fresh elevated-uac control across browser focus-release before first wire pointer 158ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/desktop/DesktopRelay.test.ts > keeps fresh normal control across browser focus-release before first wire pointer
+ FAIL  packages/server/src/desktop/DesktopRelay.test.ts > keeps fresh shared control across browser focus-release before first wire pointer
+ FAIL  packages/server/src/desktop/DesktopRelay.test.ts > keeps fresh elevated-default control across browser focus-release before first wire pointer
+ FAIL  packages/server/src/desktop/DesktopRelay.test.ts > keeps fresh elevated-uac control across browser focus-release before first wire pointer
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/server/src/desktop/DesktopRelay.test.ts:228:24
+    226|  // Mirrors the browser's toolbar/window→canvas focus transfer after c…
+    227|  v.send({type:"release"});await expect.poll(()=>released).toBe(true);s…
+    228|  expect(share.control).toBe(true);expect(state.resources.faulted).toBe…
+       |                        ^
+    229|  expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).so…
+    230|  v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 3 passed | 338 skipped (345)
+   Start at  18:22:24
+   Duration  3.12s (tests 46%, transform 44%, import 10%)
+

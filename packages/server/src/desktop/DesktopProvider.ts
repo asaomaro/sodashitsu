@@ -580,7 +580,9 @@ export class DesktopProvider {
           else if (m.type === "release") {
             s.inputAcks.invalidatePointers();
             delete s.pointerWitness;
-            if (s.control&&this.ownsResource(s,"control")){if(s.resourcesManaged&&!this.resources.identity(s,"control"))this.applyControl(s,false);else this.write(s,m);}
+            // release neutralizes held inputs while retaining logical control. A
+            // reservation has no native grant or held input to release yet.
+            if (s.control&&this.ownsResource(s,"control")&&(!s.resourcesManaged||this.resources.identity(s,"control")))this.write(s,m);
           } else if (m.type === "ack") {
             if (m.seq !== s.pending) {
               this.stop(s);

@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-first-control-input
+
+
+ Test Files  2 passed (2)
+      Tests  28 passed (28)
+   Start at  18:16:11
+   Duration  1.40s (transform 79%, import 19%, tests 2%)
+
