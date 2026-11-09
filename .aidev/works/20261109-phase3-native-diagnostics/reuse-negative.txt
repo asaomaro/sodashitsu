@@ -1,0 +1,37 @@
+✔ fromViewer preserves this, exact arguments, identity return/promise and original throw; tracking is bounded (1.958717ms)
+✔ closed gate and exact latest id; bounded wait for confirmed-retirement accessor without inventing zero (0.312871ms)
+✔ missing/throwing/saturated/invalid stats remain unknown; poll stops at2s (7.293446ms)
+✔ stats projection is exact closed bounded shape, absent fields never zero (0.332858ms)
+✔ wx conflict/collection exception does not publish success or change control result (0.224554ms)
+✔ actual stop work is shared and original server close precedes collection and server-closed marker (6.757956ms)
+✔ normally returned but rejected restart is only a candidate; unknown never copied from earlier stream (0.564495ms)
+✔ read interval field is unknown for fewer than two reads and finite otherwise (0.137539ms)
+✔ actual runner diagnostics missing/invalid/read/write error cannot change retirement, issues or measurement (4.908495ms)
+✖ same-id reuse or id cycle can never attribute a later retired generation to the first stream (1.390925ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 9
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 66.400282
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/native-diagnostics.test.mjs:16:1
+✖ same-id reuse or id cycle can never attribute a later retired generation to the first stream (1.390925ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-native-stats-observer/scripts/remote-desktop/protected-microphone-phase3/native-diagnostics.test.mjs:16:495)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

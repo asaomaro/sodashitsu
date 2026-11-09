@@ -1,0 +1,7 @@
+# 複数start候補の保守的拒否
+
+backendのgetterはexactidでも同id再利用runの新統計を返し得る。fixtureは1stream前提なので9cd521adで追跡済instanceに2回以上のstart候補を観測するとpermanentunknownにする。同id/別id/id循環のいずれも拒否。新Setは既存slotsのinstanceだけを保持しmax4。正常1start・元call引数/返値/例外・14field projection・取得/保存/合否は変更しない。
+
+追加actualhelper回帰で旧bed private-server.mjsは1FAIL、durablebytes復元後10PASS。reuse-negative.txt/reuse-restored.txt/reuse-restoration.json、current SHAはreuse-source-sha256.json。旧restoration.json/source-sha256.jsonはbed段階の歴史証跡として保持し、最終currentとの同一性を主張しない。
+
+先行独立source再review阻害候補無し、最終証跡照合待ち。

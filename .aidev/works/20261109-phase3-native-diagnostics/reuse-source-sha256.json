@@ -1,0 +1,9 @@
+{
+  "runtimeCommit": "9cd521ad",
+  "files": {
+    "scripts/remote-desktop/protected-microphone-phase3/private-server.mjs": "1b809f7136ae27349ea703b96fae9ec73b83722bcfbaea2f204e360ddb53a977",
+    "scripts/remote-desktop/protected-microphone-phase3/run-a.mjs": "ea950eaf3305ecfd47a197501a44d7a155fc27041b05adb27ad94edaf09a859b",
+    "scripts/remote-desktop/protected-microphone-phase3/native-diagnostics.test.mjs": "dafc24064e46f1fdc93c462e3c45216ab7404e1fa26ba06f1ebddacd71795356",
+    "scripts/remote-desktop/protected-microphone-phase3/README.md": "9bd3656da747da1e6c896c12acfdbeebb319f7d17e49887be1e152621709fa2f"
+  }
+}
