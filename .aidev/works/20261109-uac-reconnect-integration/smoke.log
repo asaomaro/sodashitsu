@@ -1,0 +1,25 @@
+smoke: starting server on 127.0.0.1:38421 (state dir /tmp/soda-smoke-VXEWqg)
+{"ts":"2026-11-09T06:52:30.786Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-09T06:52:30.787Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-09T06:52:30.787Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-09T06:52:30.788Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-09T06:52:30.791Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-smoke-VXEWqg/commands.json","count":1}
+smoke: agent manifests ok (23/23)
+smoke: login ok
+smoke: websocket connected
+smoke: client.hello ok
+smoke: workspace.create ok (pane ad23ca51-d5be-426c-a4ef-a0088f5d35a6)
+smoke: pane.subscribe ok
+smoke: echo round trip ok
+{"ts":"2026-11-09T06:52:31.615Z","level":"info","msg":"custom command run","commandId":"smoke-cat","type":"popup","clientId":"f08ae87d-536f-41cf-b5ba-5f209088a0a0","paneId":"ad23ca51-d5be-426c-a4ef-a0088f5d35a6"}
+smoke: custom command popup round trip ok
+smoke(web): auto-login (#token) → connect → pane 表示 ok
+smoke(web): 端末の描画用 canvas が画面内にある（xterm.css 有効。D96）
+smoke(web): tab title ok ("my-notePC: smoke"。H14/AC4）
+smoke(web): typed into pane ad23ca51-d5be-426c-a4ef-a0088f5d35a6
+smoke(web): echo round trip ok（ブラウザでの入力が PTY まで届いた）
+smoke(web): 初めてのブラウザで、はじめの案内が端末の表示のあとに開き、見出しにフォーカスがある
+smoke(web): Esc で閉じると端末へフォーカスが戻り、案内済みだけが保存される
+smoke(web): 開き直しても、はじめの案内は出ない
+smoke(web): はじめの案内を閉じたあと、クリックせずに打った文字が PTY まで届いた
+smoke: PASS

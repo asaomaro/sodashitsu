@@ -1,0 +1,13 @@
+{
+  "sourceHead": "05900d5494eebcf74d66f482a3d4aac2c6df98b9",
+  "smokeWorktree": "/workspaces/sodashitsu-uac-reconnect-smoke",
+  "isolatedXdg": true,
+  "command": [
+    "node",
+    "packages/server/dist/smoke.js"
+  ],
+  "exit": 0,
+  "elapsedSeconds": 5.685,
+  "attempts": 1,
+  "productionOperation": false
+}

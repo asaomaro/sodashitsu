@@ -1,0 +1,62 @@
+{
+  "docs/remote-desktop.md": {
+    "gitBlob": "00f689e50af6288c7f1ac2ec6c190e5e8a1e7820",
+    "sha256": "098a8bd0dbb5bc370dd9d84207a71a4d4784a8fa6210235b01965709a8e5c97f"
+  },
+  "packages/server/src/desktop/DesktopInteractiveOwner.test.ts": {
+    "gitBlob": "fdbca223424ab95b7a87c48fdb1ca551d6b608cb",
+    "sha256": "ed4c02a84d3230ec81044a2ad8d6f5d7a7b8230141bc5f17b071285f8f478d24"
+  },
+  "packages/server/src/desktop/DesktopInteractiveOwner.ts": {
+    "gitBlob": "fc9bb75313d075353c7f31775fa38561e4a0bc15",
+    "sha256": "ad3630c99b9c0b9928b511e696355b64eed583bdec81e2dbc821674625addf49"
+  },
+  "packages/server/src/desktop/DesktopProvider.controlReservation.test.ts": {
+    "gitBlob": "c6553fea37ac29733472ba37137a2d46b0dccfd9",
+    "sha256": "50be3c7b0410bb68173136c975ef3db4f12ae55d0ec14bb4c1ab76d332fc05f0"
+  },
+  "packages/server/src/desktop/DesktopProvider.retirement.test.ts": {
+    "gitBlob": "0faa518c3ab13ccf1d5bb92180ced59dcd66d000",
+    "sha256": "6ec391e2f5fa339ff4c8340fe8489fa42e6219c19d430565ab7cf147e4d9c11f"
+  },
+  "packages/server/src/desktop/DesktopProvider.ts": {
+    "gitBlob": "56396f98fee3908ff4b9a552f48bb56df8f1e2b3",
+    "sha256": "fc79bb139cb016f1a46da12d82a6d144cb144f48f32890fa0b2742dc666b961a"
+  },
+  "packages/server/src/desktop/DesktopRelay.test.ts": {
+    "gitBlob": "4a18e08f6872c14e045ae1238a803f5f77761158",
+    "sha256": "df212d0604bc6e61a3ccc354b5746722322c778b08a3ebb8a83c3112b4e0e18c"
+  },
+  "packages/server/src/desktop/DesktopRelay.ts": {
+    "gitBlob": "a1b0f8cece01799343e9cf879fe1ad8991e0d150",
+    "sha256": "2b1be6d36f9d66b5c2777411a4c97007d83d8422377de37da44688d45d9804c1"
+  },
+  "packages/server/src/desktop/DesktopResourceChannel.test.ts": {
+    "gitBlob": "7178d21aeef65b16e6f58833880723db4584e5b9",
+    "sha256": "c93303d78e8d0ce283a648b9e3426e59d9001a650d7e5aad4614f0e3031fdcfe"
+  },
+  "packages/server/src/desktop/DesktopResourceChannel.ts": {
+    "gitBlob": "4c7372475073831bba9e96bac17c523678ebbce2",
+    "sha256": "874e4bae11be8a76f682410cfcd51456daaca9948aa34b42338d662fb630b672"
+  },
+  "packages/web/src/components/RemoteDesktopReconnect.test.ts": {
+    "gitBlob": "2e82b9e1cab3963b81b6a729627083a171ba6e7c",
+    "sha256": "65360907270300b88fcb146bad60e357c2a6420d81f60ac5152ccf458075bc46"
+  },
+  "packages/web/src/components/RemoteDesktopWindow.vue": {
+    "gitBlob": "685e744929116f03b5db2edc313c669eca3de9a0",
+    "sha256": "9714ba3b95ac332addc6d38b0851540f8d955bb71df8f54152f0875e8d692634"
+  },
+  "scripts/remote-desktop/WindowsDesktopUnlock.cs": {
+    "gitBlob": "ffd1765be862798db480861c171fb01065b387c6",
+    "sha256": "1f0ba1db1d29d1df338b4aeaa32d6ffb1544748f9b4b5b4cdd4e19415cedef60"
+  },
+  "scripts/remote-desktop/WindowsProtectedScopeChecks.cs": {
+    "gitBlob": "e633b7696b12ab9613cf33d182f6884d93727f72",
+    "sha256": "e4239eb6a93f21548c278d10bda9e8ed9775e5af03f04372ec8a6293fb868f7d"
+  },
+  "scripts/remote-desktop/protected-retirement.test.mjs": {
+    "gitBlob": "5cf44b2306be823827337d30cc2a0738dccea053",
+    "sha256": "846d598497fbb543e446250e6b864cb80880befb7bef00ae117cea0f7ab0b8c2"
+  }
+}

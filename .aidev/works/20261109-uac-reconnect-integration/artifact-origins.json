@@ -1,0 +1,65 @@
+{
+  "integrationSourceHead": "05900d5494eebcf74d66f482a3d4aac2c6df98b9",
+  "base": "1006e82911d9dc6f5295ffef0cad0ca7c2735582",
+  "sourceTreeExact": true,
+  "serverExistingMapMatched": true,
+  "webReviewedAssetMatched": true,
+  "packages": {
+    "cli": {
+      "sourceHead": "1006e829",
+      "sourceTree": "5e466fee94b58cb85953018b7454a8a592e4b5bb",
+      "origin": "/workspaces/sodashitsu-main-live-assistant-agents/packages/cli/dist",
+      "fileCount": 228,
+      "byteExact": true,
+      "mapSha256": "503a5024eaf4888b035d3f4b3f78f1a4ea57b22d176659b5afda57dd8cc97ae9"
+    },
+    "client-core": {
+      "sourceHead": "1006e829",
+      "sourceTree": "ee246247693ab130705d3bf263fe9ea32438cb70",
+      "origin": "/workspaces/sodashitsu-main-live-assistant-agents/packages/client-core/dist",
+      "fileCount": 364,
+      "byteExact": true,
+      "mapSha256": "82863049a8464d399030dffe403b8060c244f09201acd3133a218f50fddca0c4"
+    },
+    "desktop-assistant": {
+      "sourceHead": "1006e829",
+      "sourceTree": "02c7ff95c011bd0110acf1e4fe0570f8fd48eda9",
+      "origin": "/workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant/dist",
+      "fileCount": 152,
+      "byteExact": true,
+      "mapSha256": "74b4cf11a62d5cbecb4f16865eab5112dded3052dad2a5226c82245235b0982c"
+    },
+    "protocol": {
+      "sourceHead": "1006e829",
+      "sourceTree": "f5b7a1afb447ce9d86f5b56c8a5697cfb026c1e6",
+      "origin": "/workspaces/sodashitsu-main-live-assistant-agents/packages/protocol/dist",
+      "fileCount": 300,
+      "byteExact": true,
+      "mapSha256": "937c358502333ae7146ed99c0d8e1aeae58724a8cd17a07944b67d7f31b7773f"
+    },
+    "server": {
+      "sourceHead": "3ac08572",
+      "sourceTree": "ea35a017a51d69f4cdde8984314fddb9df021e46",
+      "origin": "/workspaces/sodashitsu-uac-fresh-reconnect/packages/server/dist",
+      "fileCount": 1868,
+      "byteExact": true,
+      "mapSha256": "c01ce37171ae36f66c613a6e1e2b1be6389a012a64a8d709ba98bb13eb86a3fd"
+    },
+    "tui": {
+      "sourceHead": "1006e829",
+      "sourceTree": "ee0b19be6be33b06f6530cc5dd897aae2d68d9ba",
+      "origin": "/workspaces/sodashitsu-main-live-assistant-agents/packages/tui/dist",
+      "fileCount": 412,
+      "byteExact": true,
+      "mapSha256": "dfee04a521041c073f29bdacc635122790ffda6c4ce67126c4211992073aebd5"
+    },
+    "web": {
+      "sourceHead": "f3351eae",
+      "sourceTree": "bc5c6dd1e22ea434bbbf89d9e258455d65cc9349",
+      "origin": "/workspaces/sodashitsu-uac-viewer-reconnect/packages/web/dist",
+      "fileCount": 37,
+      "byteExact": true,
+      "mapSha256": "2e1bc85507a580a03cc8a536146ac0bb4bc16e72c1c9cabb5a398bacae270f2a"
+    }
+  }
+}
