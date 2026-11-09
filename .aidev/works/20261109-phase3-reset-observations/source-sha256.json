@@ -1,0 +1,10 @@
+{
+  "sourceHead": "4d770842",
+  "files": {
+    "scripts/remote-desktop/protected-microphone-phase3/Receiver.cs": "4867ae1e9f3f0f94bcfb36e598e53ef16793b3136d19c9ef42a879ca85442117",
+    "scripts/remote-desktop/protected-microphone-phase3/DetectorChecks.cs": "ac8e8f7a2372c7b23ea65d31c366174f712e13a7389d883f377a076383e7f6ad",
+    "scripts/remote-desktop/protected-microphone-phase3/detector.mjs": "d38bbe8112eeed52688d91cc0079474f8ec6d98336c85e0ec71042741d51233a",
+    "scripts/remote-desktop/protected-microphone-phase3/reset-metrics.test.mjs": "94febae6b2dac5bb96533e2c2c145fb97444db4456c2510bbd3a9d5dc3db1dd5",
+    "scripts/remote-desktop/protected-microphone-phase3/README.md": "3149ef144a6f38f8c96bc79906380f902682cff9be8c1e582d383be20c9e60dc"
+  }
+}

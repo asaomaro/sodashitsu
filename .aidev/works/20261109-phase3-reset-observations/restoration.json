@@ -1,0 +1,7 @@
+{
+  "negativeExit": 1,
+  "restoredExit": 0,
+  "byteExact": true,
+  "path": "scripts/remote-desktop/protected-microphone-phase3/detector.mjs",
+  "sha256": "d38bbe8112eeed52688d91cc0079474f8ec6d98336c85e0ec71042741d51233a"
+}

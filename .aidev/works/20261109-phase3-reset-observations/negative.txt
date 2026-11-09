@@ -1,0 +1,66 @@
+✖ silent packets counted separately without inventing discontinuities or flags (12.809016ms)
+✖ reset records bounded scalar window evidence and actual preceding streak; result remains failed (51.310683ms)
+✖ phase cancellation differs from silence in metrics; right-channel diagnostics do not become scoring input (46.541292ms)
+✖ broken/gap are separate failure bits and evidence cap is eight with omitted count (45.618733ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 201.276239
+
+✖ failing tests:
+
+test at scripts/remote-desktop/protected-microphone-phase3/reset-metrics.test.mjs:3:1
+✖ silent packets counted separately without inventing discontinuities or flags (12.809016ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  undefined !== 1
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-receiver-reset-metrics/scripts/remote-desktop/protected-microphone-phase3/reset-metrics.test.mjs:3:251)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/remote-desktop/protected-microphone-phase3/reset-metrics.test.mjs:4:1
+✖ reset records bounded scalar window evidence and actual preceding streak; result remains failed (51.310683ms)
+  TypeError [Error]: Cannot read properties of undefined (reading 'length')
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-receiver-reset-metrics/scripts/remote-desktop/protected-microphone-phase3/reset-metrics.test.mjs:4:432)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at scripts/remote-desktop/protected-microphone-phase3/reset-metrics.test.mjs:5:1
+✖ phase cancellation differs from silence in metrics; right-channel diagnostics do not become scoring input (46.541292ms)
+  TypeError [Error]: Cannot read properties of undefined (reading '0')
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-receiver-reset-metrics/scripts/remote-desktop/protected-microphone-phase3/reset-metrics.test.mjs:5:329)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at scripts/remote-desktop/protected-microphone-phase3/reset-metrics.test.mjs:6:1
+✖ broken/gap are separate failure bits and evidence cap is eight with omitted count (45.618733ms)
+  TypeError [Error]: Cannot read properties of undefined (reading '0')
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-phase3-receiver-reset-metrics/scripts/remote-desktop/protected-microphone-phase3/reset-metrics.test.mjs:6:298)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

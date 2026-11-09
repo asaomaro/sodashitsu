@@ -1,0 +1,139 @@
+{
+  "sourceHead": "8c4e9e323c3636b07070c8ef4b44d0a7f7e71a3f",
+  "generatedOnly": true,
+  "windows": false,
+  "thresholdsChanged": false,
+  "rawAudioStored": false,
+  "phaseSweep": {
+    "cases": 960,
+    "allTone": true,
+    "minRms": 5648.511896398024,
+    "minMagnitude": 7976.425174165336
+  },
+  "packetPartitions": [
+    {
+      "parts": [
+        960
+      ],
+      "windows": 300,
+      "bitExact": true,
+      "ok": true,
+      "nonToneResets": 0
+    },
+    {
+      "parts": [
+        480
+      ],
+      "windows": 300,
+      "bitExact": true,
+      "ok": true,
+      "nonToneResets": 0
+    },
+    {
+      "parts": [
+        1,
+        240,
+        441,
+        882,
+        1024,
+        128
+      ],
+      "windows": 300,
+      "bitExact": true,
+      "ok": true,
+      "nonToneResets": 0
+    },
+    {
+      "parts": [
+        48000
+      ],
+      "windows": 300,
+      "bitExact": true,
+      "ok": true,
+      "nonToneResets": 0
+    }
+  ],
+  "drainTimestampCases": [
+    {
+      "group": 1,
+      "ok": true,
+      "maxGap": 20,
+      "maxStreak": 300
+    },
+    {
+      "group": 2,
+      "ok": true,
+      "maxGap": 40,
+      "maxStreak": 300
+    },
+    {
+      "group": 3,
+      "ok": true,
+      "maxGap": 60,
+      "maxStreak": 300
+    }
+  ],
+  "endpointAlignments": {
+    "cases": 960,
+    "allPass": true,
+    "minTone": 299,
+    "minStreak": 299,
+    "maxResets": 1
+  },
+  "twoInternalSilentWindows": {
+    "ok": false,
+    "toneFrames": 298,
+    "maxStreak": 172,
+    "maxStreakWallMs": 3420,
+    "nonToneResetCount": 3,
+    "broken": 0,
+    "gap": 0,
+    "claim": "counterexample only; actual flags2/PCM not captured"
+  },
+  "twoInternalPhaseJumps": {
+    "toneFrames": 298,
+    "maxStreak": 172,
+    "nonToneResetCount": 3,
+    "broken": 0,
+    "gap": 0
+  },
+  "zeroGapSweep": [
+    {
+      "samples": 24,
+      "ms": 0.5,
+      "minMagnitude": 7820.013304576378,
+      "rejected": 0
+    },
+    {
+      "samples": 48,
+      "ms": 1,
+      "minMagnitude": 7619.420609281739,
+      "rejected": 0
+    },
+    {
+      "samples": 96,
+      "ms": 2,
+      "minMagnitude": 7218.232019874182,
+      "rejected": 0
+    },
+    {
+      "samples": 192,
+      "ms": 4,
+      "minMagnitude": 6415.878955567505,
+      "rejected": 33
+    },
+    {
+      "samples": 240,
+      "ms": 5,
+      "minMagnitude": 6014.730621672477,
+      "rejected": 31
+    }
+  ],
+  "sourceFacts": {
+    "silentFlag2ZeroFills": true,
+    "silentFlag2NotIncludedInFlagCounters": true,
+    "windowAssemblyPersistsAcrossPackets": true,
+    "metricsConsumeSynchronouslyBeforeZero": true,
+    "captureCallbackWallNotDeviceTimestamp": true
+  }
+}

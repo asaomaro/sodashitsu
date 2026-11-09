@@ -1,0 +1,12 @@
+✔ silent packets counted separately without inventing discontinuities or flags (11.616142ms)
+✔ reset records bounded scalar window evidence and actual preceding streak; result remains failed (52.495238ms)
+✔ phase cancellation differs from silence in metrics; right-channel diagnostics do not become scoring input (81.207132ms)
+✔ broken/gap are separate failure bits and evidence cap is eight with omitted count (54.716058ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 242.697281

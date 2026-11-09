@@ -1,0 +1,25 @@
+✔ same-streak max frames/wall and broken reset timing cannot become qualifying merged runs (56.530754ms)
+✔ non-tone midstream and trailing silence are visible; zero streak does not count repeated resets (43.263069ms)
+✔ baseline broken flag cannot be mislabeled a tone interruption; packet flags1/4 independent by phase (37.054546ms)
+✔ read gap keeps original failure and separate reset evidence (38.657658ms)
+✔ C# capture metadata observer preserves flags reset and old detector predicates verbatim (0.586776ms)
+✔ generated997Hz calibrated amplitude and energy, no real audio (33.072683ms)
+✔ same streak frames+wall required; baseline contamination/gaps/discontinuity/condensed delivery fail (230.594761ms)
+✔ absolute100 silent ticks, synchronous delivery and bounded worker cleanup (2096.20447ms)
+✔ async or blocking sender is a diagnostic failure, never a successful cadence (209.089259ms)
+✔ full300 generated tone cadence retains all frames over6sec, main event loop remains live (6072.107238ms)
+✔ long wall and long frame streaks cannot be combined across different intervals (43.710847ms)
+✔ approval/default endpoints/expiry remain failclosed and child environment excludes preload/history (1.291274ms)
+✔ private child cannot inherit custom desktop commands or change parent environment (0.133281ms)
+✔ silent packets counted separately without inventing discontinuities or flags (17.74786ms)
+✔ reset records bounded scalar window evidence and actual preceding streak; result remains failed (66.807011ms)
+✔ phase cancellation differs from silence in metrics; right-channel diagnostics do not become scoring input (91.62195ms)
+✔ broken/gap are separate failure bits and evidence cap is eight with omitted count (61.683635ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8739.810843
