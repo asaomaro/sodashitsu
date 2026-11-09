@@ -1,0 +1,12 @@
+{
+  "before": {
+    "packages/web/src/components/RemoteDesktopWindow.vue": "7852911ff07a8a77f62d7e87730d00f4f267c4cab56f98a23731b462b4f3685b",
+    "packages/web/src/desktop/mediaReceiver.ts": "c1fdc165e51afcca1280c8cf6743861fc644234619e982e855520fa52af72b11"
+  },
+  "after": {
+    "packages/web/src/components/RemoteDesktopWindow.vue": "7852911ff07a8a77f62d7e87730d00f4f267c4cab56f98a23731b462b4f3685b",
+    "packages/web/src/desktop/mediaReceiver.ts": "c1fdc165e51afcca1280c8cf6743861fc644234619e982e855520fa52af72b11"
+  },
+  "negativeTestExit": 1,
+  "negativeBrowserExit": 1
+}

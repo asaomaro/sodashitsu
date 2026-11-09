@@ -1,0 +1,10 @@
+{
+  "sourceHead": "9b5484a29db8bf0289334609104ca018cf619972",
+  "files": {
+    "docs/remote-desktop.md": "d084f91869df1c6bf256fde6badf30a5a6e55e5764cd673c7a71aa270a2abdb4",
+    "packages/web/src/components/RemoteDesktopWindow.vue": "bc9872fac52d860038217c72fe9cbeb20d5f0fe54959cbce61be1773f4070209",
+    "packages/web/src/desktop/mediaReceiver.ts": "c1fdc165e51afcca1280c8cf6743861fc644234619e982e855520fa52af72b11",
+    "packages/web/src/components/RemoteDesktopMediaNotice.test.ts": "e043a6ca69f95c9d6a7f5d41135cb161822af41be3c47859dfdab426f692cef9",
+    "packages/web/src/desktop/mediaReceiver.feedback.test.ts": "51498d82f23de4c1f86fcbf32dde5f23edfab837c8392e13a68f214a963a5986"
+  }
+}

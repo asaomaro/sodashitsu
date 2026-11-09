@@ -1,0 +1,11 @@
+{
+  "sourceHead": "9b5484a29db8bf0289334609104ca018cf619972",
+  "node": "v24.22.2",
+  "command": "NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter @sodashitsu/web build",
+  "exitCode": 0,
+  "typecheck": "test-inclusive vue-tsc --noEmit -p tsconfig.typecheck.json",
+  "artifactCount": 37,
+  "relatedTestsPassed": 50,
+  "windowsOperations": 0,
+  "gpuDecodeVerified": false
+}

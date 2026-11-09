@@ -1,0 +1,19 @@
+# GPU動画の誤った補助画面警告
+
+base: f3299ae539ac13e00e1c3c0344b772507ef52a25
+
+Receiverの500ms timerは、native/UDPオブジェクトの生成前にlegacy media_feedbackを送信し得た。native交渉中のIDはlegacy companionに存在せず、media_unavailableを生じ得る。実機での当該因果は未実測。確定したlegacy MSE/RTC streamだけ旧feedbackを送り、既存native/UDP処理は変更しない。
+
+media_unavailableは別の正当な拒否にも使われるので無視しない。警告をmedia専用に分離し、新しいIDの正常media開始時だけ解消する。他のエラーは保持する。文言のBを接続先へ変更。
+
+旧runtime2fileで新6回帰の3件と生成Chromeの遅延交渉が失敗した。raw negative.log / negative-browser.log参照。durable scratchからbytesを復元、restoration.jsonの2SHA完全一致。
+
+browser.mjsは実Vue＋Receiver、偽socket・生成静止canvas・native状態通知によるDOM確認。2.6秒の交渉待ちでlegacy feedback0、native状態後に警告のみ消去、別マイクエラー保持、新たな拒否は表示。実GPUデコード・実permission/service・Windowsは検証していない。browser/context/Viteは自分のものだけ終了。実PC入力・接続・音声・UAC・モデル呼出し0。
+
+独立レビューP2で、既成功streamと同IDの状態再通知により新しい正当拒否が消える境界を修正。最後の正常開始IDをsource内に保持し、同IDの再通知/negotiating経由では警告を保持、新IDの成功で解消する。旧507b runtimeは追加回帰1FAIL→fix-restoration.jsonのSHA完全復元→関連50PASS。Native profile変更で必ずstatus再通知が出るとは主張しない。
+
+生成Chromeは警告単独の新規開始での解消に加え、同ID再通知の警告保持、新ID成功時のmediaNoticeだけ解消、他マイクerrorとの同時保持も確認した。画像を実見。
+
+初回507bの型/Vite0はbuild-507b.logへ分離、P2修正後の最終9b5484a2で再build。新runtime差分に必要な再検証であり全repo二重検証ではない。
+
+関連回帰結果はrestored.log、最終Webのtest-inclusive vue-tsc＋Viteはbuild.log参照。全repo/server/native再buildは実施しない。
