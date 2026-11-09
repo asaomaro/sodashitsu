@@ -1,0 +1,22 @@
+{
+  "sourceHead": "eb47add505d098d7ca0c76c673a3ce510e273aed",
+  "commands": [
+    {
+      "command": "<tree>/node_modules/typescript/bin/tsc",
+      "exit": 0
+    },
+    {
+      "command": "../desktop-assistant/scripts/build-host.mjs",
+      "exit": 0
+    },
+    {
+      "command": "scripts/prune-retired-features.mjs",
+      "exit": 0
+    }
+  ],
+  "elapsedSeconds": 214.513,
+  "exit": 0,
+  "node": "v24.22.2",
+  "artifactCount": 1869,
+  "artifactMapSha256": "ee4ffb45950491e3716b4d6fd126558cb73a1c7afb527005888178ce11620cdc"
+}

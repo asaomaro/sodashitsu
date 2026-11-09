@@ -1,0 +1,14 @@
+{
+  "authorArtifactCount": 1869,
+  "mainLiveArtifactCount": 1869,
+  "added": [],
+  "removed": [],
+  "changed": [
+    "desktop/DesktopProtectedMicrophone.d.ts",
+    "desktop/DesktopProtectedMicrophone.d.ts.map",
+    "desktop/DesktopProtectedMicrophone.js",
+    "desktop/DesktopProtectedMicrophone.js.map",
+    "surface/methods/ResourceProcesses.d.ts.map"
+  ],
+  "resourceProcessesSourceByteEqual": true
+}
