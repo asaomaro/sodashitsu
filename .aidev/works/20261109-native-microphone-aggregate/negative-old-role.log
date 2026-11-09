@@ -1,0 +1,30 @@
+✖ final snapshot/role emission follows Dispose join; no raw audio/identity/counters influence policy (4.945189ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 54.835947
+
+✖ failing tests:
+
+test at scripts/remote-desktop/microphone-native-stats.test.mjs:15:1
+✖ final snapshot/role emission follows Dispose join; no raw audio/identity/counters influence policy (4.945189ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(role.includes('microphone.Dispose();stats=microphone.ReadDiagnostics();'))
+  
+      at TestContext.<anonymous> (file:///workspaces/sodashitsu-native-microphone-aggregate-stats/scripts/remote-desktop/microphone-native-stats.test.mjs:15:284)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

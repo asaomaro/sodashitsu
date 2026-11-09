@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-microphone-aggregate-stats
+
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  14:04:34
+   Duration  1.94s (tests 97%, transform 2%, import 1%)
+

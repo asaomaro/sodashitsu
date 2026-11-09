@@ -1,0 +1,9 @@
+{
+  "packages/server/src/desktop/DesktopProtectedMicrophone.ts": "fe3efcb2c23864968b67bb35715e5d3c96b741cdc97083b2093c3d084b92118b",
+  "scripts/remote-desktop/WindowsDesktopMicrophone.cs": "1746e5b92ea267fc833cebabc43fc68f12a93387f21d036f4c63bab312d7aeea",
+  "scripts/remote-desktop/WindowsUserMicrophoneRole.cs": "e019020c3275915a5a3895fc1cf1840e26805d1f34913a0b4d8bb209d5af1dd9",
+  "scripts/remote-desktop/WindowsMicrophoneRenderChecks.cs": "0a3904ff5269988884ec5aafd72a12b21881e8a3434c72fc6755b8eaf7f4daad",
+  "packages/server/src/desktop/DesktopProtectedMicrophone.test.ts": "4383e21a010cbd2efdf95d5a15e59d9d3e2880393d838d628051b80ea8780d4b",
+  "scripts/remote-desktop/microphone-native-stats.test.mjs": "be9ebb8d589f7ac3b8ba2fe7997599d211645094c7a0b91c9dd900cd17bc8e26",
+  "scripts/remote-desktop/microphone-render-headroom.test.mjs": "0e436c3c561da99576dd0ea0d9df985dd7b77309f98e5a12aff346303fc27ef3"
+}

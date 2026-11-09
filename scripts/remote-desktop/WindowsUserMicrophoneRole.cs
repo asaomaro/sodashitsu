@@ -128,8 +128,8 @@ public static class SodaDesktopUserMicrophoneRole {
         }catch{return 2;}finally{
             Interlocked.Exchange(ref stopping,1);
             var deadline=new Thread(()=>{Thread.Sleep(1500);Environment.Exit(2);});deadline.IsBackground=true;deadline.Start();
-            if(microphone!=null)microphone.Dispose();microphone=null;if(peer!=null)peer.Dispose();peer=null;
-            if(id!=null)Output(new{type="user_microphone_closed",id,nonce});
+            object stats=null;if(microphone!=null){microphone.Dispose();stats=microphone.ReadDiagnostics();}microphone=null;if(peer!=null)peer.Dispose();peer=null;
+            if(id!=null){if(stats!=null)Output(new{type="user_microphone_closed",id,nonce,stats});else Output(new{type="user_microphone_closed",id,nonce});}
         }
     }
 }

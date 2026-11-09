@@ -1,0 +1,21 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-microphone-aggregate-stats
+
+ ❯ packages/server/src/desktop/DesktopProtectedMicrophone.test.ts (12 tests | 1 failed | 11 skipped) 730ms
+   × stats validator preserves explicit unknown capacity and zero-write timing without inventing values 728ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/desktop/DesktopProtectedMicrophone.test.ts > stats validator preserves explicit unknown capacity and zero-write timing without inventing values
+TypeError: parse is not a function
+ ❯ packages/server/src/desktop/DesktopProtectedMicrophone.test.ts:111:10
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 skipped (12)
+   Start at  14:04:32
+   Duration  871ms (tests 92%, transform 6%, import 2%)
+

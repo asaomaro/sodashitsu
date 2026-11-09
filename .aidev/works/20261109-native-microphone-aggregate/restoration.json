@@ -1,0 +1,35 @@
+{
+  "base": "f6579383",
+  "negative": [
+    {
+      "source": "packages/server/src/desktop/DesktopProtectedMicrophone.ts",
+      "negativeExit": 1,
+      "oldSha256": "c36a394541cd2685c0e89fccc362f6ca3b3f80b7bc525dbc4b8cee1ae976a921"
+    },
+    {
+      "source": "scripts/remote-desktop/WindowsDesktopMicrophone.cs",
+      "negativeExit": 1,
+      "oldSha256": "c01e817e71d7c5943df9f8258fdde21ccac0913323fdc82fe7ca33f9e8e36932"
+    },
+    {
+      "source": "scripts/remote-desktop/WindowsUserMicrophoneRole.cs",
+      "negativeExit": 1,
+      "oldSha256": "5e637d7bc472f3d6117678e60ca2aed8a23cd49d42713cd7c56e3e50407bab0d"
+    }
+  ],
+  "byteExact": {
+    "packages/server/src/desktop/DesktopProtectedMicrophone.ts": true,
+    "scripts/remote-desktop/WindowsDesktopMicrophone.cs": true,
+    "scripts/remote-desktop/WindowsUserMicrophoneRole.cs": true
+  },
+  "restoredSha256": {
+    "packages/server/src/desktop/DesktopProtectedMicrophone.ts": "fe3efcb2c23864968b67bb35715e5d3c96b741cdc97083b2093c3d084b92118b",
+    "scripts/remote-desktop/WindowsDesktopMicrophone.cs": "1746e5b92ea267fc833cebabc43fc68f12a93387f21d036f4c63bab312d7aeea",
+    "scripts/remote-desktop/WindowsUserMicrophoneRole.cs": "e019020c3275915a5a3895fc1cf1840e26805d1f34913a0b4d8bb209d5af1dd9"
+  },
+  "providerExit": 0,
+  "nativeExit": 0,
+  "strictTypeExit": 0,
+  "authorWindowsExecuted": false,
+  "csharpCompileExecuted": false
+}
