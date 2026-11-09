@@ -69,3 +69,13 @@ microphone_ticket到着時に専用laneを即attachする（native ready待ち�
 `continuity.resetObservations` は、既存のstreakが実際にresetする窓だけ最大8件を保持し、超過件数を `resetObservationsOmitted` に出す。終端のsilenceによるresetも含む。各行は相対 `wallMs`、直前の `precedingStreakFrames` / `precedingStreakWallMs`、左右のRMS / 997Hz magnitude / clip件数、`failureMask` の10数値だけ。PCM・endpoint・プロセス情報は保存しない。maskは1/2=左RMS下限未満/上限超過、4/8=左997成分下限未満/上限超過、16=左clipあり、32=broken、64=gap>60ms。右の数値は診断だけで既存の採点対象を変えない。
 
 `baselineSilentPackets` / `toneSilentPackets` は正式capture packetのSILENT bit2件数を期別に数える。未観測はnull、観測済みで該当なしは0。既存flags1/4件数、used/reset、tone/streak、壁時計、合否閾値は変えない。これらは実測失敗をPASSへ読み替えるための情報ではない。
+
+### private server内のNative aggregate観測
+
+fixtureの `private-server.mjs` 内だけで `DesktopProtectedMicrophone.fromViewer` を観測する。元のthis・全引数・返り値・例外は変えず、正常returnしたstart候補のUUIDだけ最大4instance、各instanceの最新候補1件を保持する。正常returnはstart成功の証明ではない。拒否restart候補で旧idが置き換わった場合も、getterのexact idに合わなければ未取得に倒す。
+
+`server.close()` 完了後、内部 `readNativeDiagnostics(expectedId)` を最大2秒だけ待つ。この時間は元のserver退役待ち10秒の内側で、deadline延長はしない。accessorは正式closed receipt・child物理close・binary close・resource release成功後だけ返す契約で、live・未確認・saturated・期限切れ・次startは未取得。公開RPC/マイクwire schemaへは追加しない。
+
+Native stats v1の14項目は、version、capacityKnown、capacityFrames、packetReadCount、entryExpiredCount、writeAttempts、pcmCommitCount、paddingZeroCount、prefixFrames、writeExpiryRejectedCount、silentReleaseCount、maxWriteMs、maxReadInterarrivalMs、saturated。count8項目は0..2147483647、容量はknown時960..48000、それ以外null。writeAttempts=0ならmaxWriteMs=null、packetReadCount<2ならmaxReadInterarrivalMs=null。時間は観測時0..100000ms、異常/saturatedは未取得。actor全生存期間の集計であり、baseline/post-toneを含む。ACK数や実再生・受音の保証ではない。
+
+収集結果はown jobへ `native-microphone-server-diagnostics.json` をwx保存し、保存成功だけを既存子IPCの固定boolで親へ通知する。wx競合・getter/保存例外・IPC欠測は未取得。IPCstop/disconnectのstop workは一度だけ共有する。元server-closed marker・exit・停止/退役/合否の条件へdiagnosticsを流用しない。runAは元のserver/actor退役確認後、同じstreamIdだけを選び、IDを落とした `native-microphone-diagnostics.json`（version/known/optional stats）をwx保存する。失敗してもissuesや測定結果を変えない。PCM・endpoint・名前・PID・raw例外は保存しない。既存12実行fixtureのseal inventoryを保ち、未sealの追加runtime moduleは導入しない。

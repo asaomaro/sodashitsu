@@ -1,5 +1,6 @@
 // New phase3 A fixture. This is not a product command or an automatic elevation/unlock tool.
 import {readFile,writeFile,mkdir,lstat,rm,access,realpath} from 'node:fs/promises';import {resolve,dirname,join} from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';import {fork} from 'node:child_process';import {createRequire} from 'node:module';import {randomUUID} from 'node:crypto';
+import {selectNativeDiagnostics} from './private-server.mjs';
 import {FIXTURE_FILES} from './prepare.mjs';
 import {AbsolutePcm,generatedFrame,clockFailureEvidence} from './absolute-pcm.mjs';import {assertManifest,checkedFile,receipt,ownEnv,bounded,probe,sha} from './safety.mjs';
 const exists=p=>access(p).then(()=>true,()=>false),sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -38,7 +39,7 @@ export async function runA(manifestPath){
  await receipt(m.jobRoot,'claim.json',{jobId:m.jobId,controllerPid:process.pid});
  let stage='other',failureStage,failureClass,retiring=false;const failureEvidence={};
  let stopViewerHeartbeat=()=>{},attachment,attachmentRetired=true,monitor,stopExpected=false;
- let server,closed,viewer,mic,rpc,clock,pump,streamId,receiverOwned=false,serverRetired=false,receiverRetired=false,actor,actorRetired=false,measurementPassed=false,settingsBefore,settingsAfter,receiver;const issues=[];let baseline,receiverResult,cadence,post,pre;let sent=0,acked=0,expectedAck=0;const sockets=[];
+ let nativeDiagnosticsPublication=false;let server,closed,viewer,mic,rpc,clock,pump,streamId,receiverOwned=false,serverRetired=false,receiverRetired=false,actor,actorRetired=false,measurementPassed=false,settingsBefore,settingsAfter,receiver;const issues=[];let baseline,receiverResult,cadence,post,pre;let sent=0,acked=0,expectedAck=0;const sockets=[];
  const until=async(fn,ms,label)=>{const deadline=Date.now()+ms;while(true){if(Date.now()>=Date.parse(m.expiresAt)||issues.length)throw Error('fixture-retired');const value=await fn();if(value)return value;if(Date.now()>deadline)throw Error(label);await sleep(20);}};
  const phase=async name=>receipt(m.jobRoot,'phase-'+name+'.json',{phase:name,at:new Date().toISOString()});
  try{
@@ -55,7 +56,7 @@ export async function runA(manifestPath){
   await writeFile(join(stateDir,'desktop-permissions.json'),JSON.stringify({enabled:true,allowInput:false,allowClipboard:false,allowDisplayResize:false,allowElevated:true,allowMicrophone:true,allowProtectedMicrophone:true,microphoneEndpoint:m.renderEndpoint}),{flag:'wx',mode:0o600});
   const config=join(m.jobRoot,'private-config.json');await writeFile(config,JSON.stringify({...m,cwd,stateDir}),{flag:'wx',mode:0o600});
   // IPC requires fork; stdout/stderr are drained and discarded, not printed or archived.
-  server=fork(new URL('./private-server.mjs',import.meta.url),[config],{env:ownEnv(),windowsHide:true,stdio:['ignore','pipe','pipe','ipc'],execArgv:[]});for(const s of [server.stdout,server.stderr])s.on('data',()=>{});closed=new Promise(resolve=>server.once('exit',code=>resolve(code)));server.once('error',()=>issues.push('private-server-error'));
+  server=fork(new URL('./private-server.mjs',import.meta.url),[config],{env:ownEnv(),windowsHide:true,stdio:['ignore','pipe','pipe','ipc'],execArgv:[]});for(const s of [server.stdout,server.stderr])s.on('data',()=>{});closed=new Promise(resolve=>server.once('exit',code=>resolve(code)));server.once('error',()=>issues.push('private-server-error'));server.on('message',value=>{if(value&&Object.keys(value).length===2&&value.type==='native_diagnostics_publication'&&typeof value.published==='boolean')nativeDiagnosticsPublication=value.published;});
   const ready=await until(async()=>{const p=join(m.jobRoot,'server-ready.json');return await readPublishedAReceipt(p,failureEvidence);},60000,'private-server-not-ready');if(ready.pid!==server.pid||ready.ownInitialPaneProof?.count!==1||!ready.ownInitialPaneProof.cwdMatches||!ready.ownInitialPaneProof.nodeShellMatches||!ready.ownInitialPaneProof.agentAbsent)throw Error('own-pane-proof');
   const require=createRequire(join(m.productRoot,'packages/server/package.json')),WebSocket=require('ws'),protocol=await import(pathToFileURL(join(m.productRoot,'packages/protocol/dist/index.js')).href);
   const origin='http://127.0.0.1:'+m.port;const local=JSON.parse(await readFile(join(stateDir,'local-auth.json'),'utf8'));if(local.pid!==server.pid)throw Error('private-auth-owner');
@@ -100,6 +101,8 @@ export async function runA(manifestPath){
   if(receiverOwned){try{await until(async()=>{const retired=await probe(m,'retired',{ownedPid:receiver.pid,ownedStartedTicks:receiver.startedTicks});return retired.ok&&retired.retired;},5000,'receiver-still-alive');receiverRetired=(await readPublishedAReceipt(join(m.jobRoot,'receiver-result.json'),failureEvidence))?.physicalClosed===true;}catch{receiverRetired=false;}}
   if(server?.connected){server.send('stop');serverRetired=await Promise.race([closed.then(code=>code===0),sleep(10000).then(()=>false)]);}else serverRetired=server?.exitCode===0;
   if(actor&&serverRetired){try{const identity=actor.actors[0].identity;const after=await probe(m,'retired',{ownedPid:identity.pid,ownedStartedTicks:identity.startedTicks});actorRetired=after.ok&&after.retired;}catch{actorRetired=false;}}
+  // Diagnostics never decide retirement, stop success, issues or measurement.
+  try{let nativeDiagnostics={version:1,known:false};if(serverRetired&&actorRetired&&streamId&&nativeDiagnosticsPublication){const path=join(m.jobRoot,'native-microphone-server-diagnostics.json'),info=await lstat(path);if(info.isFile()&&!info.isSymbolicLink()&&info.nlink===1&&info.size<=16384){const bytes=await readFile(path);if(bytes.length<=16384)nativeDiagnostics=selectNativeDiagnostics(JSON.parse(bytes.toString()),streamId,true);}}await receipt(m.jobRoot,'native-microphone-diagnostics.json',nativeDiagnostics);}catch{}
   if(serverRetired&&receiverRetired&&actorRetired){try{post=await probe(m,'preflight');if(!post.ok||post.capture.volume!==pre.capture.volume||post.render.volume!==pre.render.volume)issues.push('endpoint-postcheck');}catch{issues.push('postcheck-unavailable');}}
   if(serverRetired&&receiverRetired&&actorRetired&&attachmentRetired&&post?.ok&&issues.length===0)await rm(join(m.jobRoot,'state'),{recursive:true});
   await receipt(m.jobRoot,'result.json',{ok:measurementPassed&&attachmentRetired&&issues.length===0&&serverRetired&&receiverRetired&&actorRetired&&post?.ok===true,serverRetired,receiverRetired,actorRetired,privateStateCleaned:!await exists(join(m.jobRoot,'state')),attachmentRetired,...(failureStage?{failureStage,failureClass,failureEvidence}:{}),issues,rawAudioStored:false,physicalMicrophoneUsed:false,modelCalls:0});
