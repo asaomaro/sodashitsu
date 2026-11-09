@@ -1,0 +1,38 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-uac-fresh-reconnect
+
+ ❯ packages/server/src/desktop/DesktopRelay.test.ts (334 tests | 2 failed | 332 skipped) 499ms
+   × requires the actual elevated-default helper proof and keeps protected input human-only 287ms
+   × requires the actual elevated-uac helper proof and keeps protected input human-only 210ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/desktop/DesktopRelay.test.ts > requires the actual elevated-default helper proof and keeps protected input human-only
+ FAIL  packages/server/src/desktop/DesktopRelay.test.ts > requires the actual elevated-uac helper proof and keeps protected input human-only
+AssertionError: expected undefined to deeply equal { …(2) }
+
+- Expected:
+{
+  "code": "source_changed",
+  "type": "protected_desktop_failure",
+}
+
++ Received:
+undefined
+
+ ❯ packages/server/src/desktop/DesktopRelay.test.ts:962:73
+    960|   await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+    961|   expect(viewer.messages.find(m=>m.type==="error")).toMatchObject({mes…
+    962|   expect(viewer.messages.find(m=>m.type==="protected_desktop_failure")…
+       |                                                                         ^
+    963|   expect(viewer.messages.some(m=>["session_locked","session_unlocked"]…
+    964|   const events=(await readFile(f.ledger,"utf8")).trim().split("\n").ma…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 332 skipped (334)
+   Start at  15:20:13
+   Duration  2.01s (transform 61%, tests 26%, import 13%)
+

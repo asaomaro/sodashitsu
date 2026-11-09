@@ -959,6 +959,7 @@ it.each(["elevated-default","elevated-uac"] as const)("requires the actual %s he
   await writeFile(f.endedMarker,"changed");
   await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
   expect(viewer.messages.find(m=>m.type==="error")).toMatchObject({message:expect.stringContaining("接続し直し")});
+  expect(viewer.messages.find(m=>m.type==="protected_desktop_failure")).toEqual({type:"protected_desktop_failure",code:"source_changed"});
   expect(viewer.messages.some(m=>["session_locked","session_unlocked"].includes(String(m.type)))).toBe(false);
   const events=(await readFile(f.ledger,"utf8")).trim().split("\n").map(line=>JSON.parse(line));expect(events.find(m=>m.type==="scope-ended")).toMatchObject({held:[]});
   writes.mockRestore();

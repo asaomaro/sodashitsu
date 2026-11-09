@@ -1,0 +1,21 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-uac-fresh-reconnect
+
+ ❯ packages/server/src/desktop/DesktopInteractiveOwner.test.ts (23 tests | 1 failed | 22 skipped) 5ms
+   × reserves control without a native grant and drops an unused source without inventing a cleanup receipt 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/desktop/DesktopInteractiveOwner.test.ts > reserves control without a native grant and drops an unused source without inventing a cleanup receipt
+TypeError: owner.reserveControl is not a function
+ ❯ packages/server/src/desktop/DesktopInteractiveOwner.test.ts:232:16
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 skipped (23)
+   Start at  15:20:11
+   Duration  147ms (transform 63%, import 25%, tests 7%, worker 5%)
+

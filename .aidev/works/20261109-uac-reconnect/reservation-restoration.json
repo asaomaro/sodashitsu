@@ -1,0 +1,28 @@
+{
+  "base": "1006e829",
+  "negative": [
+    {
+      "source": "packages/server/src/desktop/DesktopInteractiveOwner.ts",
+      "exit": 1
+    },
+    {
+      "source": "packages/server/src/desktop/DesktopProvider.ts",
+      "exit": 1
+    },
+    {
+      "source": "packages/server/src/desktop/DesktopRelay.ts",
+      "exit": 1
+    }
+  ],
+  "byteExact": {
+    "packages/server/src/desktop/DesktopInteractiveOwner.ts": true,
+    "packages/server/src/desktop/DesktopProvider.ts": true,
+    "packages/server/src/desktop/DesktopRelay.ts": true
+  },
+  "runtimeSha256": {
+    "packages/server/src/desktop/DesktopInteractiveOwner.ts": "ad3630c99b9c0b9928b511e696355b64eed583bdec81e2dbc821674625addf49",
+    "packages/server/src/desktop/DesktopProvider.ts": "fc79bb139cb016f1a46da12d82a6d144cb144f48f32890fa0b2742dc666b961a",
+    "packages/server/src/desktop/DesktopRelay.ts": "2b1be6d36f9d66b5c2777411a4c97007d83d8422377de37da44688d45d9804c1"
+  },
+  "windowsExecuted": false
+}

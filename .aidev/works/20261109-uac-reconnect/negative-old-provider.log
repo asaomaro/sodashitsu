@@ -1,0 +1,63 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-uac-fresh-reconnect
+
+ ❯ packages/server/src/desktop/DesktopProvider.controlReservation.test.ts (5 tests | 2 failed | 3 skipped) 11ms
+   × queues epoch→native control→first action only when used (shared=false) 8ms
+   × queues epoch→native control→first action only when used (shared=true) 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/desktop/DesktopProvider.controlReservation.test.ts > queues epoch→native control→first action only when used (shared=false)
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "id": "90c0857a-6c2c-4c89-a5d3-49fcf1c394c9",
++     "resource": "control",
++     "type": "resource_epoch",
++   },
++   {
++     "enabled": true,
++     "type": "control",
++   },
++ ]
+
+ ❯ packages/server/src/desktop/DesktopProvider.controlReservation.test.ts:3:242
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/server/src/desktop/DesktopProvider.controlReservation.test.ts > queues epoch→native control→first action only when used (shared=true)
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "id": "d9ed35d7-d4e2-4fc5-9b26-e4b467e42990",
++     "resource": "control",
++     "type": "resource_epoch",
++   },
++   {
++     "enabled": true,
++     "type": "control",
++   },
++ ]
+
+ ❯ packages/server/src/desktop/DesktopProvider.controlReservation.test.ts:3:242
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 skipped (5)
+   Start at  15:20:12
+   Duration  1.29s (transform 81%, import 18%, tests 1%)
+

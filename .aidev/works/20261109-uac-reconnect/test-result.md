@@ -1,0 +1,13 @@
+# UAC source reconnect — unit1 (not full issue completion)
+
+Base1006. Formal source_changed currently becomes generic text in Relay and protected UI loses reconnect. Resource ownership also grants Nativeepoch immediately when control is allowed,even if no input occurs. A cancelled/changed source without that epoch ACK faults forever. This is not grounds to reset a true unknown owner.
+
+Unit1 separates control logical reservation from physical activation. Unused cancellation has Nativebegin-attempt0 and can remove only the reservation. All actual inputs/SAS/dismiss keep original ready/permission/source/freshframe conditions,then first activation queues nativeepoch→controltrue→action in the same physical FIFO. Existing shared requestControl(true) is already logical-only;its false/release cleanup is unchanged. Blurring/release of an unused reservation cancels without activation. Clipboard/microphone acquire immediately as before. Clipboard writes use their own Native grant/local allow;display resize uses displayCeiling,not NativeControl;file native drop already requires active epoch and pointer witness. Activated begin false/throw remains terminal unknown,not safe cancel. Identity only exposes an active native epoch;unused releaseConfirmed cannot forge a physical receipt.
+
+Old source/nonce/peer/permission/budget/epoch retirement remains. Resource fault is never cleared;no readonly fallback is introduced by this unit. Relay forwards existing strict protected_desktop_failure then its old fixed genericerror for compatibility. UI still must clear old frame/control and obtain fresh source authorization.
+
+Evidence:oldOwner/Provider/Relay individually exit1→durable byteExact restore.37 Owner/Channel/Provider cases and23 selected actualWS generated Relay cases pass;changed production/test strict TypeScript exit0. Rawlogs/restoration/source6SHA committed. Source-only zero-input and bufferedterminal-ACK audit scripts remain in common recovery;no Windows/native input performed. Productionbuild will run once after the separate Native terminal-ACK drain unit,not duplicated now.
+
+The main user path has actual activated input before UAC. Unit1 alone does not close that problem. Activated+neutral ACK loss in installed worker remains under investigation;repository broker has a concrete liveness gate dropping buffered terminalACK after workerexit/lock change. Any drain must correlate exact known epoch/pipe/nonce/generation/retained creation identity,forward no content after revoke,and preserve no-ACK/unknown fault.
+
+Independent unit1 source review pending. Author Windows/model0. Installedworker sourcegeneration is unproven;actual reproduction/update is Root-only after review.

@@ -1,0 +1,8 @@
+{
+  "packages/server/src/desktop/DesktopInteractiveOwner.ts": "ad3630c99b9c0b9928b511e696355b64eed583bdec81e2dbc821674625addf49",
+  "packages/server/src/desktop/DesktopProvider.ts": "fc79bb139cb016f1a46da12d82a6d144cb144f48f32890fa0b2742dc666b961a",
+  "packages/server/src/desktop/DesktopRelay.ts": "2b1be6d36f9d66b5c2777411a4c97007d83d8422377de37da44688d45d9804c1",
+  "packages/server/src/desktop/DesktopInteractiveOwner.test.ts": "ed4c02a84d3230ec81044a2ad8d6f5d7a7b8230141bc5f17b071285f8f478d24",
+  "packages/server/src/desktop/DesktopProvider.controlReservation.test.ts": "50be3c7b0410bb68173136c975ef3db4f12ae55d0ec14bb4c1ab76d332fc05f0",
+  "packages/server/src/desktop/DesktopRelay.test.ts": "df212d0604bc6e61a3ccc354b5746722322c778b08a3ebb8a83c3112b4e0e18c"
+}

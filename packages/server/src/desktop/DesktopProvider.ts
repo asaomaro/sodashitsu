@@ -187,7 +187,7 @@ export class DesktopProvider {
   private createResources(){return new DesktopInteractiveOwner<Share,DesktopResourceChannel>({begin:(source,epoch,resource)=>source.begin(epoch,resource),clean:(source,epoch)=>source.clean(epoch),send:(source,id,resource)=>source.fence(id,resource),idle:source=>this.resumeControls(source),fault:()=>{if(this.active)this.stop(this.active);for(const s of [...this.shared])this.stop(s);}});}
   private applyControl(s:Share,enabled:boolean){
     s.control=s.process?.requestControl?s.process.requestControl(enabled):enabled;
-    this.write(s,{type:"control",enabled:s.control});
+    if(!s.control||!s.resourcesManaged||this.resources.identity(s,"control"))this.write(s,{type:"control",enabled:s.control});
     if(!s.control&&s.resourcesManaged)this.resources.release(s,"control");
     this.send(s,{type:"control",enabled:s.control});
   }
@@ -199,11 +199,20 @@ export class DesktopProvider {
       const pending=this.resources.releasing(s,"control");
       if(pending?.id===intent.id&&pending.epoch===intent.epoch)continue;
       delete s.pendingControl;
-      this.applyControl(s,!pending&&this.claimResource(s,"control"));
+      this.applyControl(s,!pending&&this.reserveControl(s));
     }
   }
   private resetResourcesIfDrained(){if(this.resourceReset&&!this.physicalHelpers.size){if(!this.resources.faulted){this.resources.dispose();this.resources=this.createResources();}this.resourceReset=false;}}
   private claimResource(s:Share,kind:DesktopInteractiveResource):boolean{if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;return !!source?.supported&&this.resources.acquire(s,source,kind);}
+  private reserveControl(s:Share):boolean{if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;return !!source?.supported&&this.resources.reserveControl(s,source);}
+  private activateControl(s:Share):boolean{
+    if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;if(!source?.supported)return false;
+    const identity=this.resources.identity(s,"control");if(identity)return identity.source===source;
+    if(!this.resources.activate(s,source,"control"))return false;
+    // begin queued resource_epoch on this same physical channel. Only now may
+    // the native Control flag become true, before the first action in its FIFO.
+    this.write(s,{type:"control",enabled:true});return this.live(s)&&s.control&&this.resources.identity(s,"control")?.source===source;
+  }
   private ownsResource(s:Share,kind:DesktopInteractiveResource):boolean{return !s.resourcesManaged||this.resources.owns(s,kind);}
   private readonly sharedCapture = new DesktopSharedCapture();
   private readonly shared = new Set<Share>();
@@ -571,7 +580,7 @@ export class DesktopProvider {
           else if (m.type === "release") {
             s.inputAcks.invalidatePointers();
             delete s.pointerWitness;
-            if (s.control&&this.ownsResource(s,"control")) this.write(s, m);
+            if (s.control&&this.ownsResource(s,"control")){if(s.resourcesManaged&&!this.resources.identity(s,"control"))this.applyControl(s,false);else this.write(s,m);}
           } else if (m.type === "ack") {
             if (m.seq !== s.pending) {
               this.stop(s);
@@ -589,17 +598,17 @@ export class DesktopProvider {
             s.inputAcks.invalidatePointers();
             delete s.pointerWitness;
             if(s.pendingControl){delete s.pendingControl;this.send(s,{type:"control",enabled:false});if(!this.live(s))return;}
-            const enabled = m.enabled && s.allowInput && s.ready && this.claimResource(s,"control");
+            const enabled = m.enabled && s.allowInput && s.ready && this.reserveControl(s);
             if(m.enabled&&!enabled&&s.allowInput&&s.ready&&s.resourcesManaged){
               const pending=this.resources.releasing(s,"control");
               if(pending&&s.process?.resourceChannel===pending.source){s.pendingControl=pending;s.control=false;return;}
             }
             this.applyControl(s,enabled);
           } else if (m.type === "sas") {
-            if (s.secureDesktop && !s.protectedDesktop && !s.lockScreenCover && s.control && this.ownsResource(s,"control") && s.ready && performance.now() - s.lastSeen < 5000)
+            if (s.secureDesktop && !s.protectedDesktop && !s.lockScreenCover && s.control && this.ownsResource(s,"control") && s.ready && performance.now() - s.lastSeen < 5000 && this.activateControl(s))
               this.write(s, m);
           } else if (m.type === "dismiss_lock_screen") {
-            if (s.lockScreenCover && s.secureDesktop && s.control && this.ownsResource(s,"control") && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000)
+            if (s.lockScreenCover && s.secureDesktop && s.control && this.ownsResource(s,"control") && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000 && this.activateControl(s))
               this.write(s, m);
           } else if (m.type === "input") {
             s.inputAcks.invalidatePointers();delete s.pointerWitness;
@@ -615,6 +624,7 @@ export class DesktopProvider {
               s.seq > 0 &&
               (nativeDraw ? s.native?.hasFreshDraw() === true : performance.now() - s.frameAt < 2000||platformIdleInput&&s.sourceIdle.fresh({backend:cfg.nativePlatform,ready:s.ready,pending:s.pending,seq:s.seq}))
             ) {
+              if(!this.activateControl(s)){this.applyControl(s,false);return;}
               s.inputSeq = m.seq;
               s.inputAcks.submitted(m.seq,m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0);
               this.write(s, { ...m, expiresAt: Date.now() + 500, ...(nativeDraw && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });

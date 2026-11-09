@@ -21,7 +21,7 @@ const kinds: DesktopInteractiveResource[] = ["control", "clipboard", "microphone
 export class DesktopInteractiveOwner<Member, Source> {
   private owners = new Map<
     DesktopInteractiveResource,
-    { member: Member; source: Source; epoch: string }
+    { member: Member; source: Source; epoch: string; activated: boolean }
   >();
   private pending = new Map<DesktopInteractiveResource, PendingRelease<Member,Source>>();
   private failed = false;
@@ -62,21 +62,33 @@ export class DesktopInteractiveOwner<Member, Source> {
     return true;
   }
   acquire(member: Member, source: Source, resource: DesktopInteractiveResource): boolean {
+    return this.claim(member, source, resource, true);
+  }
+  /** Logical exclusion only: no native grant has been attempted yet. */
+  reserveControl(member: Member, source: Source): boolean {
+    return this.claim(member, source, "control", false);
+  }
+  private claim(member: Member, source: Source, resource: DesktopInteractiveResource, activate: boolean): boolean {
     if (!kinds.includes(resource) || !this.current() || this.pending.has(resource)) return false;
+    let owner = this.owners.get(resource);
+    if (owner && (owner.member !== member || owner.source !== source)) return false;
+    if (!owner) { owner = { member, source, epoch: randomUUID(), activated: false }; this.owners.set(resource, owner); }
+    return !activate || this.begin(owner, resource);
+  }
+  activate(member: Member, source: Source, resource: DesktopInteractiveResource): boolean {
+    if (!this.current()) return false;
     const owner = this.owners.get(resource);
-    if (owner) return owner.member === member && owner.source === source;
-    const candidate = { member, source, epoch: randomUUID() };
-    this.owners.set(resource, candidate);
+    return !!owner && owner.member === member && owner.source === source && this.begin(owner, resource);
+  }
+  private begin(owner: { member: Member; source: Source; epoch: string; activated: boolean }, resource: DesktopInteractiveResource): boolean {
+    if (owner.activated) return true;
+    // Even a false/throwing begin can have partially written its grant. It must
+    // never become an unused reservation again or bypass the existing fence.
+    owner.activated = true;
     try {
-      if (this.hooks.begin && !this.hooks.begin(source, candidate.epoch, resource)) {
-        this.fail();
-        return false;
-      }
-    } catch {
-      this.fail();
-      return false;
-    }
-    return this.current() && this.owners.get(resource) === candidate;
+      if (this.hooks.begin && !this.hooks.begin(owner.source, owner.epoch, resource)) { this.fail(); return false; }
+    } catch { this.fail(); return false; }
+    return this.current() && this.owners.get(resource) === owner;
   }
   owns(member: Member, resource: DesktopInteractiveResource): boolean {
     return this.current() && this.owners.get(resource)?.member === member;
@@ -87,7 +99,7 @@ export class DesktopInteractiveOwner<Member, Source> {
   ): { source: Source; epoch: string } | undefined {
     if (!this.current()) return;
     const owner = this.owners.get(resource);
-    if (owner?.member === member) return { source: owner.source, epoch: owner.epoch };
+    if (owner?.member === member && owner.activated) return { source: owner.source, epoch: owner.epoch };
     return;
   }
   release(member: Member, resource: DesktopInteractiveResource): void {
@@ -118,6 +130,12 @@ export class DesktopInteractiveOwner<Member, Source> {
     if (!this.current()) return false;
     const owner = this.owners.get(resource);
     if (owner?.member !== member) return false;
+    if (!owner.activated) {
+      // No native begin was attempted. This removes only logical exclusion,
+      // and cannot produce the physical receipt requested by releaseConfirmed.
+      if (completion) return false;
+      this.owners.delete(resource); this.idle(owner.source); return true;
+    }
     this.owners.delete(resource);
     const id = randomUUID(),
       timer = setTimeout(() => this.tick(), 5000);
@@ -182,7 +200,7 @@ export class DesktopInteractiveOwner<Member, Source> {
     if (!this.current()) return;
     for (const [resource, owner] of this.owners)
       if (owner.source === source) {
-        if (this.hooks.clean?.(source, owner.epoch)) {
+        if (!owner.activated || this.hooks.clean?.(source, owner.epoch)) {
           this.owners.delete(resource);
           this.idle(source);
         } else {

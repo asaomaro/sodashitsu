@@ -226,3 +226,24 @@ it("accepts a synchronous ACK only after a successful send returns", async () =>
   expect(owner.acquire({}, source, "control")).toBe(true);
   owner.dispose();
 });
+
+it('reserves control without a native grant and drops an unused source without inventing a cleanup receipt', async () => {
+  const begin=vi.fn(()=>true),send=vi.fn(()=>true),fault=vi.fn(),owner=new DesktopInteractiveOwner<object,object>({begin,send,idle:()=>{},fault}),member={},other={},source={};
+  expect(owner.reserveControl(member,source)).toBe(true);expect(owner.owns(member,'control')).toBe(true);expect(owner.identity(member,'control')).toBeUndefined();expect(owner.reserveControl(other,source)).toBe(false);expect(begin).not.toHaveBeenCalled();
+  await expect(owner.releaseConfirmed(member,'control')).rejects.toThrow('cannot be released');expect(send).not.toHaveBeenCalled();
+  owner.sourceGone(source);expect(owner.faulted).toBe(false);expect(owner.owns(member,'control')).toBe(false);expect(owner.reserveControl(other,{})).toBe(true);owner.releaseAll(other);expect(owner.faulted).toBe(false);expect(send).not.toHaveBeenCalled();owner.dispose();
+});
+it('activates a reservation once against the exact source; later no-ACK disappearance remains a permanent fault',()=>{
+  const begin=vi.fn(()=>true),owner=new DesktopInteractiveOwner<object,object>({begin,send:()=>true,idle:()=>{},fault:()=>{}}),member={},source={};
+  owner.reserveControl(member,source);expect(owner.activate(member,{},'control')).toBe(false);expect(begin).not.toHaveBeenCalled();
+  expect(owner.activate(member,source,'control')).toBe(true);expect(owner.activate(member,source,'control')).toBe(true);expect(begin).toHaveBeenCalledOnce();expect(owner.identity(member,'control')?.source).toBe(source);
+  owner.sourceGone(source);expect(owner.faulted).toBe(true);expect(owner.reserveControl({},{})).toBe(false);owner.dispose();
+});
+it.each(['false','throw'] as const)('an attempted native begin returning %s never becomes a safe unused reservation',mode=>{
+  const owner=new DesktopInteractiveOwner<object,object>({begin:()=>{if(mode==='throw')throw Error('generated');return false;},send:()=>true,idle:()=>{},fault:()=>{}}),member={},source={};owner.reserveControl(member,source);expect(owner.activate(member,source,'control')).toBe(false);owner.sourceGone(source);owner.releaseAll(member);expect(owner.faulted).toBe(true);expect(owner.reserveControl({},source)).toBe(false);owner.dispose();
+});
+it('clipboard and microphone still begin immediately and confirmed release still requires their native ACK',async()=>{
+  const begin=vi.fn(()=>true),sent:string[]=[],source={},member={},owner=new DesktopInteractiveOwner<object,object>({begin,send:(_s,id)=>{sent.push(id);return true;},idle:()=>{},fault:()=>{}});
+  expect(owner.acquire(member,source,'clipboard')).toBe(true);expect(owner.acquire(member,source,'microphone')).toBe(true);expect(begin).toHaveBeenCalledTimes(2);
+  let done=false;const release=owner.releaseConfirmed(member,'clipboard').then(()=>{done=true;});await Promise.resolve();expect(done).toBe(false);owner.acknowledge(source,sent[0]!);await release;expect(done).toBe(true);owner.dispose();
+});
