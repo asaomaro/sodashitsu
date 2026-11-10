@@ -1,0 +1,30 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-retirement-reconnect-tests/packages/server
+
+ ❯ src/desktop/DesktopProvider.reconnectAfterRetirement.test.ts (2 tests | 2 failed) 2544ms
+   × reconnects only after failed cleanup's physical helper closes, shared=false 1279ms
+   × reconnects only after failed cleanup's physical helper closes, shared=true 1264ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopProvider.reconnectAfterRetirement.test.ts > reconnects only after failed cleanup's physical helper closes, shared=false
+ FAIL  src/desktop/DesktopProvider.reconnectAfterRetirement.test.ts > reconnects only after failed cleanup's physical helper closes, shared=true
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktop/DesktopProvider.reconnectAfterRetirement.test.ts:41:181
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:17:34
+   Duration  3.88s (tests 67%, transform 26%, import 7%)
+

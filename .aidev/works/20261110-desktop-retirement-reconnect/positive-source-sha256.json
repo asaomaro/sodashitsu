@@ -1,0 +1,18 @@
+{
+  "sourceRoot": "/workspaces/sodashitsu-desktop-readonly-retirement",
+  "sourceHead": "7bb024388e3137fdbbfef36689459777492dc416",
+  "status": "Final Provider fixed source after fault/retiring guard consolidation; measured after final 2-case run",
+  "files": {
+    "packages/server/src/desktop/DesktopProvider.ts": "e0c72625d80ee9d951404e64000866d6288d00126dcf6e7f411ef0f36b2d9e52",
+    "packages/server/src/desktop/DesktopInteractiveOwner.ts": "ad3630c99b9c0b9928b511e696355b64eed583bdec81e2dbc821674625addf49",
+    "packages/server/src/desktop/DesktopResourceChannel.ts": "874e4bae11be8a76f682410cfcd51456daaca9948aa34b42338d662fb630b672",
+    "packages/server/src/desktop/DesktopRelay.ts": "abdf936ddcfe8b83c2f2ce864723aa770dbc1facd8304c0404b227de0c7cce69"
+  },
+  "testCommit": "1f9e7b3abe211e44266e9377283f2c0a0912ebc4",
+  "testSha256": "8e7099e4cf3200539aad627d69df4e1875f9e96ee8915cef3763647e9e2eaf24",
+  "positiveCases": 2,
+  "negativeCases": 2,
+  "actualSystemWorkerCloseVerified": false,
+  "wholeBuilds": 0,
+  "windowsOperations": 0
+}

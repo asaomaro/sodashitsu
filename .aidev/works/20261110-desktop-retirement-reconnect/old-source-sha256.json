@@ -1,0 +1,12 @@
+{
+  "production": "0a6d8871",
+  "runtime": {
+    "packages/server/src/desktop/DesktopProvider.ts": "7162b75c910e9b83516c25613a85ba2723090c14ed86e70a68aba20f40911e54",
+    "packages/server/src/desktop/DesktopInteractiveOwner.ts": "ad3630c99b9c0b9928b511e696355b64eed583bdec81e2dbc821674625addf49",
+    "packages/server/src/desktop/DesktopResourceChannel.ts": "874e4bae11be8a76f682410cfcd51456daaca9948aa34b42338d662fb630b672",
+    "packages/server/src/desktop/DesktopRelay.ts": "2b1be6d36f9d66b5c2777411a4c97007d83d8422377de37da44688d45d9804c1"
+  },
+  "test": "8e7099e4cf3200539aad627d69df4e1875f9e96ee8915cef3763647e9e2eaf24",
+  "expectedNegative": "both cases reach post-close fresh ready assertion then fail; earlier rejection/exit-only/Promise assertions passed",
+  "windowsOperations": 0
+}

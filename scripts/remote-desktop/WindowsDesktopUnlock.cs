@@ -398,11 +398,15 @@ public static class SodaDesktopUnlock {
             while((line=Line(Console.In,64))!=null) {Require(line=="heartbeat");writer.WriteLine(line);}
         }
     }
+    // Keep the output pipe open until the broker has retired its worker.
+    static void StopInput(TextWriter writer,Action close,bool virtualDisplay=false) {
+        try{if(virtualDisplay)close();else writer.WriteLine("{\"type\":\"stop\"}");}catch{close();}
+    }
     public static void Share(bool virtualDisplay=false) {
         if(virtualDisplay)Require(VirtualShareAllowed(LockState,InputIsDefault));
         using(var pipe=ClientPipe(""))using(var writer=Writer(pipe))using(var reader=Reader(pipe)) {
             writer.WriteLine(virtualDisplay?"virtual":"share");
-            var input=new Thread(()=>{try{Copy(Console.In,writer,65536);}catch{}finally{pipe.Dispose();}}){IsBackground=true};input.Start();
+            var input=new Thread(()=>{try{Copy(Console.In,writer,65536);}catch{}finally{StopInput(writer,()=>pipe.Dispose(),virtualDisplay);}}){IsBackground=true};input.Start();
             Copy(reader,Console.Out,3*1024*1024);
         }
     }
@@ -529,6 +533,7 @@ public static class SodaDesktopUnlock {
                             if(!outputSeen&&Live())WorkerFailure(writer,"worker_no_output");}
                         }
                     }catch{WorkerFailure(writer,"worker_start_or_connection");throw;}
+                    finally{EndWorker();}
                 }
             }catch{} finally{EndWorker();try{if(SharePipe!=null)SharePipe.Dispose();}catch{} }
         }
@@ -541,7 +546,7 @@ public static class SodaDesktopUnlock {
             ReapCurrentWorker(
                 ()=>{try{if(WorkerPipe!=null)WorkerPipe.Dispose();}finally{WorkerPipe=null;}},
                 ()=>{if(Worker!=null&&!Worker.HasExited)Worker.WaitForExit(750);},
-                ()=>{if(Job!=IntPtr.Zero){CloseHandle(Job);Job=IntPtr.Zero;}});
+                ()=>{if(Job!=IntPtr.Zero){CloseHandle(Job);Job=IntPtr.Zero;}if(Worker!=null&&!Worker.HasExited)Worker.WaitForExit();});
             try{if(Worker!=null)Worker.Dispose();}catch{}finally{Worker=null;WorkerNonce=Guid.Empty;}
         }
     }
@@ -652,7 +657,7 @@ public static class SodaDesktopUnlock {
         Require(LockState()==1);string mode=InputIsDefault()?"elevated-default":"elevated-uac";
         using(var pipe=ClientPipe(""))using(var writer=Writer(pipe))using(var reader=Reader(pipe)){
             writer.WriteLine(mode);
-            var input=new Thread(()=>{try{Copy(Console.In,writer,65536);}catch{}finally{pipe.Dispose();}}){IsBackground=true};input.Start();
+            var input=new Thread(()=>{try{Copy(Console.In,writer,65536);}catch{}finally{StopInput(writer,()=>pipe.Dispose());}}){IsBackground=true};input.Start();
             Copy(reader,Console.Out,3*1024*1024);
         }
     }

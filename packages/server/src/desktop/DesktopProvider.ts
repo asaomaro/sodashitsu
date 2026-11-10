@@ -181,7 +181,7 @@ export class DesktopProvider {
   private readonly physicalHelpers=new Set<DesktopHelper>();
   private resourceReset=false;
   private resources=this.createResources();
-  private createResources(){return new DesktopInteractiveOwner<Share,DesktopResourceChannel>({begin:(source,epoch,resource)=>source.begin(epoch,resource),clean:(source,epoch)=>source.clean(epoch),send:(source,id,resource)=>source.fence(id,resource),idle:source=>this.resumeControls(source),fault:()=>{if(this.active)this.stop(this.active);for(const s of [...this.shared])this.stop(s);}});}
+  private createResources(){return new DesktopInteractiveOwner<Share,DesktopResourceChannel>({begin:(source,epoch,resource)=>source.begin(epoch,resource),clean:(source,epoch)=>source.clean(epoch),send:(source,id,resource)=>source.fence(id,resource),idle:source=>this.resumeControls(source),fault:()=>{this.resourceReset=true;if(this.active)this.stop(this.active);for(const s of [...this.shared])this.stop(s);this.resetResourcesIfDrained();}});}
   private applyControl(s:Share,enabled:boolean){
     s.control=s.process?.requestControl?s.process.requestControl(enabled):enabled;
     if(!s.control||!s.resourcesManaged||this.resources.identity(s,"control"))this.write(s,{type:"control",enabled:s.control});
@@ -199,7 +199,7 @@ export class DesktopProvider {
       this.applyControl(s,!pending&&this.reserveControl(s));
     }
   }
-  private resetResourcesIfDrained(){if(this.resourceReset&&!this.physicalHelpers.size){if(!this.resources.faulted){this.resources.dispose();this.resources=this.createResources();}this.resourceReset=false;}}
+  private resetResourcesIfDrained(){if(this.resourceReset&&!this.physicalHelpers.size){this.resources.dispose();this.resources=this.createResources();this.resourceReset=false;}}
   private claimResource(s:Share,kind:DesktopInteractiveResource):boolean{if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;return !!source?.supported&&this.resources.acquire(s,source,kind);}
   private reserveControl(s:Share):boolean{if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;return !!source?.supported&&this.resources.reserveControl(s,source);}
   private activateControl(s:Share):boolean{
@@ -248,9 +248,8 @@ export class DesktopProvider {
   capabilities() {return desktopProviderCapabilities(this.config,this.endpointOnly,!!this.transferStore);}
 
   async start(owner: string, raw: z.infer<typeof DesktopStartParams>,scope?:EndpointScope): Promise<{ started: true }> {
-    if(this.resources.faulted)throw new RpcError("server_busy","接続先の入力解放を確認できません。接続先で共有設定を確認して再起動してください。");
-    if(this.resourceReset&&this.physicalHelpers.size)throw new RpcError("server_busy","前の補助プログラムの終了を待っています。");
     this.resetResourcesIfDrained();
+    if(this.resources.faulted||this.resourceReset&&this.physicalHelpers.size)throw new RpcError("server_busy","前の補助プログラムの終了を待っています。");
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     const epoch=this.sourceEpoch;

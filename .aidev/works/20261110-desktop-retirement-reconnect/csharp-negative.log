@@ -1,0 +1,4 @@
+
+�n���h������Ă��Ȃ���O: System.InvalidOperationException: EOF closed the proxy before broker retirement
+   �ꏊ SodaDesktopTests.LockCoverChecks.Run()
+   �ꏊ SodaDesktopTests.LockCoverChecks.Main()

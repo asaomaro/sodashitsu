@@ -1,0 +1,5 @@
+{
+  "packages/server/src/desktop/DesktopProvider.ts": "e0c72625d80ee9d951404e64000866d6288d00126dcf6e7f411ef0f36b2d9e52",
+  "scripts/remote-desktop/WindowsDesktopUnlock.cs": "af4103694e122d17280bd461e296cc2f7c84c7aa1f39a114172f41995fb7c349",
+  "scripts/remote-desktop/WindowsLockCoverChecks.cs": "6970da17eb5a14cf4c93f9ce5e95b2948f28c026b926895599ed25e3764736d4"
+}

@@ -1,0 +1,34 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-readonly-retirement/packages/server
+
+ ❯ src/desktop/DesktopRelay.test.ts (344 tests | 1 failed) 97393ms
+   × queues only the original viewer's reacquisition behind its exact shared cleanup 1176ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopRelay.test.ts > queues only the original viewer's reacquisition behind its exact shared cleanup
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/desktop/DesktopRelay.test.ts:1308:140
+
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:1308:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 477 passed (478)
+   Start at  22:34:17
+   Duration  98.99s (tests 95%, transform 4%, import 1%)
+
+undefined
+/workspaces/sodashitsu-desktop-readonly-retirement/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/desktop/DesktopRelay.test.ts src/desktop/DesktopSharedCapture.test.ts src/desktop/LazyDesktopProvider.test.ts src/desktop/DesktopInteractiveOwner.test.ts src/desktop/DesktopResourceChannel.test.ts

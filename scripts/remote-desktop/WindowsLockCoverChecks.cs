@@ -1,6 +1,7 @@
 // Pure routing/policy checks for the real capture path. No native calls or input.
 using System;
 using System.Reflection;
+using System.IO;
 namespace SodaDesktopTests {
     public static class LockCoverChecks {
         static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);}
@@ -25,6 +26,7 @@ namespace SodaDesktopTests {
             }
             object[] normal={new Func<int>(()=>1),new Func<bool>(()=>true),false,true};Check(!(bool)Call(typeof(SodaDesktopHost),"ConfigureLockedDefault",normal)&&(bool)normal[3],"Normal permission changed");
             Check(!(bool)Call(typeof(SodaDesktopUnlock),"VirtualShareAllowed",new Func<int>(()=>0),new Func<bool>(()=>true)),"Locked desktop gained virtual display");
+            using(var output=new StringWriter()){bool closed=false;Call(typeof(SodaDesktopUnlock),"StopInput",output,new Action(()=>closed=true),false);Check(!closed&&output.ToString().Trim()=="{\"type\":\"stop\"}","EOF closed the proxy before broker retirement");}
             Console.WriteLine("desktop_capture_routing_checks_passed");
         }
         public static void Main(){Run();}
