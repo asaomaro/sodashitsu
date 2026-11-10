@@ -1,0 +1,12 @@
+{
+  "negative": {
+    "WindowsDesktopHost.cs": "cf36d62d8bc80e29664269d6078ff5a8f50d3ffaadf7ab2120a9105d7efee815",
+    "WindowsDesktopUnlock.cs": "1f0ba1db1d29d1df338b4aeaa32d6ffb1544748f9b4b5b4cdd4e19415cedef60",
+    "WindowsLockCoverChecks.cs": "22954c42e8cc6b2cf1249694dd6774c4f3fd4890c5f9b5d58361db4ccf674c7c"
+  },
+  "positive": {
+    "WindowsDesktopHost.cs": "90a56eb2d8a69d42dca24fd430e29d6dedfd8b465e254ac25b169c63718ccc3c",
+    "WindowsDesktopUnlock.cs": "fd36b5899ae628944e0bcc1d758bf7e671dba69365128ea63ed5675f5e381c1e",
+    "WindowsLockCoverChecks.cs": "22954c42e8cc6b2cf1249694dd6774c4f3fd4890c5f9b5d58361db4ccf674c7c"
+  }
+}

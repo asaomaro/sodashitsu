@@ -183,8 +183,7 @@ function run() {
   if(configuredProtected&&!['elevated-default','elevated-uac'].includes(configuredProtected))throw Error("Generated protected role");
   const protectedEndAt=process.argv.indexOf("--protected-end-marker"),protectedEndMarker=protectedEndAt>=0?process.argv[protectedEndAt+1]:undefined;
   let protectedMode,protectedEnded=false;
-  const coverAt = process.argv.indexOf("--cover-marker"), coverMarker = coverAt >= 0 ? process.argv[coverAt + 1] : undefined;
-  const lockCover = secure && process.argv.includes("--lock-cover") && (!coverMarker || !existsSync(coverMarker));
+  const legacyCover = secure && process.argv.includes("--legacy-lock-cover");
   const recordAt = process.argv.indexOf("--record"),
     record = recordAt >= 0 ? process.argv[recordAt + 1] : undefined;
   const send = (value) => { if(outputBlocked){if(queuedOutput.length<8)queuedOutput.push(value);}else process.stdout.write(JSON.stringify(value) + "\n"); };
@@ -288,7 +287,7 @@ function run() {
           backend: nativePlatform??(process.argv.includes("--dxgi") && m.captureBackends?.includes("dxgi") ? "windows-dxgi" : "synthetic"),
           ...(secure ? {secureDesktop:true} : {}),
           ...(nativePlatform?{inputCapabilities:{keys:["KeyA","ControlLeft","Space","ArrowLeft","ArrowRight"],text:true,pointerButtons:[0,1,2,3,4],wheel:true}}:{}),
-          ...(lockCover ? {lockScreenCover:true} : {}),
+          ...(legacyCover ? {lockScreenCover:true} : {}),
           ...(displayAllowed ? {display:{modes}} : {}),
           image: options.image ?? { colorMode: "full", showCursor: true },
           allowClipboard: !secure && process.argv.includes("--allow-clipboard") && m.allowClipboard===true, dynamicQuality:!process.argv.includes("--native-only"),
@@ -348,10 +347,6 @@ function run() {
       }
       else if (m.type === "control") {
         control = (!resourceMode||resourceEpochs.has("control")&&!resourceReleased.has("control"))&&m.enabled && allowInput;
-      } else if (m.type === "dismiss_lock_screen" && lockCover && control) {
-        if (coverMarker) writeFileSync(coverMarker,"dismissed");
-        send({type:"lock_screen_changed"});
-        process.exit(0);
       } else if (m.type === "sas" && secure && !protectedMode && control) {
         if (unlockMarker) writeFileSync(unlockMarker,"unlocked");
         send({type:"session_unlocked"});
@@ -400,7 +395,7 @@ function run() {
       if(!pending&&performance.now()>=nextIdle&&(markerAt<0||!existsSync(process.argv[markerAt+1]))){nextIdle=performance.now()+500;send({type:"platform_idle",backend:nativePlatform,seq,counter:++idleCounter});}
       return;
     }
-    if (!options || lockCover || pending || performance.now() < next) return;
+    if (!options || legacyCover || pending || performance.now() < next) return;
     const deltaTest = process.argv.includes("--delta-test"),
       stable = deltaTest || process.argv.includes("--static");
     const optimized = options.deltas && stable;

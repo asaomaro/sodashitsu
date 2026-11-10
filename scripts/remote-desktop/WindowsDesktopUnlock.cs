@@ -1,7 +1,6 @@
 // Installed, administrator-protected broker. No network listeners or policy changes.
 // Compile together with WindowsDesktopHost.cs, targeting the 64-bit .NET Framework.
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -72,9 +71,6 @@ public static class SodaDesktopUnlock {
     [DllImport("user32.dll",SetLastError=true)]static extern IntPtr OpenInputDesktop(uint flags,bool inherit,uint access);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern bool GetUserObjectInformation(IntPtr handle,int kind,StringBuilder name,uint size,out uint needed);
     [DllImport("user32.dll")]static extern bool CloseDesktop(IntPtr handle);
-    [DllImport("user32.dll")]static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")]static extern uint GetWindowThreadProcessId(IntPtr window,out uint pid);
-    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]static extern uint GetWindowsDirectory(StringBuilder directory,uint size);
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateJobObject(IntPtr sa,string name);
     [DllImport("kernel32.dll")]static extern bool SetInformationJobObject(IntPtr job,int kind,ref JOB_LIMIT limits,uint length);
     [DllImport("kernel32.dll")]static extern bool AssignProcessToJobObject(IntPtr job,IntPtr process);
@@ -208,65 +204,6 @@ public static class SodaDesktopUnlock {
         try{uint needed;var name=new StringBuilder(256);return GetUserObjectInformation(desktop,2,name,512,out needed)&&name.ToString()=="Default";}
         finally{CloseDesktop(desktop);}
     }
-    static string SystemAppPath(string packageName,string executable) {
-        var windows=new StringBuilder(32768);uint length=GetWindowsDirectory(windows,(uint)windows.Capacity);
-        Require(length>0&&length<windows.Capacity);
-        string root=Path.Combine(windows.ToString(),"SystemApps"),package=Path.Combine(root,packageName),exe=Path.Combine(package,executable);
-        foreach(string path in new[]{root,package,exe})Require((File.GetAttributes(path)&FileAttributes.ReparsePoint)==0);
-        return exe;
-    }
-    static string LockAppPath(){return SystemAppPath("Microsoft.LockApp_cw5n1h2txyewy","LockApp.exe");}
-    static bool UserSystemApp(Func<string> expectedPath) {
-        try {
-            using(var current=WindowsIdentity.GetCurrent()) {
-                if(current.IsSystem||LockState()!=0||!InputIsDefault())return false;
-                IntPtr foreground=GetForegroundWindow();if(foreground==IntPtr.Zero)return false;
-                uint pid;GetWindowThreadProcessId(foreground,out pid);if(pid==0)return false;
-                using(var app=Process.GetProcessById((int)pid))using(var identity=Identity(app))
-                    return app.SessionId==Process.GetCurrentProcess().SessionId&&identity.User==current.User&&
-                        LogonSid(identity)==LogonSid(current)&&String.Equals(Image(app),expectedPath(),StringComparison.OrdinalIgnoreCase)&&
-                        foreground==GetForegroundWindow()&&LockState()==0&&InputIsDefault();
-            }
-        }catch{return false;}
-    }
-    public static bool UserLockScreen(){return UserSystemApp(LockAppPath);}
-    static bool PendingShellLockScreen(){return UserSystemApp(()=>SystemAppPath("ShellExperienceHost_cw5n1h2txyewy","ShellExperienceHost.exe"));}
-    static bool DormantLockScreen(bool system,Func<int> state,Func<bool> inputDefault,Func<bool> wakeSurface) {
-        // A sleeping locked console can have no foreground or the verified OS
-        // shell in front of LockApp. This authorizes only a display wake,
-        // never capture or a key. Enter still needs UserLockScreen's OS identity.
-        return !system&&state()==0&&inputDefault()&&wakeSurface()&&
-            state()==0&&inputDefault()&&wakeSurface();
-    }
-    static bool PendingUserLockScreen() {
-        try {
-            using(var current=WindowsIdentity.GetCurrent())
-                return DormantLockScreen(current.IsSystem,LockState,InputIsDefault,()=>GetForegroundWindow()==IntPtr.Zero||PendingShellLockScreen());
-        }catch{return false;}
-    }
-    public static bool UserLockScreenAvailable(){return UserLockScreen()||PendingUserLockScreen();}
-    [DllImport("kernel32.dll")]static extern uint SetThreadExecutionState(uint flags);
-    static void WakeLockScreen() {
-        Require(PendingUserLockScreen());Require(SetThreadExecutionState(2)!=0);
-    }
-    static int LockCoverObservationCount;
-    internal static void RecordLockCover(string stage,int inserted=-1) {
-        // Fixed private metadata only; diagnostics never authorize or alter an action.
-        try {
-            bool count=stage=="enter_result";
-            if(count?(inserted<0||inserted>2):inserted!=-1)return;
-            if(!count&&Array.IndexOf(new[]{"dismiss_authorized","guard_changed_before","wake_selected","wake_returned","enter_selected","enter_guard_rejected","enter_result_invalid","dismiss_returned","guard_changed_after_error","dismiss_failed_guard_current","cover_changed_without_dismiss"},stage)<0)return;
-            if(Interlocked.Increment(ref LockCoverObservationCount)>8)return;
-            Console.Error.WriteLine("\nSODA_LOCK_COVER "+stage+(count?" "+inserted.ToString(System.Globalization.CultureInfo.InvariantCulture):""));Console.Error.Flush();
-        }catch{ /* No diagnostic failure may change guard, input or cleanup. */ }
-    }
-    static void PrepareUserLockScreen(Func<bool> visible,Func<bool> pending,Action wake,Action enter) {
-        // Wake never chains a key. Reconnect with control revoked; advancing
-        // after wake requires another explicit human action on the new session.
-        if(!visible()){Require(pending());RecordLockCover("wake_selected");wake();RecordLockCover("wake_returned");return;}
-        // Enter still requires the original foreground/identity/path guard.
-        RecordLockCover("enter_selected");enter();
-    }
     static bool SecureDesktopCandidate() {
         // Access denial is only a routing hint. The SYSTEM worker independently
         // requires the active, locked Winlogon desktop before capture or input.
@@ -275,11 +212,11 @@ public static class SodaDesktopUnlock {
         try{uint needed;var name=new StringBuilder(256);return GetUserObjectInformation(desktop,2,name,512,out needed)&&name.ToString()=="Winlogon";}
         finally{CloseDesktop(desktop);}
     }
-    static string SelectSource(Func<int> state,Func<bool> cover,Func<bool> secure,Action pause) {
+    static string SelectSource(Func<int> state,Func<bool> inputDefault,Func<bool> secure,Action pause) {
         string previous=null;int stable=0;
         for(int i=0;i<80;i++) {
             int locked=state();
-            string candidate=locked==1?"normal":locked==0?(cover()?"cover":secure()?"secure":null):null;
+            string candidate=locked==1?"normal":locked==0?(inputDefault()?"normal":secure()?"secure":null):null;
             stable=candidate!=null&&candidate==previous?stable+1:1;previous=candidate;
             if(candidate!=null&&stable>=4)return candidate;
             pause();
@@ -287,57 +224,9 @@ public static class SodaDesktopUnlock {
         return "transition";
     }
     public static string SelectSource() {
-        return SelectSource(LockState,UserLockScreenAvailable,SecureDesktopCandidate,()=>Thread.Sleep(25));
+        return SelectSource(LockState,InputIsDefault,SecureDesktopCandidate,()=>Thread.Sleep(25));
     }
     public static void SourceTransition() {WorkerFailure(Console.Out,"source_transition");}
-    public static void RunUserLockScreen(bool allowInput) {
-        ServeUserLockScreen(Console.In,Console.Out,UserLockScreenAvailable,LockState,
-            ()=>PrepareUserLockScreen(UserLockScreen,PendingUserLockScreen,WakeLockScreen,()=>SodaDesktopHost.DismissLockScreen(UserLockScreen)),allowInput);
-    }
-    static void ServeUserLockScreen(TextReader input,TextWriter output,Func<bool> guard,Func<int> lockState,Action dismiss,bool allowInput) {
-        if(!guard()){WorkerFailure(output,"source_transition");return;}
-        var json=new System.Web.Script.Serialization.JavaScriptSerializer();
-        string first=Line(input,65536);if(first==null)return;
-        var configure=(Dictionary<string,object>)json.DeserializeObject(first);Require((string)configure["type"]=="configure");
-        var options=(Dictionary<string,object>)configure["options"];
-        bool allowed=allowInput&&(bool)configure["allowInput"];
-        if(!guard()){WorkerFailure(output,"source_transition");return;}
-        var ready=new Dictionary<string,object>{{"type","ready"},{"title","Windows lock screen"},{"width",640},{"height",360},
-            {"allowInput",allowed},{"backend","windows-gdi"},{"secureDesktop",true},{"lockScreenCover",true},
-            {"image",options.ContainsKey("image")?options["image"]:new {colorMode="full",showCursor=true}}};
-        bool resourceMode=configure.ContainsKey("resourceFences")&&configure["resourceFences"] is bool&&(bool)configure["resourceFences"];string resourceEpoch=null;bool resourceReleased=true,cleanupKnown=true;if(resourceMode)ready["resourceFences"]=true;
-        output.WriteLine(json.Serialize(ready));output.Flush();
-        var lines=new BlockingCollection<string>(32);int closed=0;
-        var reader=new Thread(()=>{try{string line;while((line=Line(input,65536))!=null){if(!lines.TryAdd(line))break;}}catch{}finally{Interlocked.Exchange(ref closed,1);}}){IsBackground=true};reader.Start();
-        long last=Now;bool control=false,dismissed=false;
-        // This stage never captures a screen or accepts text, pointer or arbitrary keys.
-        try{
-        while(Volatile.Read(ref closed)==0&&Now-last<8000&&!dismissed&&guard()) {
-            string line;int count=0;
-            while(count++<32&&lines.TryTake(out line)) {
-                var message=(Dictionary<string,object>)json.DeserializeObject(line);string type=(string)message["type"];
-                if(type=="heartbeat")last=Now;
-                else if(type=="resource_epoch"){Guid id;string value=message.ContainsKey("id")?message["id"]as string:null;Require(resourceMode&&resourceReleased&&message.Count==3&&(string)message["resource"]=="control"&&Guid.TryParseExact(value,"D",out id)&&id!=Guid.Empty&&id.ToString("D")==value);resourceEpoch=value;resourceReleased=false;}
-                else if(type=="resource_fence"){Guid id;string value=message.ContainsKey("id")?message["id"]as string:null;Require(resourceMode&&cleanupKnown&&message.Count==4&&(string)message["resource"]=="control"&&Guid.TryParseExact(value,"D",out id)&&id!=Guid.Empty&&id.ToString("D")==value);if((string)message["epoch"]==resourceEpoch){control=false;resourceReleased=true;output.WriteLine(json.Serialize(new{type="resource_fence_ack",id=value}));output.Flush();}}
-                else if(type=="control")control=allowed&&(!resourceMode||resourceEpoch!=null&&!resourceReleased)&&(bool)message["enabled"];
-                else if(type=="dismiss_lock_screen") {
-                    Require(control&&!dismissed&&Now-last<5000);RecordLockCover("dismiss_authorized");
-                    if(!guard()){RecordLockCover("guard_changed_before");output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
-                    try{cleanupKnown=false;dismiss();cleanupKnown=true;dismissed=true;RecordLockCover("dismiss_returned");}
-                    catch{if(guard()){RecordLockCover("dismiss_failed_guard_current");throw;}RecordLockCover("guard_changed_after_error");output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
-                }else if(type=="stop")return;
-                else if(type!="release"&&type!="keyframe")throw new InvalidOperationException();
-            }
-            Thread.Sleep(25);
-        }
-        if(Volatile.Read(ref closed)!=0||Now-last>=8000)return;
-        if(!dismissed)RecordLockCover("cover_changed_without_dismiss");
-        int state=lockState();
-        if(state==0)output.WriteLine("{\"type\":\"lock_screen_changed\"}");
-        else if(state==1)output.WriteLine("{\"type\":\"session_unlocked\"}");
-        output.Flush();
-        }finally{control=false;if(resourceMode&&resourceEpoch!=null&&cleanupKnown){output.WriteLine(json.Serialize(new{type="resource_fence_ack",id=resourceEpoch,terminal=true}));output.Flush();}}
-    }
     static void WorkerFailure(TextWriter writer,string code) {
         // Only fixed stage identifiers, never exception text, paths, images or input.
         writer.WriteLine("{\"type\":\"unlock_failure\",\"code\":\""+code+"\"}");writer.Flush();
@@ -422,8 +311,8 @@ public static class SodaDesktopUnlock {
         Console.SetOut(new StreamWriter(Console.OpenStandardOutput(),new UTF8Encoding(false),4096){AutoFlush=true});
         Console.SetError(new StreamWriter(Console.OpenStandardError(),new UTF8Encoding(false),4096){AutoFlush=true});
     }
-    public static void RunNormal(int monitor,bool input,bool clipboard,bool resize,string source,bool monitors=false,bool virtualDisplay=false) {
-        SodaDesktopHost.Run(monitor,input,clipboard,resize,source,LockState,monitors,virtualDisplay);
+    public static void RunNormal(int monitor,bool input,bool clipboard,bool resize,string source,bool monitors=false,bool virtualDisplay=false,bool unlockAllowed=false) {
+        SodaDesktopHost.Run(monitor,input,clipboard,resize,source,LockState,monitors,virtualDisplay,unlockAllowed);
     }
     [StructLayout(LayoutKind.Sequential)]struct STARTUPINFOEX { public STARTUPINFO startup;public IntPtr attributes; }
     [DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr GetStdHandle(int id);
@@ -489,7 +378,7 @@ public static class SodaDesktopUnlock {
         // changes while still locked. Reclassify without reading stdin, capture,
         // or input. A fresh connection must obtain its own configure and control.
         string source=select();
-        if(source=="cover"||source=="normal")WorkerFailure(output,"source_transition");
+        if(source=="normal")WorkerFailure(output,"source_transition");
         else WorkerFailure(output,exitCode==0?"worker_ended":"worker_start_or_connection");
     }
     public static void Lease(bool virtualAllowed=false,bool unlockAllowed=true,bool elevatedAllowed=false) {
@@ -510,7 +399,7 @@ public static class SodaDesktopUnlock {
         }
     }
     public static void Share(bool virtualDisplay=false) {
-        if(virtualDisplay)Require(VirtualShareAllowed(SelectSource,InputIsDefault));
+        if(virtualDisplay)Require(VirtualShareAllowed(LockState,InputIsDefault));
         using(var pipe=ClientPipe(""))using(var writer=Writer(pipe))using(var reader=Reader(pipe)) {
             writer.WriteLine(virtualDisplay?"virtual":"share");
             var input=new Thread(()=>{try{Copy(Console.In,writer,65536);}catch{}finally{pipe.Dispose();}}){IsBackground=true};input.Start();
@@ -529,7 +418,7 @@ public static class SodaDesktopUnlock {
         lock(Gate){End=true;ShutdownToken.Cancel();EndWorker();
             foreach(var pipe in new[]{SharePipe,LeasePipe})try{if(pipe!=null)pipe.Dispose();}catch{} }
     }
-    static bool VirtualShareAllowed(Func<string> source,Func<bool> inputDefault){return source()=="normal"&&inputDefault();}
+    static bool VirtualShareAllowed(Func<int> state,Func<bool> inputDefault){return state()==1&&inputDefault();}
     static int BrokerPurpose;
     static readonly string[] PurposeNames={null,null,"virtual","both","elevated","unlock-elevated","virtual-elevated","all"};
     static string PurposeName(int purpose){Require(purpose>=2&&purpose<=7);return PurposeNames[purpose];}
@@ -556,7 +445,7 @@ public static class SodaDesktopUnlock {
         Require(AllowsBrokerRequest(unlock,"share")&&!AllowsBrokerRequest(unlock,"virtual"));
         Require(AllowsBrokerRequest(virtualOnly,"virtual")&&!AllowsBrokerRequest(virtualOnly,"share"));
         Require(AllowsBrokerRequest(both,"virtual")&&AllowsBrokerRequest(both,"share")&&!AllowsBrokerRequest(both,"unknown"));
-        Require(VirtualShareAllowed(()=>"normal",()=>true)&&!VirtualShareAllowed(()=>"normal",()=>false)&&!VirtualShareAllowed(()=>"secure",()=>true));
+        Require(VirtualShareAllowed(()=>1,()=>true)&&!VirtualShareAllowed(()=>1,()=>false)&&!VirtualShareAllowed(()=>0,()=>true));
         Console.WriteLine("desktop_broker_purpose_checks_passed: unlock-only / virtual-only / both routes separated; no service/device creation or display/input changes");
     }
     public static void VerifyProtectedPurposes(){

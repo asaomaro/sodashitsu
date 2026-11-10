@@ -152,7 +152,6 @@ type Viewer = {
   control: boolean;
   allowInput: boolean;
   secureDesktop?: boolean;
-  lockScreenCover?: boolean;
   imeKeys?: boolean;
   imeKeysRequested: boolean;
   imeKeysNegotiated?: boolean;
@@ -611,10 +610,7 @@ export class DesktopRelay {
         } else if (m.type === "keyframe") {
           if (v.provider) this.send(v.provider, m);
         } else if (m.type === "sas") {
-          if (v.secureDesktop && !v.protectedDesktop && !v.lockScreenCover && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
-            this.send(v.provider, m);
-        } else if (m.type === "dismiss_lock_screen") {
-          if (v.lockScreenCover && v.secureDesktop && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
+          if (v.secureDesktop && !v.protectedDesktop && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
             this.send(v.provider, m);
         } else if(m.type==="native_pointer_cancel") {if(v.provider)this.send(v.provider,m);}
         else if (m.type === "input") {
@@ -1075,7 +1071,7 @@ export class DesktopRelay {
         }
         if (binary) {
           if(v.imageActive&&!imageLane)throw Error("Image requires its negotiated lane");
-          if (!v.ready || v.pending || v.lockScreenCover) throw new Error();
+          if (!v.ready || v.pending) throw new Error();
           const { info, image } = decodeDesktopFrame(new Uint8Array(bytes as Buffer));
           if (info.seq <= v.seq) throw new Error();
           const now = performance.now();
@@ -1121,22 +1117,22 @@ export class DesktopRelay {
           if(msg.type==="monitor_topology_changed"&&Object.keys(msg).length===1&&v.monitors&&v.ready&&!v.secureDesktop){this.send(v.ws,{type:"monitor_topology_changed"});this.stop(v);return;}
           if (msg.type === "ready" && !v.ready) {
             const ready = DesktopReady.parse(msg);
+            if(ready.lockScreenCover){this.send(v.ws,{type:"error",message:"接続先のデスクトップ補助プログラムを更新してから接続し直してください。"});this.stop(v);return;}
             if(v.sharedProtected&&ready.sharedProtected!==true)throw Error("Shared protected helper proof missing");
             if(v.nativePlatform?(ready.backend!==v.nativePlatform||!ready.inputCapabilities):(ready.backend==="linux-portal"||ready.backend==="macos-sck"||ready.inputCapabilities))throw Error("Unexpected native backend");
             if(ready.inputCapabilities)v.inputCapabilities=ready.inputCapabilities;
-            if(v.elevatedDesktop&&(!ready.protectedDesktop||!ready.secureDesktop||ready.lockScreenCover))throw Error("Requested protected worker not selected");
+            if(v.elevatedDesktop&&(!ready.protectedDesktop||!ready.secureDesktop))throw Error("Requested protected worker not selected");
             if(ready.protectedDesktop&&!v.elevatedDesktop)throw Error("Unrequested protected worker");
             if(ready.protectedDesktop)v.protectedDesktop=ready.protectedDesktop;else delete v.protectedDesktop;
             if(ready.virtualNativeDrag&&!v.virtualNativeDrag||v.virtualNativeDrag&&!ready.virtualNativeDrag)throw Error("Virtual drag helper proof missing");
             if(ready.virtualMonitors&&!v.virtualMonitors||v.virtualMonitors&&!ready.virtualMonitors)throw Error("Virtual monitor metadata proof missing");
-            if(v.virtualDisplay&&(ready.virtualDisplay!==true||ready.secureDesktop||ready.lockScreenCover))throw Error("Virtual display not selected");
+            if(v.virtualDisplay&&(ready.virtualDisplay!==true||ready.secureDesktop))throw Error("Virtual display not selected");
             v.agentRegions=ready.agentRegions===true&&!ready.secureDesktop;
             v.ready = true;
             v.allowInput = ready.allowInput;
             v.secureDesktop = ready.secureDesktop === true;
-            v.lockScreenCover = ready.lockScreenCover === true;
-            v.imeKeys = v.imeKeysNegotiated === true && ready.imeKeys === true && !v.lockScreenCover;
-            v.extendedInput = v.extendedInputNegotiated === true && ready.extendedInput === true && !v.lockScreenCover;
+            v.imeKeys = v.imeKeysNegotiated === true && ready.imeKeys === true;
+            v.extendedInput = v.extendedInputNegotiated === true && ready.extendedInput === true;
             if (v.secureDesktop) {
               this.agents.revoke(v.agent);
               delete v.latest;
@@ -1170,10 +1166,12 @@ export class DesktopRelay {
             if(!v.ready||!v.protectedDesktop||!v.protectedFiles||!v.files||!v.fileLane)throw Error("Unnegotiated protected files proof");
             const proof=DesktopProtectedFilesReady.parse(msg);v.protectedFilesReady=true;
             this.send(v.ws,{type:"protected_files_ready",files:true,...(v.fileCheckpoints&&proof.fileCheckpoints?{fileCheckpoints:true,...(v.durableFileCheckpoints&&proof.durableFileCheckpoints?{durableFileCheckpoints:true}:{})}:{}),...(v.folders&&proof.folders?{folders:true}:{}),...(v.folderCheckpoints&&proof.folderCheckpoints?{folderCheckpoints:true,...(v.durableFolderCheckpoints&&proof.durableFolderCheckpoints?{durableFolderCheckpoints:true}:{})}:{})});
+          } else if(msg.type==="error"&&Object.keys(msg).length===2&&msg.message==="接続先のデスクトップ補助プログラムを更新してから接続し直してください。"){
+            this.send(v.ws,{type:"error",message:msg.message});this.stop(v);
           } else if (msg.type === "session_unlocked" && v.secureDesktop && !v.protectedDesktop && v.ready) {
             this.send(v.ws, { type: "session_unlocked" });
             this.stop(v);
-          } else if (msg.type === "lock_screen_changed" && v.secureDesktop && v.lockScreenCover && v.ready) {
+          } else if (msg.type === "lock_screen_changed" && v.secureDesktop && !v.protectedDesktop && v.ready) {
             this.send(v.ws, { type: "lock_screen_changed" });
             this.stop(v);
           } else if (msg.type === "unlock_failure" && (!v.ready || v.secureDesktop) && unlockFailure(msg.code)) {

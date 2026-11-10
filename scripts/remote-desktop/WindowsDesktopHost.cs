@@ -185,20 +185,6 @@ public static class SodaDesktopHost {
         try { Run(0,true,false,false,null); }
         finally { if(SecureLockState()!=0 && SecureLockState()==1)Output(new {type="session_unlocked"}); }
     }
-    public static void DismissLockScreen(Func<bool> guard) {
-        // Human-requested fixed Enter only. PIN/text input belongs to Winlogon.
-        DismissLockScreenCore(System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem,guard,()=>{
-            var down=new INPUT();down.type=1;down.data.key.vk=13;
-            var up=down;up.data.key.flags=2;
-            return SendInput(2,new[]{down,up},Marshal.SizeOf(typeof(INPUT)));
-        });
-    }
-    static void DismissLockScreenCore(bool system,Func<bool> guard,Func<uint> send) {
-        if(system||!guard()){SodaDesktopUnlock.RecordLockCover("enter_guard_rejected");throw new InvalidOperationException("Lock screen unavailable");}
-        uint inserted=send();
-        if(inserted<=2)SodaDesktopUnlock.RecordLockCover("enter_result",(int)inserted);else SodaDesktopUnlock.RecordLockCover("enter_result_invalid");
-        if(inserted!=2)throw new InvalidOperationException("Lock screen input denied");
-    }
     static bool DefaultDesktop() {
         IntPtr h=OpenInputDesktop(0,false,1);
         if(h==IntPtr.Zero) return false;
@@ -599,13 +585,21 @@ public static class SodaDesktopHost {
     static SodaDesktopDisplay.Lease DisplayLease;
     static bool VirtualNativePointerProof;
     static IDisposable VirtualLease;static Func<bool> VirtualAlive;static Func<string> VirtualFailure;static bool VirtualRequested;
-    public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null,Func<int> lockState=null,bool locallyAllowMonitors=false,bool locallyAllowVirtualDisplay=false) {
+    // Reuse the secure capability ceiling while capturing Default as its user.
+    static bool ConfigureLockedDefault(Func<int> state,Func<bool> inputDefault,bool unlockAllowed,ref bool inputAllowed) {
+        if(Secure||state==null||state()!=0||!inputDefault())return false;
+        inputAllowed=inputAllowed&&unlockAllowed;Secure=true;SecureGuard=()=>inputDefault()&&state()==0;SecureLockState=state;SecureAttentionAllowed=false;return true;
+    }
+    public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null,Func<int> lockState=null,bool locallyAllowMonitors=false,bool locallyAllowVirtualDisplay=false,bool locallyAllowUnlock=false) {
+        if(!Secure && !Environment.UserInteractive)throw new InvalidOperationException("Interactive Windows session required");
+        bool lockedDefault=ConfigureLockedDefault(lockState,DefaultDesktop,locallyAllowUnlock,ref locallyAllowInput);
         VirtualRequested=false;bool failureReported=false;
         try { RunCore(monitorIndex,locallyAllowInput,locallyAllowClipboard,locallyAllowDisplayResize,sourcePath,locallyAllowMonitors,locallyAllowVirtualDisplay); }
         catch(Exception error){if(VirtualRequested&&locallyAllowVirtualDisplay){try{var type=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopVirtualFailure");if(type!=null){Output(new {type="virtual_display_failure",code=(string)type.GetMethod("Of").Invoke(null,new object[]{error})});failureReported=true;}}catch{}}throw;}
         finally { if(DisplayLease!=null){try{DisplayLease.Dispose();}catch{Console.Error.WriteLine("Display restore failed; restore resolution locally in Windows Settings.");}DisplayLease=null;}
             if(VirtualLease!=null){try{try{if(!failureReported&&VirtualRequested&&VirtualAlive!=null&&!VirtualAlive())Output(new {type="virtual_display_failure",code=VirtualFailure!=null?VirtualFailure():"target_changed"});}catch{}Release();}finally{try{VirtualLease.Dispose();}finally{VirtualLease=null;VirtualAlive=null;VirtualFailure=null;}}}
-            if(!Secure && lockState!=null && lockState()==0)Output(new {type="session_locked"});
+            if(lockedDefault){int state=lockState();if(state==1)Output(new{type="session_unlocked"});else if(state==0)Output(new{type="lock_screen_changed"});ClearProtectedGuards();SecureLockState=null;}
+            else if(!Secure && lockState!=null && lockState()==0)Output(new {type="session_locked"});
         }
     }
     public static bool TryCreateNativeVideo(int width,int height,int fps,int bitrate,SodaDesktopDxgi capture,out SodaDesktopH264 encoder,out bool cpuOnly){return TryCreateNativeCodec(width,height,fps,bitrate,capture,"h264",out encoder,out cpuOnly);}
@@ -615,7 +609,6 @@ public static class SodaDesktopHost {
         catch{if(encoder!=null)encoder.Dispose();encoder=null;return false;}
     }
     static void RunCore(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard,bool locallyAllowDisplayResize,string sourcePath,bool locallyAllowMonitors,bool locallyAllowVirtualDisplay) {
-        if(!Secure && !Environment.UserInteractive)throw new InvalidOperationException("Interactive Windows session required");
         ActiveMonitors=null;CaptureDevice=null;MonitorNotice=0;MonitorDriver=new SodaDesktopMonitorLayout.NativeDriver();SetProcessDPIAware();
         string first=ReadBoundedLine();if(first==null || first.Length>65536)return;
         var config=Obj(Json.DeserializeObject(first));if((string)config["type"]!="configure")throw new InvalidOperationException();

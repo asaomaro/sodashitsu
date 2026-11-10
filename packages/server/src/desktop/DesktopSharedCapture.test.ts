@@ -422,20 +422,17 @@ it.skipIf(process.platform==="win32")("keeps the physical PCM owner and nonempty
 
 const unlockConfiguration={type:"configure",allowSharedUnlock:true,allowInput:true,options:{width:320}};
 const lockedReady={...ready,backend:"windows-gdi",secureDesktop:true,resourceFences:true};
-it.each([true,false])("shares the locally permitted Windows lock source with one input owner: cover=%s",async cover=>{
+it("shares locked capture pixels with one input owner and no privileged side features",async()=>{
  const f=fixture(),a=f.join("locked",unlockConfiguration),b=f.join("locked",unlockConfiguration);
  try{
-  expect(f.child.commands[0]).not.toHaveProperty("allowSharedUnlock");
-  f.child.send({...lockedReady,...(cover?{lockScreenCover:true}:{})});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({secureDesktop:true}));
+  f.child.send(lockedReady);await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({secureDesktop:true}));
+  f.child.send(frame(1));await vi.waitFor(()=>expect(b.messages.at(-1)?.type).toBe("frame"));
   expect(a.session.requestControl!(true)).toBe(true);a.send({type:"control",enabled:true});expect(b.session.requestControl!(true)).toBe(false);
-  b.send({type:cover?"dismiss_lock_screen":"sas"});expect(f.child.commands.some(c=>c.type==="dismiss_lock_screen"||c.type==="sas")).toBe(false);
-  a.send({type:cover?"dismiss_lock_screen":"sas",extra:"discarded"});expect(f.child.commands.at(-1)).toEqual({type:cover?"dismiss_lock_screen":"sas"});
-  a.send({type:cover?"sas":"dismiss_lock_screen"});expect(f.child.commands.filter(c=>c.type==="dismiss_lock_screen"||c.type==="sas")).toHaveLength(1);
-  a.send({type:"input",seq:7,input:{kind:"key",code:"KeyA",down:true}});
-  expect(f.child.commands.filter(c=>c.type==="input")).toHaveLength(cover?0:1);
-  if(!cover){f.child.send(frame(1));await vi.waitFor(()=>expect(b.messages.at(-1)?.type).toBe("frame"));}
+  b.send({type:"input",seq:1,input:{kind:"key",code:"Enter",down:true}});expect(f.child.commands.filter(c=>c.type==="input")).toHaveLength(0);
+  a.send({type:"input",seq:1,input:{kind:"key",code:"Enter",down:true}});expect(f.child.commands.filter(c=>c.type==="input")).toHaveLength(1);
  }finally{f.pool.dispose();}
 });
+
 it.each(["permission","backend","nativeVideo","nativeAudio","microphone","cursor","files","richClipboard","allowClipboard","allowMedia","agentRegions","virtualDisplay","protectedDesktop","sharedProtected"])("rejects unsafe shared lock source proof: %s",async kind=>{
  const configuration=kind==="permission"?{type:"configure",options:{width:320}}:unlockConfiguration,f=fixture(),a=f.join("locked",configuration);
  try{
@@ -458,14 +455,14 @@ it.each(["worker_start_or_connection","source_transition"])("preserves bounded u
 
 it.each([false,true])("maps Provider local unlock permission into shared admission without forwarding it: %s",async allowUnlock=>{
  const root=await mkdtemp(join(tmpdir(),"soda-lock-provider-")),program=join(root,"fixture.mjs"),received=join(root,"configuration.json");
- await writeFile(program,`import fs from 'node:fs';import readline from 'node:readline';const lines=readline.createInterface({input:process.stdin});lines.on('line',line=>{const m=JSON.parse(line);if(m.type==='configure'){fs.writeFileSync(process.argv[2],JSON.stringify(m));console.log(JSON.stringify(${JSON.stringify({...lockedReady,lockScreenCover:true})}));}});lines.on('close',()=>process.exit(0));`);
+ await writeFile(program,`import fs from 'node:fs';import readline from 'node:readline';const lines=readline.createInterface({input:process.stdin});lines.on('line',line=>{const m=JSON.parse(line);if(m.type==='configure'){fs.writeFileSync(process.argv[2],JSON.stringify(m));console.log(JSON.stringify(${JSON.stringify(lockedReady)}));}});lines.on('close',()=>process.exit(0));`);
  const web=createServer(),sockets=new WebSocketServer({server:web});await new Promise<void>(resolve=>web.listen(0,"127.0.0.1",resolve));
  const origin=`http://127.0.0.1:${(web.address() as AddressInfo).port}`,messages:any[]=[];let closed=false;
  sockets.on("connection",ws=>{ws.on("close",()=>{closed=true;});ws.on("message",raw=>{const m=JSON.parse(raw.toString());if(m.type==="provider")ws.send(JSON.stringify({type:"attached"}));else messages.push(m);});});
  const provider=new DesktopProvider({command:[process.execPath,program,received],allowInput:true,allowUnlock,allowClipboard:true,allowMonitors:true,origins:()=>[origin]});
  try{
   await provider.start("generated-owner",{url:origin.replace("http","ws")+"/desktop-share",ticket:"a".repeat(43),options:{width:320,fps:10,quality:65,features:true,sharedDesktop:true,sharedClipboard:true,sharedCursor:true,cursor:true,sharedMonitors:true,monitors:true}});
-  if(allowUnlock){await vi.waitFor(()=>expect(messages.some(m=>m.type==="ready"&&m.secureDesktop&&m.lockScreenCover)).toBe(true));expect(closed).toBe(false);expect(messages.some(m=>m.type.endsWith("_failure"))).toBe(false);}
+  if(allowUnlock){await vi.waitFor(()=>expect(messages.some(m=>m.type==="ready"&&m.secureDesktop&&!m.lockScreenCover)).toBe(true));expect(closed).toBe(false);expect(messages.some(m=>m.type.endsWith("_failure"))).toBe(false);}
   else{await vi.waitFor(()=>expect(closed).toBe(true));expect(messages.some(m=>m.type==="ready")).toBe(false);}
   expect(JSON.parse(await readFile(received,"utf8"))).not.toHaveProperty("allowSharedUnlock");
  }finally{provider.dispose();for(const ws of sockets.clients)ws.terminate();await new Promise<void>(resolve=>sockets.close(()=>resolve()));await new Promise<void>(resolve=>web.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
@@ -487,10 +484,6 @@ it("keeps exclusive native microphone ownership without forwarding inline helper
  }finally{f.pool.dispose();}
 });
 
-it("rejects image publication while the shared source is a lock cover",async()=>{
- const f=fixture(),a=f.join("locked",unlockConfiguration);
- try{f.child.send({...lockedReady,lockScreenCover:true});await vi.waitFor(()=>expect(a.messages).toHaveLength(1));f.child.send(frame(1));await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));expect(a.messages.map(m=>m.type)).toEqual(["ready"]);}finally{f.pool.dispose();}
-});
 
 const virtualConfiguration={type:"configure",allowSharedVirtual:true,allowVirtualDisplay:true,allowNativeVideo:true,options:{width:320,virtualDisplay:true}};
 it("owns one shared virtual source until its last viewer and keeps control exclusive",async()=>{

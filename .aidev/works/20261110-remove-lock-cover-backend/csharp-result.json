@@ -1,0 +1,1 @@
+{"ok":true,"results":[{"mode":"negative","compileExit":0,"diagnostics":[],"checkExit":3762504530,"expectedFailure":true,"purePassed":false},{"mode":"positive","compileExit":0,"diagnostics":[],"checkExit":0,"expectedFailure":false,"purePassed":true}],"compilerStable":true,"sourceCount":3,"productionChanged":false,"serviceAction":false,"desktopOpened":false,"input":false}

@@ -60,7 +60,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const Provider=lazy?LazyDesktopProvider:DesktopProvider;
   const configuration = {
-    command: [process.execPath, helper, "--allow-input", "--record", record,"--lifecycle-ledger",lifecycle, ...(protectedConfig?["--protected-end-marker",endedMarker,"--input-ledger",ledger,...(protectedConfig.mode?["--protected-mode",protectedConfig.mode]:[]),...(protectedConfig.force?["--protected-unconditional"]:[]),...(protectedConfig.expectEnv?["--expect-elevated-request",protectedConfig.expectEnv]:[])]:[]), ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : []), ...(nativeFixture ? ["--static","--native-60fps","--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))] : [])],
+    command: [process.execPath, helper, "--allow-input", "--record", record,"--lifecycle-ledger",lifecycle, ...(protectedConfig?["--protected-end-marker",endedMarker,"--input-ledger",ledger,...(protectedConfig.mode?["--protected-mode",protectedConfig.mode]:[]),...(protectedConfig.force?["--protected-unconditional"]:[]),...(protectedConfig.expectEnv?["--expect-elevated-request",protectedConfig.expectEnv]:[])]:[]), ...(secure ? ["--secure"] : []), ...(cover ? ["--legacy-lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : []), ...(nativeFixture ? ["--static","--native-60fps","--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))] : [])],
     allowInput,
     allowNativeVideo: nativeFixture,
     allowElevated:protectedConfig?.allowed===true,
@@ -549,22 +549,14 @@ it("rejects a source which advertises a lock screen without the local unlock cei
   expect(viewer.messages.some(m=>m.type==="ready")).toBe(false);
 });
 
-it("has no cover frames or agent access and dismisses only after human control", async () => {
+it("rejects the retired pixel-free helper before ready with an update message", async () => {
   const f=await fixture(true,false,true,true,true,true),viewer=await f.viewer();
   viewer.send({...start,options:{...start.options,features:true}});
-  await expect.poll(()=>viewer.messages.find(m=>m.type==="ready")).toMatchObject({secureDesktop:true,lockScreenCover:true,allowClipboard:false,allowMedia:false});
-  viewer.send({type:"dismiss_lock_screen"});
-  viewer.send({type:"agent_grant",enabled:true});
-  viewer.send({type:"control",enabled:true});
-  await expect.poll(()=>viewer.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
-  expect(viewer.ws.readyState).toBe(WebSocket.OPEN);
-  expect(viewer.frames).toHaveLength(0);
-  expect(viewer.messages.some(m=>m.type==="agent_ticket"||m.type==="lock_screen_changed")).toBe(false);
-  viewer.send({type:"input",seq:1,frameSeq:1,input:{kind:"text",text:"must-not-send"}});
-  viewer.send({type:"dismiss_lock_screen"});
   await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
-  expect(viewer.messages.some(m=>m.type==="lock_screen_changed")).toBe(true);
-  expect(await readFile(f.record,"utf8").catch(()=>"")).toBe("");
+  expect(viewer.messages.some(m=>m.type==="ready")).toBe(false);
+  expect(viewer.frames).toHaveLength(0);
+  expect(viewer.messages).toContainEqual({type:"error",message:"接続先のデスクトップ補助プログラムを更新してから接続し直してください。"});
+  expect(await readFile(f.record,"utf8").catch(()=>"" )).toBe("");
 });
 
 it.each([true,false])("forwards named IME keys only when advertised by the helper (%s)", async supported => {

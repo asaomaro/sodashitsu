@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-readonly-retirement/packages/server
+
+
+ Test Files  2 passed (2)
+      Tests  106 passed (106)
+   Start at  22:15:20
+   Duration  2.57s (tests 49%, transform 40%, import 11%)
+

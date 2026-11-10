@@ -1,0 +1,12 @@
+{
+  "packages/server/src/composeServer.ts": "6264503096fbd6d7f2b098e766e566a0227a3d04cdc61bdc568c9b8c08d81c79",
+  "packages/server/src/desktop/DesktopProvider.ts": "47e8972bd4f4e0bfd1aeaf7edeed8a8bf0281c979852dcafbd12cb99f6083400",
+  "packages/server/src/desktop/DesktopRelay.ts": "abdf936ddcfe8b83c2f2ce864723aa770dbc1facd8304c0404b227de0c7cce69",
+  "packages/server/src/desktop/DesktopSharedCapture.ts": "a3413afdcbc9761dc684c0291d522a40ca7781518a0faa7c90225da678bc6018",
+  "packages/server/src/desktop/LazyDesktopProvider.ts": "11c2cfd94f39b383e4f4f51820b5dce48d3d3bdc54d7a0b35e87ba27637a1b69",
+  "scripts/remote-desktop/WindowsDesktopHost.cs": "90a56eb2d8a69d42dca24fd430e29d6dedfd8b465e254ac25b169c63718ccc3c",
+  "scripts/remote-desktop/WindowsDesktopUnlock.cs": "fd36b5899ae628944e0bcc1d758bf7e671dba69365128ea63ed5675f5e381c1e",
+  "scripts/remote-desktop/WindowsLockCoverChecks.cs": "22954c42e8cc6b2cf1249694dd6774c4f3fd4890c5f9b5d58361db4ccf674c7c",
+  "scripts/remote-desktop/windows-helper.ps1": "2d0dfd4e46b51ff5e19793374d42fefe6170d1f17a93c05e1b67da142fdba6c1",
+  "scripts/remote-desktop/synthetic-helper.mjs": "ffcfa0b9fea590cdb2c31d165e671b7b54ea28a688502757e4e1d5ebe7a9718b"
+}

@@ -474,7 +474,7 @@ export async function composeServer(
   const bridgeEndpoint = new BridgeEndpoint({ version: SERVER_VERSION, hostname: osHostname(), sessionName: options.sessionName ?? null }, logger);
   const delegations = new ReverseConnections({grants:new DelegationGrants(options.sessionRoot,options.stateDir),machines,endpoint:()=>bridgeEndpoint,logger,stateDir:options.stateDir,pairingChanged:(id,message,closed)=>bus.publish({event:"machine.pairing",data:{id,message,closed}})});
   machines.onChanged((list) => bus.publish({ event: "machine.changed", data: { machines: list } }));
-  const desktop = new LazyDesktopProvider(desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)),undefined,undefined,record=>logger.info("desktop_lock_cover_action",{...record}));
+  const desktop = new LazyDesktopProvider(desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)));
   const desktopSettings = await DesktopSettings.open({
     file: join(options.stateDir, "desktop-permissions.json"), provider: desktop,
     legacy: desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)),
@@ -484,7 +484,7 @@ export async function composeServer(
   });
   const exec = new ExecService();
   const desktopRelay = new DesktopRelay(auth, originRejections, machines,()=>options.extraOrigins,{provider:desktop,createLocal:async()=>{
-    const provider=new LazyDesktopProvider(undefined,undefined,undefined,record=>logger.info("desktop_lock_cover_action",{...record}));
+    const provider=new LazyDesktopProvider(undefined);
     await DesktopSettings.open({file:join(options.stateDir,"local-computer-permissions.json"),provider,origins:()=>[],startup:{enabled:true,allowInput:true,allowClipboard:false,allowDisplayResize:false}});
     return provider;
   }});

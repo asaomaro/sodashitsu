@@ -1,0 +1,12 @@
+{
+  "negativeExit": 1,
+  "byteExact": true,
+  "before": {
+    "packages/server/src/desktop/DesktopProvider.ts": "47e8972bd4f4e0bfd1aeaf7edeed8a8bf0281c979852dcafbd12cb99f6083400",
+    "packages/server/src/desktop/DesktopRelay.ts": "abdf936ddcfe8b83c2f2ce864723aa770dbc1facd8304c0404b227de0c7cce69"
+  },
+  "restored": {
+    "packages/server/src/desktop/DesktopProvider.ts": "47e8972bd4f4e0bfd1aeaf7edeed8a8bf0281c979852dcafbd12cb99f6083400",
+    "packages/server/src/desktop/DesktopRelay.ts": "abdf936ddcfe8b83c2f2ce864723aa770dbc1facd8304c0404b227de0c7cce69"
+  }
+}

@@ -1,4 +1,3 @@
-import {DesktopLockCoverDiagnostics,type DesktopLockCoverSink} from "./DesktopLockCoverDiagnostics.js";
 import {DesktopProtectedMicrophone,protectedMicrophoneAvailable} from './DesktopProtectedMicrophone.js';
 import {DesktopNativeAudio} from "./DesktopNativeAudio.js";
 import {DesktopNativeMonitorRestore,DesktopNativeMonitorRestores} from "./DesktopNativeMonitorRestore.js";
@@ -114,7 +113,6 @@ type Share = {
   control: boolean;
   secureDesktop?: boolean;
   protectedDesktop?: "elevated-default"|"elevated-uac";
-  lockScreenCover?: boolean;
   imeKeys?: boolean;
   extendedInput?: boolean;
   allowInput: boolean;
@@ -131,7 +129,6 @@ type Share = {
 
 /** Opt-in B-side provider. Executable and input ceiling are local settings, never RPC arguments. */
 export class DesktopProvider {
-  private readonly lockCoverDiagnostics:DesktopLockCoverDiagnostics;
   private endpointOnly=false;
   private sourceEpoch=0;
   private nativeMonitorRestores=new DesktopNativeMonitorRestores();
@@ -233,8 +230,7 @@ export class DesktopProvider {
   private audioPipes=new DesktopAudioPipes();
   private nativePcmPaths=new DesktopNativePcmPaths();
   private readonly nativeMicrophones=new DesktopNativeMicrophoneHost(this.nativePcmPaths);
-  constructor(private config: DesktopProviderConfig | undefined, companion?:DesktopCompanionHub,diagnostic:DesktopLockCoverSink=()=>{}) {
-    this.lockCoverDiagnostics=new DesktopLockCoverDiagnostics(diagnostic);
+  constructor(private config: DesktopProviderConfig | undefined, companion?:DesktopCompanionHub) {
     this.companion = companion ?? new DesktopCompanionHub(config?.allowMedia === true, config?.iceServers ?? []);
   }
   configure(config: DesktopProviderConfig | undefined): void {
@@ -607,10 +603,7 @@ export class DesktopProvider {
             }
             this.applyControl(s,enabled);
           } else if (m.type === "sas") {
-            if (s.secureDesktop && !s.protectedDesktop && !s.lockScreenCover && s.control && this.ownsResource(s,"control") && s.ready && performance.now() - s.lastSeen < 5000 && this.activateControl(s))
-              this.write(s, m);
-          } else if (m.type === "dismiss_lock_screen") {
-            if (s.lockScreenCover && s.secureDesktop && s.control && this.ownsResource(s,"control") && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000 && this.activateControl(s))
+            if (s.secureDesktop && !s.protectedDesktop && s.control && this.ownsResource(s,"control") && s.ready && performance.now() - s.lastSeen < 5000 && this.activateControl(s))
               this.write(s, m);
           } else if (m.type === "input") {
             s.inputAcks.invalidatePointers();delete s.pointerWitness;
@@ -665,10 +658,6 @@ export class DesktopProvider {
         let exited=false;const closed=new Promise<void>(resolve=>raw.once("close",()=>{exited=true;resolve();}));
         child.nativePcm={paths:this.nativePcmPaths,owner:{closed,exited:()=>exited||raw.exitCode!==null||raw.signalCode!==null}};
       }
-      if(cfg.allowUnlock===true&&!cfg.nativePlatform&&!options.elevatedDesktop&&!options.virtualDisplay){
-        let ended=false;const channel=this.lockCoverDiagnostics.channel(()=>!ended&&raw.exitCode===null&&raw.signalCode===null&&this.config===cfg&&this.sourceEpoch===sourceEpoch);
-        raw.stderr.on("data",(bytes:Buffer)=>channel.push(bytes));raw.once("close",()=>{ended=true;channel.close();});
-      }
       this.physicalHelpers.add(child);child.once("close",()=>{this.physicalHelpers.delete(child);this.resetResourcesIfDrained();queueMicrotask(()=>this.pruneSources());});return child;
     };
     const child = options.sharedDesktop ? (s.capturePool??this.sharedCapture).attach(s.captureKey!, spawnHelper) : spawnHelper();
@@ -711,12 +700,13 @@ export class DesktopProvider {
           if (raw.type === "ready" && !s.ready) {
             const {protectedAudioClock,deferNativeSnapshots, inputAckPipe,nativePointerProof,virtualNativeDragProof, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
+            if(ready.lockScreenCover){this.send(s,{type:"error",message:"接続先のデスクトップ補助プログラムを更新してから接続し直してください。"});this.stop(s);return;}
             if(options.virtualMonitors&&(ready.resourceFences!==true||ready.virtualMonitors!==true||!ready.virtualDisplay||!ready.monitorLayout||ready.monitorLayout.selected==="all"||ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Owned virtual monitor metadata missing");
             s.agentRegions=ready.agentRegions===true&&!ready.secureDesktop;
             if(cfg.nativePlatform?(ready.backend!==cfg.nativePlatform||!ready.inputCapabilities):ready.backend==="linux-portal"||ready.backend==="macos-sck")throw Error("Unexpected native backend proof");
             if(!cfg.nativePlatform&&ready.inputCapabilities)throw Error("Unrequested input capabilities");
             if(ready.inputCapabilities)s.inputCapabilities=ready.inputCapabilities;
-            if(options.elevatedDesktop&&(!ready.protectedDesktop||!ready.secureDesktop||ready.lockScreenCover)){
+            if(options.elevatedDesktop&&(!ready.protectedDesktop||!ready.secureDesktop)){
               this.send(s,{type:"protected_desktop_failure",code:"service_incompatible"});throw Error("Requested protected worker unavailable");
             }
             if(options.sharedProtected&&ready.sharedProtected!==true){this.send(s,{type:"protected_desktop_failure",code:"service_incompatible"});throw Error("Shared protected worker proof missing");}
@@ -724,20 +714,19 @@ export class DesktopProvider {
             s.protectedFilesActive=options.protectedFiles===true&&cfg.allowProtectedFiles===true&&!!ready.protectedDesktop&&ready.secureDesktop===true;
             if(ready.protectedDesktop)s.protectedDesktop=ready.protectedDesktop;else delete s.protectedDesktop;
             if(options.independentMonitors){
-              if(!ready.resourceFences||!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice||ready.secureDesktop||ready.virtualDisplay||ready.lockScreenCover)throw Error("Independent monitor helper proof missing");
+              if(!ready.resourceFences||!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice||ready.secureDesktop||ready.virtualDisplay)throw Error("Independent monitor helper proof missing");
               const topology=JSON.stringify([...ready.monitorLayout.monitors].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0));
               if(this.monitorTopology&&this.monitorTopology!==topology){this.stopMonitorGeneration();throw Error("Monitor generation changed");}this.monitorTopology=topology;
             }
             s.secureDesktop = ready.secureDesktop === true;
             s.inputAcks.enabled = !s.secureDesktop && inputAckPipe === true;
-            const virtualDrag=options.virtualNativeDrag===true&&virtualNativeDragProof===true&&ready.virtualDisplay===true&&!ready.virtualMonitors&&!ready.secureDesktop&&!ready.lockScreenCover;
+            const virtualDrag=options.virtualNativeDrag===true&&virtualNativeDragProof===true&&ready.virtualDisplay===true&&!ready.virtualMonitors&&!ready.secureDesktop;
             if(options.virtualNativeDrag&&!virtualDrag)throw Error("Owned virtual drag helper proof missing");
             s.inputAcks.pointerEnabled=!s.secureDesktop&&(!ready.virtualDisplay||virtualDrag)&&!cfg.nativePlatform&&!!cfg.fileRoot&&nativePointerProof===true&&s.process?.resourceChannel?.supported===true;
             if(s.inputAcks.pointerEnabled&&options.files===true)void this.nativeSelection.prepare().catch(()=>{});
             s.deferNativeSnapshots=options.nativeVideo===true&&cfg.allowNativeVideo===true&&!s.secureDesktop&&deferNativeSnapshots===true;
-            s.lockScreenCover = ready.lockScreenCover === true;
-            s.imeKeys = options.imeKeys === true && ready.imeKeys === true && !s.lockScreenCover;
-            s.extendedInput = options.extendedInput === true && ready.extendedInput === true && !s.lockScreenCover;
+            s.imeKeys = options.imeKeys === true && ready.imeKeys === true;
+            s.extendedInput = options.extendedInput === true && ready.extendedInput === true;
             if (s.secureDesktop && !s.protectedDesktop && !cfg.allowUnlock) throw new Error("Unlock is not locally permitted");
             if (
               !s.secureDesktop && options.display &&
@@ -754,7 +743,7 @@ export class DesktopProvider {
                 : options.image.colorMode !== "full" || !options.image.showCursor)
             )
               throw new Error("Helper does not support requested image settings");
-            if(options.virtualDisplay&&(ready.virtualDisplay!==true||s.secureDesktop||ready.lockScreenCover)){this.send(s,{type:"virtual_display_failure",code:"helper_incompatible"});throw Error("Helper did not create requested virtual monitor");}
+            if(options.virtualDisplay&&(ready.virtualDisplay!==true||s.secureDesktop)){this.send(s,{type:"virtual_display_failure",code:"helper_incompatible"});throw Error("Helper did not create requested virtual monitor");}
             if(!s.secureDesktop&&options.sharedMonitors&&!ready.monitorLayout){this.send(s,{type:"shared_monitors_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(!s.secureDesktop&&options.monitorDevice&&(!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice))throw Error("Helper did not select requested monitor");
             if(ready.monitorLayout){
@@ -878,7 +867,7 @@ export class DesktopProvider {
             this.send(s, { type: "session_unlocked" });
             this.stop(s);
             return;
-          } else if (raw.type === "lock_screen_changed" && cfg.allowUnlock && s.ready && s.secureDesktop && s.lockScreenCover) {
+          } else if (raw.type === "lock_screen_changed" && cfg.allowUnlock && s.ready && s.secureDesktop) {
             this.send(s, { type: "lock_screen_changed" });
             this.stop(s);
             return;
@@ -888,7 +877,7 @@ export class DesktopProvider {
             this.send(s, { type: "unlock_failure", code: raw.code });
             this.stop(s);
             return;
-          } else if (raw.type === "frame" && s.ready && !s.lockScreenCover) {
+          } else if (raw.type === "frame" && s.ready) {
             const frame = HelperFrame.parse(raw);
             if(cfg.nativePlatform?(!frame.info.timing||frame.info.sourceInputSeq===undefined):(frame.info.timing!==undefined||frame.info.sourceInputSeq!==undefined))throw Error("Unnegotiated capture timing");
             if (

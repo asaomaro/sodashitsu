@@ -1,0 +1,69 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-readonly-retirement/packages/server
+
+ ❯ src/desktop/DesktopSharedCapture.test.ts (91 tests | 12 failed) 1292ms
+   × owns one shared virtual source until its last viewer and keeps control exclusive 3ms
+   × rejects a different source instead of an owned shared virtual screen: normal 1ms
+   × rejects a different source instead of an owned shared virtual screen: secure 0ms
+   × rejects a different source instead of an owned shared virtual screen: cover 0ms
+   × rejects a different source instead of an owned shared virtual screen: protected 0ms
+   × rejects a different source instead of an owned shared virtual screen: native-backend 0ms
+   × accepts only the owned virtual monitor layout and propagates lease loss to every viewer 0ms
+   × only forwards fresh owned virtual drag proof: proved 0ms
+   × only forwards fresh owned virtual drag proof: old-host 0ms
+   × only forwards fresh owned virtual drag proof: not-requested 0ms
+   × only forwards fresh owned virtual drag proof: no-fence 0ms
+   × only forwards fresh owned virtual drag proof: multi-source 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > owns one shared virtual source until its last viewer and keeps control exclusive
+ReferenceError: virtualConfiguration is not defined
+ ❯ src/desktop/DesktopSharedCapture.test.ts:489:39
+    487|
+    488| it("owns one shared virtual source until its last viewer and keeps con…
+    489|  const f=fixture(),a=f.join("virtual",virtualConfiguration),b=f.join("…
+       |                                       ^
+    490|  try{
+    491|   expect(f.child.commands[0]).toMatchObject({allowVirtualDisplay:true,…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > rejects a different source instead of an owned shared virtual screen: normal
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > rejects a different source instead of an owned shared virtual screen: secure
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > rejects a different source instead of an owned shared virtual screen: cover
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > rejects a different source instead of an owned shared virtual screen: protected
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > rejects a different source instead of an owned shared virtual screen: native-backend
+ReferenceError: virtualConfiguration is not defined
+ ❯ src/desktop/DesktopSharedCapture.test.ts:500:39
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > accepts only the owned virtual monitor layout and propagates lease loss to every viewer
+ReferenceError: virtualConfiguration is not defined
+ ❯ src/desktop/DesktopSharedCapture.test.ts:506:39
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > only forwards fresh owned virtual drag proof: proved
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > only forwards fresh owned virtual drag proof: old-host
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > only forwards fresh owned virtual drag proof: not-requested
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > only forwards fresh owned virtual drag proof: no-fence
+ FAIL  src/desktop/DesktopSharedCapture.test.ts > only forwards fresh owned virtual drag proof: multi-source
+ReferenceError: virtualConfiguration is not defined
+ ❯ src/desktop/DesktopSharedCapture.test.ts:510:34
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  12 failed | 94 passed (106)
+   Start at  22:13:54
+   Duration  2.60s (tests 47%, transform 41%, import 11%)
+
+undefined
+/workspaces/sodashitsu-desktop-readonly-retirement/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/desktop/DesktopSharedCapture.test.ts src/desktop/LazyDesktopProvider.test.ts

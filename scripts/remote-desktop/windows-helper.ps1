@@ -45,19 +45,11 @@ try {
     $selected = 'normal'
     if (-not $UnlockLease -and $AllowUnlock -and -not $virtualRequested) { $selected = [SodaDesktopUnlock]::SelectSource() }
     if ($selected -eq 'transition') { [SodaDesktopUnlock]::SourceTransition(); exit 0 }
-    if ($selected -eq 'cover') {
-        [SodaDesktopUnlock]::RunUserLockScreen($AllowInput.IsPresent)
-        exit 0
-    }
     if ($selected -eq 'secure') {
         $executable = [SodaDesktopUnlock]::InstalledExecutable()
         if (-not (Test-Path -LiteralPath $executable)) { throw 'Install the unlock service first.' }
         [SodaDesktopUnlock]::RunInstalled($UnlockLease.IsPresent,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent)
         exit 0
     }
-    if ($AllowUnlock) {
-        [SodaDesktopUnlock]::RunNormal($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $AllowMonitors.IsPresent, $AllowVirtualDisplay.IsPresent)
-        exit 0
-    }
-    [SodaDesktopHost]::Run($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $null, $AllowMonitors.IsPresent, $AllowVirtualDisplay.IsPresent) }
+    [SodaDesktopUnlock]::RunNormal($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $AllowMonitors.IsPresent, $AllowVirtualDisplay.IsPresent, $AllowUnlock.IsPresent) }
 catch { [Console]::Error.WriteLine('Desktop sharing stopped or unavailable.'); exit 1 }

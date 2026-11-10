@@ -1,11 +1,10 @@
-import type {DesktopLockCoverSink} from "./DesktopLockCoverDiagnostics.js";
 import {createHash} from 'node:crypto';
 import type {DesktopSavedTransferState} from './DesktopSavedTransferState.js';
 import {RpcError} from '@sodashitsu/protocol';
 import type {DesktopProviderApi} from './DesktopProvider.js';
 import {desktopProviderCapabilities,type DesktopProviderConfig,type DesktopProviderEndpointScope} from './DesktopProviderCore.js';
 import {DesktopCompanionHub} from './DesktopCompanion.js';
-type Factory=(config:DesktopProviderConfig,companion:DesktopCompanionHub,diagnostic?:DesktopLockCoverSink)=>DesktopProviderApi;
+type Factory=(config:DesktopProviderConfig,companion:DesktopCompanionHub)=>DesktopProviderApi;
 /** The disabled permission boundary owns no media/file/checkpoint implementation. */
 export class LazyDesktopProvider implements DesktopProviderApi {
  readonly companion:DesktopCompanionHub;
@@ -23,8 +22,8 @@ export class LazyDesktopProvider implements DesktopProviderApi {
  private holds=0;
  private fault=false;
  constructor(private config:DesktopProviderConfig|undefined,
-  private load:()=>Promise<Factory>=async()=>{const{DesktopProvider}=await import('./DesktopProvider.js');return(config,companion,diagnostic)=>new DesktopProvider(config,companion,diagnostic);},
-  private warn:()=>void=()=>{},private readonly diagnostic:DesktopLockCoverSink=()=>{}) {
+  private load:()=>Promise<Factory>=async()=>{const{DesktopProvider}=await import('./DesktopProvider.js');return(config,companion)=>new DesktopProvider(config,companion);},
+  private warn:()=>void=()=>{}) {
   this.companion=new DesktopCompanionHub(config?.allowMedia===true,config?.iceServers??[]);
  }
  get epoch(){return this.generation+(this.provider?this.provider.epoch-this.initialProviderEpoch:0);}
@@ -48,7 +47,7 @@ export class LazyDesktopProvider implements DesktopProviderApi {
   if(!this.loading){const generation=this.generation;
    this.loading=(async()=>{const create=await this.load();await this.stablePolicy();const state=this.saved?await this.savedState():undefined;
     if(!this.usable()||generation!==this.generation)throw this.unavailable();
-    const provider=create(this.config!,this.companion,this.diagnostic);provider.requireEndpoint(this.endpointOnly);
+    const provider=create(this.config!,this.companion);provider.requireEndpoint(this.endpointOnly);
     if(this.saved)provider.enableSavedTransfers(this.saved.directory,this.saved.binding,state);
     this.initialProviderEpoch=provider.epoch;this.provider=provider;if(!this.endpointOnly)provider.resumeUnlockLease();return provider;
    })().finally(()=>{this.loading=undefined;});

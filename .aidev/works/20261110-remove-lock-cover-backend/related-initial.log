@@ -1,0 +1,61 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-readonly-retirement/packages/server
+
+ ❯ src/desktop/DesktopRelay.test.ts (345 tests | 2 failed | 325 skipped) 7192ms
+   × rejects the retired pixel-free helper before ready with an update message 62ms
+   × preserves an unproven input cleanup fault across reconnect, reconfigure and endpoint entry 1107ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopRelay.test.ts > rejects the retired pixel-free helper before ready with an update message
+AssertionError: expected [] to deep equally contain { type: 'error', …(1) }
+
+- Expected:
+{
+  "message": "接続先のデスクトップ補助プログラムを更新してから接続し直してください。",
+  "type": "error",
+}
+
++ Received:
+[]
+
+ ❯ src/desktop/DesktopRelay.test.ts:558:27
+    556|   expect(viewer.messages.some(m=>m.type==="ready")).toBe(false);
+    557|   expect(viewer.frames).toHaveLength(0);
+    558|   expect(viewer.messages).toContainEqual({type:"error",message:"接続先のデス…
+       |                           ^
+    559|   expect(await readFile(f.record,"utf8").catch(()=>"" )).toBe("");
+    560| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/desktop/DesktopRelay.test.ts > preserves an unproven input cleanup fault across reconnect, reconfigure and endpoint entry
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktop/DesktopRelay.test.ts:1634:92
+
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:1634:42
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 1 passed | 1 skipped (3)
+      Tests  2 failed | 25 passed | 426 skipped (453)
+   Start at  22:04:12
+   Duration  8.69s (tests 65%, transform 29%, import 6%)
+
+  Transform  transforming modules took 3.20s · 29% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-desktop-readonly-retirement/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/desktop/DesktopSharedCapture.test.ts src/desktop/LazyDesktopProvider.test.ts src/desktop/DesktopRelay.test.ts -t retired pixel-free|shares locked capture|never grants agent access on a lock screen|rejects a source which advertises|source-change|unused|reserve

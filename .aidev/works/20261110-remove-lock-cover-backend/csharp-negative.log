@@ -1,0 +1,4 @@
+
+�n���h������Ă��Ȃ���O: System.InvalidOperationException: Locked Default did not use normal capture
+   �ꏊ SodaDesktopTests.LockCoverChecks.Run()
+   �ꏊ SodaDesktopTests.LockCoverChecks.Main()
