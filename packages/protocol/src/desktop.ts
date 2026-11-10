@@ -153,7 +153,6 @@ export const RemoteDesktopViewerMessage = z.union([
     .strict(),
   z.object({ type: z.literal("control"), enabled: z.boolean() }).strict(),
   z.object({ type: z.literal("sas") }).strict(),
-  z.object({ type: z.literal("dismiss_lock_screen") }).strict(),
   z
     .object({
       type: z.literal("input"),
@@ -185,6 +184,7 @@ export const DesktopReady = z
     protectedDesktop:DesktopProtectedMode.optional(),
     sharedProtected:z.literal(true).optional(),
     sharedProtectedAvailable:z.literal(true).optional(),
+    // Parse old helpers only so current endpoints can reject their no-image mode.
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),

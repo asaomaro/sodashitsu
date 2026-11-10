@@ -90,11 +90,8 @@ const platformIdle=ref(false),platformIdleCounter=ref(0);let sourceIdle=new Desk
 let controlPending=false,controlCancelled=false;
 const protectedMode=ref<"elevated-default"|"elevated-uac">();
 const elevatedScreen=ref(false), sharedScreen=ref(false),sharedProtectedAvailable=ref(false),sharedVirtualAvailable=ref(false),protectedFilesAvailable=ref(false),sharedCursorScreen=ref(false),sharedCursorAvailable=ref(false),sharedClipboardScreen=ref(false),sharedClipboardAvailable=ref(false),sharedDeltasScreen=ref(false),sharedDeltasAvailable=ref(false),sharedMonitorsScreen=ref(false),sharedMonitorsAvailable=ref(false);
-const lockScreenCover = ref(false);
 const imeKeys = ref(false);
 const extendedInput = ref(false);
-const dismissInFlight = ref(false);
-let dismissPending = false;
 async function toggleToolbar() {
   toolbarCollapsed.value = !toolbarCollapsed.value;
   if (toolbarCollapsed.value) infoOpen.value = false;
@@ -482,8 +479,6 @@ function relinquish() {
   nativeTransfer.value?.interrupt();
   inputSender.clear();
   escapePress.reset(); mouseButtons.reset(); modifiers.reset();
-  if (dismissPending) dismissInFlight.value = false;
-  dismissPending = false;
   if (clipboardGranted.value) {
     send({ type: "clipboard_grant", enabled: false });
     clearClipboard();
@@ -534,11 +529,8 @@ function stop(preserveCapabilities=false) {
   }
   secureDesktop.value = false;
   protectedMode.value=undefined;
-  lockScreenCover.value = false;
   imeKeys.value = false;
   extendedInput.value = false;
-  dismissInFlight.value = false;
-  dismissPending = false;
   agentActive.value = false;
   agentTicket.value = "";
   endpointAgentAvailable.value=false;endpointAgentPeers.value=[];endpointAgentSelected.value="";endpointAgentNotice.value="";endpointAgentBusy.value=false;
@@ -663,7 +655,7 @@ function connect(automatic = false) {
           receiver?.chunk(new Uint8Array(event.data));
           return;
         }
-        if (!ready.value || lockScreenCover.value || decoding) throw new Error("画像の順序が不正です");
+        if (!ready.value || decoding) throw new Error("画像の順序が不正です");
         decoding = true;
         const frame = decodeDesktopFrame(new Uint8Array(event.data)),
           start = performance.now();
@@ -780,12 +772,13 @@ function connect(automatic = false) {
           videoReady=false; nativeVideo.value=false;
         } else if (m.type === "ready") {
           const r = DesktopReady.parse(m);
+          if(r.lockScreenCover===true){freshControlRequired.value=true;stop(true);status.value="停止";error.value="接続先の共有プログラムを更新してください。旧ロック画面方式には接続できません。";return;}
           virtualNativeDragReady.value=virtualNativeDragRequested.value&&virtualScreen.value&&r.virtualNativeDrag===true;
           if(signinOffer.value||signinSession.value&&(!r.secureDesktop||r.protectedDesktop||r.allowMedia||r.nativeVideo||r.allowClipboard||r.files||r.microphone))throw Error("サインイン画面の機能が不正です");
           secureDesktop.value = r.secureDesktop === true;
           if(signinSession.value&&activeSettings.value)activeSettings.value={...activeSettings.value,display:undefined,deltas:false,adaptive:false,image:{colorMode:"full",showCursor:false}};
           protectedMode.value=r.protectedDesktop;sharedProtectedAvailable.value=r.sharedProtectedAvailable===true;
-          lockScreenCover.value = r.lockScreenCover === true;
+
           imeKeys.value = r.imeKeys === true;
           if(localMonitor.value&&(independentScreen.value?r.monitorLayout?.selected!==sharedMonitorDevice.value:!monitorViewport(r.monitorLayout,localMonitor.value))){
             error.value="選択したモニターを表示できません。共有方式とモニターIDを確認し、元の窓から開き直してください。";stop();return;
@@ -930,10 +923,7 @@ function connect(automatic = false) {
               ? "操作中"
               : "閲覧中";
           if (control.value) canvas.value?.focus();
-          if (control.value && lockScreenCover.value && dismissPending) {
-            dismissPending = false;
-            send({ type: "dismiss_lock_screen" });
-          }
+
         } else if (
           m.type === "stats" &&
           [m.fps, m.mbps, m.ackP95Ms].every((v) => typeof v === "number" && Number.isFinite(v))
@@ -1012,7 +1002,7 @@ function input(value: unknown) {
   inputSender.submit(parsed.data);
 }
 function canInput() {
-  return !lockScreenCover.value && (!receiver || receiver.active) && control.value && ready.value && lastDrawn > 0;
+  return (!receiver || receiver.active) && control.value && ready.value && lastDrawn > 0;
 }
 function sendInput(value: RemoteDesktopInput) {
   if(!supportsDesktopInput(inputCapabilities.value,value)){error.value="この接続先OSでは、このキー・入力操作に対応していません。";return;}
@@ -1090,25 +1080,13 @@ async function leaveDesktop() {
   const active = document.activeElement;
   if (active instanceof HTMLElement && windowElement.value?.contains(active)) active.blur();
 }
-function dismissLockScreen() {
-  if (!ready.value || !allowed.value || !lockScreenCover.value || dismissInFlight.value) return;
-  startupRetries = 0;
-  // Disabling the focused button must not blur outside and cancel its pending request.
-  windowElement.value?.focus({preventScroll:true});
-  dismissInFlight.value = true;
-  if (control.value) send({ type: "dismiss_lock_screen" });
-  else {
-    dismissPending = true;
-    send({ type: "control", enabled: true });
-  }
-}
 function toggleControl() {
-  if(!control.value&&freshControlRequired.value&&(!ready.value||!allowed.value||(!lockScreenCover.value&&lastDrawn<=0)))return;
+  if(!control.value&&freshControlRequired.value&&(!ready.value||!allowed.value||lastDrawn<=0))return;
   startupRetries = 0;
   send({ type: "control", enabled: !control.value });
 }
 function sendIme(code: ImeKeyCode) {
-  if (!imeKeys.value || !control.value || !ready.value || lockScreenCover.value) return;
+  if (!imeKeys.value || !control.value || !ready.value) return;
   // Dedicated IME keys can have no physical keyup. Pair immediately so a later
   // press is never lost and focus changes cannot leave a remote key held down.
   input({ kind: "key", code, down: true });
@@ -1126,7 +1104,7 @@ function desktopKey(e: KeyboardEvent, down: boolean) {
     e.preventDefault(); e.stopPropagation();
     if (leave) { void leaveDesktop(); return; }
   }
-  if (!control.value || !ready.value || lockScreenCover.value) return;
+  if (!control.value || !ready.value) return;
   // Every received key belongs to the remote surface, including Tab, modifiers,
   // shortcuts and composition-time physical keys; local form fields are above.
   e.preventDefault(); e.stopPropagation();
@@ -1214,16 +1192,16 @@ onBeforeUnmount(() => {
         <strong>{{ label }} — デスクトップ</strong><span data-desktop-status>{{ status }}</span>
         <span v-if="platformIdle" data-native-idle :data-idle-counter="platformIdleCounter">新しい画像待ち（最終画像を表示）</span>
         <button data-assistant-action
-          :disabled="!ready || !allowed || (!control && freshControlRequired && !lockScreenCover && rendered===0)"
+          :disabled="!ready || !allowed || (!control && freshControlRequired && rendered===0)"
           @pointerdown.prevent
           @click="toggleControl"
         >
           {{ agentActive ? "操作を引き取る" : control ? "閲覧に戻る" : "操作する" }}
         </button>
-        <button data-assistant-action v-if="!lockScreenCover" :disabled="!ready || !control || !imeKeys"
+        <button data-assistant-action :disabled="!ready || !control || !imeKeys"
           :title="imeKeys ? '接続先のIMEをONにする' : '接続先をIMEキー対応版に更新してください'"
           @pointerdown.prevent @click="sendIme('ImeOn')">IME ON</button>
-        <button data-assistant-action v-if="!lockScreenCover" :disabled="!ready || !control || !imeKeys"
+        <button data-assistant-action :disabled="!ready || !control || !imeKeys"
           :title="imeKeys ? '接続先のIMEをOFFにする' : '接続先をIMEキー対応版に更新してください'"
           @pointerdown.prevent @click="sendIme('ImeOff')">IME OFF</button>
         <button data-assistant-feature :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
@@ -1267,7 +1245,7 @@ onBeforeUnmount(() => {
       <p v-if="title" class="target">
         {{ title }} <b v-if="synthetic">模擬画面（実デスクトップではありません）</b>
       </p>
-      <p v-if="secureDesktop && !protectedMode && !lockScreenCover" data-desktop-locked>
+      <p v-if="secureDesktop && !protectedMode" data-desktop-locked>
         <template v-if="signinSession">Windows標準の認証画面を表示しています。終了すると操作許可も破棄します。</template>
         <template v-else>Windows標準の認証画面で解除してください。認証情報は保存しません。解除後は閲覧専用に戻ります。</template>
         <button data-assistant-action v-if="!signinSession" :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
@@ -1420,7 +1398,7 @@ onBeforeUnmount(() => {
       <p v-if="ready&&monitorLayout?.coordinateSpace==='logical'" data-native-monitors>画面配置はOSの論理座標です。<template v-if="monitorLayout.switchingSupported===false">OSで画面選択の記憶が許可されていないため、この共有からの画面切替はできません。</template></p>
       <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :durable-resume="durableFileCheckpoints" :durable-folder-resume="durableFolderCheckpoints" :can-folders="foldersCap" :can-resume-folders="folderCheckpoints" :machine-id="props.machineId" @grant-change="fileGranted=$event" />
       <p v-if="virtualActive&&virtualMonitors" data-virtual-monitor-selection>物理モニターを選ぶと、この窓の仮想画面共有を終了して閲覧から接続し直します。操作許可は引き継ぎません。独立配信に対応する接続先では、別の窓の仮想共有を維持して選択したモニターを配信します。</p>
-      <DesktopNativeTransfer v-if="ready&&filesCap&&filesReady&&fileClient&&!secureDesktop&&!lockScreenCover&&!elevatedScreen&&nativeTransferSourceAllowed&&!platformBackend" ref="nativeTransfer" :files="fileClient" :granted="fileGranted" :input-enabled="control" @fallback="nativeFallback" @handoff="nativeHandoff" @release="relinquish" />
+      <DesktopNativeTransfer v-if="ready&&filesCap&&filesReady&&fileClient&&!secureDesktop&&!elevatedScreen&&nativeTransferSourceAllowed&&!platformBackend" ref="nativeTransfer" :files="fileClient" :granted="fileGranted" :input-enabled="control" @fallback="nativeFallback" @handoff="nativeHandoff" @release="relinquish" />
       <details v-if="ready && microphoneAvailable" data-desktop-microphone>
         <summary>マイク入力</summary>
         <p v-if="protectedMicrophone">管理者画面の共有中も、通常ユーザーの権限で固定の仮想デバイスへ転送します。初回の準備には時間がかかる場合があります。ロック・画面切替で停止します。</p>
@@ -1515,7 +1493,6 @@ onBeforeUnmount(() => {
       >
         <div class="monitor-viewport" :class="{cropped:!!crop}" :style="viewportSize" :data-monitor-viewport="crop?localMonitor:undefined">
         <canvas
-          v-show="!lockScreenCover"
           ref="canvas"
           tabindex="0"
           aria-label="共有画面"
@@ -1536,14 +1513,9 @@ onBeforeUnmount(() => {
         />
         <canvas v-if="separateCursor" ref="cursorCanvas" class="cursor-overlay" :style="canvasSize" aria-hidden="true" data-remote-cursor />
         </div>
-        <div v-if="lockScreenCover" class="lock-screen-cover" data-desktop-lock-cover>
-          <p>接続先はWindowsのロック画面です。</p>
-          <button data-assistant-action :disabled="!ready || !allowed || dismissInFlight" @click="dismissLockScreen">サインイン画面へ進む</button>
-          <p>PIN・パスワードは、次の認証画面で入力してください。</p>
-        </div>
-        <span v-else-if="!info" class="cover">{{ status }}{{ error ? " — " + error : "" }}</span>
+        <span v-if="!info" class="cover">{{ status }}{{ error ? " — " + error : "" }}</span>
       </div>
-      <div v-show="!lockScreenCover && (infoOpen || control)" class="desktop-input" :class="{ 'input-collapsed': inputCollapsed }">
+      <div v-show="infoOpen || control" class="desktop-input" :class="{ 'input-collapsed': inputCollapsed }">
       <div class="viewer-input-row">
       <form v-show="!inputCollapsed"
         @submit.prevent="submitText"
@@ -1661,15 +1633,7 @@ p {
   background: #000;
   border: 2px solid transparent;
 }
-.lock-screen-cover {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-}
+
 .screen.controlling {
   border-color: var(--soda-accent-fg, #79c0ff);
 }

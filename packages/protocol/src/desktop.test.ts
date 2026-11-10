@@ -10,11 +10,11 @@ import {
   encodeDesktopFrame,
 } from "./desktop.js";
 
-it("requires the human-only ceiling for a lock cover and only accepts a fixed dismissal command", () => {
+it("recognizes legacy lock-cover ready for rejection but no longer accepts its dismissal command", () => {
   const ready={type:"ready",title:"lock",allowInput:true,width:640,height:360,backend:"windows-gdi",lockScreenCover:true};
   expect(DesktopReady.safeParse(ready).success).toBe(false);
   expect(DesktopReady.safeParse({...ready,secureDesktop:true}).success).toBe(true);
-  expect(RemoteDesktopViewerMessage.safeParse({type:"dismiss_lock_screen"}).success).toBe(true);
+  expect(RemoteDesktopViewerMessage.safeParse({type:"dismiss_lock_screen"}).success).toBe(false);
   expect(RemoteDesktopViewerMessage.safeParse({type:"dismiss_lock_screen",text:"password"}).success).toBe(false);
 });
 
