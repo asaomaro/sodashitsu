@@ -1,0 +1,33 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-remove-cover-ui/packages/protocol
+
+ ❯ src/desktop.test.ts (9 tests | 1 failed) 34ms
+   × recognizes legacy lock-cover ready for rejection but no longer accepts its dismissal command 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop.test.ts > recognizes legacy lock-cover ready for rejection but no longer accepts its dismissal command
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/desktop.test.ts:17:86
+     15|   expect(DesktopReady.safeParse(ready).success).toBe(false);
+     16|   expect(DesktopReady.safeParse({...ready,secureDesktop:true}).success…
+     17|   expect(RemoteDesktopViewerMessage.safeParse({type:"dismiss_lock_scre…
+       |                                                                                      ^
+     18|   expect(RemoteDesktopViewerMessage.safeParse({type:"dismiss_lock_scre…
+     19| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  21:57:17
+   Duration  286ms (transform 50%, import 31%, tests 18%, worker 2%)
+

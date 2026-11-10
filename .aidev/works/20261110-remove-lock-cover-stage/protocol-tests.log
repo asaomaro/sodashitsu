@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-remove-cover-ui/packages/protocol
+
+
+ Test Files  3 passed (3)
+      Tests  21 passed (21)
+   Start at  21:57:39
+   Duration  737ms (transform 67%, import 27%, tests 6%, worker 1%)
+

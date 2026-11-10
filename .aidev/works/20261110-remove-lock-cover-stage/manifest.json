@@ -1,0 +1,16 @@
+{
+  "browser.log": "8d09ead5be0cd5f0ef549223587712e7aefec871f00dcb7438b47e876864fd66",
+  "browser.mjs": "af22cbb4073acae67d590032a2ff915a56a1d700cfbaa075a08d4dad7c9435f5",
+  "design.md": "f64213041f43473cc2030b53a16ae2fdf4bdb22580119daa1b5a8bbf45d9f7f7",
+  "generated-locked-capture.png": "e86b847976c80bf697201fe18eee1dae9cb9e1b23fc7e5709f1773c4febc14c9",
+  "negative-browser.log": "5a7075c6c5d9c0fb1e8a97fb5cee880ae150c515f70a129c8ba44296fc4e9ffa",
+  "negative-protocol.log": "ba9ed4321e50ab8306905679e6d67e525746546843d064b9eba6c5f9978b76c0",
+  "negative-web.log": "05bf041008f2baec9da70548a9513cec7a42ded6791b6c751a41f88ecb9b1c9c",
+  "protocol-tests.log": "e418e0f04742403fa1ef5548de94f5e5c529b9ec6eec5241b77965ccd14663f4",
+  "receipt.json": "0ea1216940ebcf69eb2f9e755a17a27ce28dac2009904426a75a2ff0d7ce344b",
+  "restoration.json": "ed1ecfeab83a83553f8fa578b9ed71a4a3158fc0c903fa722c1040c88fc701ba",
+  "restored-web.log": "83383123e15b8dfbf9f27314c026a4acf5a6caea3c19e9651f671dae3c49daec",
+  "source-sha256.json": "85ca220ba8683efd38178e9b8a00222c1e68cc6e652453d13ea84fe61df590bc",
+  "verification.md": "9e5002d99f150d94d0736e6e8c15e1c4275c9a79d706ab45622de691798b1c92",
+  "web-tests.log": "cf174d2e6c6322f5d892a37b99289c95db6e668f5fe31ecf6c6c7ea4cebcb29f"
+}

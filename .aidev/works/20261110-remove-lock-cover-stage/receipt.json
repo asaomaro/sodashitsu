@@ -1,0 +1,25 @@
+{
+  "generatedOnly": true,
+  "windowsInput": false,
+  "uacStarted": false,
+  "cases": [
+    {
+      "legacy": false,
+      "ordinaryCanvas": true,
+      "legacyStopped": false,
+      "dedicatedDismissPackets": 0
+    },
+    {
+      "legacy": true,
+      "ordinaryCanvas": false,
+      "legacyStopped": true,
+      "dedicatedDismissPackets": 0
+    }
+  ],
+  "errors": [],
+  "cleanup": {
+    "browser": true,
+    "vite": true
+  },
+  "vueSha256": "a9ea32ffe027ce0610c2fd8843ce59fba2186d6b99adc2f0c1fe6ab3c441ce7c"
+}

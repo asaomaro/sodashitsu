@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-remove-cover-ui/packages/web
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  22:00:02
+   Duration  1.64s (transform 72%, import 14%, environment 9%, tests 5%)
+

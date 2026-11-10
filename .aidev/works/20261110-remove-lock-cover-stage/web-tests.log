@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-remove-cover-ui/packages/web
+
+
+ Test Files  9 passed (9)
+      Tests  60 passed (60)
+   Start at  21:59:26
+   Duration  2.59s (transform 62%, import 17%, environment 15%, tests 5%)
+
+  Transform  transforming modules took 12.11s · 62% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

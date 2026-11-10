@@ -1,0 +1,15 @@
+{
+  "before": {
+    "packages/web/src/components/RemoteDesktopWindow.vue": "a9ea32ffe027ce0610c2fd8843ce59fba2186d6b99adc2f0c1fe6ab3c441ce7c",
+    "packages/protocol/src/desktop.ts": "f5040d0b65849ba0864481dd52d549154554bbaa9bde92c7938ff2b5cbbbfca1"
+  },
+  "after": {
+    "packages/web/src/components/RemoteDesktopWindow.vue": "a9ea32ffe027ce0610c2fd8843ce59fba2186d6b99adc2f0c1fe6ab3c441ce7c",
+    "packages/protocol/src/desktop.ts": "f5040d0b65849ba0864481dd52d549154554bbaa9bde92c7938ff2b5cbbbfca1"
+  },
+  "negativeExits": {
+    "web": 1,
+    "protocol": 1,
+    "browser": 1
+  }
+}
