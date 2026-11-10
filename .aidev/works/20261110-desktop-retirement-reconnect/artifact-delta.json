@@ -1,0 +1,29 @@
+{
+  "serverCount": 1864,
+  "removedServerArtifacts": [
+    "desktop/DesktopLockCoverDiagnostics.d.ts",
+    "desktop/DesktopLockCoverDiagnostics.d.ts.map",
+    "desktop/DesktopLockCoverDiagnostics.js",
+    "desktop/DesktopLockCoverDiagnostics.js.map"
+  ],
+  "addedServerArtifacts": [],
+  "changedServerArtifacts": [
+    "composeServer.js",
+    "composeServer.js.map",
+    "desktop/DesktopProvider.d.ts",
+    "desktop/DesktopProvider.d.ts.map",
+    "desktop/DesktopProvider.js",
+    "desktop/DesktopProvider.js.map",
+    "desktop/DesktopRelay.d.ts.map",
+    "desktop/DesktopRelay.js",
+    "desktop/DesktopRelay.js.map",
+    "desktop/DesktopSharedCapture.d.ts.map",
+    "desktop/DesktopSharedCapture.js",
+    "desktop/DesktopSharedCapture.js.map",
+    "desktop/LazyDesktopProvider.d.ts",
+    "desktop/LazyDesktopProvider.d.ts.map",
+    "desktop/LazyDesktopProvider.js",
+    "desktop/LazyDesktopProvider.js.map"
+  ],
+  "webCount": 37
+}

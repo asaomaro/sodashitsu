@@ -1,0 +1,22 @@
+{
+  "sourceBuildHead": "f71d1d771f47f54fb9ed932dcc66117f845e5991",
+  "sourceCodeUnchangedAtEvidenceHead": true,
+  "files": {
+    "desktop-assistant-dist-sha256.json": "74b4cf11a62d5cbecb4f16865eab5112dded3052dad2a5226c82245235b0982c",
+    "server-dist-sha256.json": "ac149ad68ff9bd61d9e53bf3003ea3b70f930a3240e9bfcf322c4ed5475990a3",
+    "protocol-dist-sha256.json": "a471d05f23261e44b578b5162b5ef655dd684839c48d2a4a58e69c3de3724b4a",
+    "tui-dist-sha256.json": "dfee04a521041c073f29bdacc635122790ffda6c4ce67126c4211992073aebd5",
+    "web-dist-sha256.json": "ff49e87e9a37140830c25eb1268aadbdecd376653d4afd79f3aa21fceb2c69a4",
+    "cli-dist-sha256.json": "503a5024eaf4888b035d3f4b3f78f1a4ea57b22d176659b5afda57dd8cc97ae9",
+    "client-core-dist-sha256.json": "82863049a8464d399030dffe403b8060c244f09201acd3133a218f50fddca0c4",
+    "artifact-delta.json": "b4eabedae7e271f31e0557965a186c3380b3582dbdc9a7bbbbd6104ed3997916",
+    "server-build-result.json": "a077757847f808f9932d5d829366ec9dd3998653c1fc4714ec47846b13705ef9",
+    "server-build-start.json": "d8168012418fb72baf1e8cc1641e04fe09dc30dce315d4f3b4b6b214ea000531",
+    "server-test-type-result.json": "510130d6c2998b42bfcbb9d011c07be018cf6b4a8c62085855252f2580a9d86d",
+    "server-test-type-recorded.log": "56e9f01e6f7f4f0591e4bf74d1f1c87db285facd8fb978a6974516d376cfa2f8",
+    "server-test-type-exit.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "e2e-locked-capture.log": "d94ddc53d56e2102ec27b5629a7c9faeff9524e113867629b6302ac9201f61f8",
+    "test-result.md": "b00bb46f5e35db80e28e2788f3e58b2ea85691afd14055e375a3b44997fa2b29",
+    "server-build.log": "a45c39fc2bcc75cf9e8da927372f2053f9566bd5aa7e595ca4cb9b0b46641acf"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "command": "pnpm --filter @sodashitsu/server typecheck",
+  "exitCode": 0,
+  "cliDependencies": "unchanged verified production CLI dist reused",
+  "initialAttempt": "only two CLI agentStatus.js module-resolution errors; no product source changed",
+  "secondAttempt": "process ended with no diagnostics; exit receipt unavailable, not used as success proof",
+  "recordedAttempt": "server-test-type-recorded.log and exit.txt, exit0"
+}

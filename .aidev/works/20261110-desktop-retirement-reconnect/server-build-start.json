@@ -1,0 +1,26 @@
+{
+  "sourceHead": "f71d1d771f47f54fb9ed932dcc66117f845e5991",
+  "sourceSha256": {
+    "packages/e2e/src/specs/remote-desktop-cover.spec.ts": "df94e284c41f60345876496d9ce5c96e34a04b95fc0821054a7eb8fff81c5a4b",
+    "packages/protocol/src/desktop.test.ts": "c81988f8409280f1072cbe5747523d11461a73dfaa51a842606cd355ac85b206",
+    "packages/protocol/src/desktop.ts": "f5040d0b65849ba0864481dd52d549154554bbaa9bde92c7938ff2b5cbbbfca1",
+    "packages/server/src/composeServer.ts": "6264503096fbd6d7f2b098e766e566a0227a3d04cdc61bdc568c9b8c08d81c79",
+    "packages/server/src/desktop/DesktopProvider.reconnectAfterRetirement.test.ts": "8e7099e4cf3200539aad627d69df4e1875f9e96ee8915cef3763647e9e2eaf24",
+    "packages/server/src/desktop/DesktopProvider.ts": "e0c72625d80ee9d951404e64000866d6288d00126dcf6e7f411ef0f36b2d9e52",
+    "packages/server/src/desktop/DesktopRelay.ackStall.test.ts": "15c869231d555496d702dd41dc84bd28193186212f8c6427b495deb74ffab1f2",
+    "packages/server/src/desktop/DesktopRelay.test.ts": "28dff79607558e7537ed56e391a7556ee17dd8f497b084539c60d2015c38fa54",
+    "packages/server/src/desktop/DesktopRelay.ts": "f9210a4edcb40c6994007928cc8bb03bb2bfc9f5047a79e1c2decbde899c52cc",
+    "packages/server/src/desktop/DesktopSharedCapture.test.ts": "18b16990e736e528f8b2c7d727a2590b1dc498925702e79c6bf882b06017903c",
+    "packages/server/src/desktop/DesktopSharedCapture.ts": "a3413afdcbc9761dc684c0291d522a40ca7781518a0faa7c90225da678bc6018",
+    "packages/server/src/desktop/LazyDesktopProvider.test.ts": "a71e482ddd61ab600792a1fd892736d16f732476127ab426f82cb46ff7ae6c6b",
+    "packages/server/src/desktop/LazyDesktopProvider.ts": "11c2cfd94f39b383e4f4f51820b5dce48d3d3bdc54d7a0b35e87ba27637a1b69",
+    "packages/web/src/components/RemoteDesktopLockedCapture.test.ts": "1bfee071dae443728a9328474c3fa1fc78d242e4be8f79fb83d40452127f1a9d",
+    "packages/web/src/components/RemoteDesktopWindow.vue": "a9ea32ffe027ce0610c2fd8843ce59fba2186d6b99adc2f0c1fe6ab3c441ce7c",
+    "scripts/remote-desktop/WindowsDesktopHost.cs": "90a56eb2d8a69d42dca24fd430e29d6dedfd8b465e254ac25b169c63718ccc3c",
+    "scripts/remote-desktop/WindowsDesktopUnlock.cs": "af4103694e122d17280bd461e296cc2f7c84c7aa1f39a114172f41995fb7c349",
+    "scripts/remote-desktop/WindowsLockCoverChecks.cs": "6970da17eb5a14cf4c93f9ce5e95b2948f28c026b926895599ed25e3764736d4",
+    "scripts/remote-desktop/synthetic-helper.mjs": "ffcfa0b9fea590cdb2c31d165e671b7b54ea28a688502757e4e1d5ebe7a9718b",
+    "scripts/remote-desktop/windows-helper.ps1": "2d0dfd4e46b51ff5e19793374d42fefe6170d1f17a93c05e1b67da142fdba6c1"
+  },
+  "startedAt": 1794318284.5685594
+}
