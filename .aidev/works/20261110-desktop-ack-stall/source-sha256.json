@@ -1,0 +1,8 @@
+{
+  "runtimeCommit": "3253b5f4",
+  "files": {
+    "packages/server/src/desktop/DesktopRelay.ts": "f9210a4edcb40c6994007928cc8bb03bb2bfc9f5047a79e1c2decbde899c52cc",
+    "packages/server/src/desktop/DesktopRelay.ackStall.test.ts": "15c869231d555496d702dd41dc84bd28193186212f8c6427b495deb74ffab1f2",
+    "docs/remote-desktop.md": "9251118aa5d504f94c2ca7616aa3f920674cc6b5c70e939a63dcc82b485194d0"
+  }
+}

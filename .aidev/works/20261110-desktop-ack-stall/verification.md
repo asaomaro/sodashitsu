@@ -1,0 +1,11 @@
+# 描画ACK遅延による接続全体切断の削除（第三小単位）
+
+base5dcc2123、runtime3253b5f4。DesktopRelay.timerのpending画像ACK age>5sによるwholeclose条件を1行削除。新state/pause/timeout延長無し。
+
+実RelayWS/publicProvider/既synthetic-helper使用（製品methodmock0）。heartbeatを維持しACKを6500ms待機しても接続open・受信画像1/pending1、ACK再開後freshseq画像2。Relayはpending中の二重frameを拒否、Providerもpending1、helperはpending中に新frame送信しない既境界をそのまま維持するため蓄積無制限にならない。
+
+別caseはviewerheartbeat無し・描画ACK継続、B側heartbeatは独立して維持し、viewerの約12s死活期限で従来closeする。第一caseと合わせ2PASS。旧5dcc runtimeではheartbeat健全なACK遅延だけ1FAIL/通信死活caseはPASS。rawnegative.log→durablebytes復元SHA一致→restored2PASSを保存。
+
+入力/agent/framefreshness/permission/Owner/ResourceChannel/GPU/audio/nativeは無変更。rootからの限定監査で比較したFreeRDP fba7d19ac85f834700328ed445b8949087de6ccd shadow_client.c3014/3208のGFX flow制御とtransport死活の分離を根拠にした（sourceコピー無し）。https://github.com/FreeRDP/FreeRDP/blob/fba7d19ac85f834700328ed445b8949087de6ccd/server/shadow/shadow_client.c#L3014
+
+Windows/live/service/OS入力/モデル0。自所有loopback WS/HTTP/生成Node helperのみ、各fixture closeでphysicalHelpers0まで確認。全serverbuild/統合型はbackend最終統合で1回、作者wholebuild0。②heartbeat activity統一③human frameage整理は今回変更しない。
