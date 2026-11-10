@@ -300,7 +300,6 @@ export class DesktopRelay {
         if (
           !(v.headlessActive?v.headlessActive():auth.verifySession(v.sessionId)) ||
           now - v.lastSeen > 12000 ||
-          (v.pending && now - v.frameAt > 5000) ||
           (v.started && !v.ready && now - v.since > (v.nativePlatform?140000:v.virtualDisplay?25000:15000))
         )
           this.stop(v);
