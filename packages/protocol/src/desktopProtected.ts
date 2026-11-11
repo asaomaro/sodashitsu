@@ -11,7 +11,7 @@ export function desktopProtectedFailureMessage(code:z.infer<typeof DesktopProtec
     case "source_changed":return "接続先の管理者画面・ロック・利用者の状態が変わりました。接続し直し、操作を許可し直してください。";
     case "not_allowed":return "接続先PCで管理者画面の共有が許可されていません。";
     case "conflict":return "管理者画面は仮想画面・モニター指定・解像度変更と併用できません。";
-    default:return "管理者画面の補助プログラムを開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。";
+    default:return "管理者画面の補助プログラムを開始できません。接続先の許可と、必要な補助プログラムの準備・権限を確認してください。";
   }
 }
 

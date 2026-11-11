@@ -89,15 +89,16 @@ async function save() {
       <p v-if="state?.nativePlatform==='linux-portal'&&draft.allowVirtualDisplay">VIRTUAL sourceに対応するPortalが必要です。OSの選択・許可画面で承認した仮想画面だけを共有し、通常画面へ代替しません。</p>
       <label v-if="state?.nativePlatform==='macos-sck'"><input v-model="draft.allowDisplayResize" type="checkbox" />選択したディスプレイの解像度変更を許可</label>
       <template v-if="!state?.nativePlatform">
+      <p v-if="draft.allowUnlock || draft.allowElevated || draft.allowVirtualDisplay" data-desktop-helper-lifetime>権限が必要な補助プログラムは、操舵室サーバーの稼働中だけ動き、サーバー停止で終了します。初回は接続先Windowsで準備と権限の確認を行ってください。Windowsサービスの登録は不要です。</p>
       <label><input v-model="draft.allowElevated" type="checkbox" />管理者権限のアプリ・UAC画面の共有を許可</label>
       <label><input v-model="draft.allowProtectedFiles" type="checkbox" :disabled="!draft.allowElevated||!draft.fileRoot?.trim()" />管理者画面中も共有フォルダーを転送（soda実行ユーザーの権限）</label>
       <label><input v-model="draft.allowProtectedMicrophone" type="checkbox" :disabled="!draft.allowElevated||!draft.allowMicrophone||!draft.microphoneEndpoint?.trim()" />管理者画面中のマイク転送を個別に許可（通常ユーザー・単独共有）</label>
-      <p v-if="draft.allowElevated">接続先Windowsで専用保護サービスの導入・更新が必要です。接続時にも管理者画面を選び、操作は接続ごとに許可します。</p>
+      <p v-if="draft.allowElevated">接続時にも管理者画面を選び、操作は接続ごとに許可します。</p>
       <label><input v-model="draft.allowVirtualDisplay" type="checkbox" />一時的な仮想画面の作成を許可</label>
-      <p v-if="draft.allowVirtualDisplay">接続先Windows 11 x64に署名済み仮想画面ドライバーと専用保護サービスの導入が必要です。</p>
+      <p v-if="draft.allowVirtualDisplay">接続先Windows 11 x64に署名済み仮想画面ドライバーが必要です。</p>
 
-      <label><input v-model="draft.allowUnlock" type="checkbox" />Sodashitsu起動中のロック解除を許可</label>
-      <p v-if="draft.allowUnlock">接続先Windowsで、専用補助サービスの初回導入が必要です。解除操作にはマウス・キーボードの許可も必要です。</p>
+      <label><input v-model="draft.allowUnlock" type="checkbox" />操舵室サーバー稼働中のロック解除を許可</label>
+      <p v-if="draft.allowUnlock">解除操作にはマウス・キーボードの許可も必要です。</p>
       <label
         ><input
           v-model="draft.allowDisplayResize"

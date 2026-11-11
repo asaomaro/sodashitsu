@@ -26,16 +26,16 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
   const entries = [
     ["enabled", "画面共有を許可"],
     ["allowInput", "マウス・キーボードを許可"],
-    ["allowElevated","管理者権限のアプリ・UAC画面を許可（保護サービス更新が必要）"],
+    ["allowElevated","管理者権限のアプリ・UAC画面を許可"],
     ["allowProtectedMicrophone","管理者画面中のマイク転送を個別に許可（通常ユーザー・単独共有）"],
     ["allowProtectedFiles","管理者画面中も共有フォルダーを転送（soda実行ユーザーの権限）"],
     ["allowMonitors","全モニターの共有と切替を許可"],
-    ["allowVirtualDisplay","一時仮想画面の作成を許可（署名済みdriver/保護サービスが必要）"],
+    ["allowVirtualDisplay","一時仮想画面の作成を許可（署名済みdriverが必要）"],
     ["allowMicrophone", "接続元からのマイク転送を許可（仮想デバイス設定が必要）"],
     ["allowSystemAudio", "システム音声の送信を許可"],
     ["allowClipboard", "クリップボードを許可"],
     ["allowDisplayResize", "解像度変更を許可"],
-    ["allowUnlock", "起動中のロック解除を許可（Windows専用サービスが必要）"],
+    ["allowUnlock", "操舵室サーバー稼働中のロック解除を許可"],
   ] as const;
   return {
     id: "desktop-sharing",
@@ -43,6 +43,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
     items: () => [
       { label: message, heading: true },
       ...(state?.setupMessage?[{label:state.setupMessage,heading:true}]:[]),
+      ...(!state?.nativePlatform&&(state?.permissions.allowUnlock||state?.permissions.allowElevated||state?.permissions.allowVirtualDisplay)?[{label:"権限が必要な補助プログラムは操舵室サーバーの稼働中だけ動き、サーバー停止で終了します。初回は接続先Windowsで準備と権限の確認を行います。Windowsサービスの登録は不要です。",heading:true}]:[]),
       ...(!state?.supported
         ? [{ label: state?.nativePlatform?"OS向け補助プログラムの利用条件を確認してください":"Windows補助プログラムを利用できません", heading: true }]
         : []),

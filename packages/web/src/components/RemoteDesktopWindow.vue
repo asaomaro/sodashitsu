@@ -971,8 +971,8 @@ function connect(automatic = false) {
     status.value = "終了";
     if(monitorChanged){status.value="停止";return;}
     if(!wasReady&&switchingFromVirtual){status.value="停止";error.value=(error.value?error.value+" ":"")+"指定した物理モニターへ切り替えられません。他の共有窓を閉じ、接続先のモニター構成と許可を確認してから接続し直してください。";return;}
-    if(elevatedScreen.value){status.value="停止";if(!error.value)error.value=wasReady?"管理者画面の共有が終了しました。接続し直し、操作を許可し直してください。":"管理者画面を開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。";return;}
-    if(virtualScreen.value&&!wasReady){status.value="停止";error.value=(error.value?error.value+" ":"")+"仮想画面を作成できません。接続先の許可設定とOSの対応を確認してください。Windowsでは署名済みドライバーと保護サービスの導入・更新も必要です。";return;}
+    if(elevatedScreen.value){status.value="停止";if(!error.value)error.value=wasReady?"管理者画面の共有が終了しました。接続し直し、操作を許可し直してください。":"管理者画面を開始できません。接続先の許可と、必要な補助プログラムの準備・権限を確認してください。";return;}
+    if(virtualScreen.value&&!wasReady){status.value="停止";error.value=(error.value?error.value+" ":"")+"仮想画面を作成できません。接続先の許可設定とOSの対応を確認してください。Windowsでは署名済みドライバーと、必要な権限の補助プログラムの準備も必要です。";return;}
     if (!wasReady && activeSettings.value?.display) {
       maximumDisplay.value = false;
       requestedDisplay = undefined;
