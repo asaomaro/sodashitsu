@@ -676,6 +676,7 @@ function connect(automatic = false) {
         info.value = frame.info;
         sourceIdle.frame();platformIdle.value=false;
         lastDrawn = frame.info.seq;
+        startupRetries = 0;
         rendered.value++;
         cursorRenderer?.paint();
         drawMs.value = performance.now() - start;

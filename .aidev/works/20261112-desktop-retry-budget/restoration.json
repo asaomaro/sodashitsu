@@ -1,0 +1,8 @@
+{
+  "fixedSHA": "8578954d5e796b91a2288e3117955f6419c6f53ce0622fb4743616a277850200",
+  "oldSHA": "3e050c9ac93924b7d5d426da6673e2e155e623f4a1b0db00449ec8ba8ed08537",
+  "restoredSHA": "8578954d5e796b91a2288e3117955f6419c6f53ce0622fb4743616a277850200",
+  "byteExact": true,
+  "browserOldExit": 1,
+  "vitestOldExit": 1
+}

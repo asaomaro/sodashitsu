@@ -1,0 +1,25 @@
+{
+  "generatedOnly": true,
+  "windows": false,
+  "osInput": false,
+  "componentSHA256": "3e050c9ac93924b7d5d426da6673e2e155e623f4a1b0db00449ec8ba8ed08537",
+  "cases": [
+    {
+      "name": "six rendered epochs keep viewing",
+      "ok": false,
+      "error": "page.waitForFunction: Timeout 3500ms exceeded."
+    },
+    {
+      "name": "ready-only failures remain bounded",
+      "ok": true,
+      "epochs": 4,
+      "actualCanvasPixels": false,
+      "controlOrInputSent": false
+    }
+  ],
+  "errors": [],
+  "cleanup": {
+    "browser": true,
+    "vite": true
+  }
+}

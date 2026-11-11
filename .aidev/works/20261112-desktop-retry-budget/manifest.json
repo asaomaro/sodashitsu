@@ -1,0 +1,18 @@
+{
+  "baseHead": "c9f3f3941ce9f30328525ee261cf693d347750cb",
+  "files": {
+    ".aidev/works/20261112-desktop-retry-budget/browser-check.mjs": "70b7421ac2dc94225176f99eb7f0a59217fa5bad066e2a6bf05e2edfc58ecb98",
+    ".aidev/works/20261112-desktop-retry-budget/browser-negative.json": "eea1c3b6e43d322e01701f9e04a2e611646e838c2271ce5a288f2f6babda6da3",
+    ".aidev/works/20261112-desktop-retry-budget/browser-negative.log": "498d9bd04aeab6376bc9e97c2188625a959d5b405657407a215bd0da94bfab1c",
+    ".aidev/works/20261112-desktop-retry-budget/browser-positive.json": "389ba18282eedf3b73383e8e42af87f9f72e815092216ecb4ac00a48145cf10a",
+    ".aidev/works/20261112-desktop-retry-budget/browser-positive.log": "a8cb60e5183b28dcadb67a25b1d6ae9c21817dd663ef3383270635a83b3792ac",
+    ".aidev/works/20261112-desktop-retry-budget/browser-restored.log": "a8cb60e5183b28dcadb67a25b1d6ae9c21817dd663ef3383270635a83b3792ac",
+    ".aidev/works/20261112-desktop-retry-budget/browser-result.json": "389ba18282eedf3b73383e8e42af87f9f72e815092216ecb4ac00a48145cf10a",
+    ".aidev/works/20261112-desktop-retry-budget/related-negative.log": "945ffaf715a78025f86d9de6b55f1ac5173e9914e25297507839254105d9223c",
+    ".aidev/works/20261112-desktop-retry-budget/related-positive.log": "b74d3ee0004f5410ed927f3c7aeb9629d6a034b24e095128ed11e97f0960321e",
+    ".aidev/works/20261112-desktop-retry-budget/related-restored.log": "4731f5d468b5c51254a02b22f0464a613e7a5adf62dd2c8a515e62d3533afc39",
+    ".aidev/works/20261112-desktop-retry-budget/restoration.json": "0e5ccbaa3d5e56c2502e7c1dfa4aa07736f8379350c99606619ed0c4132f8f44",
+    ".aidev/works/20261112-desktop-retry-budget/source-sha256.json": "113c7703403097618463b05d74d25b143362b89fdd351d2d07c00e1012da0181",
+    ".aidev/works/20261112-desktop-retry-budget/test-result.md": "2c4f8b6973bd2d524dfd09ade77ddca493deff8d5ac84b5c3394d1264bd408d4"
+  }
+}

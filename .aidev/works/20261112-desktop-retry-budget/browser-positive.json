@@ -1,0 +1,27 @@
+{
+  "generatedOnly": true,
+  "windows": false,
+  "osInput": false,
+  "componentSHA256": "8578954d5e796b91a2288e3117955f6419c6f53ce0622fb4743616a277850200",
+  "cases": [
+    {
+      "name": "six rendered epochs keep viewing",
+      "ok": true,
+      "epochs": 6,
+      "actualCanvasPixels": true,
+      "controlOrInputSent": false
+    },
+    {
+      "name": "ready-only failures remain bounded",
+      "ok": true,
+      "epochs": 4,
+      "actualCanvasPixels": false,
+      "controlOrInputSent": false
+    }
+  ],
+  "errors": [],
+  "cleanup": {
+    "browser": true,
+    "vite": true
+  }
+}

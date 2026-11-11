@@ -1,0 +1,5 @@
+{
+  "packages/web/src/components/RemoteDesktopWindow.vue": "8578954d5e796b91a2288e3117955f6419c6f53ce0622fb4743616a277850200",
+  "packages/web/src/components/RemoteDesktopReconnect.test.ts": "2d3ebd51bb1950a0ee043351f246b33a8bb4ab725970d84d274982fc9501ae88",
+  ".aidev/works/20261112-desktop-retry-budget/browser-check.mjs": "70b7421ac2dc94225176f99eb7f0a59217fa5bad066e2a6bf05e2edfc58ecb98"
+}
