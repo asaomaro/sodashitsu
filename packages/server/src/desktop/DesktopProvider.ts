@@ -616,7 +616,7 @@ export class DesktopProvider {
               m.seq > s.inputSeq &&
               performance.now() - s.lastSeen < 5000 &&
               s.seq > 0 &&
-              (nativeDraw ? s.native?.hasFreshDraw() === true : performance.now() - s.frameAt < 2000||platformIdleInput&&s.sourceIdle.fresh({backend:cfg.nativePlatform,ready:s.ready,pending:s.pending,seq:s.seq}))
+              (!nativeDraw || s.native?.hasFreshDraw() === true)
             ) {
               if(!this.activateControl(s)){this.applyControl(s,false);return;}
               s.inputSeq = m.seq;

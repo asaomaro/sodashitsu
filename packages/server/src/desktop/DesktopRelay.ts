@@ -625,9 +625,8 @@ export class DesktopRelay {
             m.frameSeq <= v.seq &&
             m.frameSeq >= v.seq - 1 &&
             v.seq > 0 &&
-            (v.nativeInputFreshness && v.media?.native
-              ? v.media.drawnAt !== undefined && now - v.media.drawnAt < 2000
-              : now - v.frameAt < 5000||v.sourceIdle.fresh({backend:v.nativePlatform,ready:v.ready,pending:v.pending,seq:v.seq}))
+            (!(v.nativeInputFreshness && v.media?.native) ||
+              v.media.drawnAt !== undefined && now - v.media.drawnAt < 2000)
           ) {
             v.viewerSeq = m.seq;
             const seq = ++v.inputSeq;

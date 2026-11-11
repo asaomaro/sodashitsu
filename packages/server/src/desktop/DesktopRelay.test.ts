@@ -214,6 +214,38 @@ it("rejects headless capture on locked or disabled shared sources",async()=>{
  const locked=await fixture(true,false,true,true);
  await expect(locked.relay.openHeadless("locked",false,()=>true)).rejects.toThrow();
 });
+it.each([3000, 6200])("delivers human JPEG input after %ims without a new image while heartbeat stays alive",async age=>{
+ const f=await fixture(),v=await f.viewer("extended");v.send(start);
+ await expect.poll(()=>v.frames.length).toBe(1);
+ v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
+ const share=(f.provider as any).active,writes=vi.spyOn(share.process.resourceChannel.stdin,"write");
+ const heartbeat=setInterval(()=>v.send({type:"heartbeat"}),500);cleanup.push(async()=>{clearInterval(heartbeat);});
+ // Deliberately leave the real first image unacknowledged: bounded pending=1,
+ // unchanged source/epoch/seq, and no invented idle proof or timer advance.
+ await new Promise(resolve=>setTimeout(resolve,age));
+ expect(v.frames).toHaveLength(1);expect(share.pending).toBe(decodeDesktopFrame(v.frames[0]!).info.seq);
+ const before=Date.now();v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames[0]!).info.seq,input:{kind:"key",code:"KeyA",down:true}});
+ await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ const sent=writes.mock.calls.map(([value])=>JSON.parse(String(value))).filter(m=>m.type==="input");
+ expect(sent).toHaveLength(1);expect(sent[0].expiresAt).toBeGreaterThanOrEqual(before+500);expect(sent[0].expiresAt).toBeLessThanOrEqual(Date.now()+500);
+ // Existing sequence/source/control boundaries still reject on the same socket.
+ v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames[0]!).info.seq,input:{kind:"key",code:"KeyB",down:true}});
+ v.send({type:"input",seq:2,frameSeq:99999,input:{kind:"key",code:"KeyB",down:true}});
+ v.send({type:"control",enabled:false});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);
+ v.send({type:"input",seq:3,frameSeq:decodeDesktopFrame(v.frames[0]!).info.seq,input:{kind:"key",code:"KeyC",down:true}});
+ await new Promise(resolve=>setTimeout(resolve,75));expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).filter(m=>m.type==="input")).toHaveLength(1);
+ writes.mockRestore();
+},12000);
+it("still rejects an agent observation older than two seconds on the real JPEG source",async()=>{
+ const f=await fixture(),lease=await f.relay.openHeadless("cli",true,()=>true);
+ await f.relay.agents.refresh("cli",lease.leaseId);const observed=f.relay.agents.observe("cli",lease.leaseId);
+ const share=(f.provider as any).active,writes=vi.spyOn(share.process.resourceChannel.stdin,"write");
+ // Headless auto-ACKs fresh frames. Aging the actual latest frame isolates the
+ // agent's image proof without bypassing grant/digest/dimension verification.
+ const viewer=[...(f.relay as any).viewers][0];viewer.latest.at-=3000;viewer.frameAt-=3000;
+ await expect(f.relay.agents.act("cli",lease.leaseId,observed.observationId,[{kind:"key",code:"KeyA",down:true}])).rejects.toThrow("Desktop changed; observe and decide again");
+ expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).filter(m=>m.type==="input")).toHaveLength(0);writes.mockRestore();f.relay.clientGone("cli");
+});
 it.each(["normal","shared","elevated-default","elevated-uac"] as const)("keeps fresh %s control across browser focus-release before first wire pointer",async mode=>{
  const ordinary=mode==="normal"||mode==="shared",f=ordinary?await fixture():await protectedFixture({mode,allowed:true});
  if(ordinary){const cfg=(f.provider as any).config;f.provider.configure({...cfg,fileRoot:dirname(f.record),command:[...cfg.command,"--pointer-witness-generated"]});}
@@ -291,7 +323,7 @@ it.each(["pipe","json","shared"].flatMap(mode=>["release","control","rejected-in
  v.send({type:"heartbeat"});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  expect(share.pointerWitness).toBeUndefined();expect(share.inputSeq).toBe(1);expect(v.ws.readyState).toBe(WebSocket.OPEN);
 });
-it("keeps image freshness for unmarked and agent input even when native video is fresh", async () => {
+it("keeps native draw freshness separate from human image age", async () => {
   const f=await fixture(), viewer=await f.viewer();viewer.send(start);
   await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
   viewer.send({type:"control",enabled:true});
@@ -312,9 +344,9 @@ it("keeps image freshness for unmarked and agent input even when native video is
   native.fromViewer({type:"native_video_ack",id,generation:1,seq:1});
   share.native=native;share.frameAt=performance.now()-3000;
   const inject=(seq:number,text:string,marked=false)=>share.ws.emit("message",Buffer.from(JSON.stringify({type:"input",seq,frameSeq:share.seq,input:{kind:"text",text},...(marked?{nativeDraw:true}:{})})),false);
-  inject(1,"DENIED_IMAGE");inject(2,"ACCEPT_NATIVE",true);
+  inject(1,"ACCEPT_OLD_IMAGE");inject(2,"ACCEPT_NATIVE",true);
   await expect.poll(async()=>(await recorded()).includes("ACCEPT_NATIVE")).toBe(true);
-  expect(await readFile(f.record,"utf8")).not.toContain("DENIED_IMAGE");
+  expect(await readFile(f.record,"utf8")).toContain("ACCEPT_OLD_IMAGE");
   expect(helperInput(2)).not.toHaveProperty("deferNativeSnapshot");
   share.deferNativeSnapshots=true;
   inject(3,"ACCEPT_NATIVE_DEFER",true);
@@ -772,7 +804,7 @@ it("cursor packets advance independently and cannot renew image freshness or gra
  await expect.poll(()=>v.frames.filter(isDesktopCursor).length).toBeGreaterThan(1);
  expect(v.messages.find(m=>m.type==="ready")?.cursor).toBe(true);expect(f.startRequests[0]!.options.cursor).toBe(true);
  const server=[...(f.relay as any).viewers][0],source=(f.provider as any).active;
- v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ expect(server.control).toBe(false);
  server.pending=0;const before=server.frameAt=performance.now()-6000,sourceBefore=source.frameAt;
  for(let seq=100;seq<103;seq++)server.provider.emit("message",Buffer.from(encodeDesktopCursor({type:"cursor",seq,visible:true,x:.2,y:.3,shapeId:1})),true);
  expect(server.frameAt).toBe(before);expect(source.frameAt).toBe(sourceBefore);
@@ -1318,16 +1350,16 @@ it("discards main-lane idle notices overtaken by a newer image on its independen
   v.send({type:"ack",seq:2});await expect.poll(()=>a.pending).toBe(0);emit.call(a.provider,"message",...held[0]!);expect(a.frameAt).toBe(at);expect(a.sourceIdle.fresh({backend:"linux-portal",ready:true,pending:0,seq:2})).toBe(false);expect(v.messages.some(m=>m.type==="platform_idle")).toBe(false);expect(v.ws.readyState).toBe(WebSocket.OPEN);
  }finally{hook.mockRestore();image.terminate();v.send({type:"stop"});}
 });
-it("keeps quiet Linux human input live without refreshing agent images or unmarked B input",async()=>{
+it("keeps quiet Linux human input live independently of idle notices without refreshing agent images",async()=>{
  const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal","--native-idle"]});const viewer=await f.viewer("native-platform");viewer.send({...start,options:{...start.options,features:true}});await expect.poll(()=>viewer.frames.length).toBe(1);viewer.send({type:"ack",seq:1});await expect.poll(()=>viewer.messages.some(m=>m.type==="platform_idle")).toBe(true);
  viewer.send({type:"control",enabled:true});await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
  const a=[...(f.relay as any).viewers][0],b=(f.provider as any).active,old=performance.now()-7000;a.frameAt=b.frameAt=old;
  viewer.send({type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"KeyA",down:true}});await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);expect((await readFile(f.record,"utf8"))).toContain('"code":"KeyA"');expect(a.frameAt).toBe(old);expect(b.frameAt).toBe(old);expect(viewer.frames).toHaveLength(1);expect(a.agent.frame()).toBeUndefined();
  await expect(a.agent.input({kind:"text",text:"DENIED_AGENT"})).rejects.toThrow("Desktop control unavailable");
- const deniedWrites=vi.spyOn(f.provider as any,"write");b.ws.emit("message",Buffer.from(JSON.stringify({type:"input",seq:999,frameSeq:1,input:{kind:"text",text:"DENIED_UNMARKED"}})),false);expect(deniedWrites.mock.calls.some(([,value]:any)=>value.type==="input"&&value.input?.text==="DENIED_UNMARKED")).toBe(false);
- expect(await readFile(f.record,"utf8")).not.toContain("DENIED");
  a.sourceIdle.clock=()=>performance.now()+1000;b.sourceIdle.clock=()=>performance.now()+1000;
- const writes=vi.spyOn(f.relay as any,"send");viewer.send({type:"input",seq:2,frameSeq:1,input:{kind:"text",text:"DENIED_EXPIRED"}});await expect.poll(()=>writes.mock.calls.some(([,value]:any)=>value.type==="native_pointer_cancel")).toBe(true);expect(await readFile(f.record,"utf8")).not.toContain("DENIED");
+ viewer.send({type:"input",seq:2,frameSeq:1,input:{kind:"key",code:"KeyA",down:false}});await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);
+ expect(a.frameAt).toBe(old);expect(b.frameAt).toBe(old);expect(viewer.frames).toHaveLength(1);expect(a.agent.frame()).toBeUndefined();
+ expect(await readFile(f.record,"utf8")).not.toContain("DENIED_AGENT");
  viewer.send({type:"stop"});
 });
 it("rejects a browser-forged private quiet-input marker",async()=>{
