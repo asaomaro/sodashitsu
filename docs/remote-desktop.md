@@ -207,7 +207,7 @@ UACの表示/終了、ロック、利用者変更等を検出したら旧共有�
 
 この経路は画像と利用者の入力を基本とします。対応版では、後述の追加条件でGPU H.264動画・通常ユーザーのシステム音声・共有フォルダー転送も利用できます。Ctrl+Alt+DelのSAS、エージェントAPI、clipboard、マイク、モニター選択・実解像度変更・仮想画面との併用は無効です。SYSTEMとして汎用コマンドを実行する受け口は追加しません。補助プロセスは既存の利用者process/logonとheartbeatに結び、サインアウト後に永続するエージェントにはなりません。
 
-コンパイル、生成facts/画像、private pipeの相互確認・期限close、専用WinEvent markerの実配送、ブラウザの許可/表示/拒否/終了を検証しています。2026-11-09にはWindows実機1台で、操作中の通常画面からUACへ移り、閲覧再接続後に改めて操作権を取り「いいえ」で閉じ、通常画面への閲覧復帰と操作権の再取得まで手動確認しました。すべてのWindows構成や資格情報入力・複数窓での実操作を保証するものではありません。他のWindowsにも、本体と同梱の保護サービスの両方を更新してください。ビルド・handoffだけでは導入済みサービスの実行ファイルは更新されません。サービス更新と実機確認は利用者の管理者操作で行ってください。
+コンパイル、生成facts/画像、private pipeの相互確認・期限close、専用WinEvent markerの実配送、ブラウザの許可/表示/拒否/終了を検証しています。2026-11-09には旧サービス方式のWindows実機1台で、操作中の通常画面からUACへ移り、閲覧再接続後に改めて操作権を取り「いいえ」で閉じ、通常画面への閲覧復帰と操作権の再取得まで手動確認しました。すべてのWindows構成や資格情報入力・複数窓での実操作を保証するものではありません。新しいTask方式の起動・停止は別の候補確認対象で、この旧方式の実績では証明していません。他のWindowsでも、本体の更新に加え、上の `prepare-desktop-helper.ps1` で権限補助プログラムを更新してください。ビルド・handoffだけでは準備済みの補助プログラムの実行ファイルは更新されません。準備と実機確認は利用者の管理者操作で行ってください。
 
 ### 実装ファイルの配置と更新
 
@@ -223,7 +223,7 @@ UACの表示/終了、ロック、利用者変更等を検出したら旧共有�
 | `scripts/remote-desktop/WindowsDesktopAudio.cs` | 通常画面の要求時システム音声。PowerShellが追加コンパイルするため同じフォルダに残す。認証画面サービスへの追加は不要 |
 | `scripts/remote-desktop/WindowsDesktopRichClipboard.cs` | 通常画面のPNG/HTML/RTFクリップボード。必要な場合はPowerShellと同じフォルダに残す。認証画面サービスへの追加は不要 |
 | `scripts/remote-desktop/WindowsDesktopHost.cs` | 通常画面の取得と入力。上のPowerShellと同じフォルダに残す |
-| `scripts/remote-desktop/WindowsDesktopUnlock.cs` | ロック画面の判定、権限補助プログラムとの通信。上のPowerShellと同じフォルダに残す |
+| `scripts/remote-desktop/WindowsDesktopUnlock.cs` | ロック画面の判定、runtime brokerとの通信（旧サービス方式との互換も保持）。上のPowerShellと同じフォルダに残す |
 | `packages/server/src/machine/DelegationPairing.ts` | BからAへの接続申請。共有前のmachine接続に使う。ビルド対象の実装ファイル |
 
 `src`配下のTSはサーバ用の`dist`へビルドされます。現在のプロセスが動いていても、TSを削除すると次のビルドができなくなります。CSはhelperの起動時にも必要なので、`dist`やインストール済みサービスがあっても削除しないでください。Program Filesに配置した専用サービスの更新は、前節のインストーラー再実行が別途必要です。
