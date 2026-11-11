@@ -1,0 +1,12 @@
+{
+  "packages/server/src/desktop/DesktopSettings.ts": "cbf87b72b0294678ed5f6ab1d7e45e455dba16f4c837859758c164c056fdb3c0",
+  "packages/server/src/desktop/DesktopSettings.test.ts": "371838bb0d376965ddb5c60bd0c2b2672d8020e255017e0889b1746f5d490045",
+  "packages/server/src/desktop/unlockFailure.ts": "8156eb267888b10cdc518e64abbdb9efdc4b7ff560b30f14e23fffaec2c96273",
+  "scripts/remote-desktop/WindowsDesktopHost.cs": "e5cd0f45a1c934369f8795ca1e7cd5d195897fd1983eb269543949a377f6cf00",
+  "scripts/remote-desktop/WindowsDesktopUnlock.cs": "e547098ec74efb79d9cec9c0f03b5c8b7e010ed9f423a47d02a197f843117295",
+  "scripts/remote-desktop/install-unlock-service.ps1": "f296e8e29d7452920c7b142f21a3e1435bc20e33f2668f307aadf8984d1e6cb7",
+  "scripts/remote-desktop/windows-helper.ps1": "6ed0b55e30c5cba82f8d241611095509d5b1a19f10e5c5f4fcf1e312fe0f896f",
+  "scripts/remote-desktop/prepare-desktop-helper.ps1": "c0b704431a532e1af496441a2fc6a1414105d221a7aeb4f5033ff7e556870df8",
+  "scripts/remote-desktop/WindowsRuntimeBrokerChecks.cs": "1b587f9c1a7aaee3f95f8dce498f2346f1353d6025f4f561c5b0b0f1ba7ddf94",
+  "scripts/remote-desktop/WindowsRuntimeTaskDefinitionChecks.ps1": "06e53e7829f302a80ba1c96045021d2f012ad18e7811b4bfb75bd0a0f38925bd"
+}

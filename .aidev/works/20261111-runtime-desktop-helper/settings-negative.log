@@ -1,0 +1,52 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transient-desktop-broker/packages/server
+
+ ❯ src/desktop/DesktopSettings.test.ts (39 tests | 2 failed | 37 skipped) 28ms
+   × persists opt-in unlock and ties its lease to provider disposal; old permissions stay compatible 20ms
+   × shows the resolved preparation command only to the local configuring client, without starting a lease for normal sharing 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopSettings.test.ts > persists opt-in unlock and ties its lease to provider disposal; old permissions stay compatible
+AssertionError: expected { command: [ …(3) ], …(14) } to match object { Object (allowUnlock, command) }
+(13 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "allowUnlock": true,
+    "command": [
+      "synthetic-helper",
+-     "-RuntimeBroker",
+      "-AllowInput",
+      "-AllowUnlock",
+    ],
+  }
+
+ ❯ src/desktop/DesktopSettings.test.ts:113:45
+    111|     expect(start).not.toHaveBeenCalled();
+    112|     await settings.set({...off,enabled:true,allowInput:true,allowUnloc…
+    113|     expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowUnlock…
+       |                                             ^
+    114|     expect(start).toHaveBeenLastCalledWith(["synthetic-helper","-Runti…
+    115|     expect(JSON.parse(await readFile(options.file,"utf8"))).toMatchObj…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/desktop/DesktopSettings.test.ts > shows the resolved preparation command only to the local configuring client, without starting a lease for normal sharing
+AssertionError: expected [ 'powershell.exe', '-File', …(1) ] to include '-RuntimeBroker'
+ ❯ src/desktop/DesktopSettings.test.ts:249:269
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 37 skipped (39)
+   Start at  00:08:17
+   Duration  1.54s (transform 79%, import 19%, tests 2%)
+
+undefined
+/workspaces/sodashitsu-transient-desktop-broker/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/desktop/DesktopSettings.test.ts -t persists opt-in unlock|shows the resolved preparation

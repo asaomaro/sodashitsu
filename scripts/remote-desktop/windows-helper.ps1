@@ -1,4 +1,4 @@
-param([int]$MonitorIndex = 0, [switch]$AllowInput, [switch]$AllowClipboard, [switch]$AllowMonitors, [switch]$AllowVirtualDisplay, [switch]$AllowElevated, [switch]$AllowDisplayResize, [switch]$ValidateOnly, [switch]$AllowUnlock, [switch]$UnlockLease, [ValidateSet("auto","gdi")][string]$CaptureBackend = "auto")
+param([int]$MonitorIndex = 0, [switch]$AllowInput, [switch]$AllowClipboard, [switch]$AllowMonitors, [switch]$AllowVirtualDisplay, [switch]$AllowElevated, [switch]$AllowDisplayResize, [switch]$ValidateOnly, [switch]$AllowUnlock, [switch]$UnlockLease, [switch]$RuntimeBroker, [ValidateSet("auto","gdi")][string]$CaptureBackend = "auto")
 $ErrorActionPreference = 'Stop'
 # Loading and compilation are side-effect free: -ValidateOnly never opens a window,
 # captures the screen, queries the input desktop, or sends input.
@@ -30,26 +30,27 @@ try {
     $virtualRequested = $AllowVirtualDisplay -and $env:SODA_DESKTOP_VIRTUAL_REQUEST -eq '1'
     $elevatedRequested = $AllowElevated -and $env:SODA_DESKTOP_ELEVATED_REQUEST -eq '1'
     if ($virtualRequested -and $elevatedRequested) { throw 'Conflicting desktop requests.' }
+    $brokerExecutable = if ($RuntimeBroker) { [SodaDesktopUnlock]::RuntimeExecutable() } else { [SodaDesktopUnlock]::InstalledExecutable() }
     if ($UnlockLease) {
-        [SodaDesktopUnlock]::RunInstalled($true,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent,$AllowElevated.IsPresent)
+        [SodaDesktopUnlock]::RunInstalled($true,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent,$AllowElevated.IsPresent,$RuntimeBroker.IsPresent)
         exit 0
     }
     if ($elevatedRequested) {
-        if (-not (Test-Path -LiteralPath ([SodaDesktopUnlock]::InstalledExecutable()))) {
+        if (-not (Test-Path -LiteralPath $brokerExecutable)) {
             [Console]::Out.WriteLine('{"type":"protected_desktop_failure","code":"service_missing"}')
             exit 0
         }
-        [SodaDesktopUnlock]::RunInstalled($false,$false,$false,$true)
+        [SodaDesktopUnlock]::RunInstalled($false,$false,$false,$true,$RuntimeBroker.IsPresent)
         exit 0
     }
     $selected = 'normal'
     if (-not $UnlockLease -and $AllowUnlock -and -not $virtualRequested) { $selected = [SodaDesktopUnlock]::SelectSource() }
     if ($selected -eq 'transition') { [SodaDesktopUnlock]::SourceTransition(); exit 0 }
     if ($selected -eq 'secure') {
-        $executable = [SodaDesktopUnlock]::InstalledExecutable()
+        $executable = $brokerExecutable
         if (-not (Test-Path -LiteralPath $executable)) { throw 'Install the unlock service first.' }
-        [SodaDesktopUnlock]::RunInstalled($UnlockLease.IsPresent,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent)
+        [SodaDesktopUnlock]::RunInstalled($UnlockLease.IsPresent,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent,$false,$RuntimeBroker.IsPresent)
         exit 0
     }
-    [SodaDesktopUnlock]::RunNormal($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $AllowMonitors.IsPresent, $AllowVirtualDisplay.IsPresent, $AllowUnlock.IsPresent) }
+    [SodaDesktopUnlock]::RunNormal($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $AllowMonitors.IsPresent, $AllowVirtualDisplay.IsPresent, $AllowUnlock.IsPresent, $RuntimeBroker.IsPresent) }
 catch { [Console]::Error.WriteLine('Desktop sharing stopped or unavailable.'); exit 1 }

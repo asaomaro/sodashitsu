@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transient-desktop-broker/packages/server
+
+
+ Test Files  2 passed (2)
+      Tests  46 passed (46)
+   Start at  00:08:20
+   Duration  3.24s (tests 54%, transform 37%, import 9%)
+

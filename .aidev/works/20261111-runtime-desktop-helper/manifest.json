@@ -1,0 +1,12 @@
+{
+  "files": {
+    "windows-peer-result.json": "302a2dae3908f4964455f670bfeb5c83bca763c4a5db816c57612a446d651d78",
+    "windows-full-source-sha256.json": "407a0d02bf491927cacb2b069de7e339b236e208f9a6e4bf86433079df66c0a9",
+    "source-sha256.json": "55ad2fe49b5785b780c7b231ae6c11fae8169f27ac37d4b971e4d5447594e316",
+    "design.md": "d368d0ba37f7f96bafb3be4f3863878906a60c75339f4391f7bda7bac4ed0020",
+    "windows-virtual-result.json": "302a2dae3908f4964455f670bfeb5c83bca763c4a5db816c57612a446d651d78",
+    "test-result.md": "4d31bd4af07da69cc5b2c35c7497fad776b787b8ac6fd7f0fd6a0c26d246b51c",
+    "settings-restoration.json": "6ff289a17f51e96ef59b2e49d529bfcb5975e62da7b994f7679e909348f954d8",
+    "windows-full-result.json": "6a1c63b31cd62de4f22aee07fd248c001a81ecb5cbfb2f473aaeea20bc9daa09"
+  }
+}

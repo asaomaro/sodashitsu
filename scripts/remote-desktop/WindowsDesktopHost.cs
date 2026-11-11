@@ -590,11 +590,11 @@ public static class SodaDesktopHost {
         if(Secure||state==null||state()!=0||!inputDefault())return false;
         inputAllowed=inputAllowed&&unlockAllowed;Secure=true;SecureGuard=()=>inputDefault()&&state()==0;SecureLockState=state;SecureAttentionAllowed=false;return true;
     }
-    public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null,Func<int> lockState=null,bool locallyAllowMonitors=false,bool locallyAllowVirtualDisplay=false,bool locallyAllowUnlock=false) {
+    public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null,Func<int> lockState=null,bool locallyAllowMonitors=false,bool locallyAllowVirtualDisplay=false,bool locallyAllowUnlock=false,bool runtimeBroker=false) {
         if(!Secure && !Environment.UserInteractive)throw new InvalidOperationException("Interactive Windows session required");
         bool lockedDefault=ConfigureLockedDefault(lockState,DefaultDesktop,locallyAllowUnlock,ref locallyAllowInput);
         VirtualRequested=false;bool failureReported=false;
-        try { RunCore(monitorIndex,locallyAllowInput,locallyAllowClipboard,locallyAllowDisplayResize,sourcePath,locallyAllowMonitors,locallyAllowVirtualDisplay); }
+        try { RunCore(monitorIndex,locallyAllowInput,locallyAllowClipboard,locallyAllowDisplayResize,sourcePath,locallyAllowMonitors,locallyAllowVirtualDisplay,runtimeBroker); }
         catch(Exception error){if(VirtualRequested&&locallyAllowVirtualDisplay){try{var type=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopVirtualFailure");if(type!=null){Output(new {type="virtual_display_failure",code=(string)type.GetMethod("Of").Invoke(null,new object[]{error})});failureReported=true;}}catch{}}throw;}
         finally { if(DisplayLease!=null){try{DisplayLease.Dispose();}catch{Console.Error.WriteLine("Display restore failed; restore resolution locally in Windows Settings.");}DisplayLease=null;}
             if(VirtualLease!=null){try{try{if(!failureReported&&VirtualRequested&&VirtualAlive!=null&&!VirtualAlive())Output(new {type="virtual_display_failure",code=VirtualFailure!=null?VirtualFailure():"target_changed"});}catch{}Release();}finally{try{VirtualLease.Dispose();}finally{VirtualLease=null;VirtualAlive=null;VirtualFailure=null;}}}
@@ -608,7 +608,8 @@ public static class SodaDesktopHost {
         try{cpuOnly=capture!=null&&!capture.ConfigureVideoOutput(width,height);encoder=SodaDesktopH264.CreateCodecForDesktop(width,height,fps,bitrate,cpuOnly?null:capture,codec);return true;}
         catch{if(encoder!=null)encoder.Dispose();encoder=null;return false;}
     }
-    static void RunCore(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard,bool locallyAllowDisplayResize,string sourcePath,bool locallyAllowMonitors,bool locallyAllowVirtualDisplay) {
+    static object OpenVirtualBroker(bool runtime,Func<string,object> open) {return open(runtime?SodaDesktopUnlock.RuntimeExecutable():SodaDesktopUnlock.InstalledExecutable());}
+    static void RunCore(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard,bool locallyAllowDisplayResize,string sourcePath,bool locallyAllowMonitors,bool locallyAllowVirtualDisplay,bool runtimeBroker) {
         ActiveMonitors=null;CaptureDevice=null;MonitorNotice=0;MonitorDriver=new SodaDesktopMonitorLayout.NativeDriver();SetProcessDPIAware();
         string first=ReadBoundedLine();if(first==null || first.Length>65536)return;
         var config=Obj(Json.DeserializeObject(first));if((string)config["type"]!="configure")throw new InvalidOperationException();
@@ -620,7 +621,7 @@ public static class SodaDesktopHost {
         if(virtualRequested){
             if(Secure||!locallyAllowVirtualDisplay||!config.ContainsKey("allowVirtualDisplay")||!(config["allowVirtualDisplay"] is bool)||!(bool)config["allowVirtualDisplay"]||options.ContainsKey("monitorDevice"))throw new InvalidOperationException("Virtual display not permitted");
             var type=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopVirtualClient");if(type==null)throw new InvalidOperationException("Virtual display client unavailable");
-            var client=OpenVirtualOnNormalDesktop(AllowedDesktop,()=>type.GetMethod("Open").Invoke(null,new object[]{SodaDesktopUnlock.InstalledExecutable()}));VirtualLease=(IDisposable)client;
+            var client=OpenVirtualOnNormalDesktop(AllowedDesktop,()=>OpenVirtualBroker(runtimeBroker,exe=>type.GetMethod("Open").Invoke(null,new object[]{exe})));VirtualLease=(IDisposable)client;
             var failed=type.GetProperty("FailureCode");VirtualFailure=()=>failed!=null?(failed.GetValue(client,null) as string??"target_changed"):"target_changed";
             var alive=type.GetProperty("Alive");VirtualAlive=()=>Convert.ToBoolean(alive.GetValue(client,null));virtualDevice=(string)type.GetProperty("DeviceName").GetValue(client,null);
         }

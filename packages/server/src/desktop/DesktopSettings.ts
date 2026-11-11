@@ -2,6 +2,7 @@ import {nativePlatformFor,nativeDesktopCommand,nativeDesktopSetup} from "./Deskt
 import type {DesktopNativePlatform} from "@sodashitsu/protocol";
 
 import { existsSync } from "node:fs";
+import { win32 as windowsPath } from "node:path";
 import {createHash} from "node:crypto";
 import { lstat,readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
@@ -29,7 +30,7 @@ export function bundledDesktopCommand(
   );
   const required = ["windows-helper.ps1","WindowsDesktopHost.cs","WindowsDesktopUnlock.cs",
     "WindowsVirtualDisplay.cs","WindowsVirtualDisplayNative.cs","WindowsVirtualDisplayChannel.cs",
-    "WindowsProtectedEpoch.cs","WindowsProtectedScope.cs","WindowsProtectedScopeNative.cs","WindowsProtectedHandshake.cs","WindowsProtectedWorker.cs"];
+    "WindowsProtectedEpoch.cs","WindowsProtectedScope.cs","WindowsProtectedScopeNative.cs","WindowsProtectedHandshake.cs","WindowsProtectedWorker.cs","prepare-desktop-helper.ps1"];
   if (!required.every(name=>existsSync(fileURLToPath(new URL(`../../../../scripts/remote-desktop/${name}`,import.meta.url))))) return;
   if(os!=="win32"&&!env.WSL_DISTRO_NAME)return;
   let path = script;
@@ -104,7 +105,10 @@ export class DesktopSettings {
   }
   private get nativePlatform(){return this.platform;}
   get(canConfigure: boolean): DesktopSettingsResult {
-    return {...(this.nativePlatform?{nativePlatform:this.nativePlatform,setupMessage:nativeDesktopSetup(this.nativePlatform)}:{}), permissions: { ...this.permissions }, supported: !!this.command, canConfigure };
+    const helper=this.command?.[this.command.indexOf("-File")+1];
+    const prepare=canConfigure&&helper&&/^[A-Za-z]:[\\/]/.test(helper)?windowsPath.join(windowsPath.dirname(helper),"prepare-desktop-helper.ps1"):undefined;
+    const runtimeSetup=!this.nativePlatform&&!this.options.legacy&&this.command?`ロック解除・管理者画面・仮想画面を使う場合は、接続先で${prepare?` powershell.exe -NoProfile -File "${prepare}" `:"同梱の prepare-desktop-helper.ps1 "}を初回だけ実行し、共有設定を保存し直してください。Windowsサービスは登録せず、補助プロセスは操舵室サーバーの稼働中だけ動き、サーバー停止で終了します。`:undefined;
+    return {...(runtimeSetup?{setupMessage:runtimeSetup}:{}),...(this.nativePlatform?{nativePlatform:this.nativePlatform,setupMessage:nativeDesktopSetup(this.nativePlatform)}:{}), permissions: { ...this.permissions }, supported: !!this.command, canConfigure };
   }
   async transferScope():Promise<string>{
     let file:unknown=null;try{const st=await lstat(this.options.file,{bigint:true});file=[st.dev.toString(),st.ino.toString(),st.mtimeNs.toString(),st.ctimeNs.toString(),await readFile(this.options.file,"utf8")];}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;}
@@ -146,6 +150,7 @@ export class DesktopSettings {
       const command = [...this.command];
       // Custom commands retain their launch syntax; saved local permissions supersede env defaults.
       if (!legacy && !this.nativePlatform) {
+        command.push("-RuntimeBroker");
         if(p.allowMonitors)command.push("-AllowMonitors");
         if(p.allowVirtualDisplay)command.push("-AllowVirtualDisplay");
         if(p.allowElevated)command.push("-AllowElevated");
@@ -177,7 +182,7 @@ export class DesktopSettings {
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,
         allowUnlock: p.allowUnlock === true,
-        ...((p.allowUnlock||p.allowVirtualDisplay||p.allowElevated) && !legacy && !this.nativePlatform ? { unlockLeaseCommand: [...this.command, "-UnlockLease",...(p.allowVirtualDisplay?["-AllowVirtualDisplay"]:[]),...(p.allowUnlock&&(p.allowVirtualDisplay||p.allowElevated)?["-AllowUnlock"]:[]),...(p.allowElevated?["-AllowElevated"]:[])] } : {}),
+        ...((p.allowUnlock||p.allowVirtualDisplay||p.allowElevated) && !legacy && !this.nativePlatform ? { unlockLeaseCommand: [...this.command, "-RuntimeBroker", "-UnlockLease",...(p.allowVirtualDisplay?["-AllowVirtualDisplay"]:[]),...(p.allowUnlock&&(p.allowVirtualDisplay||p.allowElevated)?["-AllowUnlock"]:[]),...(p.allowElevated?["-AllowElevated"]:[])] } : {}),
         origins: legacy?.origins ?? this.options.origins,
       };
     }
