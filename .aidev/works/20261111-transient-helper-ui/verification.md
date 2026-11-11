@@ -1,0 +1,13 @@
+# Task-based helper UI verification
+
+Source c15558ca0aa06d98e1eb605b0d0a79ceec6bc485, base 23cf87712a556d9638e6fc1c7fd086cf3fd07684. Only guidance/display helpers/docs change; existing permission schema, guards and request methods stay intact. Backend owns native/CLI/setupMessage and final integrated build.
+
+Restored source: Web settings/reconnect 25 PASS, TUI settings 10 PASS, protocol protected message 12 PASS. Raw outputs are positive-web.log, positive-tui.log and positive-protocol.log. Commands use each package's `node node_modules/vitest/vitest.mjs run` with the files listed in the source map. No whole build/typecheck is claimed here.
+
+Negative control replaced only four runtime files with base Git blobs, after durable backup in Git common-dir recovery/transient-helper-ui-c155-negative. Existing new tests stayed fixed. Old Web 3 FAIL/22 PASS, TUI 1 FAIL/9 PASS, protocol 3 FAIL/9 PASS. Old browser fails because the server-lifetime marker is missing (5-second locator timeout); this is a generated UI regression, not a Windows preparation test. Complete raw output is in negative-{web,tui,protocol,browser}.log. restoration.json records all four before/restored SHA values; all match. Source has no tracked diff after restoration.
+
+Generated Chrome uses actual DesktopSettings.vue and an injected mock ConnectionKey. A quoted full Windows preparation command supplied through existing setupMessage is visible, as is server-lifetime guidance; mocked preparation completion + settings reload removes stale setupMessage; existing permission save has only the eight existing permission keys. All requests are settings get/set, no elevation/Task/service launch RPC. browser-receipt.json and positive-browser.log record browser/Vite cleanup, command display/reload/save. generated-preparation-guidance.png was visually inspected. Endpoint/command strings are synthetic; no credentials or user browser profile are used.
+
+Initial preparation remains local explicit UAC, Task definition + protected EXE only, no immediate broker start; re-save permissions/restart server is required. TUI close is not server stop. Old Unlock/Boot/Signin services are preserved. Historical service evidence in docs is labelled historical, not evidence that the new Task path works.
+
+Author Windows/service/desktop/input/model operations: 0. Real preparation, UAC, Task registration/start/stop, bundled path resolution and installed old-service coexistence remain backend/Root validation gates. No generated screenshot represents a real Windows system. Final combined build is delegated to backend once; no duplicate author build.

@@ -1,0 +1,22 @@
+{
+  "packages/web/src/components/DesktopSettings.vue": {
+    "before": "19ca9e42a3b374d46b6de5b93162f67a60b86669f9248310d759a7d7df38b642",
+    "restored": "19ca9e42a3b374d46b6de5b93162f67a60b86669f9248310d759a7d7df38b642"
+  },
+  "packages/web/src/components/RemoteDesktopWindow.vue": {
+    "before": "3e050c9ac93924b7d5d426da6673e2e155e623f4a1b0db00449ec8ba8ed08537",
+    "restored": "3e050c9ac93924b7d5d426da6673e2e155e623f4a1b0db00449ec8ba8ed08537"
+  },
+  "packages/tui/src/settings/desktopSettings.ts": {
+    "before": "fd16aa75477a728a27927a6c7a254aab17f7f690dd8a841e7e81192a524c9d30",
+    "restored": "fd16aa75477a728a27927a6c7a254aab17f7f690dd8a841e7e81192a524c9d30"
+  },
+  "packages/protocol/src/desktopProtected.ts": {
+    "before": "d5e13492d17af96f968dc30f7442c3d9b23f8783d19002bd00b2d7a8abb97b6f",
+    "restored": "d5e13492d17af96f968dc30f7442c3d9b23f8783d19002bd00b2d7a8abb97b6f"
+  },
+  "webExit": 1,
+  "tuiExit": 1,
+  "protocolExit": 1,
+  "browserExit": 1
+}

@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transient-helper-ui/packages/web
+
+
+ Test Files  2 passed (2)
+      Tests  25 passed (25)
+   Start at  00:07:35
+   Duration  2.59s (transform 54%, environment 18%, tests 15%, import 13%, worker 1%)
+

@@ -1,0 +1,16 @@
+{
+  "sourceHead": "c15558ca0aa06d98e1eb605b0d0a79ceec6bc485",
+  "base": "23cf87712a556d9638e6fc1c7fd086cf3fd07684",
+  "files": {
+    "docs/remote-desktop.md": "06d5328c38f1b3125a1b36a7bba50dfe59e9219cc35e0416d6d85498a383c361",
+    "docs/tui.md": "19e43658c0d3af02f83187b129c7d9389320cd43f718932b7338ffaaa7aade0f",
+    "packages/protocol/src/desktopProtected.test.ts": "de05e5a4a7cb646ab6a1af873beef6b1f0b84cfc157f266a57f9ae3e592ec65d",
+    "packages/protocol/src/desktopProtected.ts": "d5e13492d17af96f968dc30f7442c3d9b23f8783d19002bd00b2d7a8abb97b6f",
+    "packages/tui/src/settings/desktopSettings.test.ts": "5b4f614102d451f530e06cb643c46cbc9c51fa4969dbaed3eef2965b35ad0eef",
+    "packages/tui/src/settings/desktopSettings.ts": "fd16aa75477a728a27927a6c7a254aab17f7f690dd8a841e7e81192a524c9d30",
+    "packages/web/src/components/DesktopSettings.test.ts": "3420f3721fa86d5221edae622be7a693c24534c0087a417cab1e59e4f31d6c20",
+    "packages/web/src/components/DesktopSettings.vue": "19ca9e42a3b374d46b6de5b93162f67a60b86669f9248310d759a7d7df38b642",
+    "packages/web/src/components/RemoteDesktopReconnect.test.ts": "d8f892aaed6fbc74714da23f88d2cb4ad04679d087702fc38f8d4546da316d1d",
+    "packages/web/src/components/RemoteDesktopWindow.vue": "3e050c9ac93924b7d5d426da6673e2e155e623f4a1b0db00449ec8ba8ed08537"
+  }
+}

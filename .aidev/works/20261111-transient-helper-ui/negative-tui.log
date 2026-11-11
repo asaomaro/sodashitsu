@@ -1,0 +1,43 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transient-helper-ui/packages/tui
+
+ ❯ src/settings/desktopSettings.test.ts (10 tests | 1 failed) 671ms
+   × shows the preparation command and server lifetime while retaining the existing toggles only 55ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/settings/desktopSettings.test.ts > shows the preparation command and server lifetime while retaining the existing toggles only
+AssertionError: expected 'このPCの画面共有を許可します。変更すると共有中の接続は停止します。\np…' to contain '操舵室サーバーの稼働中'
+
+- Expected
++ Received
+
+- 操舵室サーバーの稼働中
++ このPCの画面共有を許可します。変更すると共有中の接続は停止します。
++ powershell.exe -NoProfile -File "C:\Soda\prepare-desktop-helper.ps1" を実行し、共有設定を保存し直してください。
++ マイク転送先の仮想再生デバイスID
++ ファイル共有フォルダ
++ 画面共有を許可
++ マウス・キーボードを許可
++ 管理者権限のアプリ・UAC画面を許可（保護サービス更新が必要）
++ 管理者画面中のマイク転送を個別に許可（通常ユーザー・単独共有）
++ 管理者画面中も共有フォルダーを転送（soda実行ユーザーの権限）
++ 全モニターの共有と切替を許可
++ 一時仮想画面の作成を許可（署名済みdriver/保護サービスが必要）
++ 接続元からのマイク転送を許可（仮想デバイス設定が必要）
++ システム音声の送信を許可
++ クリップボードを許可
++ 解像度変更を許可
++ 起動中のロック解除を許可（Windows専用サービスが必要）
+
+ ❯ src/settings/desktopSettings.test.ts:62:662
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  00:07:04
+   Duration  819ms (tests 92%, transform 6%, import 2%)
+

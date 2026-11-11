@@ -1,0 +1,20 @@
+{
+  "sourceHead": "c15558ca0aa06d98e1eb605b0d0a79ceec6bc485",
+  "sha256": {
+    ".aidev/works/20261111-transient-helper-ui/browser-receipt.json": "2c06593f2c563f172dc3a689c47b2abc3add93cab368fafbaa6b5a9789aafe65",
+    ".aidev/works/20261111-transient-helper-ui/browser.mjs": "f11314793a017eb24b19ec135ce952cd6a2330fea1dcdaabb67458cf719fcdf9",
+    ".aidev/works/20261111-transient-helper-ui/generated-preparation-guidance.png": "764cc3d127358a7a8e55c41c656b17525fe187e19ee84a9768b12a9c705de1ef",
+    ".aidev/works/20261111-transient-helper-ui/negative-browser.log": "abde229fb44815d3f11859760f0d923b04f6cefd7e79a9127fc0631f6883038d",
+    ".aidev/works/20261111-transient-helper-ui/negative-protocol.log": "0a4954f4c9c5ac0271665cdc6c2e61fb9b8b8740824a6d1594fc68399069828c",
+    ".aidev/works/20261111-transient-helper-ui/negative-tui.log": "5c0e640dc5b5256764e2ba8636728a85243c573dc50d006ce2618dc7d3eab181",
+    ".aidev/works/20261111-transient-helper-ui/negative-web.log": "ffdb3898e13e3313a3107c2dd2acdcfc21c0b11a17b86eda74ac0808ffe41c95",
+    ".aidev/works/20261111-transient-helper-ui/plan.md": "60ab3d187d8d9cf408b10b3d0da223a32d82229eaeef444d74e3a19cfd44cde8",
+    ".aidev/works/20261111-transient-helper-ui/positive-browser.log": "02518a206d630faa272aa7c04e2f0c5ed241b9678624b2f41a94ee9072861316",
+    ".aidev/works/20261111-transient-helper-ui/positive-protocol.log": "400f195608750f937a0ab04d88185c99e2c880812da00d675c8b2dcaf725b04f",
+    ".aidev/works/20261111-transient-helper-ui/positive-tui.log": "48edeb6b2a39c0e19d0e4ce8afd9d3fa1cbb54c13f6a01e293c253593a4b82ff",
+    ".aidev/works/20261111-transient-helper-ui/positive-web.log": "877e56785e555b507e6f5f44a17c1493637da225f209a087a6322714e6010bbe",
+    ".aidev/works/20261111-transient-helper-ui/restoration.json": "8ba76caf5c6ee626413632f2cc2df103240ebfd4ff7353e90c6dd89be372a554",
+    ".aidev/works/20261111-transient-helper-ui/source-sha256.json": "406d99bee07ef8d47c1263ec3d3eee780a38e73f2c769b9c9f9684ae187c4bbc",
+    ".aidev/works/20261111-transient-helper-ui/verification.md": "04f084cc04ace2e26a09da7eb706392460299ca8940a5a6a77f7fd9d9c776000"
+  }
+}

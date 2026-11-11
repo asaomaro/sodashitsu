@@ -1,0 +1,76 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transient-helper-ui/packages/web
+
+ ❯ src/components/DesktopSettings.test.ts (12 tests | 1 failed) 137ms
+   × shows the first preparation command and server lifetime without introducing another permission or launch RPC 15ms
+ ❯ src/components/RemoteDesktopReconnect.test.ts (13 tests | 2 failed) 347ms
+   × guides protected startup failure to helper preparation without a service installation demand 17ms
+   × guides virtual startup failure to helper preparation without a service installation demand 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/DesktopSettings.test.ts > shows the first preparation command and server lifetime without introducing another permission or launch RPC
+Error: Unable to get [data-desktop-helper-lifetime] within: <section data-v-615f575c="" class="settings-section" aria-labelledby="settings-desktop-sharing">
+  <h3 data-v-615f575c="" id="settings-desktop-sharing" class="settings-heading">デスクトップ共有</h3>
+  <p data-v-615f575c="">このPCの画面を、接続済みのSodashitsuへ共有する許可です。</p>
+  <!--v-if-->
+  <p data-v-615f575c="">接続先で powershell.exe -NoProfile -File "C:\Program Files\Sodashitsu\prepare-desktop-helper.ps1" を実行し、共有設定を保存し直してください。</p>
+  <!--v-if-->
+  <fieldset data-v-615f575c=""><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">画面共有を許可</label><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">マウス・キーボードの操作を許可</label><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">クリップボードを許可</label><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">全モニターの共有と切替を許可</label>
+    <!--v-if-->
+    <!--v-if-->
+    <!--v-if--><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">管理者権限のアプリ・UAC画面の共有を許可</label><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox" disabled="">管理者画面中も共有フォルダーを転送（soda実行ユーザーの権限）</label><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox" disabled="">管理者画面中のマイク転送を個別に許可（通常ユーザー・単独共有）</label>
+    <p data-v-615f575c="">接続先Windowsで専用保護サービスの導入・更新が必要です。接続時にも管理者画面を選び、操作は接続ごとに許可します。</p><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">一時的な仮想画面の作成を許可</label>
+    <p data-v-615f575c="">接続先Windows 11 x64に署名済み仮想画面ドライバーと専用保護サービスの導入が必要です。</p><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">Sodashitsu起動中のロック解除を許可</label>
+    <p data-v-615f575c="">接続先Windowsで、専用補助サービスの初回導入が必要です。解除操作にはマウス・キーボードの許可も必要です。</p><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">ディスプレイ解像度の変更を許可</label><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">接続元からのマイク転送を許可</label><label data-v-615f575c="">マイク転送先の仮想オーディオ出力ID<input data-v-615f575c="" type="text" maxlength="512" placeholder="仮想ケーブルの再生側のデバイスID"></label>
+    <p data-v-615f575c="">仮想オーディオケーブルを別途導入し、Windowsは再生デバイスID、Linuxは仮想sink名、macOSは仮想デバイスUIDを指定してください。アプリでは対応する録音側をマイクとして選びます。</p><label data-v-615f575c=""><input data-v-615f575c="" type="checkbox">システム音声の送信を許可</label>
+    <p data-v-615f575c="">共有するPCの通常デスクトップの音を送ります。接続側でも音声共有と再生を開始してください。</p><label data-v-615f575c="">ファイル共有フォルダ（空欄で無効）<input data-v-615f575c="" type="text" maxlength="4096" placeholder="このサーバーOSの絶対パス"></label>
+    <p data-v-615f575c="">このフォルダの中だけを送受信します。既存ファイルは上書きしません。WSLサーバーでは/mnt/c等のパスを指定します。</p><button data-v-615f575c="" data-assistant-action="" type="button">共有設定を保存</button>
+  </fieldset>
+  <details data-v-e7c940d2="" data-v-615f575c="" data-endpoint-settings="">
+    <summary data-v-e7c940d2="">暗号化接続の鍵と許可</summary>
+    <p data-v-e7c940d2=""> 中継へ画面・入力・音声・ファイルの平文を渡さない接続を設定します。接続元とこのPCの指紋を、それぞれの画面で確認して相互に許可してください。 </p><button data-v-e7c940d2="" data-assistant-action="" type="button"> このPCの暗号化接続用の鍵を作成 </button>
+    <!--v-if-->
+    <fieldset data-v-e7c940d2="" disabled=""><label data-v-e7c940d2=""><input data-v-e7c940d2="" type="checkbox">暗号化接続を必須にする</label><button data-v-e7c940d2="" data-assistant-action="" type="button">暗号化の必須設定を保存</button>
+      <p data-v-e7c940d2=""> 有効にすると、通常接続と古い接続元からの共有を拒否します。許可済みの接続元を登録してから有効にしてください。 </p><label data-v-e7c940d2="">接続元ブラウザの指紋<input data-v-e7c940d2="" type="text" maxlength="96" autocomplete="off" spellcheck="false"></label><label data-v-e7c940d2="">接続元の名前<input data-v-e7c940d2="" type="text" maxlength="80"></label><label data-v-e7c940d2=""><input data-v-e7c940d2="" type="checkbox">接続元の画面で指紋を確認しました</label><button data-v-e7c940d2="" data-assistant-action="" type="button" disabled="">この接続元を許可</button>
+      <ul data-v-e7c940d2=""></ul>
+    </fieldset>
+    <p data-v-e7c940d2=""> 鍵を読み取れない場合は共有を停止し、自動で鍵を作り直したり通常接続へ戻ったりしません。ブラウザへ配信されるプログラムと両端のPCは信頼する必要があります。 </p>
+    <!--v-if-->
+  </details>
+  <!--v-if-->
+</section>
+ ❯ VueWrapper.get ../../../sodashitsu-main-live-assistant-agents/node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/components/DesktopSettings.test.ts:112:90
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > guides protected startup failure to helper preparation without a service installation demand
+AssertionError: expected 'Generated — デスクトップ停止操作するIME ONIME OFF…' to contain '補助プログラムの準備'
+
+Expected: "補助プログラムの準備"
+Received: "Generated — デスクトップ停止操作するIME ONIME OFF情報・設定最大化閉じる▴管理者画面を開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。閲覧で接続し直す通常画面へ戻って閲覧管理者画面を開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。閲覧で接続し直す通常画面へ戻って閲覧暗号化接続 接続先PCのlocalhost設定で鍵を作成し、このブラウザの指紋を許可してください。接続先で「暗号化接続を必須にする」を有効にします。  このブラウザの鍵を作成 接続先PCで確認した指紋接続先PCのlocalhost画面に表示された指紋と一致することを確認しました この接続先を記憶して暗号化で接続  指紋の不一致や鍵を読み取れない場合は停止します。通常接続へは自動で戻りません。ブラウザへ配信されるプログラムと両端のPCは信頼する必要があります。 複数viewerで同じ画面を共有管理者権限のアプリ・UAC画面を共有画面の種類を選ぶと再接続します。切替後は新しい画像を確認して、操作を許可し直してください。一時的な仮想画面を使う再同期共有停止画面に合わせる画質・計測プリセット選択…低帯域標準高画質送信幅の上限fps上限JPEG品質色フルカラー約6.5万色256色16階調グレー差分転送自動画質調整共有元のカーソルを表示 幅は縦横比を保った上限、fpsは目標上限です。JPEG品質を下げると文字がにじむ場合があります。  減色は細かな色の違いを失い、エージェントの画像認識にも影響します。差分PNGにも適用されます。  適用すると共有へ再接続し、操作とエージェント許可を解除します。設定はこのブラウザでマシンごとに記憶します。 適用して再接続停止 — 管理者画面を開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。文字を送る▾閲覧専用。操作にはBの事前許可が必要です。0.0 fps · 0.00 Mbps · relay→描画ACK p95 0 ms · 取得 — / encode — / 描画 0.0 ms · 入力ACK 0 ms"
+
+ ❯ src/components/RemoteDesktopReconnect.test.ts:18:476
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/components/RemoteDesktopReconnect.test.ts > guides virtual startup failure to helper preparation without a service installation demand
+AssertionError: expected 'Generated — デスクトップ停止操作するIME ONIME OFF…' to contain '補助プログラムの準備'
+
+Expected: "補助プログラムの準備"
+Received: "Generated — デスクトップ停止操作するIME ONIME OFF情報・設定最大化閉じる▴仮想画面を作成できません。接続先の許可設定とOSの対応を確認してください。Windowsでは署名済みドライバーと保護サービスの導入・更新も必要です。閲覧で接続し直す既定のモニターで接続し直す仮想画面を作成できません。接続先の許可設定とOSの対応を確認してください。Windowsでは署名済みドライバーと保護サービスの導入・更新も必要です。閲覧で接続し直す既定のモニターで接続し直す暗号化接続 接続先PCのlocalhost設定で鍵を作成し、このブラウザの指紋を許可してください。接続先で「暗号化接続を必須にする」を有効にします。  このブラウザの鍵を作成 接続先PCで確認した指紋接続先PCのlocalhost画面に表示された指紋と一致することを確認しました この接続先を記憶して暗号化で接続  指紋の不一致や鍵を読み取れない場合は停止します。通常接続へは自動で戻りません。ブラウザへ配信されるプログラムと両端のPCは信頼する必要があります。 複数viewerで同じ画面を共有管理者権限のアプリ・UAC画面を共有画面の種類を選ぶと再接続します。切替後は新しい画像を確認して、操作を許可し直してください。一時的な仮想画面を使う所有仮想画面のExplorer直接ドラッグを要求する（再接続）再同期共有停止画面に合わせる画質・計測プリセット選択…低帯域標準高画質送信幅の上限fps上限JPEG品質色フルカラー約6.5万色256色16階調グレー差分転送自動画質調整共有元のカーソルを表示 幅は縦横比を保った上限、fpsは目標上限です。JPEG品質を下げると文字がにじむ場合があります。  減色は細かな色の違いを失い、エージェントの画像認識にも影響します。差分PNGにも適用されます。  適用すると共有へ再接続し、操作とエージェント許可を解除します。設定はこのブラウザでマシンごとに記憶します。 適用して再接続停止 — 仮想画面を作成できません。接続先の許可設定とOSの対応を確認してください。Windowsでは署名済みドライバーと保護サービスの導入・更新も必要です。文字を送る▾閲覧専用。操作にはBの事前許可が必要です。0.0 fps · 0.00 Mbps · relay→描画ACK p95 0 ms · 取得 — / encode — / 描画 0.0 ms · 入力ACK 0 ms"
+
+ ❯ src/components/RemoteDesktopReconnect.test.ts:18:476
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 22 passed (25)
+   Start at  00:07:01
+   Duration  2.45s (transform 55%, environment 18%, tests 16%, import 11%)
+
