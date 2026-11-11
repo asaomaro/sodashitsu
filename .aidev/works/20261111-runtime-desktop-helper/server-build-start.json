@@ -1,0 +1,6 @@
+{
+  "sourceHead": "b96364627825d8627cf9ae7b6af5910a64f1160f",
+  "nodeVersion": "v24.22.2",
+  "command": "pnpm --filter @sodashitsu/server build",
+  "maxOldSpaceMiB": 8192
+}

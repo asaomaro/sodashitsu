@@ -1,0 +1,21 @@
+{
+  "sourceHead": "b96364627825d8627cf9ae7b6af5910a64f1160f",
+  "sourceCount": 14,
+  "allMatch": true,
+  "files": {
+    "WindowsDesktopUnlock.cs": "e547098ec74efb79d9cec9c0f03b5c8b7e010ed9f423a47d02a197f843117295",
+    "WindowsDesktopHost.cs": "e5cd0f45a1c934369f8795ca1e7cd5d195897fd1983eb269543949a377f6cf00",
+    "WindowsVirtualDisplay.cs": "a321985f7dab701ca9f851b2edb9c1d808befce2f2a8368119cad8cede2c2318",
+    "WindowsVirtualDisplayNative.cs": "f568e076f67df9f4822a0585986bd81fc0c4cd4734096189c234f0131914b224",
+    "WindowsVirtualDisplayChannel.cs": "3e8feed486968e716be2946ffda94cad878ded26e71b32416bfada5397d86c98",
+    "WindowsProtectedEpoch.cs": "cd12541a5b01d36c56926fb1322ecb61094a2b6bf84d3379dcf88b874abd93a4",
+    "WindowsProtectedScope.cs": "27f89c113cad970076e4c365fde03ead393c775dcab4c5a7566778e9c22e74ea",
+    "WindowsProtectedScopeNative.cs": "e496ca00c8c97a9df6e090144a1f593cb9eb4a4f8d56e39bdd3ae97b4b8467de",
+    "WindowsProtectedHandshake.cs": "64d02032891bfe375b32b87fc2125aad1a579a7203b6fac64c2d073067873ae4",
+    "WindowsProtectedWorker.cs": "a0379ec6257e12c4e2cc32484b401b8d06f23667b3d0393a640178ab06bafa13",
+    "WindowsResourceFence.cs": "18d8e7f79f5c0305a9dee738317ea2fa1e6397a995b0a0ae0c1510b57fd21906",
+    "install-unlock-service.ps1": "f296e8e29d7452920c7b142f21a3e1435bc20e33f2668f307aadf8984d1e6cb7",
+    "prepare-desktop-helper.ps1": "c0b704431a532e1af496441a2fc6a1414105d221a7aeb4f5033ff7e556870df8",
+    "windows-helper.ps1": "6ed0b55e30c5cba82f8d241611095509d5b1a19f10e5c5f4fcf1e312fe0f896f"
+  }
+}

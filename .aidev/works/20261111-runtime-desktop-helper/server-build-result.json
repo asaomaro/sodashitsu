@@ -1,0 +1,7 @@
+{
+  "sourceHead": "b96364627825d8627cf9ae7b6af5910a64f1160f",
+  "command": "pnpm --filter @sodashitsu/server build",
+  "exitCode": 0,
+  "elapsedSeconds": 287.604,
+  "sourceUnchanged": true
+}

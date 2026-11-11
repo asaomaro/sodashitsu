@@ -1,0 +1,80 @@
+{
+  "total": 3357,
+  "packages": {
+    "protocol": {
+      "count": 300,
+      "changed": [
+        "desktopProtected.js",
+        "desktopProtected.js.map"
+      ],
+      "added": [],
+      "deleted": []
+    },
+    "client-core": {
+      "count": 364,
+      "changed": [],
+      "added": [],
+      "deleted": []
+    },
+    "desktop-assistant": {
+      "count": 152,
+      "changed": [],
+      "added": [],
+      "deleted": []
+    },
+    "tui": {
+      "count": 412,
+      "changed": [
+        "settings/desktopSettings.d.ts.map",
+        "settings/desktopSettings.js",
+        "settings/desktopSettings.js.map"
+      ],
+      "added": [],
+      "deleted": []
+    },
+    "web": {
+      "count": 37,
+      "changed": [
+        "index.html"
+      ],
+      "added": [
+        "assets/DashboardView-DMdilbqG.js",
+        "assets/UsageAnalytics-De5BP-bT.js",
+        "assets/dashboardModel-CyFU65LB.js",
+        "assets/dist-BV6ZJbkg.js",
+        "assets/dist-DPYeTyrO.js",
+        "assets/index-ChC4Trip.css",
+        "assets/index-uoaj5O1t.js",
+        "assets/navigation-DdeDRXZI.js"
+      ],
+      "deleted": [
+        "assets/DashboardView-B1yKjy7R.js",
+        "assets/UsageAnalytics-qJ86yrlV.js",
+        "assets/dashboardModel-usMj3S_J.js",
+        "assets/dist--DHBdhJh.js",
+        "assets/dist-DI2S6lM3.js",
+        "assets/index-CDUEQLyH.css",
+        "assets/index-DOuJJQSa.js",
+        "assets/navigation-CK7TYfwT.js"
+      ]
+    },
+    "server": {
+      "count": 1864,
+      "changed": [
+        "desktop/DesktopSettings.d.ts.map",
+        "desktop/DesktopSettings.js",
+        "desktop/DesktopSettings.js.map",
+        "desktop/unlockFailure.js",
+        "desktop/unlockFailure.js.map"
+      ],
+      "added": [],
+      "deleted": []
+    },
+    "cli": {
+      "count": 228,
+      "changed": [],
+      "added": [],
+      "deleted": []
+    }
+  }
+}

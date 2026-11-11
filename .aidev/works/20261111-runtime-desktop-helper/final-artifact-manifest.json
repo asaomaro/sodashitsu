@@ -1,0 +1,25 @@
+{
+  "sourceCodeHead": "b96364627825d8627cf9ae7b6af5910a64f1160f",
+  "files": {
+    "protocol-build.log": "b351592f17bc60779d973cca0845df4a44cfd50e73b863fd3f3ad1e5a0197829",
+    "server-build.log": "73eaea665c9a5bfcc4f282a908c9495ae438339f129a8afa958a78f7ed24b466",
+    "web-build.log": "b1144e6210d92e803cb80f28e1d4e24a45c3cc76446a84dc7156df72a16a7eb0",
+    "server-test-type.log": "3d6d7fb38a8ebf24ac0a6e74916bdaa6ad7b9604df4f65c2eb7a5263bc7d012f",
+    "e2e-locked-capture.log": "491b1b0620bced49008bc58b4edc68874a5ed372fda24dca03c65496939519dd",
+    "e2e-exit.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "server-build-start.json": "26cf9c11b124a9e19cc71d95eff680d04e62f94dd280ae80df1a99679ece53c5",
+    "server-build-result.json": "60a63c2510edbcf4e8828faeb22684f101737637f28f8edab5cf3e7828d25404",
+    "web-build-result.json": "6ec93a0bf7c7281f2b3b5c402ffb73b5563432055ceacf917c93961e3c02cf0e",
+    "server-test-type-result.json": "f0ffbc98e1eb85199a8aa7bd5f33d0a19f353090d1465f20abd2a3853605c53b",
+    "windows-final-source-proof.json": "cb83bd3bc5324621dd3b98108fdf79a2bb81bf87ddea746d5a5ec07be34abad6",
+    "artifact-delta.json": "99512e37e0ca474016a2976ad236f9a9ff1d6258cf14e33957d976e73a0dfdd1",
+    "test-result.md": "bd6d56deca2f2eebd0b66e60d379d2f455a9c49e8162490375b7c56e081dda5e",
+    "desktop-assistant-dist-sha256.json": "74b4cf11a62d5cbecb4f16865eab5112dded3052dad2a5226c82245235b0982c",
+    "server-dist-sha256.json": "6ee05646528e4e1bd97560711be1f640deb3ef7e226add11d7f38a808394d68c",
+    "protocol-dist-sha256.json": "e0608c63df5a2951f73991a85c11c80b4b66f409292d1fdd0f65c9d6c8832d73",
+    "tui-dist-sha256.json": "de34d6b2aa86768cf082de96162f320100c82e7237c19b6fb3dc0477dce20be9",
+    "web-dist-sha256.json": "b8c1e4e21ba682b3e852c79d9eed2d8a46f6f67e959630fe5175decd4823007d",
+    "cli-dist-sha256.json": "503a5024eaf4888b035d3f4b3f78f1a4ea57b22d176659b5afda57dd8cc97ae9",
+    "client-core-dist-sha256.json": "82863049a8464d399030dffe403b8060c244f09201acd3133a218f50fddca0c4"
+  }
+}

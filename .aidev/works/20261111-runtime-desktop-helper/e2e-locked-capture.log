@@ -1,0 +1,19 @@
+
+Running 1 test using 1 worker
+
+(node:3964948) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-11-11T15:31:51.300Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-11T15:31:51.301Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-11T15:31:51.302Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-11T15:31:51.302Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-11T15:31:51.305Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-TBxTVx/commands.json","count":0}
+{"ts":"2026-11-11T15:31:51.947Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-11T15:31:51.948Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-11T15:31:51.949Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-11T15:31:51.949Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-11T15:31:51.951Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-Fyq9Hf/commands.json","count":0}
+{"ts":"2026-11-11T15:31:54.765Z","level":"info","msg":"machine link closed","machine":"428d65f2a30bd8626868990c683fe6fe","kind":"transient","reason":"接続が切れました"}
+  ✓  1 src/specs/remote-desktop-cover.spec.ts:10:1 › locked desktop displays ordinary frames without a cover-only dismissal stage (3.9s)
+
+  1 passed (10.9s)

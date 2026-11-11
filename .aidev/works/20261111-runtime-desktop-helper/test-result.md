@@ -21,3 +21,11 @@ Raw virtual negative output:
 ```
 
 Complete source-sealed Windows PS error/raw outputs and private candidate paths remain in .git/recovery/runtime-desktop-helper-virtual-pure-20261111 and the private raw-record.md, rather than publishing operational paths. Public structured receipts identify scope and exit codes. Windows candidate Task registration, effective normal-user Run/modify denial, authenticated Runtime SYSTEM worker frame, server-stop process retirement/reconnect, and production migration are subsequent Root-controlled gates. Current registered legacy service is preserved. No ExecutionPolicy bypass, UAC policy change, new token or wire permission layer was added.
+
+## Final integrated build (UI c15558ca +20e0d68c)
+
+Code integration head b96364627825d8627cf9ae7b6af5910a64f1160f. Protocol build exited0; strict server build including referenced TUI/desktop packages exited0 in287.604s; Web test-inclusive vue-tsc plus Vite exited0 in277.616s. Final server test-inclusive typecheck exited0 in212.26s using unchanged verified CLI dist dependencies. Each required build was run once, code/source unchanged. Real Chromium plus isolated A/B servers passed the locked secure-canvas E2E1/1 (10.9s), with no OS input/Windows task.
+
+Seven artifact maps contain3357 files: protocol300/client-core364/desktop-assistant152/TUI412/Web37/server1864/CLI228. Relative to23cf, protocol2/TUI3/server5 outputs changed, Web entry1 and8 hashed assets replaced; there are no removed non-Web artifacts. Old Web hashed assets may be retained by later deployment. No app deployment or legacy service migration has occurred.
+
+The final14 Native/PowerShell source hashes match the full Windows -ValidateOnly compile inputs. These receipts and generated tests establish compilation and policy behavior, not successful Task Scheduler execution, normal-token ACL enforcement, SYSTEM worker frames or actual retirement. Those are isolated Root-controlled candidate gates before production or old service removal.
