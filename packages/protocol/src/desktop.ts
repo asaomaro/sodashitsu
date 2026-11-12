@@ -164,7 +164,7 @@ export const RemoteDesktopViewerMessage = z.union([
   z.object({ type: z.literal("heartbeat") }).strict(),
   z.object({ type: z.literal("release") }).strict(),
   z.object({ type: z.literal("native_pointer_cancel") }).strict(),
-  z.object({ type: z.literal("keyframe"), region:DesktopRegionSpec.nullable().optional() }).strict(),
+  z.object({ type: z.literal("keyframe"), region:DesktopRegionSpec.nullable().optional(), snapshotIds:z.array(z.string().uuid()).min(1).max(64).optional() }).strict(),
   z.object({ type: z.literal("agent_grant"), enabled: z.boolean() }).strict(),
   z.object({ type: z.literal("stop") }).strict(),
 ]);
@@ -243,6 +243,7 @@ export const DesktopFrameInfo = z
     captureMs: z.number().finite().min(0).max(60000),
     encodeMs: z.number().finite().min(0).max(60000),
     regions:z.array(DesktopRegionProof).max(8).optional(),
+    snapshotIds:z.array(z.string().uuid()).min(1).max(64).optional(),
     contentId: z
       .string()
       .regex(/^[a-f0-9]{64}$/)

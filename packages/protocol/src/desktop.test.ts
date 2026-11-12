@@ -176,3 +176,5 @@ it("bounds regional proof area, geometry, count, identity and digest",async()=>{
  expect(DesktopFrameInfo.safeParse({...info,regions:[proof]}).success).toBe(true);
  for(const regions of [[proof,proof],[{...proof,width:2}],[{...proof,digest:"broken"}],Array.from({length:9},()=>({...proof,id:crypto.randomUUID()}))])expect(DesktopFrameInfo.safeParse({...info,regions}).success).toBe(false);
 });
+
+it("validates bounded explicit fresh snapshot request correlation",async()=>{const {DesktopFrameInfo}=await import("./desktop.js");const ids=[crypto.randomUUID()];expect(DesktopFrameInfo.safeParse({seq:1,width:320,height:180,format:"image/png",captureMs:0,encodeMs:0,snapshotIds:ids}).success).toBe(true);expect(DesktopFrameInfo.safeParse({seq:1,width:320,height:180,format:"image/png",captureMs:0,encodeMs:0,snapshotIds:Array(65).fill(ids[0])}).success).toBe(false);});
