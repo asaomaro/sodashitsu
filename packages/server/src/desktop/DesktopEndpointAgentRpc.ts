@@ -50,7 +50,7 @@ export class DesktopEndpointAgentRpc {
       }else if(message.method==="desktop.agent.observe"){
        const p=DesktopMethods["desktop.agent.observe"].parse(params);await this.agents.refresh(this.owner,p.leaseId,p.afterFrameSeq,p.region);this.ensure();result=this.agents.observe(this.owner,p.leaseId,p.afterFrameSeq);
       }else if(message.method==="desktop.agent.act"){
-       const p=DesktopMethods["desktop.agent.act"].parse(params);result=await this.agents.act(this.owner,p.leaseId,p.observationId,p.inputs);
+       const p=DesktopMethods["desktop.agent.act"].parse(params);result=await this.agents.act(this.owner,p.leaseId,p.observationId,p.inputs,Math.min(this.expiresAt,pending.deadline));
       }else{
        const p=DesktopMethods["desktop.agent.release"].parse(params);this.releasing=true;try{result=this.agents.release(this.owner,p.leaseId);}finally{this.releasing=false;}
       }

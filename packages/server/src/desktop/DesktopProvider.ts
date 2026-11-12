@@ -39,6 +39,7 @@ import {
   DesktopReady,
   DesktopStartParams,
   RemoteDesktopViewerMessage,
+  DesktopAgentInput,
   DESKTOP_MAX_FRAME_BYTES,
   encodeDesktopFrame,
   decodeDesktopFrame,
@@ -477,7 +478,7 @@ export class DesktopProvider {
             if(!s.imageFailed&&s.ready&&s.imageSocket?.readyState===WebSocket.OPEN){s.imageReady=true;const held=s.heldImage;delete s.heldImage;if(held)this.sendImage(s,held);}else this.failImages(s);return;
           }
           if(p.imageTicket&&Object.keys(rawMessage).length===1&&rawMessage.type==="image_closed"){this.failImages(s);return;}
-          const m = RemoteDesktopViewerMessage.parse(rawMessage);
+          const m = rawMessage.type==="agent_input"?DesktopAgentInput.parse(rawMessage):RemoteDesktopViewerMessage.parse(rawMessage);
           if(p.options.sharedDesktop&&(!p.options.sharedRate||!s.sharedRate)&&m.type==="media"&&m.settings)m.settings.adaptive=false;
           if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&p.videoTicket&&!s.videoReady){this.send(s,{type:"media_unavailable"});return;}
           if(m.type==="media"&&!m.enabled&&s.ready&&(!s.secureDesktop||s.protectedVideoActive)){s.native?.fromViewer(m);if(!s.secureDesktop)this.companion.fromViewer(s,m);return;}
@@ -581,7 +582,7 @@ export class DesktopProvider {
           } else if (m.type === "sas") {
             if (s.secureDesktop && !s.protectedDesktop && s.control && this.ownsResource(s,"control") && s.ready )
               this.write(s, m);
-          } else if (m.type === "input") {
+          } else if (m.type === "input"||m.type==="agent_input") {
             s.inputAcks.invalidatePointers();delete s.pointerWitness;
             if(!supportsDesktopInput(s.inputCapabilities,m.input))return;
             if (isExtendedDesktopInput(m.input) && !s.extendedInput) return;
@@ -593,7 +594,7 @@ export class DesktopProvider {
             ) {
               s.inputSeq = m.seq;
               s.inputAcks.submitted(m.seq,m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0);
-              this.write(s, { ...m, ...(s.video && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
+              this.write(s, { type:"input",seq:m.seq,input:m.input,...(m.type==="agent_input"?{expiresAt:Date.now()+Math.floor(m.remainingMs)}:{}), ...(s.video && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
             }
           } else {
             this.stop(s);

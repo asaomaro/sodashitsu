@@ -418,7 +418,7 @@ export class DesktopRelay {
           if (v.provider) this.sendControl(v, v.control);
         },
         state: (active, expiresAt) => this.send(v.ws, { type: "agent_state", active, expiresAt }),
-        input: (input: RemoteDesktopInput) =>
+        input: (input: RemoteDesktopInput, deadline=Infinity) =>
           new Promise<void>((resolve, reject) => {
             if(!supportsDesktopInput(v.inputCapabilities,input)){reject(new RpcError("invalid_params",desktopNativePlatformFailureMessage("input_unavailable")));return;}
             if (isExtendedDesktopInput(input) && !v.extendedInput) {
@@ -439,6 +439,8 @@ export class DesktopRelay {
               reject(new RpcError("unauthorized", "Desktop control unavailable"));
               return;
             }
+            const remainingMs=Math.min(1500,deadline-performance.now());
+            if(remainingMs<=0){reject(new RpcError("unauthorized","Agent action deadline expired"));return;}
             const seq = ++v.inputSeq;
             const timer = setTimeout(() => {
               v.inputWaits.delete(seq);
@@ -448,7 +450,7 @@ export class DesktopRelay {
                   "Input acknowledgement timed out; observe before retrying",
                 ),
               );
-            }, 1500);
+            }, remainingMs);
             v.inputWaits.set(seq, {
               resolve: () => {
                 if(v.nativePlatform)v.nativeInputFloor=Math.max(v.nativeInputFloor??0,seq);
@@ -460,7 +462,9 @@ export class DesktopRelay {
                 reject(e);
               },
             });
-            if (!this.send(v.provider, { type: "input", seq, input })) {
+            const budget=Math.min(remainingMs,deadline-performance.now());
+            if(budget<=0){v.inputWaits.get(seq)?.reject(new RpcError("unauthorized","Agent action deadline expired"));v.inputWaits.delete(seq);return;}
+            if (!this.send(v.provider, { type: "agent_input", seq, input,remainingMs:budget })) {
               v.inputWaits.get(seq)?.reject(new RpcError("server_busy", "Desktop unavailable"));
               v.inputWaits.delete(seq);
             }

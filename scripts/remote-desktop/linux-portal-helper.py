@@ -61,7 +61,7 @@ class InputGuard:
         self.held_keys.clear();self.held_buttons.clear();self.control=False
     def input(self, message):
         seq=message.get("seq");expiry=message.get("expiresAt");value=message.get("input")
-        if not self.control or not self.alive() or not integer(seq,1,9007199254740991) or seq<=self.seq or ("expiresAt" in message and not finite(expiry,self.clock(),self.clock()+1000)) or not isinstance(value,dict): return False
+        if not self.control or not self.alive() or not integer(seq,1,9007199254740991) or seq<=self.seq or ("expiresAt" in message and not finite(expiry,self.clock(),9007199254740991)) or not isinstance(value,dict): return False
         kind=value.get("kind");plan=[]
         if kind=="key" and self.devices&1:
             code=KEYS.get(value.get("code"));down=value.get("down")

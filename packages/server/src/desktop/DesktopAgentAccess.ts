@@ -9,7 +9,7 @@ export interface AgentTarget {
   capture?(afterFrameSeq?: number): Promise<void>;
   control(enabled: boolean): void;
   state(active: boolean, expiresAt: number): void;
-  input(input: RemoteDesktopInput): Promise<void>;
+  input(input: RemoteDesktopInput, deadline?:number): Promise<void>;
   releaseInputs(): void;
 }
 /** Provider-private binding. active includes the recipient trust revision and
@@ -153,7 +153,7 @@ export class DesktopAgentAccess {
       ...(g.region?{verification:{kind:"region" as const,region:{x:g.region.x,y:g.region.y,width:g.region.width,height:g.region.height},pointerOnly:true as const}}:{}),
     };
   }
-  async act(owner: string, lease: string, observationId: string, inputs: RemoteDesktopInput[]) {
+  async act(owner: string, lease: string, observationId: string, inputs: RemoteDesktopInput[], deadline=Infinity) {
     const g = this.require(owner, lease);
     if (g.busy || g.preparing) throw new RpcError("server_busy", "Action is in progress");
     const observed = g.observation;
@@ -178,7 +178,9 @@ export class DesktopAgentAccess {
     try {
       for (const input of inputs) {
         this.require(owner, lease);
-        await g.target.input(input);
+        const expires=Math.min(g.expires,deadline);
+        if(performance.now()>=expires)throw new RpcError("unauthorized","Agent action deadline expired");
+        await g.target.input(input,expires);
         this.require(owner, lease);
       }
       return {

@@ -850,3 +850,66 @@ Error: 別のドラッグが処理中か期限切れです
 ## Phase 11 macOS output
 
 Swift production and generated selftests updated: healthy pipe backpressure exceeding500ms completes; admitted JSON completes across same-source input revision changes; queued invalid source writes0bytes; actual source loss during partial output fails and invokes ordinary cleanup. Negative-control mutation reinserts former500ms policy. Swift compiler/runtime is unavailable in this Linux workspace; these source/selftest changes are not a claimed macOS run or OLD FAIL execution. Independent review must inspect main/IO queue and gate ordering, and actual macOS CI remains the platform validation.
+
+## Phase 12
+
+Agent/headless/regional/snapshot suites36 PASS; explicit caller and grant-minimum policy unit2 PASS. Linux Guards19 PASS. Provider-private command and native expiresAt rejected on browser schema. Real helper FIFO regression holds input and subsequent cleanup commands until caller budget expires, then drains in original order and waits actual control-stop completion: no applied expired text and no success inputACK. OLD production Access/Relay/Provider/Endpoint2 FAIL: old Access completes both actions beyond caller deadline, old helper actually records EXPIRED_AGENT after timeout. Sources restored/byte-compared. Native author confirmed expiry and OS admission failure return before ACK; Apply success alone emits ACK.
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopAgentAccess.test.ts (20 tests | 1 failed | 19 skipped) 10ms
+   × passes the existing caller or grant deadline into each input without renewing it 9ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (354 tests | 1 failed | 353 skipped) 1775ms
+   × expires an agent command held in the helper queue using its existing caller budget 1773ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopAgentAccess.test.ts > passes the existing caller or grant deadline into each input without renewing it
+AssertionError: promise resolved "{ acknowledged: 2, afterFrameSeq: 1 }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "acknowledged": 2,
++   "afterFrameSeq": 1,
+  }
+
+ ❯ src/desktop/DesktopAgentAccess.test.ts:226:545
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > expires an agent command held in the helper queue using its existing caller budget
+AssertionError: expected '{"kind":"text","text":"EXPIRED_AGENT"…' not to contain 'EXPIRED_AGENT'
+
+- Expected
++ Received
+
+- EXPIRED_AGENT
++ {"kind":"text","text":"EXPIRED_AGENT"}
++
+
+ ❯ src/desktop/DesktopRelay.test.ts:2149:1361
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 372 skipped (374)
+   Start at  00:22:23
+   Duration  3.31s (transform 47%, tests 43%, import 10%)
+
+
+```

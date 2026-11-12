@@ -132,6 +132,8 @@ export type RemoteDesktopInput = z.infer<typeof RemoteDesktopInput>;
 export function isExtendedDesktopInput(input: RemoteDesktopInput): boolean {
   return input.kind === "pointer" ? input.button > 2 : input.kind === "key" && !legacyKeyPattern.test(input.code);
 }
+/** Provider-private input budget. Never accepted on a browser viewer socket. */
+export const DesktopAgentInput=z.object({type:z.literal("agent_input"),seq:z.number().int().positive(),input:RemoteDesktopInput,remainingMs:z.number().finite().positive().max(1500)}).strict();
 export const RemoteDesktopViewerMessage = z.union([
   DesktopNativeCodecFallback,
   DesktopNativeFormatAck,
