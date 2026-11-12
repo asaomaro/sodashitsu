@@ -18,9 +18,9 @@ async function fixture(allowInput=true) {
  cleanup.push(async()=>{await plane.close();provider.dispose();await rm(directory,{recursive:true,force:true});});
  async function log(path=record){try{return (await readFile(path,"utf8")).trim().split("\n").filter(Boolean).map(line=>JSON.parse(line));}catch{return [];}}
  async function viewer(protocols:string[]=[],root=plane.root(publicMachine,()=>true)) {
-  const messages:Record<string,unknown>[]=[],frames:Uint8Array[]=[],closed=vi.fn();
-  const socket=await root.open(protocols,(bytes,binary)=>{if(binary)frames.push(bytes.slice());else messages.push(JSON.parse(new TextDecoder().decode(bytes)));},closed);
-  return {root,socket,messages,frames,closed,send:(value:unknown)=>socket.send(JSON.stringify(value)),start:(shared=false)=>socket.send(JSON.stringify({type:"start",machineId:publicMachine,options:{width:320,fps:10,quality:65,...(shared?{features:true,sharedDesktop:true}:{})}}))};
+  const messages:Record<string,unknown>[]=[],frames:Uint8Array[]=[],closed=vi.fn();let drawing=false;
+  const socket=await root.open(protocols,(bytes,binary)=>{if(binary){frames.push(bytes.slice());if(drawing)socket.send(JSON.stringify({type:"ack",seq:decodeDesktopFrame(bytes).info.seq}));}else messages.push(JSON.parse(new TextDecoder().decode(bytes)));},closed);
+  return {root,socket,messages,frames,closed,draw:()=>{drawing=true;const frame=frames.at(-1);if(frame)socket.send(JSON.stringify({type:"ack",seq:decodeDesktopFrame(frame).info.seq}));},send:(value:unknown)=>socket.send(JSON.stringify(value)),start:(shared=false)=>socket.send(JSON.stringify({type:"start",machineId:publicMachine,options:{width:320,fps:10,quality:65,...(shared?{features:true,sharedDesktop:true}:{})}}))};
  }
  return {provider,config,plane,record,lifecycle,publicMachine,log,viewer};
 }
@@ -110,9 +110,11 @@ it("rejects another root's image ticket without consuming the legitimate attachm
 });
 it("binds a recipient grant to its own private viewer scope and forwards only permitted agent input",async()=>{
  const f=await fixture(),v=await f.viewer([DESKTOP_INPUT_PROTOCOL]),fingerprint="a".repeat(64);v.start();await expect.poll(()=>v.frames.length).toBe(1);
+ v.draw();
  const grant=v.root.grantAgent({fingerprint,active:()=>true}),rpc=f.plane.agent(fingerprint,grant.scope,()=>true);
  const call=async(id:number,method:string,params:unknown)=>JSON.parse(await rpc.request(JSON.stringify({id:String(id),method,params})));
  const {leaseId}=(await call(1,"desktop.agent.attach",{ticket:grant.ticket})).result,observed=(await call(2,"desktop.agent.observe",{leaseId})).result;
+ expect(observed.frameSeq).toBeGreaterThan(decodeDesktopFrame(v.frames[0]!).info.seq);
  const inputs=[{kind:"key",code:"ControlLeft",down:true},{kind:"key",code:"Space",down:true},{kind:"key",code:"Space",down:false},{kind:"key",code:"ControlLeft",down:false}];
  expect((await call(3,"desktop.agent.act",{leaseId,observationId:observed.observationId,inputs})).result.acknowledged).toBe(4);expect(await f.log()).toEqual(inputs);
  expect((await call(4,"desktop.agent.release",{leaseId})).result.released).toBe(true);expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(0);
@@ -128,6 +130,7 @@ it("keeps a second root's agent alive when another root closes or its owner call
  const f=await fixture(),a=await f.viewer([DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL]),b=await f.viewer([DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL]),fingerprint="a".repeat(64);a.start(true);await expect.poll(()=>a.frames.length).toBe(1);b.start(true);await expect.poll(()=>b.frames.length).toBe(1);
  const ag=a.root.grantAgent({fingerprint,active:()=>true}),bg=b.root.grantAgent({fingerprint,active:()=>true}),ar=f.plane.agent(fingerprint,ag.scope,()=>true),br=f.plane.agent(fingerprint,bg.scope,()=>true);
  const attach=(rpc:typeof ar,ticket:string)=>rpc.request(JSON.stringify({id:"1",method:"desktop.agent.attach",params:{ticket}}));await attach(ar,ag.ticket);const {leaseId}=JSON.parse(await attach(br,bg.ticket)).result;
+ b.draw();
  a.root.close();ar.close();expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(1);expect(JSON.parse(await br.request(JSON.stringify({id:"2",method:"desktop.agent.observe",params:{leaseId}}))).result.imageBase64).toBeTruthy();expect(b.root.active()).toBe(true);expect((await f.log(f.lifecycle)).filter(row=>row.type==="spawn")).toHaveLength(1);
  b.root.revokeAgent();await expect(br.request(JSON.stringify({id:"3",method:"desktop.agent.observe",params:{leaseId}}))).rejects.toThrow();expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(0);
 });
