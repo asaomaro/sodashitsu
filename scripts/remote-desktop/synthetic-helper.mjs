@@ -337,7 +337,7 @@ function run() {
         if (unlockMarker) writeFileSync(unlockMarker,"unlocked");
         send({type:"session_unlocked"});
         process.exit(0);
-      } else if (m.type === "input" && control && m.expiresAt >= Date.now()) {
+      } else if (m.type === "input" && control && (m.expiresAt===undefined||m.expiresAt >= Date.now())) {
         if(m.input.kind==="key"){if(m.input.down)held.add(m.input.code);else held.delete(m.input.code);note(m.input.down?"key-down":"key-up");}
         if(cursorEnabled){
           if(m.input.kind==="pointer"){

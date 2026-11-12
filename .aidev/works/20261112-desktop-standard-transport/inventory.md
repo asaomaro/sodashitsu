@@ -39,11 +39,15 @@ The code comparisons informed concepts and API use. No upstream implementation w
 
 ## Remaining candidates / limits requiring an explicit disposition
 
-- Human frameSeq adjacency checks still exist in Provider/Relay after removing age checks. Upstream browser input dispatch suggests they are ordinary RD custom gating, not a proven requirement. Removing the obsolete human wire field touches all producers/fixtures and should be a separate small phase; do not label this complete while it remains unexamined.
-- DesktopSourceIdle.fresh became unused in production after platformIdleInput removal. The helper notification still drives an informational UI badge. The unused proof method/clock latches should be deleted separately; the notification and badge need their own UI disposition.
-- Duplicate websocket-RPC machinery in nativeHelperRpc versus client-core Connection remains an integration candidate. Connection also performs reconnect/machine selection and has a broader lifecycle; blindly importing it could add unwanted reconnect semantics. The no-op poll was removed without adding those semantics.
+- Human frameSeq adjacency checks and the obsolete human wire field are removed in phase 4, including browser, Relay, Provider, backplane fixtures and signin WorkerProcess. Frame ACK validation and the separate agent observation frameSeq remain. Native signin Worker/Scope wire producer changes are supplied by the signin phase.
+- DesktopSourceIdle.fresh and its clock/timestamp/reset state are removed in phase 4. SourceIdle only validates/deduplicates an informational badge against the current image sequence. The badge grants no input and renews no observation.
+- nativeHelperRpc now reuses the existing client-core Connection in phase 4, directly targeting this page origin. Its custom raw message parser, request map, sequence and 15-second request timers are deleted. The existing onClosed callback calls disconnect before the ordinary Connection chooses reconnect, preserving per-socket helper ownership without a new reconnect mode.
 - Media format barriers and codec fallback timers need to be judged as codec/transport operations, not removed just because they are timeouts. This phase removes input freshness consumers and their timestamps; it does not claim to replace the custom media wire protocol with a maintained external codec server.
 - Durable file checkpoint journals and lease clocks have not been replaced by an upstream library here. Their current required behavior is identified above; this is not a claim of demonstrated superiority. Full zero-custom completion requires reviewing their implementation independently.
+
+## Phase 4 ordinary input
+
+The remaining browser receiver.active age gate is removed from canInput. Live control and a ready source with an initial displayed image authorize ordinary human input. Per-operation lastSeen<5s gates are removed; the existing 12-second authenticated session/source liveness boundary remains. The Provider no longer stamps every human input with a 500ms expiry. Linux/Swift/Windows input parsers accept absent optional expiry and validate it when provided. Swift reuses its existing expires=0 cleanup-event convention; no replacement timestamp is fabricated. Explicit agent observation/digest/source checks and two-second observation policy remain in DesktopAgentAccess. Clipboard request budgets and realtime PCM deadlines are distinct operations, not human image-age permission.
 
 ## Phase 3 handoff invariants
 

@@ -25,7 +25,7 @@ const allowed=new Set(["control","release","ack","input","quality","heartbeat","
 export class DesktopSigninWorkerProcess {
   #child:Child|undefined;#spawning=true;#closing=false;#done=false;#notified=false;#ack=false;#ready=false;#unsafeTail=false;
   #line="";#lineBytes=0;readonly #decoder=new TextDecoder("utf-8",{fatal:true});
-  #lastSeq=0;#pending=0;#drawn=0;#input=0;readonly #inputs=new Set<number>();
+  #lastSeq=0;#pending=0;#input=0;readonly #inputs=new Set<number>();
   readonly #deadline:number;readonly #readyUntil:number;
   #beat:ReturnType<typeof setInterval>|undefined;#readyTimer:ReturnType<typeof setTimeout>|undefined;#stopTimer:ReturnType<typeof setTimeout>|undefined;
   readonly #stopped:Promise<void>;#resolve!:()=>void;#reject!:(error:Error)=>void;
@@ -79,8 +79,8 @@ export class DesktopSigninWorkerProcess {
       // Drop both notifications; this grants no early native commands.
       if(!this.#ready){if((message.type==="heartbeat"||message.type==="release")&&this.deps.now()<this.#readyUntil)return;throw unavailable();}
       if(message.type==="control"&&message.enabled&&!this.options.control)throw unavailable();
-      if(message.type==="ack"){if(message.seq!==this.#pending)throw unavailable();this.#drawn=message.seq;this.#pending=0;}
-      if(message.type==="input"){if(!this.options.control||message.seq<=this.#input||message.frameSeq!==this.#drawn||this.#inputs.size>=32)throw unavailable();this.#input=message.seq;this.#inputs.add(message.seq);}
+      if(message.type==="ack"){if(message.seq!==this.#pending)throw unavailable();this.#pending=0;}
+      if(message.type==="input"){if(!this.options.control||message.seq<=this.#input||this.#inputs.size>=32)throw unavailable();this.#input=message.seq;this.#inputs.add(message.seq);}
       this.write(message);
     }catch{this.close();}
   }

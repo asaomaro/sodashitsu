@@ -233,3 +233,39 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 
 
 ```
+
+## Phase 4 ordinary human input and app RPC reuse
+
+Removed human input.frameSeq (including strict schema and ordinary browser/Relay/Provider/signin TS producer/consumer checks). Capture/frame ACK ordering and agent observation.frameSeq remain. Removed dead SourceIdle.fresh clock/proof/reset state, browser receiver.active from canInput, per-operation Provider lastSeen<5s admission and blanket human input500ms expiry. Existing session/source12s liveness remains.
+
+nativeHelperRpc reuses app Connection to the fixed page origin; the private raw parser/request map/sequence/15s request timers are deleted. The existing Connection.onClosed callback disconnects before its reconnect branch, with a regression proving no helper restart after close. No new connection mode/retry guard is added.
+
+Optional input expiry is supported in Linux/Swift/synthetic helpers; native author supplies the matching Windows parser. The signin author supplies native Worker/Scope human frameSeq removal. These counterpart changes must integrate before a full build. Swift uses its existing expires=0 sentinel; malformed supplied Linux expiry is still rejected.
+
+Validation:
+
+- Protocol/client-core targeted compile PASS.
+- SourceIdle/signin WorkerProcess/endpoint backplane/app RPC:58 PASS.
+- Web helper RPC + native-transfer component:8 PASS.
+- Ordinary JPEG input at3s/6.2s without a new image, native input before draw receipt, quiet Linux input and stale-agent rejection:5 PASS.
+- Linux InputGuard18 PASS, including missing expiry accepted and supplied invalid/expired expiry rejected. Full portable suite has2 environmental failures from unavailable GStreamer GstVideo namespace (plus2 skips); no actual portal/input device operation was attempted.
+- Swift optional-input regression added to its existing pure selftests. Swift/macOS compiler is unavailable in this container, so this is source-only here.
+- Negative control: restored only Linux InputGuard implementation to pre-change source, new missing-expiry test FAILED; restored modified bytes and compared exactly, then all18 guards PASS. Raw output follows.
+
+```text
+F
+======================================================================
+FAIL: test_human_input_has_no_optional_operation_deadline (__main__.Guards.test_human_input_has_no_optional_operation_deadline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-portal-helper.py", line 131, in test_human_input_has_no_optional_operation_deadline
+    self.assertTrue(g.input(command));self.assertTrue(c);self.assertEqual(g.seq,1)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+
+```

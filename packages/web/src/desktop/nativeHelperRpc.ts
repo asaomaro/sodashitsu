@@ -1,23 +1,32 @@
-import {DesktopNativeHelperDescriptor,type DesktopNativeHelperDescriptor as Descriptor,type ParamsOf,type ResultOf} from "@sodashitsu/protocol";
-type Method="client.hello"|"desktop.native_helper.start"|"desktop.native_helper.stop";
-/** A dedicated direct connection to this page's server; never the selected B route. */
+import {Connection,type WebSocketLike} from "@sodashitsu/client-core/net/Connection";
+import {DesktopNativeHelperDescriptor,type DesktopNativeHelperDescriptor as Descriptor} from "@sodashitsu/protocol";
+/** Use the application's ordinary RPC connection to this page's server.
+ * This helper belongs to one socket and is not resumed after disconnect. */
 export class DesktopNativeHelperRpc {
- private socket:WebSocket|undefined;private dead=false;private sequence=0;private viewer:string|undefined;private ready:Promise<void>|undefined;private pending=new Map<string,{resolve(value:unknown):void;reject(error:Error):void;timer:ReturnType<typeof setTimeout>}>();
- constructor(private closed:()=>void,private open=(url:string)=>new WebSocket(url)){}
- private connect(){return this.ready??=new Promise<void>((resolve,reject)=>{
-  if(this.dead){reject(Error("補助プログラムの接続は終了しました"));return;}
-  const socket=this.socket=this.open(location.origin.replace(/^http/,"ws")+"/ws");let hello=false;const timer=setTimeout(()=>{this.close();reject(Error("操作元の接続が時間切れです"));},15000);
-  socket.onopen=()=>{void this.call("client.hello",{protocol:1,kind:"desktop"}).then(()=>{if(this.dead)return;hello=true;clearTimeout(timer);resolve();},error=>{clearTimeout(timer);reject(error);this.close();});};
-  socket.onerror=()=>socket.close();socket.onclose=()=>{clearTimeout(timer);if(!hello)reject(Error("操作元に接続できません"));this.close();};
-  socket.onmessage=event=>{try{
-   if(typeof event.data!=="string"||event.data.length>8388608)throw Error("RPC message limit");const value=JSON.parse(event.data);if(!value||typeof value.id!=="string")return;const pending=this.pending.get(value.id);if(!pending)return;this.pending.delete(value.id);clearTimeout(pending.timer);if(value.error)pending.reject(Error("補助プログラムの要求を実行できません"));else pending.resolve(value.result);
-  }catch{this.close();}};
- });}
- private call<M extends Method>(method:M,params:ParamsOf<M>):Promise<ResultOf<M>>{
-  const socket=this.socket;if(this.dead||socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>16384||this.pending.size>=4)return Promise.reject(Error("操作元の接続が終了しました"));
-  const id=String(++this.sequence);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(Error("補助プログラムの応答がありません"));this.close();},15000);this.pending.set(id,{resolve:value=>resolve(value as ResultOf<M>),reject,timer});try{socket.send(JSON.stringify({id,method,params}));}catch{this.close();}});
+ private readonly connection:Connection;
+ private resolveReady!:()=>void;
+ private rejectReady!:(error:Error)=>void;
+ private readonly ready=new Promise<void>((resolve,reject)=>{this.resolveReady=resolve;this.rejectReady=reject;});
+ private dead=false;
+ private viewer:string|undefined;
+ constructor(private closed:()=>void,open=(url:string)=>new WebSocket(url) as unknown as WebSocketLike,fetchImpl:typeof fetch=fetch){
+  void this.ready.catch(()=>{});
+  this.connection=new Connection({
+   kind:"desktop",httpOrigin:location.origin,wsUrl:location.origin.replace(/^http/,"ws")+"/ws",createWebSocket:open,fetchImpl,
+   sink:{onOutput(){},onSnapshot(){},onSizeChanged(){}},
+   store:{applySnapshot(){},applyEvent(){},onConnectionState:state=>{if(state==="rejected")this.close();},onAuthRequired:()=>this.close(),onOriginRejectSuspected(){}},
+  });
+  this.connection.onOpened(()=>this.resolveReady());
+  // Connection notifies close before choosing whether to reconnect. Disposing
+  // here uses its existing disconnect path to retire this socket's helper.
+  this.connection.onClosed(()=>this.close());
  }
- async start(viewerId:string):Promise<Descriptor>{if(this.viewer&&this.viewer!==viewerId)throw Error("別のデスクトップには使えません");this.viewer=viewerId;await this.connect();const result=DesktopNativeHelperDescriptor.parse(await this.call("desktop.native_helper.start",{viewerId}));return result;}
- async stop(viewerId:string){if(!this.dead&&this.socket?.readyState===WebSocket.OPEN)await this.call("desktop.native_helper.stop",{viewerId});}
- close(){if(this.dead)return;this.dead=true;for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(Error("補助プログラムの接続が終了しました"));}this.pending.clear();this.socket?.close();this.socket=undefined;this.closed();}
+ async start(viewerId:string):Promise<Descriptor>{
+  if(this.dead)throw Error("補助プログラムの接続は終了しました");
+  if(this.viewer&&this.viewer!==viewerId)throw Error("別のデスクトップには使えません");
+  this.viewer=viewerId;this.connection.connect();await this.ready;
+  return DesktopNativeHelperDescriptor.parse(await this.connection.request("desktop.native_helper.start",{viewerId}));
+ }
+ async stop(viewerId:string){if(!this.dead)await this.connection.request("desktop.native_helper.stop",{viewerId});}
+ close(){if(this.dead)return;this.dead=true;this.rejectReady(Error("補助プログラムの接続が終了しました"));this.connection.disconnect();this.closed();}
 }

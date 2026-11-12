@@ -125,7 +125,10 @@ class Guards(unittest.TestCase):
  def test_invalid_suffix_and_expiry_have_no_partial_injection(self):
   g,c,a=self.setup_guard()
   for text in ["valid\x00","valid\ud800"]:self.assertFalse(g.input(self.command(1,{"kind":"text","text":text})))
-  command=self.command(1,{"kind":"key","code":"KeyA","down":True});command["expiresAt"]=999;self.assertFalse(g.input(command));self.assertFalse(c)
+  command=self.command(1,{"kind":"key","code":"KeyA","down":True});command["expiresAt"]=999;self.assertFalse(g.input(command));command["expiresAt"]=None;self.assertFalse(g.input(command));self.assertFalse(c)
+ def test_human_input_has_no_optional_operation_deadline(self):
+  g,c,a=self.setup_guard();command={"seq":1,"input":{"kind":"key","code":"KeyA","down":True}}
+  self.assertTrue(g.input(command));self.assertTrue(c);self.assertEqual(g.seq,1)
  def test_actual_os_device_grants_limit_capabilities(self):
   g,c,a=self.setup_guard(2);self.assertFalse(g.capabilities()["keys"]);self.assertFalse(g.capabilities()["text"]);self.assertFalse(g.input(self.command(1,{"kind":"key","code":"ControlLeft","down":True})));self.assertFalse(c)
  def test_unicode_is_forwarded_as_keysyms_not_shell_text(self):

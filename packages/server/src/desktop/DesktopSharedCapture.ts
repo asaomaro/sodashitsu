@@ -482,7 +482,6 @@ export class DesktopSharedCapture {
       decodeDesktopFrame(encodeDesktopFrame(info, Buffer.from(value.data, "base64")));
       g.images.accept(info);
       g.frameSeq = info.seq;
-      g.sourceIdle.frame();
       let recover = false;
       // Bounded acceptance at the source replaces the slowest subscriber's ACK.
       // Every subscriber still ACKs exactly its own delivered frame.

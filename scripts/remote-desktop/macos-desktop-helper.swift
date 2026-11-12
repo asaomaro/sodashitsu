@@ -86,9 +86,9 @@ final class InputGuard {
     }
     func input(_ message: [String: Any], now: Int64 = utcMilliseconds()) throws -> Int64? {
         guard let next = integer(message["seq"], 1, Int64(safeInteger)),
-              let expires = integer(message["expiresAt"], 1, Int64(safeInteger)),
+              let expires = message["expiresAt"] == nil ? Int64(0) : integer(message["expiresAt"], 1, Int64(safeInteger)),
               let value = message["input"] as? [String: Any], let kind = value["kind"] as? String else { throw NativeError("backend_failure") }
-        guard allowed, control, active(), next > seq, expires >= now, expires <= now + 1500 else { return nil }
+        guard allowed, control, active(), next > seq, (expires == 0 || (expires >= now && expires <= now + 1500)) else { return nil }
         var event = InjectedEvent(kind:kind,modifiers:modifiers,expires:expires)
         switch kind {
         case "key":
@@ -135,9 +135,9 @@ func postText(_ text: String, expires: Int64, active: () -> Bool, now: () -> Int
     var down=false
     defer { if down && active() { cleanup() } }
     for chunk in unicodeChunks(text) {
-        guard active(),now()<=expires else { throw NativeError("source_changed") }
+        guard active(),(expires == 0 || now()<=expires) else { throw NativeError("source_changed") }
         try emit(chunk,true);down=true
-        guard active(),now()<=expires else { throw NativeError("source_changed") }
+        guard active(),(expires == 0 || now()<=expires) else { throw NativeError("source_changed") }
         try emit(chunk,false);down=false
     }
 }
@@ -921,6 +921,11 @@ func generatedTests() throws -> Int {
     try check(expired==nil && !guardInput.keys.contains(11),"expired input discarded")
     let replay=try guardInput.input(key(2,"KeyB",true),now:1000)
     try check(replay==nil,"input replay discarded")
+    let humanSink=GeneratedSink()
+    let noDeadlineInput=InputGuard(sink:humanSink,allowed:true,active:{true});noDeadlineInput.control=true
+    let humanApplied=try noDeadlineInput.input(["seq":1,"input":["kind":"key","code":"KeyA","down":true]],now:3000)
+    try check(humanApplied==1 && humanSink.events.count==1,"human input needs no operation deadline")
+    noDeadlineInput.release()
     let revision=guardInput.revision
     let ticket=FrameTicket(revision:revision,started:1000,inputSeq:guardInput.seq)
     try check(canPublish(ticket,revision:revision,now:1001,active:true),"fresh ticket")

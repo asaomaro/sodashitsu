@@ -158,7 +158,6 @@ export const RemoteDesktopViewerMessage = z.union([
       type: z.literal("input"),
       input: RemoteDesktopInput,
       seq: z.number().int().positive(),
-      frameSeq: z.number().int().positive(),
     })
     .strict(),
   z.object({ type: z.literal("ack"), seq: z.number().int().positive() }).strict(),

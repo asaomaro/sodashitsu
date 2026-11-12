@@ -24,19 +24,18 @@ it("spawns only the fixed installed broker with pipes and a bounded explicit con
 });
 it("validates real encoded pixels and permits only a displayed frame and monotonic input",async()=>{
   const f=fixture();f.output(ready);f.output(image());expect(f.records).toHaveLength(2);expect(decodeDesktopFrame(f.records[1]!.bytes).info.seq).toBe(1);
-  f.process.send({type:"ack",seq:1});f.process.send({type:"control",enabled:true});f.process.send({type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"Space",down:true}});expect(f.closed).not.toHaveBeenCalled();
+  f.process.send({type:"ack",seq:1});f.process.send({type:"control",enabled:true});f.process.send({type:"input",seq:1,input:{kind:"key",code:"Space",down:true}});expect(f.closed).not.toHaveBeenCalled();
   f.output({type:"input_ack",seq:1});expect(f.records).toHaveLength(3);f.process.close();expect(f.child.stdin.destroyed).toBe(true);f.finish();await expect(f.process.settled()).resolves.toBeUndefined();expect(f.unsafeStop).not.toHaveBeenCalled();
 });
-it.each(["input-before-frame","future-ack","replay","unsupported-command","wrong-ready","second-frame","bad-pixels","extra-ready-field"])("rejects %s without arbitrary native instructions",mode=>{
+it.each(["future-ack","replay","unsupported-command","wrong-ready","second-frame","bad-pixels","extra-ready-field"])("rejects %s without arbitrary native instructions",mode=>{
   const f=fixture();
   if(mode==="wrong-ready")f.output({...ready,allowInput:false});else if(mode==="extra-ready-field")f.output({...ready,files:true});else{
     f.output(ready);
-    if(mode==="input-before-frame")f.process.send({type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"Space",down:true}});
     if(mode==="future-ack")f.process.send({type:"ack",seq:2});
     if(mode==="unsupported-command")f.process.send({type:"sas"});
     if(mode==="bad-pixels")f.output({...image(),data:"aGVsbG8="});
     if(mode==="second-frame"){f.output(image());f.output(image(2));}
-    if(mode==="replay"){f.output(image());f.process.send({type:"ack",seq:1});f.process.send({type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"Space",down:true}});f.process.send({type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"Space",down:true}});}
+    if(mode==="replay"){f.output(image());f.process.send({type:"ack",seq:1});f.process.send({type:"input",seq:1,input:{kind:"key",code:"Space",down:true}});f.process.send({type:"input",seq:1,input:{kind:"key",code:"Space",down:true}});}
   }
   expect(f.closed).toHaveBeenCalledOnce();f.finish();
 });
@@ -68,7 +67,7 @@ it("rejects a stop marker followed by an incomplete UTF8 byte in the same chunk"
 });
 it.each(["unissued","duplicate","quota"])("bounds native input acknowledgements on %s",mode=>{
   const f=fixture();f.output(ready);f.output(image());f.process.send({type:"ack",seq:1});
-  const key=(seq:number)=>({type:"input",seq,frameSeq:1,input:{kind:"key",code:"Space",down:true}});
+  const key=(seq:number)=>({type:"input",seq,input:{kind:"key",code:"Space",down:true}});
   if(mode==="quota"){for(let seq=1;seq<=33;seq++)f.process.send(key(seq));}
   else{f.process.send(key(100));if(mode==="duplicate")f.output({type:"input_ack",seq:100});f.output({type:"input_ack",seq:mode==="duplicate"?100:1});}
   expect(f.closed).toHaveBeenCalledOnce();f.finish();
@@ -81,7 +80,7 @@ it("keeps viewer heartbeats harmless while native startup is pending",async()=>{
  f.clock(2000);await vi.advanceTimersByTimeAsync(2000);expect(f.child.stdin.read().toString()).toBe('{"type":"heartbeat"}\n');
  f.process.send({type:"heartbeat"});f.output(ready);f.output(image());expect(f.records).toHaveLength(2);expect(f.closed).not.toHaveBeenCalled();f.finish();await expect(f.process.settled()).resolves.toBeUndefined();
 });
-it.each([{type:"control",enabled:true},{type:"ack",seq:1},{type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"Space",down:true}},{type:"keyframe"}])("still rejects pre-ready command $type",message=>{
+it.each([{type:"control",enabled:true},{type:"ack",seq:1},{type:"input",seq:1,input:{kind:"key",code:"Space",down:true}},{type:"keyframe"}])("still rejects pre-ready command $type",message=>{
  const f=fixture();f.child.stdin.read();f.process.send(message);expect(f.closed).toHaveBeenCalledOnce();expect(f.records).toHaveLength(0);f.finish();
 });
 it("does not let waiting heartbeats extend the native ready deadline",()=>{

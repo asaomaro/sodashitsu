@@ -31,9 +31,9 @@ it("rejects legacy and forged endpoint starts before opening a provider socket",
 });
 it("runs the generated helper and raw input through the private permission backplane",async()=>{
  const f=await fixture(),v=await f.viewer([DESKTOP_INPUT_PROTOCOL]);v.start();await expect.poll(()=>v.frames.length).toBe(1);expect(v.messages).toContainEqual(expect.objectContaining({type:"ready",backend:"synthetic"}));
- const frameSeq=decodeDesktopFrame(v.frames[0]!).info.seq;v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
  const inputs=[{kind:"key",code:"ControlLeft",down:true},{kind:"key",code:"Space",down:true},{kind:"key",code:"Space",down:false},{kind:"key",code:"ControlLeft",down:false}];
- inputs.forEach((input,index)=>v.send({type:"input",seq:index+1,frameSeq,input}));
+ inputs.forEach((input,index)=>v.send({type:"input",seq:index+1,input}));
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===4)).toBe(true);expect(await f.log()).toEqual(inputs);
  v.root.close();await expect.poll(()=>v.closed.mock.calls.length).toBe(1);expect(v.root.active()).toBe(false);
 });
@@ -42,7 +42,7 @@ it("binds the public target before rewriting it to a private machine route",asyn
 });
 it("stops input and helper ownership synchronously when the endpoint is revoked",async()=>{
  const f=await fixture();let active=true;const root=f.plane.root(f.publicMachine,()=>active),v=await f.viewer([DESKTOP_INPUT_PROTOCOL],root);v.start();await expect.poll(()=>v.frames.length).toBe(1);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
- active=false;root.close();expect(root.active()).toBe(false);expect(()=>v.send({type:"input",seq:1,frameSeq:1,input:{kind:"text",text:"denied"}})).toThrow();expect(await f.log()).toEqual([]);await expect.poll(()=>v.closed.mock.calls.length).toBe(1);
+ active=false;root.close();expect(root.active()).toBe(false);expect(()=>v.send({type:"input",seq:1,input:{kind:"text",text:"denied"}})).toThrow();expect(await f.log()).toEqual([]);await expect.poll(()=>v.closed.mock.calls.length).toBe(1);
 });
 it("does not revive an old root after provider configure or handoff rollback",async()=>{
  const f=await fixture(),root=f.plane.root(f.publicMachine,()=>true);const before=f.provider.epoch;f.provider.configure(f.config);expect(f.provider.epoch).toBeGreaterThan(before);expect(root.active()).toBe(false);await expect(root.open([],()=>{},()=>{})).rejects.toThrow();
@@ -87,7 +87,7 @@ it("closes the root on malformed parent JSON and coalesces shutdown promises",as
 });
 it("preserves the local input ceiling even if the helper advertises input",async()=>{
  const f=await fixture(false),v=await f.viewer([DESKTOP_INPUT_PROTOCOL]);v.start();await expect.poll(()=>v.frames.length).toBe(1);expect(v.messages.find(m=>m.type==="ready")!.allowInput).toBe(false);
- v.send({type:"control",enabled:true});v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames[0]!).info.seq,input:{kind:"text",text:"forbidden"}});v.send({type:"ack",seq:decodeDesktopFrame(v.frames[0]!).info.seq});
+ v.send({type:"control",enabled:true});v.send({type:"input",seq:1,input:{kind:"text",text:"forbidden"}});v.send({type:"ack",seq:decodeDesktopFrame(v.frames[0]!).info.seq});
  await expect.poll(()=>v.frames.length).toBeGreaterThan(1);expect(v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(false);expect(await f.log()).toEqual([]);
 });
 it("rejects a provider start released after its root was revoked",async()=>{
@@ -148,7 +148,7 @@ it("binds native file offers to the trusted outer origin across the private endp
  v.send({type:"start",machineId:f.publicMachine,options:{width:320,fps:10,quality:65,files:true}});await expect.poll(()=>v.frames.length).toBeGreaterThan(0);await expect.poll(()=>v.messages.some(m=>m.type==="files_ticket")).toBe(true);
  const messages:any[]=[],child=await root.open([DESKTOP_FILES_PROTOCOL],(bytes,binary)=>{expect(binary).toBe(false);messages.push(JSON.parse(new TextDecoder().decode(bytes)));},()=>{});child.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="files_ticket")!.ticket}));await expect.poll(()=>v.messages.some(m=>m.type==="files_ready")).toBe(true);
  const run=async(request:unknown)=>{const id=randomUUID();child.send(JSON.stringify({type:"desktop_file",id,request}));await expect.poll(()=>messages.some(m=>m.id===id)).toBe(true);return messages.find(m=>m.id===id);};
- expect((await run({action:"grant",enabled:true})).ok).toBe(true);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ expect((await run({action:"grant",enabled:true})).ok).toBe(true);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  const forged=await run({action:"native_prepare",gesture:randomUUID(),origin:"https://forged.example",seq:1});expect(forged.ok).toBe(false);expect(capture).not.toHaveBeenCalled();
  const gesture=randomUUID(),prepared=await run({action:"native_prepare",gesture,origin,seq:1});expect(prepared.ok).toBe(true);const offer=prepared.result.native;expect((await run({action:"native_activate",gesture,lease:offer.lease})).ok).toBe(true);
  const read=await run({action:"native_read",gesture,lease:offer.lease,request:randomUUID(),index:0,offset:0,length:15});expect(read.ok).toBe(true);expect(Buffer.from(read.result.data,"base64").toString()).toBe("endpoint native");root.close();

@@ -457,7 +457,7 @@ export class DesktopRelay {
                 reject(e);
               },
             });
-            if (!this.send(v.provider, { type: "input", seq, frameSeq: v.seq, input })) {
+            if (!this.send(v.provider, { type: "input", seq, input })) {
               v.inputWaits.get(seq)?.reject(new RpcError("server_busy", "Desktop unavailable"));
               v.inputWaits.delete(seq);
             }
@@ -619,8 +619,6 @@ export class DesktopRelay {
             !this.agents.occupied(v.agent) &&
             v.provider &&
             m.seq > v.viewerSeq &&
-            m.frameSeq <= v.seq &&
-            m.frameSeq >= v.seq - 1 &&
             v.seq > 0
           ) {
             v.viewerSeq = m.seq;
@@ -1084,7 +1082,6 @@ export class DesktopRelay {
           v.seq = info.seq;
           v.pending = info.seq;
           v.frameAt = now;
-          v.sourceIdle.frame();
           v.frames++;
           v.bytes += bytes.byteLength;
           if (!(imageLane?v.imageLane!.send(bytes):this.send(v.ws, new Uint8Array(bytes as Buffer)))) this.stop(v);

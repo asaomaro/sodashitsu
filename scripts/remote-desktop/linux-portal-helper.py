@@ -61,7 +61,7 @@ class InputGuard:
         self.held_keys.clear();self.held_buttons.clear();self.control=False
     def input(self, message):
         seq=message.get("seq");expiry=message.get("expiresAt");value=message.get("input")
-        if not self.control or not self.alive() or not integer(seq,1,9007199254740991) or seq<=self.seq or not finite(expiry,self.clock(),self.clock()+1000) or not isinstance(value,dict): return False
+        if not self.control or not self.alive() or not integer(seq,1,9007199254740991) or seq<=self.seq or ("expiresAt" in message and not finite(expiry,self.clock(),self.clock()+1000)) or not isinstance(value,dict): return False
         kind=value.get("kind");plan=[]
         if kind=="key" and self.devices&1:
             code=KEYS.get(value.get("code"));down=value.get("down")
@@ -85,7 +85,7 @@ class InputGuard:
         else:return False
         self.revision+=1
         for method,signature,*args in plan:
-            if self.clock()>expiry and not (method=="NotifyKeyboardKeysym" and args[-1]==0): self.release();return False
+            if expiry is not None and self.clock()>expiry and not (method=="NotifyKeyboardKeysym" and args[-1]==0): self.release();return False
             self.call(method,signature,*args)
             if method=="NotifyKeyboardKeycode":
                 if args[-1]:self.held_keys.add(args[0])

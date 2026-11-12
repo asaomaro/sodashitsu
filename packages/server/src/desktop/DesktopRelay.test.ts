@@ -224,15 +224,15 @@ it.each([3000, 6200])("delivers human JPEG input after %ims without a new image 
  // unchanged source/epoch/seq, and no invented idle proof or timer advance.
  await new Promise(resolve=>setTimeout(resolve,age));
  expect(v.frames).toHaveLength(1);expect(share.pending).toBe(decodeDesktopFrame(v.frames[0]!).info.seq);
- const before=Date.now();v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames[0]!).info.seq,input:{kind:"key",code:"KeyA",down:true}});
+ v.send({type:"input",seq:1,input:{kind:"key",code:"KeyA",down:true}});
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  const sent=writes.mock.calls.map(([value])=>JSON.parse(String(value))).filter(m=>m.type==="input");
- expect(sent).toHaveLength(1);expect(sent[0].expiresAt).toBeGreaterThanOrEqual(before+500);expect(sent[0].expiresAt).toBeLessThanOrEqual(Date.now()+500);
+ expect(sent).toHaveLength(1);expect(sent[0]).not.toHaveProperty("expiresAt");
  // Existing sequence/source/control boundaries still reject on the same socket.
- v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames[0]!).info.seq,input:{kind:"key",code:"KeyB",down:true}});
- v.send({type:"input",seq:2,frameSeq:99999,input:{kind:"key",code:"KeyB",down:true}});
+ v.send({type:"input",seq:1,input:{kind:"key",code:"KeyB",down:true}});
+ v.send({type:"input",seq:1,input:{kind:"key",code:"KeyB",down:true}});
  v.send({type:"control",enabled:false});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);
- v.send({type:"input",seq:3,frameSeq:decodeDesktopFrame(v.frames[0]!).info.seq,input:{kind:"key",code:"KeyC",down:true}});
+ v.send({type:"input",seq:3,input:{kind:"key",code:"KeyC",down:true}});
  await new Promise(resolve=>setTimeout(resolve,75));expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).filter(m=>m.type==="input")).toHaveLength(1);
  writes.mockRestore();
 },12000);
@@ -259,17 +259,17 @@ it.each(["normal","shared","elevated-default","elevated-uac"] as const)("keeps f
  v.send({type:"release"});await expect.poll(()=>released).toBe(true);share.ws.off("message",listener);
  expect(share.control).toBe(true);expect(state.resources.identity(share,"control")?.source).toBe(share.process.resourceChannel);
  expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch")).toBe(false);
- v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
+ v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  const commands=writes.mock.calls.map(([value])=>JSON.parse(String(value))).filter(m=>["resource_epoch","control","input"].includes(m.type));expect(commands.map(m=>m.type)).toEqual(["input"]);
  expect(state.resources.identity(share,"control").source).toBe(share.process.resourceChannel);
  if(ordinary)expect(share.pointerWitness).toMatchObject({seq:1,source:share.process.resourceChannel,point:{x:-400,y:50,window:42,pid:7}});else expect(share.pointerWitness).toBeUndefined();
- v.send({type:"input",seq:2,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"up",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);writes.mockRestore();
+ v.send({type:"input",seq:2,input:{kind:"pointer",x:0.5,y:0.5,event:"up",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);writes.mockRestore();
 });
 it.each(["normal","elevated-default","elevated-uac"] as const)("still cancels unused %s control explicitly before any input",async mode=>{
  const f=mode==="normal"?await fixture():await protectedFixture({mode,allowed:true}),v=await f.viewer(mode==="normal"?"extended":"protected");v.send(mode==="normal"?start:protectedStart);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
  const state=f.provider as any,share=state.active,writes=vi.spyOn(share.process.stdin,"write");v.send({type:"control",enabled:false});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);expect(state.resources.owns(share,"control")).toBe(false);
- v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});v.send({type:"release"});let observed=false;share.ws.once("message",()=>{observed=true;});v.send({type:"heartbeat"});await expect.poll(()=>observed).toBe(true);
+ v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});v.send({type:"release"});let observed=false;share.ws.once("message",()=>{observed=true;});v.send({type:"heartbeat"});await expect.poll(()=>observed).toBe(true);
  expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch"||m.type==="input")).toBe(false);writes.mockRestore();
 });
 it.each(["stop","close","timeout","source_changed"] as const)("releases control ownership after focus-release on %s",async ending=>{
@@ -285,7 +285,7 @@ it("shares and controls the local desktop without opening a machine channel, and
  expect(f.providerStartCalls()).toBe(0);
  v.send({type:"control",enabled:true});
  await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
- v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"key",code:"KeyA",down:true}});
+ v.send({type:"input",seq:1,input:{kind:"key",code:"KeyA",down:true}});
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  await expect.poll(async()=>{try{return (await readFile(f.record,"utf8")).includes('"code":"KeyA"');}catch{return false;}}).toBe(true);
  v.ws.close();
@@ -303,12 +303,12 @@ it.each(["pipe","json","shared"])("keeps %s physical input witnesses on B and in
  const v=await f.viewer(mode==="shared"?"shared":false);v.send({...start,options:{...start.options,...(mode==="shared"?{sharedDesktop:true,features:true}:{})}});
  await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
  const state=f.provider as any,share=mode==="shared"?[...state.shared][0]:state.active;
- v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
+ v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  expect(share.pointerWitness).toMatchObject({seq:1,point:{x:-400,y:50,window:42,pid:7}});
  expect(share.pointerWitness.source).toBe(share.process.resourceChannel);
  expect(v.messages.find(m=>m.type==="input_ack"&&m.seq===1)).toEqual({type:"input_ack",seq:1});expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativePointerProof");
- v.send({type:"input",seq:2,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.51,y:0.5,event:"move",button:0}});
+ v.send({type:"input",seq:2,input:{kind:"pointer",x:0.51,y:0.5,event:"move",button:0}});
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);expect(share.pointerWitness).toBeUndefined();
 });
 it.each(["pipe","json","shared"].flatMap(mode=>["release","control","rejected-input"].map(interrupt=>({mode,interrupt}))))("does not revive a delayed $mode witness after $interrupt",async({mode,interrupt})=>{
@@ -317,9 +317,9 @@ it.each(["pipe","json","shared"].flatMap(mode=>["release","control","rejected-in
  const v=await f.viewer(mode==="shared"?"shared":false);v.send({...start,options:{...start.options,...(mode==="shared"?{sharedDesktop:true,features:true}:{})}});
  await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
  const state=f.provider as any,share=mode==="shared"?[...state.shared][0]:state.active;
- v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
+ v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
  await expect.poll(async()=>{try{return (await readFile(f.record,"utf8")).includes('"event":"down"');}catch{return false;}}).toBe(true);
- if(interrupt==="release")v.send({type:"release"});else if(interrupt==="control")v.send({type:"control",enabled:true});else v.send({type:"input",seq:2,frameSeq:999999,input:{kind:"pointer",x:0.5,y:0.5,event:"up",button:0}});
+ if(interrupt==="release")v.send({type:"release"});else if(interrupt==="control")v.send({type:"control",enabled:true});else v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"up",button:0}});
  v.send({type:"heartbeat"});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  expect(share.pointerWitness).toBeUndefined();expect(share.inputSeq).toBe(1);expect(v.ws.readyState).toBe(WebSocket.OPEN);
 });
@@ -343,7 +343,7 @@ it("accepts human input after native video stops without requiring a draw receip
   native.fromHelper({type:"native_frame",id,seq:1,width:320,height:180,timestamp:1,key:true,codec:"avc1.42041f",data:Buffer.from([0,0,0,1,0x65,1]).toString("base64")});
   native.fromViewer({type:"native_video_ack",id,generation:1,seq:1});
   share.native=native;share.frameAt=performance.now()-3000;
-  const inject=(seq:number,text:string)=>share.ws.emit("message",Buffer.from(JSON.stringify({type:"input",seq,frameSeq:share.seq,input:{kind:"text",text}})),false);
+  const inject=(seq:number,text:string)=>share.ws.emit("message",Buffer.from(JSON.stringify({type:"input",seq,input:{kind:"text",text}})),false);
   inject(1,"ACCEPT_OLD_IMAGE");inject(2,"ACCEPT_NATIVE");
   await expect.poll(async()=>(await recorded()).includes("ACCEPT_NATIVE")).toBe(true);
   expect(await readFile(f.record,"utf8")).toContain("ACCEPT_OLD_IMAGE");
@@ -371,7 +371,7 @@ it("accepts human native input without any painted-frame receipt", async()=>{
  // Model a negotiated native stream before a draw. This checks the relay's
  // input decision; decoder/renderer behavior has separate browser coverage.
  server.media={id:crypto.randomUUID(),generation:1,seq:0,native:true,pending:[],window:3};
- viewer.send({type:"input",seq:1,frameSeq:server.seq,input:{kind:"text",text:"NO_DRAW_RECEIPT"}});
+ viewer.send({type:"input",seq:1,input:{kind:"text",text:"NO_DRAW_RECEIPT"}});
  await expect.poll(async()=>readFile(f.record,"utf8").catch(()=>""),{timeout:1000}).toContain("NO_DRAW_RECEIPT");
 });
 it("reconnects when an installed worker ends after secure ready and the parent verifies a different desktop",async()=>{
@@ -441,7 +441,6 @@ it("automatically connects B to A, isolates viewers and enforces both input perm
   const text = {
     type: "input",
     seq: 1,
-    frameSeq: frame.seq,
     input: { kind: "text", text: "日本語" },
   };
   a.send(text);
@@ -468,7 +467,7 @@ it("refuses control when B is readonly and closes an unacknowledged share", asyn
   await expect
     .poll(() => a.messages.some((m) => m.type === "control" && m.enabled === false))
     .toBe(true);
-  a.send({ type: "input", seq: 1, frameSeq: 1, input: { kind: "text", text: "DENIED" } });
+  a.send({ type: "input", seq: 1, input: { kind: "text", text: "DENIED" } });
   a.send({ type: "heartbeat" });
   await expect.poll(() => a.ws.readyState, { timeout: 8000 }).toBe(WebSocket.CLOSED);
   await expect(readFile(f.record, "utf8")).rejects.toThrow();
@@ -611,10 +610,9 @@ it.each([true,false])("forwards named IME keys only when advertised by the helpe
   await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
   viewer.send({type:"control",enabled:true});
   await expect.poll(()=>viewer.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
-  const frameSeq=decodeDesktopFrame(viewer.frames.at(-1)!).info.seq;
-  viewer.send({type:"input",seq:1,frameSeq,input:{kind:"key",code:"ImeOn",down:true}});
-  viewer.send({type:"input",seq:2,frameSeq,input:{kind:"key",code:"ImeOn",down:false}});
-  viewer.send({type:"input",seq:3,frameSeq,input:{kind:"key",code:"KeyA",down:true}});
+  viewer.send({type:"input",seq:1,input:{kind:"key",code:"ImeOn",down:true}});
+  viewer.send({type:"input",seq:2,input:{kind:"key",code:"ImeOn",down:false}});
+  viewer.send({type:"input",seq:3,input:{kind:"key",code:"KeyA",down:true}});
   await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===3)).toBe(true);
   const record=await readFile(f.record,"utf8");
   expect(record.includes('"code":"ImeOn"')).toBe(supported);
@@ -649,12 +647,11 @@ it.each([true,false])("keeps middle click and gates side buttons/added keys by h
   expect(viewer.messages.find(m=>m.type==="ready")?.extendedInput).toBe(supported?true:undefined);
   viewer.send({type:"control",enabled:true});
   await expect.poll(()=>viewer.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
-  const frameSeq=decodeDesktopFrame(viewer.frames.at(-1)!).info.seq;
   let seq=0;
   for(const button of [1,3,4])for(const event of ["down","up"])
-    viewer.send({type:"input",seq:++seq,frameSeq,input:{kind:"pointer",x:0.5,y:0.5,event,button}});
+    viewer.send({type:"input",seq:++seq,input:{kind:"pointer",x:0.5,y:0.5,event,button}});
   for(const code of ["F24","Tab"])for(const down of [true,false])
-    viewer.send({type:"input",seq:++seq,frameSeq,input:{kind:"key",code,down}});
+    viewer.send({type:"input",seq:++seq,input:{kind:"key",code,down}});
   await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===seq)).toBe(true);
   const record=await readFile(f.record,"utf8");
   expect(record.includes('"button":1')).toBe(true);
@@ -728,7 +725,7 @@ it.each(["malformed", "source congestion", "viewer congestion"])("isolates H264 
  expect(v.frames.some(b=>isDesktopMediaChunk(b))).toBe(false);
  const native=events.find(m=>m.type==="media_stream"),packet=decodeDesktopMediaChunk(packets[0]!);
  v.send({type:"native_video_ack",id:native.id,generation:packet.generation,seq:packet.seq});
- v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames[0]!).info.seq,input:{kind:"key",code:"ArrowRight",down:true}});
+ v.send({type:"input",seq:1,input:{kind:"key",code:"ArrowRight",down:true}});
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  // Fail only generated video; never disconnect an actual machine or inject OS input.
  const share=(f.provider as any).active;
@@ -749,7 +746,7 @@ it.each(["malformed", "source congestion", "viewer congestion"])("isolates H264 
  const fresh=decodeDesktopFrame(v.frames[v.frames.length-1]!).info.seq;
  v.send({type:"ack",seq:fresh});v.send({type:"control",enabled:true});
  await expect.poll(()=>v.messages.filter(m=>m.type==="control"&&m.enabled).length).toBe(2);
- v.send({type:"input",seq:2,frameSeq:fresh,input:{kind:"key",code:"ArrowRight",down:false}});
+ v.send({type:"input",seq:2,input:{kind:"key",code:"ArrowRight",down:false}});
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);
  v.send({type:"stop"});
 });
@@ -820,7 +817,7 @@ it("cursor packets advance independently and cannot renew image freshness or gra
  server.pending=0;const before=server.frameAt=performance.now()-6000,sourceBefore=source.frameAt;
  for(let seq=100;seq<103;seq++)server.provider.emit("message",Buffer.from(encodeDesktopCursor({type:"cursor",seq,visible:true,x:.2,y:.3,shapeId:1})),true);
  expect(server.frameAt).toBe(before);expect(source.frameAt).toBe(sourceBefore);
- v.send({type:"input",seq:1,frameSeq:server.seq,input:{kind:"key",code:"KeyA",down:true}});
+ v.send({type:"input",seq:1,input:{kind:"key",code:"KeyA",down:true}});
  await new Promise<void>(r=>{v.ws.once("pong",()=>r());v.ws.ping();});expect(server.viewerSeq).toBe(0);expect(source.inputSeq).toBe(0);v.send({type:"stop"});
 });
 it.each(["viewer","provider","secure"])("does not send cursor extensions to an incompatible %s",async missing=>{
@@ -873,7 +870,7 @@ it.each(["transition","timeout","stop","parent-close"])("freezes a lost authenti
  if(outcome==="timeout")server.provider.removeAllListeners("close");
  server.imageLane.fail();
  expect(server.control).toBe(false);expect(server.imageCloseTimer).toBeDefined();
- v.send({type:"control",enabled:true});v.send({type:"input",seq:1,frameSeq:server.seq,input:{kind:"key",code:"F13",down:true}});
+ v.send({type:"control",enabled:true});v.send({type:"input",seq:1,input:{kind:"key",code:"F13",down:true}});
  await new Promise<void>(resolve=>{v.ws.once("pong",()=>resolve());v.ws.ping();});
  expect(server.control).toBe(false);expect(server.viewerSeq).toBe(0);
  const emit=(m:unknown)=>server.provider.emit("message",Buffer.from(JSON.stringify(m)),false);
@@ -1018,7 +1015,7 @@ it.each(["elevated-default","elevated-uac"] as const)("requires the actual %s he
   await expect.poll(()=>viewer.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
   const share=(f.provider as unknown as {active:{process:{stdin:Writable};ws:WebSocket}}).active,writes=vi.spyOn(share.process.stdin,"write");
   const fromA:string[]=[];const observe=(data:unknown)=>{try{fromA.push(JSON.parse(String(data)).type);}catch{}};share.ws.on("message",observe);
-  viewer.send({type:"sas"});viewer.send({type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"ControlLeft",down:true}});
+  viewer.send({type:"sas"});viewer.send({type:"input",seq:1,input:{kind:"key",code:"ControlLeft",down:true}});
   await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
   expect(viewer.messages.some(m=>m.type==="agent_ticket")).toBe(false);
   expect(fromA).not.toContain("sas");share.ws.off("message",observe);
@@ -1105,15 +1102,15 @@ it("shares one capture across viewers with independent backpressure and exclusiv
  expect((await readFile(f.lifecycle,"utf8")).trim().split("\n").map(line=>JSON.parse(line)).filter(m=>m.type==="spawn")).toHaveLength(1);
  fast.send({type:"control",enabled:true});await vi.waitFor(()=>expect(fast.messages.at(-1)).toMatchObject({type:"control",enabled:true}));
  slow.send({type:"control",enabled:true});await vi.waitFor(()=>expect(slow.messages.at(-1)).toMatchObject({type:"control",enabled:false}));
- slow.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(slow.frames[0]!).info.seq,input:{kind:"key",code:"KeyB",down:true}});
- fast.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(fast.frames.at(-1)!).info.seq,input:{kind:"key",code:"KeyA",down:true}});
+ slow.send({type:"input",seq:1,input:{kind:"key",code:"KeyB",down:true}});
+ fast.send({type:"input",seq:1,input:{kind:"key",code:"KeyA",down:true}});
  await vi.waitFor(()=>expect(fast.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true));
  expect(await readFile(f.record,"utf8")).toContain('"code":"KeyA"');expect(await readFile(f.record,"utf8")).not.toContain('"code":"KeyB"');
  fast.send({type:"stop"});await vi.waitFor(()=>expect(fast.ws.readyState).toBe(WebSocket.CLOSED));
  slow.send({type:"ack",seq:decodeDesktopFrame(slow.frames[0]!).info.seq});
  await vi.waitFor(()=>expect(slow.frames.length).toBeGreaterThan(1));
  slow.send({type:"control",enabled:true});await vi.waitFor(()=>expect(slow.messages.at(-1)).toMatchObject({type:"control",enabled:true}));
- slow.send({type:"input",seq:2,frameSeq:decodeDesktopFrame(slow.frames.at(-1)!).info.seq,input:{kind:"key",code:"KeyC",down:true}});
+ slow.send({type:"input",seq:2,input:{kind:"key",code:"KeyC",down:true}});
  await vi.waitFor(()=>expect(slow.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true));
  const pid=JSON.parse((await readFile(f.lifecycle,"utf8")).trim()).pid as number;
  expect(()=>process.kill(pid,0)).not.toThrow();
@@ -1270,7 +1267,7 @@ it("preserves another viewer's held key and control when non-owner video stops a
  const childPid=JSON.parse((await readFile(f.lifecycle,"utf8")).trim()).pid as number;
  try{
   b.send({type:"control",enabled:true});await vi.waitFor(()=>expect(b.messages.at(-1)).toMatchObject({type:"control",enabled:true}));
-  b.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(b.frames.at(-1)!).info.seq,input:{kind:"key",code:"ControlLeft",down:true}});
+  b.send({type:"input",seq:1,input:{kind:"key",code:"ControlLeft",down:true}});
   await vi.waitFor(()=>expect(b.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true));
   a.send({type:"media",enabled:true,settings:{transport:"native",audio:false,maxBitrateKbps:2500}});
   await vi.waitFor(()=>expect(a.messages.some(m=>m.type==="media_status"&&m.state==="native")).toBe(true));
@@ -1284,7 +1281,7 @@ it("preserves another viewer's held key and control when non-owner video stops a
   expect(shares.find(s=>s.control)?.control).toBe(true);
   const ledger=(await readFile(f.ledger,"utf8")).trim().split("\n").map(line=>JSON.parse(line));
   expect(ledger.at(-1)).toMatchObject({type:"key-down",held:["ControlLeft"]});
-  b.send({type:"input",seq:2,frameSeq:decodeDesktopFrame(b.frames.at(-1)!).info.seq,input:{kind:"key",code:"ControlLeft",down:false}});
+  b.send({type:"input",seq:2,input:{kind:"key",code:"ControlLeft",down:false}});
   await vi.waitFor(()=>expect(b.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true));
   expect(JSON.parse((await readFile(f.ledger,"utf8")).trim().split("\n").at(-1)!)).toMatchObject({type:"key-up",held:[]});
  }finally{
@@ -1332,7 +1329,7 @@ it.each(["none","viewer","provider","helper","permission"])("negotiates shared a
 it("negotiates native backend proof and supported inputs without leaking unsupported shortcuts",async()=>{
  const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal"]});
  const viewer=await f.viewer("native-platform");viewer.send({...start,options:{...start.options,features:true,deltas:true,adaptive:true,image:{colorMode:"gray16",showCursor:false}}});await expect.poll(()=>viewer.messages.some(m=>m.type==="ready")).toBe(true);expect(viewer.messages.find(m=>m.type==="ready")).toMatchObject({backend:"linux-portal",inputCapabilities:{keys:expect.arrayContaining(["ControlLeft","Space"])}});expect(f.startRequests.at(-1)!.options).toMatchObject({nativePlatform:"linux-portal",deltas:false,adaptive:false,image:{colorMode:"full",showCursor:false}});
- await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);viewer.send({type:"control",enabled:true});await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);const frame=decodeDesktopFrame(viewer.frames.at(-1)!);viewer.send({type:"input",seq:1,frameSeq:frame.info.seq,input:{kind:"key",code:"F24",down:true}});viewer.send({type:"input",seq:2,frameSeq:frame.info.seq,input:{kind:"key",code:"ControlLeft",down:true}});viewer.send({type:"input",seq:3,frameSeq:frame.info.seq,input:{kind:"key",code:"Space",down:true}});
+ await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);viewer.send({type:"control",enabled:true});await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);const frame=decodeDesktopFrame(viewer.frames.at(-1)!);viewer.send({type:"input",seq:1,input:{kind:"key",code:"F24",down:true}});viewer.send({type:"input",seq:2,input:{kind:"key",code:"ControlLeft",down:true}});viewer.send({type:"input",seq:3,input:{kind:"key",code:"Space",down:true}});
  await expect.poll(async()=>{try{return (await readFile(f.record,"utf8")).trim().split("\n").length;}catch{return 0;}}).toBe(2);const values=(await readFile(f.record,"utf8")).trim().split("\n").map(s=>JSON.parse(s));expect(values.map(m=>m.code)).toEqual(["ControlLeft","Space"]);expect(frame.info.timing).toBe("unavailable");viewer.send({type:"stop"});
 });
 it("refuses an old viewer before opening a native OS request or exposing an unknown backend",async()=>{
@@ -1348,7 +1345,7 @@ it("keeps a generated native OS permission wait alive past the Windows startup d
 },25000);
 
 it("queues only the original viewer's reacquisition behind its exact shared cleanup",async()=>{
- const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,"--control-release-marker",f.endedMarker]});const first=await f.viewer("shared"),second=await f.viewer("shared"),options={...start,options:{...start.options,features:true,sharedDesktop:true}};first.send(options);second.send(options);await expect.poll(()=>first.messages.some(m=>m.type==="ready")&&second.messages.some(m=>m.type==="ready")).toBe(true);first.send({type:"control",enabled:true});await expect.poll(()=>first.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);await expect.poll(()=>first.frames.length).toBeGreaterThan(0);first.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(first.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"move",button:0}});await expect.poll(()=>first.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);first.send({type:"control",enabled:false});await expect.poll(()=>first.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,"--control-release-marker",f.endedMarker]});const first=await f.viewer("shared"),second=await f.viewer("shared"),options={...start,options:{...start.options,features:true,sharedDesktop:true}};first.send(options);second.send(options);await expect.poll(()=>first.messages.some(m=>m.type==="ready")&&second.messages.some(m=>m.type==="ready")).toBe(true);first.send({type:"control",enabled:true});await expect.poll(()=>first.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);await expect.poll(()=>first.frames.length).toBeGreaterThan(0);first.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"move",button:0}});await expect.poll(()=>first.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);first.send({type:"control",enabled:false});await expect.poll(()=>first.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);
  first.send({type:"control",enabled:true});await expect.poll(()=>[...(f.provider as any).shared].filter((s:any)=>s.pendingControl).length).toBe(1);second.send({type:"control",enabled:true});await expect.poll(()=>second.messages.some(m=>m.type==="control"&&!m.enabled)).toBe(true);expect([...(f.provider as any).shared].filter((s:any)=>s.pendingControl)).toHaveLength(1);
  await writeFile(f.endedMarker,"generated cleanup");await expect.poll(()=>first.messages.filter(m=>m.type==="control"&&m.enabled).length).toBe(2);expect(second.messages.some(m=>m.type==="control"&&m.enabled)).toBe(false);first.send({type:"stop"});second.send({type:"stop"});
 });
@@ -1358,24 +1355,23 @@ it("discards main-lane idle notices overtaken by a newer image on its independen
  const emit=a.provider.emit,held:any[][]=[];const hook=vi.spyOn(a.provider,"emit").mockImplementation(function(this:any,event:any,...args:any[]){if(event==="message"&&!args[1]){try{if(JSON.parse(String(args[0])).type==="platform_idle"){held.push(args);return true;}}catch{}}return emit.call(this,event,...args);});
  try{
   v.send({type:"ack",seq:1});await expect.poll(()=>held.length).toBeGreaterThan(0);await writeFile(f.endedMarker,"generated next image");await expect.poll(()=>frames.length).toBe(2);expect(a.seq).toBe(2);const at=a.frameAt;
-  emit.call(a.provider,"message",...held[0]!);expect(a.frameAt).toBe(at);expect(a.sourceIdle.fresh({backend:"linux-portal",ready:true,pending:0,seq:2})).toBe(false);expect(v.ws.readyState).toBe(WebSocket.OPEN);
-  v.send({type:"ack",seq:2});await expect.poll(()=>a.pending).toBe(0);emit.call(a.provider,"message",...held[0]!);expect(a.frameAt).toBe(at);expect(a.sourceIdle.fresh({backend:"linux-portal",ready:true,pending:0,seq:2})).toBe(false);expect(v.messages.some(m=>m.type==="platform_idle")).toBe(false);expect(v.ws.readyState).toBe(WebSocket.OPEN);
+  emit.call(a.provider,"message",...held[0]!);expect(a.frameAt).toBe(at);expect(v.ws.readyState).toBe(WebSocket.OPEN);
+  v.send({type:"ack",seq:2});await expect.poll(()=>a.pending).toBe(0);emit.call(a.provider,"message",...held[0]!);expect(a.frameAt).toBe(at);expect(v.messages.some(m=>m.type==="platform_idle")).toBe(false);expect(v.ws.readyState).toBe(WebSocket.OPEN);
  }finally{hook.mockRestore();image.terminate();v.send({type:"stop"});}
 });
 it("keeps quiet Linux human input live independently of idle notices without refreshing agent images",async()=>{
  const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal","--native-idle"]});const viewer=await f.viewer("native-platform");viewer.send({...start,options:{...start.options,features:true}});await expect.poll(()=>viewer.frames.length).toBe(1);viewer.send({type:"ack",seq:1});await expect.poll(()=>viewer.messages.some(m=>m.type==="platform_idle")).toBe(true);
  viewer.send({type:"control",enabled:true});await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
  const a=[...(f.relay as any).viewers][0],b=(f.provider as any).active,old=performance.now()-7000;a.frameAt=b.frameAt=old;
- viewer.send({type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"KeyA",down:true}});await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);expect((await readFile(f.record,"utf8"))).toContain('"code":"KeyA"');expect(a.frameAt).toBe(old);expect(b.frameAt).toBe(old);expect(viewer.frames).toHaveLength(1);expect(a.agent.frame()).toBeUndefined();
+ viewer.send({type:"input",seq:1,input:{kind:"key",code:"KeyA",down:true}});await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);expect((await readFile(f.record,"utf8"))).toContain('"code":"KeyA"');expect(a.frameAt).toBe(old);expect(b.frameAt).toBe(old);expect(viewer.frames).toHaveLength(1);expect(a.agent.frame()).toBeUndefined();
  await expect(a.agent.input({kind:"text",text:"DENIED_AGENT"})).rejects.toThrow("Desktop control unavailable");
- a.sourceIdle.clock=()=>performance.now()+1000;b.sourceIdle.clock=()=>performance.now()+1000;
- viewer.send({type:"input",seq:2,frameSeq:1,input:{kind:"key",code:"KeyA",down:false}});await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);
+ viewer.send({type:"input",seq:2,input:{kind:"key",code:"KeyA",down:false}});await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);
  expect(a.frameAt).toBe(old);expect(b.frameAt).toBe(old);expect(viewer.frames).toHaveLength(1);expect(a.agent.frame()).toBeUndefined();
  expect(await readFile(f.record,"utf8")).not.toContain("DENIED_AGENT");
  viewer.send({type:"stop"});
 });
 it("rejects a browser-forged private quiet-input marker",async()=>{
- const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal","--native-idle"]});const viewer=await f.viewer("native-platform");viewer.send({...start,options:{...start.options,features:true}});await expect.poll(()=>viewer.frames.length).toBe(1);viewer.send({type:"input",seq:1,frameSeq:1,input:{kind:"text",text:"DENIED"},platformIdleInput:true});await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);expect(await readFile(f.record,"utf8").catch(()=>"")).not.toContain("DENIED");
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal","--native-idle"]});const viewer=await f.viewer("native-platform");viewer.send({...start,options:{...start.options,features:true}});await expect.poll(()=>viewer.frames.length).toBe(1);viewer.send({type:"input",seq:1,input:{kind:"text",text:"DENIED"},platformIdleInput:true});await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);expect(await readFile(f.record,"utf8").catch(()=>"")).not.toContain("DENIED");
 });
 it("does not reuse a native pre-input image as an agent observation after the input ACK",async()=>{
  const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal"]});const viewer=await f.viewer("native-platform");viewer.send({...start,options:{...start.options,features:true}});await expect.poll(()=>viewer.frames.length).toBe(1);
@@ -1419,7 +1415,7 @@ it.each(["elevated-default","elevated-uac"] as const)("shares one proven %s sour
  b.send({type:"control",enabled:true});await expect.poll(()=>b.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);
  a.send({type:"stop"});await expect.poll(()=>a.ws.readyState).toBe(WebSocket.CLOSED);
  b.send({type:"control",enabled:true});await expect.poll(()=>b.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
- b.send({type:"input",seq:41,frameSeq:1,input:{kind:"key",code:"ArrowRight",down:true}});await expect.poll(()=>b.messages.some(m=>m.type==="input_ack"&&m.seq===41)).toBe(true);
+ b.send({type:"input",seq:41,input:{kind:"key",code:"ArrowRight",down:true}});await expect.poll(()=>b.messages.some(m=>m.type==="input_ack"&&m.seq===41)).toBe(true);
  await writeFile(f.endedMarker,"changed");await expect.poll(()=>b.ws.readyState).toBe(WebSocket.CLOSED);expect(b.messages.some(m=>m.type==="error")).toBe(true);
 });
 it.each(["viewer","provider","permission","helper"] as const)("refuses protected pooling without the %s gate",async missing=>{
@@ -1688,7 +1684,7 @@ it.each(["pipe","json","shared","folder","virtual","virtual-shared"])("copies a 
  await new Promise<void>((resolve,reject)=>{socket.once("open",resolve);socket.once("error",reject);});socket.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="files_ticket")!.ticket}));await expect.poll(()=>v.messages.some(m=>m.type==="files_ready")).toBe(true);
  const run=async(request:unknown)=>{const id=crypto.randomUUID();socket.send(JSON.stringify({type:"desktop_file",id,request}));await expect.poll(()=>responses.some(m=>m.id===id)).toBe(true);return responses.find(m=>m.id===id);};
  expect((await run({action:"grant",enabled:true})).ok).toBe(true);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
- v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  const state=f.provider as any,share=shared?[...state.shared][0]:state.active,gesture=crypto.randomUUID();
  const prepared=await run({action:"native_prepare",gesture,origin:f.origin,seq:1});expect(prepared.ok).toBe(true);expect(capture).toHaveBeenCalledWith(expect.objectContaining({x:-400,y:50,window:42,pid:7}),expect.any(Number),expect.any(AbortSignal));
  const offer=prepared.result.native;expect(offer.entries[0].name).toBe(mode==="folder"?"selected-folder":"selected-generated.txt");if(mode==="folder")expect(offer.entries).toEqual(expect.arrayContaining([expect.objectContaining({name:"selected-folder\\empty",directory:true,bytes:0})]));expect(offer.generation).toBe(gesture);expect(JSON.stringify(offer)).not.toContain(root);
@@ -1793,11 +1789,11 @@ it.each(["linux-portal","macos-sck"] as const)("shares one %s source while prese
  expect(a.frames).toHaveLength(1);expect((await readFile(f.lifecycle,"utf8")).trim().split("\n").map(line=>JSON.parse(line)).filter(m=>m.type==="spawn")).toHaveLength(1);
  a.send({type:"control",enabled:true});await vi.waitFor(()=>expect(a.messages.some(m=>m.type==="control"&&m.enabled===true)).toBe(true));
  b.send({type:"control",enabled:true});await vi.waitFor(()=>expect(b.messages.some(m=>m.type==="control"&&m.enabled===false)).toBe(true));
- a.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(a.frames[0]!).info.seq,input:{kind:"key",code:"KeyA",down:true}});
+ a.send({type:"input",seq:1,input:{kind:"key",code:"KeyA",down:true}});
  await vi.waitFor(()=>expect(a.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true));
  a.send({type:"control",enabled:false});a.send({type:"ack",seq:decodeDesktopFrame(a.frames[0]!).info.seq});
  b.send({type:"control",enabled:true});await vi.waitFor(()=>expect(b.messages.some(m=>m.type==="control"&&m.enabled===true)).toBe(true));
- b.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(b.frames.at(-1)!).info.seq,input:{kind:"key",code:"KeyA",down:false}});
+ b.send({type:"input",seq:1,input:{kind:"key",code:"KeyA",down:false}});
  await vi.waitFor(()=>expect(b.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true));
  await vi.waitFor(()=>expect(decodeDesktopFrame(b.frames.at(-1)!).info.sourceInputSeq).toBe(1));
  a.send({type:"stop"});await vi.waitFor(()=>expect(a.ws.readyState).toBe(WebSocket.CLOSED));expect(b.ws.readyState).toBe(WebSocket.OPEN);
@@ -1836,7 +1832,7 @@ it("keeps shared Linux quiet-input liveness private to an ACKed viewer without r
  const views=[...(f.relay as any).viewers],shares=[...(f.provider as any).shared],old=performance.now()-7000;
  for(const v of views)v.frameAt=old;for(const s of shares)s.frameAt=old;
  b.send({type:"control",enabled:true});await vi.waitFor(()=>expect(b.messages.some(m=>m.type==="control"&&m.enabled===true)).toBe(true));
- b.send({type:"input",seq:1,frameSeq:1,input:{kind:"key",code:"KeyA",down:true}});await vi.waitFor(()=>expect(b.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true));
+ b.send({type:"input",seq:1,input:{kind:"key",code:"KeyA",down:true}});await vi.waitFor(()=>expect(b.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true));
  for(const v of views){expect(v.frameAt).toBe(old);expect(v.agent.frame()?.at??old).toBe(old);}
  expect(views[1]!.agent.frame()).toBeUndefined();
  expect(a.frames).toHaveLength(1);expect(b.frames).toHaveLength(1);a.send({type:"stop"});b.send({type:"stop"});
@@ -2117,10 +2113,10 @@ it.each(['single','shared','old-host','no-optin','old-viewer'])('requires negoti
  const readyMessage=v.messages.find(m=>m.type==='ready');expect(readyMessage!.virtualNativeDrag).toBe(mode==='no-optin'?undefined:true);expect(readyMessage).not.toHaveProperty('virtualNativeDragProof');expect(readyMessage).not.toHaveProperty('nativePointerProof');
  v.send({type:'control',enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==='control'&&m.enabled)).toBe(true);
  const state=f.provider as any,share=mode==='shared'?[...state.shared][0]:state.active;
- v.send({type:'input',seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:'pointer',x:0.5,y:0.5,event:'down',button:0}});
+ v.send({type:'input',seq:1,input:{kind:'pointer',x:0.5,y:0.5,event:'down',button:0}});
  await expect.poll(()=>v.messages.some(m=>m.type==='input_ack'&&m.seq===1)).toBe(true);
  if(mode==='no-optin')expect(share.pointerWitness).toBeUndefined();else expect(share.pointerWitness).toMatchObject({seq:1,source:share.process.resourceChannel,point:{x:-400,y:50,window:42,pid:7}});
- v.send({type:'input',seq:2,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:'pointer',x:0.51,y:0.5,event:'move',button:0}});
+ v.send({type:'input',seq:2,input:{kind:'pointer',x:0.51,y:0.5,event:'move',button:0}});
  await expect.poll(()=>v.messages.some(m=>m.type==='input_ack'&&m.seq===2)).toBe(true);expect(share.pointerWitness).toBeUndefined();
 });
 it('does not reuse owned virtual drag ready proof after reconnect to an old host',async()=>{

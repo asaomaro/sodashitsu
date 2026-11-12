@@ -416,7 +416,7 @@ export class DesktopProvider {
             if(p.fileTicket){
               if(p.options.files!==true||!cfg.fileRoot)throw Error("File transfer not negotiated");
               const socket=s.fileSocket=new WebSocket(p.url,DESKTOP_FILES_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:100000});
-              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&(!s.secureDesktop||s.protectedFilesActive===true)&&performance.now()-s.lastSeen<5000,p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot,p.options.folders===true,p.options.folderCheckpoints?this.folderCheckpoints:undefined,!cfg.nativePlatform&&!p.options.elevatedDesktop&&(!p.options.virtualDisplay||p.options.virtualNativeDrag===true)?{
+              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&(!s.secureDesktop||s.protectedFilesActive===true),p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot,p.options.folders===true,p.options.folderCheckpoints?this.folderCheckpoints:undefined,!cfg.nativePlatform&&!p.options.elevatedDesktop&&(!p.options.virtualDisplay||p.options.virtualNativeDrag===true)?{
                 origin:scope?.nativeOrigin??url.origin.replace(/^ws/,"http"),
                 runtime:this.nativeSelection,paths:(paths,signal)=>this.nativeSelection.paths(paths,signal),
                 pointer:seq=>{
@@ -526,7 +526,6 @@ export class DesktopProvider {
               !s.ready ||
               m.id <= s.clipboardId ||
               s.clipboardPending.size ||
-              performance.now() - s.lastSeen > 5000 ||
               (m.operation === "write" && !cfg.allowInput)
             ) {
               this.send(s, { type: "clipboard_result", id: m.id, ok: false });
@@ -577,7 +576,7 @@ export class DesktopProvider {
             delete s.pendingControl;
             this.applyControl(s,enabled);
           } else if (m.type === "sas") {
-            if (s.secureDesktop && !s.protectedDesktop && s.control && this.ownsResource(s,"control") && s.ready && performance.now() - s.lastSeen < 5000 )
+            if (s.secureDesktop && !s.protectedDesktop && s.control && this.ownsResource(s,"control") && s.ready )
               this.write(s, m);
           } else if (m.type === "input") {
             s.inputAcks.invalidatePointers();delete s.pointerWitness;
@@ -586,15 +585,12 @@ export class DesktopProvider {
             if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !s.imeKeys) return;
             if (
               s.control && this.ownsResource(s,"control") &&
-              m.frameSeq >= s.seq - 1 &&
-              m.frameSeq <= s.seq &&
               m.seq > s.inputSeq &&
-              performance.now() - s.lastSeen < 5000 &&
               s.seq > 0
             ) {
               s.inputSeq = m.seq;
               s.inputAcks.submitted(m.seq,m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0);
-              this.write(s, { ...m, expiresAt: Date.now() + 500, ...(s.video && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
+              this.write(s, { ...m, ...(s.video && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
             }
           } else {
             this.stop(s);
@@ -751,15 +747,15 @@ export class DesktopProvider {
               display,
               ...legacyReady
             } = ready;
-            if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&this.ownsResource(s,"clipboard")&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
-            if((!s.resourcesManaged||!!s.process?.resourceChannel)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(cfg.nativePlatform&&ready.backend!=="synthetic"?{nativeOutput:(name:string,active:()=>boolean)=>this.nativeMicrophones.open(cfg.nativePlatform!,cfg.microphoneEndpoint!,name,active)}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!protectedMicrophoneAvailable()||!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true,cfg.nativePlatform&&ready.backend!=="synthetic"?false:true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone",Promise.resolve());return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
+            if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&this.ownsResource(s,"clipboard")&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
+            if((!s.resourcesManaged||!!s.process?.resourceChannel)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(cfg.nativePlatform&&ready.backend!=="synthetic"?{nativeOutput:(name:string,active:()=>boolean)=>this.nativeMicrophones.open(cfg.nativePlatform!,cfg.microphoneEndpoint!,name,active)}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!protectedMicrophoneAvailable()||!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true,cfg.nativePlatform&&ready.backend!=="synthetic"?false:true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone",Promise.resolve());return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone")),write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const protectedMicrophone=options.protectedMicrophone===true&&options.elevatedDesktop===true&&!!s.protectedDesktop&&s.secureDesktop&&cfg.allowElevated===true&&cfg.allowProtectedMicrophone===true&&cfg.allowMicrophone===true&&!!cfg.microphoneEndpoint&&!options.sharedDesktop;
             if(protectedMicrophone&&!!s.process?.resourceChannel&&s.microphoneSocket&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes))s.microphone=new DesktopProtectedMicrophone({
               endpoint:cfg.microphoneEndpoint!,mode:s.protectedDesktop!,
               ...(s.audioPipes?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),
               claim:()=>{if(!this.claimResource(s,"microphone"))return false;s.microphoneOwned=true;return true;},
               release:()=>{s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone",Promise.resolve());},
-              allowed:()=>this.live(s)&&s.ready&&this.config===cfg&&cfg.allowProtectedMicrophone===true&&!!s.protectedDesktop&&s.secureDesktop===true&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,
+              allowed:()=>this.live(s)&&s.ready&&this.config===cfg&&cfg.allowProtectedMicrophone===true&&!!s.protectedDesktop&&s.secureDesktop===true&&(!s.microphoneOwned||this.ownsResource(s,"microphone")),
               send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;},
             });
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
@@ -778,7 +774,7 @@ export class DesktopProvider {
             const udpEnabled=options.nativeDatagrams===true&&(nativeDatagrams===true||!!cfg.nativePlatform)&&nativeEnabled;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
             s.sharedRate=options.sharedRate===true&&nativeCadence===true&&nativeEnabled;
-            s.native=new DesktopNativeVideo({...(s.process?.nativePcm?{nativePcm:s.process.nativePcm}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{audioBridge:(active:()=>boolean)=>s.audioPipes!.open("audio",active)}:{}),enabled:nativeEnabled,sharedResolution:options.sharedResolution===true&&nativeAdaptive===true,codecs:options.nativeCodecs===true&&nativeCodecs===true,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,sharedRate:options.sharedRate===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,...(s.protectedAudioActive?{audioFactory:hooks=>{if(ready.backend==="synthetic")return new DesktopNativeAudio(hooks);let stopped=false,lease:import("./DesktopNativeAudio.js").DesktopAudioLease|undefined;void import("./DesktopProtectedAudio.js").then(module=>{if(!stopped&&this.live(s)&&s.ready&&hooks.active())lease=module.createProtectedAudio({...hooks,active:()=>this.live(s)&&s.ready&&s.protectedAudioActive===true&&performance.now()-s.lastSeen<5000&&hooks.active()});}).catch(()=>{if(!stopped)hooks.state("unavailable");});return{stop(notify=true){stopped=true;lease?.stop(notify);}};}}:{}),...(s.shared&&s.process?.createAudio?{audioFactory:hooks=>s.process!.createAudio!(hooks)}:{}),synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
+            s.native=new DesktopNativeVideo({...(s.process?.nativePcm?{nativePcm:s.process.nativePcm}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{audioBridge:(active:()=>boolean)=>s.audioPipes!.open("audio",active)}:{}),enabled:nativeEnabled,sharedResolution:options.sharedResolution===true&&nativeAdaptive===true,codecs:options.nativeCodecs===true&&nativeCodecs===true,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,sharedRate:options.sharedRate===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,...(s.protectedAudioActive?{audioFactory:hooks=>{if(ready.backend==="synthetic")return new DesktopNativeAudio(hooks);let stopped=false,lease:import("./DesktopNativeAudio.js").DesktopAudioLease|undefined;void import("./DesktopProtectedAudio.js").then(module=>{if(!stopped&&this.live(s)&&s.ready&&hooks.active())lease=module.createProtectedAudio({...hooks,active:()=>this.live(s)&&s.ready&&s.protectedAudioActive===true&&hooks.active()});}).catch(()=>{if(!stopped)hooks.state("unavailable");});return{stop(notify=true){stopped=true;lease?.stop(notify);}};}}:{}),...(s.shared&&s.process?.createAudio?{audioFactory:hooks=>s.process!.createAudio!(hooks)}:{}),synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
               ...(options.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}),
@@ -872,7 +868,6 @@ export class DesktopProvider {
             s.seq = frame.info.seq;
             s.pending = s.seq;
             s.frameAt = performance.now();
-            s.sourceIdle.frame();
             if(s.imageExpected&&!s.imageFailed&&!s.imageReady)s.heldImage=packet;
             else if (!this.sendImage(s, packet)) return;
           } else if (raw.type==="cursor"&&s.ready&&!s.secureDesktop&&s.cursor) {

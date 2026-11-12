@@ -674,7 +674,7 @@ function connect(automatic = false) {
           el.getContext("2d")!.drawImage(sourceCanvas, 0, 0);
         }
         info.value = frame.info;
-        sourceIdle.frame();platformIdle.value=false;
+        platformIdle.value=false;
         lastDrawn = frame.info.seq;
         startupRetries = 0;
         rendered.value++;
@@ -1003,7 +1003,7 @@ function input(value: unknown) {
   inputSender.submit(parsed.data);
 }
 function canInput() {
-  return (!receiver || receiver.active) && control.value && ready.value && lastDrawn > 0;
+  return control.value && ready.value && lastDrawn > 0;
 }
 function sendInput(value: RemoteDesktopInput) {
   if(!supportsDesktopInput(inputCapabilities.value,value)){error.value="この接続先OSでは、このキー・入力操作に対応していません。";return;}
@@ -1012,7 +1012,7 @@ function sendInput(value: RemoteDesktopInput) {
   const id = ++seq;
   inputs.set(id, performance.now());
   if (inputs.size > 64) inputs.delete(inputs.keys().next().value!);
-  send({ type: "input", seq: id, frameSeq: lastDrawn, input: value });
+  send({ type: "input", seq: id, input: value });
   if(value.kind==="pointer"&&value.event==="down"&&value.button===0)nativeTransfer.value?.sent(id);
 }
 function pointer(e: PointerEvent, event: "move" | "down" | "up") {
