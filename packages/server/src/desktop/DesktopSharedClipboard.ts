@@ -47,6 +47,7 @@ export class DesktopSharedClipboard<Member> {
     )
       return true; // Never route an ungranted/stale request into another viewer's lease.
     if (value.type === "clipboard") {
+      if(value.operation==="cancel"){for(const[id,route]of this.texts)if(route.member===member&&route.local===value.id)this.texts.delete(id);return true;}
       if (!Number.isSafeInteger(this.textSeq + 1)) return true;
       const id = ++this.textSeq;
       if (this.texts.size >= 32) this.texts.delete(this.texts.keys().next().value!);

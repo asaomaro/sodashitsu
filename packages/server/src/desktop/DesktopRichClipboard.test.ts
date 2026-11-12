@@ -110,14 +110,15 @@ it("rejects overlap, decoded overflow, mismatched helper offsets, and retired ID
   }
 });
 
-it("retires an idle transaction even after the helper has replied, so a new ID can start", async () => {
+it("keeps a healthy idle transaction until explicit cancellation, then accepts a new ID", async () => {
   vi.useFakeTimers();
   const f = setup();
   try {
     f.request("begin", { size: 3 });
     f.result("begin", { size: 3 });
     await vi.advanceTimersByTimeAsync(5001);
-    expect((f.clipboard as any).current).toBeUndefined();
+    expect((f.clipboard as any).current?.id).toBe(id);
+    f.request("cancel");
     const next = "33333333-3333-4333-8333-333333333333";
     f.clipboard.fromViewer({ type: "clipboard_rich", id: next, operation: "read" });
     expect(f.write).toHaveBeenLastCalledWith(
@@ -127,3 +128,5 @@ it("retires an idle transaction even after the helper has replied, so a new ID c
     f.clipboard.stop();
   }
 });
+
+it("uses the existing three-second request budget and ignores late old replies without revoking permission",async()=>{vi.useFakeTimers();const f=setup();try{f.request("read");expect(f.write).toHaveBeenLastCalledWith(expect.objectContaining({expiresAt:Date.now()+3000}));await vi.advanceTimersByTimeAsync(3001);const next="33333333-3333-4333-8333-333333333333";f.clipboard.fromViewer({type:"clipboard_rich",id:next,operation:"read"});const count=f.send.mock.calls.length;f.result("begin",{size:3});expect(f.send).toHaveBeenCalledTimes(count);f.clipboard.fromHelper({type:"clipboard_rich_result",id:next,ok:true,stage:"begin",size:3});expect(f.send).toHaveBeenLastCalledWith(expect.objectContaining({id:next,ok:true}));}finally{f.clipboard.stop();}});

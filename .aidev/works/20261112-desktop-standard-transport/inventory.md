@@ -59,3 +59,9 @@ Same-source old commands, native stop and subsequent grants share the physical h
 ## Phase 6 portable media and signin lifetime
 
 Linux and macOS retain current-source identity, one encoder job, bounded three-frame credit, stream/generation/baseSeq and actual encoder retirement. Capture1s, ACK2s, profile3s and pending-replacement2s time-only teardown are removed. The append-only1024 stream-ID ledger is removed; callers already generate nonreused UUIDs. Native encoder failure and actual scope loss still stop the stream. The signin WorkerProcess no longer expires a healthy source after120s or requires a synthetic stopped receipt in addition to real process close: success requires actual close0 and complete UTF8/newline output. Startup admission and actual owner/source loss remain distinct.
+
+## Phase 7 clipboard request scope
+
+Plaintext browser requests reuse their existing2s timeout to send cancel with the original request id. Provider retires only that pending id; SharedClipboard removes only its matching route. A late reply cannot resolve a newer request, and permission remains granted for retry. Windows/custom helpers no longer receive the redundant pre-call1s delivery-age expiry. Portable plaintext retains its sole bounded Portal/OS I/O budget (Linux select on pipe fd, macOS pasteboard query admission); this is distinct from source permission. Rich requests reuse the existing B-side3s response budget in the native expiresAt field; duplicate inner1s, idle5s and whole-transaction60s cutoffs are removed in TS/Linux/macOS and matching Windows phase. One transaction, bounded4MB, exact id/generation/offset and actual cancellation/source loss remain. No clock proves successful clipboard application.
+
+The browser signin offer has no arbitrary120s timer. Explicit offer id/consent and allowInput ceiling remain; user-configured agent grant expiry is unaffected. Protocol and native signin counterpart are supplied by the signin owner.

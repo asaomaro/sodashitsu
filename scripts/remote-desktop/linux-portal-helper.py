@@ -216,17 +216,17 @@ class RichClipboardProtocol:
     def expire(self):
         with self.parent.helper.output_gate:
             c=self.current
-            if c and (self.parent.mono()-c["last"]>5000 or self.parent.mono()-c["started"]>60000 or not self.parent.scope() or c["generation"]!=self.parent.generation):self.finish(True)
+            if c and (not self.parent.scope() or c["generation"]!=self.parent.generation):self.finish(True)
     def live(self,c,ticket,write=False):
         p=self.parent;allowed=p.can_write(ticket) if write else p.authorized(ticket);now=p.mono()
-        return allowed and self.current is c and not c["cancelled"] and c["generation"]==ticket[0]==p.generation and p.enabled and not p.closed and ticket[2]<=now<=ticket[3] and c["started"]<=now<=c["started"]+60000 and c["last"]<=now<=c["last"]+5000 and c["version"]==p.owner_version
+        return allowed and self.current is c and not c["cancelled"] and c["generation"]==ticket[0]==p.generation and p.enabled and not p.closed and ticket[2]<=now<=ticket[3] and c["version"]==p.owner_version
     def witness(self,c,ticket):
         if not any(item is c for item in self.publications):
             self.publications.append(c)
             if len(self.publications)>32:self.publications.pop(0)["cancelled"]=True
         def publish():
             p=self.parent;allowed=p.authorized(ticket);now=p.mono()
-            return allowed and not c["cancelled"] and c["id"] not in self.cancelled and c["generation"]==ticket[0]==p.generation and p.enabled and not p.closed and ticket[2]<=now<=ticket[3] and c["started"]<=now<=c["started"]+60000 and c["last"]<=now<=c["last"]+5000 and (not c["read"] or c["version"]==p.owner_version)
+            return allowed and not c["cancelled"] and c["id"] not in self.cancelled and c["generation"]==ticket[0]==p.generation and p.enabled and not p.closed and ticket[2]<=now<=ticket[3] and (not c["read"] or c["version"]==p.owner_version)
         return publish
     def cancel(self,value,ticket):
         identifier=value.get("id")
@@ -249,11 +249,10 @@ class RichClipboardProtocol:
                 if self.current or identifier in self.retired:raise NativeFailure("backend_failure")
                 size=value.get("size",0)
                 if operation=="begin" and (not integer(size,1,self.BUNDLE) or not p.can_write(ticket)):raise NativeFailure("permission_denied")
-                c={"id":identifier,"generation":ticket[0],"read":operation=="read","version":p.owner_version,"started":p.mono(),"last":p.mono(),"data":None,"offset":0,"cancelled":False}
+                c={"id":identifier,"generation":ticket[0],"read":operation=="read","version":p.owner_version,"data":None,"offset":0,"cancelled":False}
                 self.current=c
             else:c=self.current
             if not c or c["id"]!=identifier or not self.live(c,ticket):raise NativeFailure("source_changed")
-            c["last"]=p.mono()
         if operation=="read":
             value=self.bundle(p.read_rich(ticket))
             data=bytearray(json.dumps(value,ensure_ascii=False,separators=(",",":")).encode("utf-8"))
@@ -440,7 +439,7 @@ class PortalTextClipboard:
         started=self.mono();utc=self.clock();identifier=value.get("id");owner=value.get("generation");expires=value.get("expiresAt")
         if not RichClipboardProtocol.uuid(identifier):raise NativeFailure("backend_failure")
         failure={"type":"clipboard_rich_result","id":identifier,"ok":False,"stage":"done"}
-        ticket=(owner,expires,started,started+(expires-utc)) if finite(expires,utc,utc+1500) and integer(owner,1,9007199254740991) else None
+        ticket=(owner,expires,started,started+(expires-utc)) if finite(expires,utc,utc+3000) and integer(owner,1,9007199254740991) else None
         with self.helper.output_gate:
             if ticket is None or not self.helper.config.get("rich") or not self.authorized(ticket):self.helper.output(failure);return
             if value.get("operation")=="cancel":

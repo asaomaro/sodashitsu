@@ -515,3 +515,111 @@ Ran 1 test in 0.014s
 FAILED (errors=1)
 
 ```
+
+## Phase 7
+
+Plaintext regression:2 tests passed (shared/unshared) using a helper that never answers the first request, cancellation, and successful fresh copy under the same grant. Shared route regression proves late old response ignored. Rich tests prove existing3s end-to-end deadline, late response retirement and fresh request without grant loss; healthy transaction survives idle time until actual cancel. Portal rich tests9 passed. Swift source selftests updated; compiler unavailable. OLD source negative control restores only Provider/SharedClipboard/RichClipboard production files, retains new tests, then restores/byte-compares:5 regressions fail before and pass after.
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRichClipboard.test.ts (7 tests | 2 failed | 5 skipped) 14ms
+   × keeps a healthy idle transaction until explicit cancellation, then accepts a new ID 9ms
+   × uses the existing three-second request budget and ignores late old replies without revoking permission 4ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopSharedClipboard.test.ts (8 tests | 1 failed | 7 skipped) 8ms
+   × cancels a plaintext route without revoking its grant and ignores its late response 7ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (350 tests | 2 failed | 348 skipped) 2399ms
+   × cancels only a timed-out plaintext request and retries without regrant, shared=false 1237ms
+   × cancels only a timed-out plaintext request and retries without regrant, shared=true 1160ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > cancels only a timed-out plaintext request and retries without regrant, shared=false
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > cancels only a timed-out plaintext request and retries without regrant, shared=true
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/desktop/DesktopRelay.test.ts:2141:1245
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRichClipboard.test.ts > keeps a healthy idle transaction until explicit cancellation, then accepts a new ID
+AssertionError: expected undefined to be '22222222-2222-4222-8222-222222222222' // Object.is equality
+
+- Expected:
+"22222222-2222-4222-8222-222222222222"
+
++ Received:
+undefined
+
+ ❯ src/desktop/DesktopRichClipboard.test.ts:120:46
+    118|     f.result("begin", { size: 3 });
+    119|     await vi.advanceTimersByTimeAsync(5001);
+    120|     expect((f.clipboard as any).current?.id).toBe(id);
+       |                                              ^
+    121|     f.request("cancel");
+    122|     const next = "33333333-3333-4333-8333-333333333333";
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRichClipboard.test.ts > uses the existing three-second request budget and ignores late old replies without revoking permission
+AssertionError: expected last "vi.fn()" call to have been called with [ ObjectContaining{…} ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "expiresAt": 1794494224234,
++     "expiresAt": 1794494222234,
++     "generation": 1,
++     "id": "22222222-2222-4222-8222-222222222222",
++     "operation": "read",
++     "type": "clipboard_rich",
+    },
+  ]
+
+ ❯ src/desktop/DesktopRichClipboard.test.ts:132:192
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSharedClipboard.test.ts > cancels a plaintext route without revoking its grant and ignores its late response
+AssertionError: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ src/desktop/DesktopSharedClipboard.test.ts:183:362
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed | 360 skipped (365)
+   Start at  23:37:00
+   Duration  4.11s (transform 49%, tests 40%, import 11%)
+
+  Transform  |@sodashitsu/server| transforming modules took 3.02s · 49% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+```

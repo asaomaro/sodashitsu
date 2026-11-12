@@ -14,8 +14,6 @@ export class DesktopRichClipboard {
         read: boolean;
         size: number;
         offset: number;
-        started: number;
-        last: number;
         waiting?: { op: Request["operation"]; next?: number };
       }
     | undefined;
@@ -52,7 +50,7 @@ export class DesktopRichClipboard {
         id: c.id,
         operation: "cancel",
         generation: this.hooks.generation(),
-        expiresAt: this.now() + 1000,
+        expiresAt: this.now() + 3000,
       });
     if (!this.dead)
       this.hooks.send({ type: "clipboard_rich_result", id, ok: false, stage: "done" });
@@ -63,16 +61,11 @@ export class DesktopRichClipboard {
     if (m.operation === "cancel") {
       if (this.current?.id === m.id) {
         const c = this.finish()!;
-        this.hooks.write({ ...m, generation: c.generation, expiresAt: this.now() + 1000 });
+        this.hooks.write({ ...m, generation: c.generation, expiresAt: this.now() + 3000 });
       }
       this.hooks.send({ type: "clipboard_rich_result", id: m.id, ok: true, stage: "cancelled" });
       return;
     }
-    if (
-      this.current &&
-      (this.now() - this.current.last > 5000 || this.now() - this.current.started > 60000)
-    )
-      this.failure(this.current.id);
     const start = m.operation === "read" || m.operation === "begin";
     if (start) {
       if (this.current || this.retired.has(m.id) || !this.hooks.allowed(m.operation === "begin")) {
@@ -85,8 +78,6 @@ export class DesktopRichClipboard {
         read: m.operation === "read",
         size: m.operation === "begin" ? m.size : 0,
         offset: 0,
-        started: this.now(),
-        last: this.now(),
       };
     }
     const c = this.current;
@@ -97,8 +88,7 @@ export class DesktopRichClipboard {
     if (
       c.waiting ||
       c.generation !== this.hooks.generation() ||
-      !this.hooks.allowed(!c.read) ||
-      this.now() - c.started > 60000
+      !this.hooks.allowed(!c.read)
     ) {
       this.failure(c.id);
       return;
@@ -118,13 +108,12 @@ export class DesktopRichClipboard {
       return;
     }
     clearTimeout(this.timeout);
-    c.last = this.now();
     c.waiting = { op: m.operation, ...(next === undefined ? {} : { next }) };
     this.timeout = setTimeout(() => {
       if (this.current === c) this.failure(c.id);
     }, 3000);
     this.timeout.unref();
-    this.hooks.write({ ...m, generation: c.generation, expiresAt: this.now() + 1000 });
+    this.hooks.write({ ...m, generation: c.generation, expiresAt: this.now() + 3000 });
   }
   fromHelper(raw: unknown) {
     if ((raw as { type?: string }).type !== "clipboard_rich_result") return false;
@@ -134,8 +123,7 @@ export class DesktopRichClipboard {
     if (!c || m.id !== c.id) return true;
     if (
       c.generation !== this.hooks.generation() ||
-      !this.hooks.allowed(!c.read) ||
-      this.now() - c.started > 60000
+      !this.hooks.allowed(!c.read)
     ) {
       this.failure(c.id);
       return true;
@@ -207,16 +195,7 @@ export class DesktopRichClipboard {
       return true;
     }
     if (pending.op === "commit" || (c.read && c.offset === c.size)) this.finish();
-    else {
-      c.last = this.now();
-      this.timeout = setTimeout(
-        () => {
-          if (this.current === c) this.failure(c.id);
-        },
-        Math.max(1, Math.min(5000, 60000 - (this.now() - c.started))),
-      );
-      this.timeout.unref();
-    }
+
     return true;
   }
   revoke() {
@@ -232,7 +211,7 @@ export class DesktopRichClipboard {
         id: c.id,
         operation: "cancel",
         generation: c.generation,
-        expiresAt: this.now() + 1000,
+        expiresAt: this.now() + 3000,
       });
   }
 }

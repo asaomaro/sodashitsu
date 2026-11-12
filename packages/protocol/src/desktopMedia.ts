@@ -79,6 +79,7 @@ export const DesktopClipboardGrant = z
   .object({ type: z.literal("clipboard_grant"), enabled: z.boolean() })
   .strict();
 export const DesktopClipboardRequest = z.discriminatedUnion("operation", [
+  z.object({type:z.literal("clipboard"),id:z.number().int().positive(),operation:z.literal("cancel")}).strict(),
   z
     .object({
       type: z.literal("clipboard"),

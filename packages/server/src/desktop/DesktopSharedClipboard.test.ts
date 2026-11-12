@@ -180,3 +180,4 @@ it("allows the wrapper to time out, cancel and immediately start a fresh transac
     vi.useRealTimers();
   }
 });
+it("cancels a plaintext route without revoking its grant and ignores its late response",()=>{const f=fixture();f.pool.grant("a",true,1);f.pool.command("a",{type:"clipboard",operation:"read",id:1,generation:1});const old=f.write.mock.calls.at(-1)![0];f.pool.command("a",{type:"clipboard",operation:"cancel",id:1,generation:1});expect((f.pool as any).texts.size).toBe(0);f.pool.command("a",{type:"clipboard",operation:"read",id:2,generation:1});const next=f.write.mock.calls.at(-1)![0];f.pool.receive({type:"clipboard_result",id:old.id,ok:true,text:"old"});expect(f.send).not.toHaveBeenCalled();f.pool.receive({type:"clipboard_result",id:next.id,ok:true,text:"new"});expect(f.send).toHaveBeenLastCalledWith("a",{type:"clipboard_result",id:2,ok:true,text:"new"});});

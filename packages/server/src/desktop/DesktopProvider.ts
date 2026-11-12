@@ -524,6 +524,7 @@ export class DesktopProvider {
             if(!s.clipboardGranted&&s.resourcesManaged)this.resources.release(s,"clipboard");
             this.send(s, { type: "clipboard_state", enabled: s.clipboardGranted });
           } else if (m.type === "clipboard") {
+            if(m.operation==="cancel"){s.clipboardPending.delete(m.id);if(p.options.sharedClipboard)this.write(s,{...m,generation:s.clipboardGeneration});return;}
             if (
               !s.clipboardGranted || !this.ownsResource(s,"clipboard") ||
               !s.ready ||
@@ -538,7 +539,7 @@ export class DesktopProvider {
               this.write(s, {
                 ...m,
                 generation: s.clipboardGeneration,
-                expiresAt: Date.now() + 1000,
+                ...(cfg.nativePlatform?{expiresAt:Date.now()+1000}:{}),
               });
             }
           } else if (m.type === "heartbeat") {

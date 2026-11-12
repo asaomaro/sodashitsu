@@ -646,11 +646,12 @@ class RichClipboard(unittest.TestCase):
   clip.submit_rich(self.command(str(module.uuid.uuid4()),"read"));self.assertFalse(results[-1]["ok"]);self.assertFalse(calls)
   h.config["rich"]=True;identifier=str(module.uuid.uuid4());clip.rich.request(self.command(identifier,"begin",size=10),self.ticket(state));data=clip.rich.current["data"];data[0]=9
   clip.control({"generation":2,"enabled":False});self.assertEqual(data,bytes(10));self.assertIsNone(clip.rich.current)
- def test_idle_expiry_and_invalid_suffix_never_extend_transaction(self):
+ def test_idle_transaction_remains_until_explicit_cancel_and_invalid_suffix_is_rejected(self):
   clip,h,state,calls,results,publish,done=self.setup_rich();identifier=str(module.uuid.uuid4());ticket=self.ticket(state)
   clip.rich.request(self.command(identifier,"begin",size=10),ticket);data=clip.rich.current["data"];data[0]=9
   with self.assertRaises(module.NativeFailure):clip.rich.request(self.command(identifier,"push",offset=0,data="AQ==",path="unexpected"),ticket)
-  state["mono"]=5001;clip.rich.expire();self.assertIsNone(clip.rich.current);self.assertEqual(data,bytes(10))
+  state["mono"]=65001;clip.rich.expire();self.assertIsNotNone(clip.rich.current);self.assertEqual(data[0],9)
+  clip.rich.finish(True);self.assertIsNone(clip.rich.current);self.assertEqual(data,bytes(10))
 
 class Entry(unittest.TestCase):
  def test_real_main_accepts_clipboard_flag_before_dispatching_owned_stub(self):

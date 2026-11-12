@@ -68,9 +68,9 @@ final class PasteboardRichSink: RichClipboardSink {
     }
 }
 final class RichClipboardTransaction {
-    let id: String,generation: Int64,reading: Bool,version: Int,started: Double
-    var last: Double,offset=0,cancelled=false,data: Data?
-    init(id: String,generation: Int64,reading: Bool,version: Int,now: Double) { self.id=id;self.generation=generation;self.reading=reading;self.version=version;self.started=now;self.last=now }
+    let id: String,generation: Int64,reading: Bool,version: Int
+    var offset=0,cancelled=false,data: Data?
+    init(id: String,generation: Int64,reading: Bool,version: Int) { self.id=id;self.generation=generation;self.reading=reading;self.version=version }
 }
 struct RichClipboardReply { let value: [String:Any];let valid: () -> Bool }
 /** Same wire contract as Windows/Portal. DesktopSource.gate serializes all operations. */
@@ -88,8 +88,8 @@ final class RichClipboardGuard {
     }
     func clear() { finish(cancel:true) }
     func expire() {
-        guard let c=current else { return };let now=clipboard.monotonic()
-        if now<c.started || now-c.started>60000 || now-c.last>5000 || !clipboard.enabled || c.generation != clipboard.generation { finish(cancel:true) }
+        guard let c=current else { return }
+        if !clipboard.enabled || c.generation != clipboard.generation { finish(cancel:true) }
     }
     func allowed(_ ticket: TextClipboardTicket,write: Bool=false) -> Bool {
         let writable = !write || clipboard.canWrite(),granted=clipboard.authorized(ticket),now=clipboard.monotonic()
@@ -97,7 +97,7 @@ final class RichClipboardGuard {
     }
     func live(_ c: RichClipboardTransaction,_ ticket: TextClipboardTicket,write: Bool=false,expectedVersion: Int?=nil) -> Bool {
         let granted=allowed(ticket,write:write),version=sink?.sequence,now=clipboard.monotonic()
-        return granted && current===c && !c.cancelled && c.generation==ticket.owner && clipboard.enabled && clipboard.generation==ticket.owner && version==(expectedVersion ?? c.version) && now>=ticket.started && now<=ticket.deadline && now>=c.started && now-c.started<=60000 && now>=c.last && now-c.last<=5000
+        return granted && current===c && !c.cancelled && c.generation==ticket.owner && clipboard.enabled && clipboard.generation==ticket.owner && version==(expectedVersion ?? c.version) && now>=ticket.started && now<=ticket.deadline
     }
     func witness(_ c: RichClipboardTransaction,_ ticket: TextClipboardTicket) -> () -> Bool {
         if !publications.contains(where:{$0===c}) {
@@ -106,14 +106,14 @@ final class RichClipboardGuard {
         return { [weak self] in
             guard let self=self else { return false }
             let granted=self.allowed(ticket),version=c.reading ? self.sink?.sequence:nil,now=self.clipboard.monotonic()
-            return granted && !c.cancelled && !self.cancelled.contains(c.id) && c.generation==ticket.owner && self.clipboard.enabled && self.clipboard.generation==ticket.owner && now>=ticket.started && now<=ticket.deadline && now>=c.started && now-c.started<=60000 && now>=c.last && now-c.last<=5000 && (!c.reading || version==c.version)
+            return granted && !c.cancelled && !self.cancelled.contains(c.id) && c.generation==ticket.owner && self.clipboard.enabled && self.clipboard.generation==ticket.owner && now>=ticket.started && now<=ticket.deadline && (!c.reading || version==c.version)
         }
     }
     func evaluate(_ value: [String:Any]) throws -> RichClipboardReply {
         let started=clipboard.monotonic(),utc=clipboard.clock()
         guard let id=value["id"] as? String,id.count==36,UUID(uuidString:id) != nil else { throw NativeError("backend_failure") }
         let failure=RichClipboardReply(value:["type":"clipboard_rich_result","id":id,"ok":false,"stage":"done"],valid:{true})
-        guard let owner=integer(value["generation"],1,Int64(safeInteger)),let expires=integer(value["expiresAt"],utc,utc+1500),let operation=value["operation"] as? String else { return failure }
+        guard let owner=integer(value["generation"],1,Int64(safeInteger)),let expires=integer(value["expiresAt"],utc,utc+3000),let operation=value["operation"] as? String else { return failure }
         let ticket=TextClipboardTicket(owner:owner,expires:expires,started:started,deadline:started+Double(expires-utc))
         var keys=Set(["type","id","operation","generation","expiresAt"])
         if operation=="begin" { keys.insert("size") };if operation=="pull" || operation=="push" { keys.insert("offset") };if operation=="push" { keys.insert("data") }
@@ -129,13 +129,13 @@ final class RichClipboardGuard {
                 guard current==nil,!retired.contains(id),!cancelled.contains(id),allowed(ticket,write:operation=="begin") else { return failure }
                 if sink==nil { sink=factory() };guard let board=sink else { return failure };let version=board.sequence
                 guard allowed(ticket,write:operation=="begin"),!cancelled.contains(id) else { return failure }
-                let c=RichClipboardTransaction(id:id,generation:owner,reading:operation=="read",version:version,now:clipboard.monotonic());current=c
+                let c=RichClipboardTransaction(id:id,generation:owner,reading:operation=="read",version:version);current=c
                 guard live(c,ticket,write:operation=="begin") else { throw NativeError("source_changed") }
                 if c.reading { let bundle=try richBundle(board.read(valid:{self.live(c,ticket)}));let data=try JSONSerialization.data(withJSONObject:bundle,options:[.sortedKeys]);guard data.count>0,data.count<=richBundleLimit,live(c,ticket) else { throw NativeError("source_changed") };c.data=data }
                 else { guard let size=integer(value["size"],1,Int64(richBundleLimit)) else { throw NativeError("backend_failure") };c.data=Data(count:Int(size)) }
                 return RichClipboardReply(value:["type":"clipboard_rich_result","id":id,"ok":true,"stage":"begin","size":c.data!.count],valid:witness(c,ticket))
             }
-            guard let c=current,c.id==id,live(c,ticket),let size=c.data?.count else { throw NativeError("source_changed") };c.last=clipboard.monotonic()
+            guard let c=current,c.id==id,live(c,ticket),let size=c.data?.count else { throw NativeError("source_changed") }
             if operation=="pull" || operation=="push" {
                 guard let offset=integer(value["offset"],0,Int64(richBundleLimit)),Int(offset)==c.offset else { throw NativeError("backend_failure") }
                 if operation=="pull" {
@@ -217,7 +217,7 @@ func generatedRichClipboardTests() throws -> Int {
     try check(queryChanged.value["ok"] as? Bool==false && board.writes==1,"rich clipboard final permission query preserves local clipboard")
     let pending=UUID().uuidString,prepared=try rich.evaluate(command(pending,"read"));board.version+=1
     try check(!prepared.valid(),"rich clipboard source version fences queued read");rich.clear()
-    let idle=UUID().uuidString;_ = try rich.evaluate(command(idle,"begin",["size":10]));now=5001;rich.expire();try check(rich.current==nil,"rich clipboard idle clears buffer");now=0
+    let idle=UUID().uuidString;_ = try rich.evaluate(command(idle,"begin",["size":10]));now=65001;rich.expire();try check(rich.current != nil,"rich clipboard idle remains current");rich.clear();try check(rich.current==nil,"rich clipboard cancel clears buffer");now=0
     let revoked=UUID().uuidString;_ = try rich.evaluate(command(revoked,"read"));try text.control(["generation":2,"enabled":false]);rich.clear()
     try check(rich.current==nil,"rich clipboard grant teardown clears buffer")
     var oversized=Data(base64Encoded:png)!;oversized[18]=16;oversized[19]=1

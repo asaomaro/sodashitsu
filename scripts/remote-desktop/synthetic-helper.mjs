@@ -321,7 +321,7 @@ function run() {
       else if(m.type==="clipboard_rich"){rich(m);}
       else if(m.type==="clipboard_control"){clearRich();clipboardAllowed=m.enabled && process.argv.includes("--allow-clipboard");clipboardGeneration=m.generation;send({type:"clipboard_control",enabled:clipboardAllowed,generation:clipboardGeneration});}
       else if(m.type==="clipboard"){
-        let ok=clipboardAllowed && m.generation===clipboardGeneration && m.expiresAt>=Date.now();
+        let ok=clipboardAllowed && m.generation===clipboardGeneration && (m.expiresAt===undefined||m.expiresAt>=Date.now());
         if(m.operation==="write"){ok=ok&&allowInput;if(ok)clipboard=m.text;send({type:"clipboard_result",id:m.id,ok});}
         else send({type:"clipboard_result",id:m.id,ok,...(ok?{text:clipboard}:{})});
       }

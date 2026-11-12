@@ -77,11 +77,10 @@ const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
 const textInput = ref<HTMLInputElement>();
 const secureDesktop = ref(false);
 const signinOffer=ref<ReturnType<typeof DesktopSigninRequired.parse>>(),signinSession=ref(false);
-let signinTimer:ReturnType<typeof setTimeout>|undefined,signinUntil=0;
 function grantSignin(control:boolean){
   const offer=signinOffer.value;
-  if(!endpointEncrypted.value||!offer||performance.now()>=signinUntil||control&&!offer.allowInput)return;
-  signinOffer.value=undefined;clearTimeout(signinTimer);signinSession.value=true;
+  if(!endpointEncrypted.value||!offer||control&&!offer.allowInput)return;
+  signinOffer.value=undefined;signinSession.value=true;
   status.value="Windowsのサインイン画面に接続中";
   send({type:"signin_grant",id:offer.id,control});
 }
@@ -281,6 +280,7 @@ function clipboard(operation: "read" | "write", text?: string): Promise<string |
     const id = ++clipSeq,
       timer = setTimeout(() => {
         clipWaits.delete(id);
+        send({type:"clipboard",id,operation:"cancel"});
         reject(new Error("クリップボードの応答がありません"));
       }, 2000);
     clipWaits.set(id, { resolve, reject, timer });
@@ -495,7 +495,7 @@ function startMicrophone(){if(ready.value&&microphoneAvailable.value&&microphone
 function stop(preserveCapabilities=false) {
   clearTimeout(sourceReconnectTimer);sourceReconnectTimer=undefined;
   resetMicrophone();
-  clearTimeout(signinTimer);signinOffer.value=undefined;signinSession.value=false;
+  signinOffer.value=undefined;signinSession.value=false;
   epoch++;
   cursorRenderer?.stop();cursorRenderer=undefined;separateCursor.value=false;
   if (clipboardGranted.value) send({ type: "clipboard_grant", enabled: false });
@@ -686,11 +686,7 @@ function connect(automatic = false) {
         const m = JSON.parse(String(event.data));
         if(m.type==="signin_required"){
           if(!endpointEncrypted.value||signinOffer.value||signinSession.value||ready.value)throw Error("サインイン接続の状態が不正です");
-          const offer=DesktopSigninRequired.parse(m),remaining=offer.validForMs;
-          signinUntil=performance.now()+remaining;
-          if(remaining<=0||remaining>120000)throw Error("サインイン接続の許可期限が切れています");
-          signinOffer.value=offer;status.value="サインイン画面への接続許可を待っています";
-          signinTimer=setTimeout(()=>{error.value="サインイン接続の許可期限が切れました。接続し直してください。";stop();},remaining);return;
+          signinOffer.value=DesktopSigninRequired.parse(m);status.value="サインイン画面への接続許可を待っています";return;
         }
         if(m.type==="agent_endpoint_available"){
           if(!endpointEncrypted.value)throw Error("暗号化エージェントの接続状態が不正です");
