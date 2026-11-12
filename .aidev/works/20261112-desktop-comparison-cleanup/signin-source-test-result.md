@@ -89,3 +89,6 @@ signin_package_generated_staging_manifest_passed
 ```
 
 pipeの実OS ACL・接続者token・remote拒否・SCM purposeの実確認はWindowsで未実施。唯一のWindows operatorが独立レビュー後に行う。上のMemoryStream検査を実認証の検査として扱わない。
+
+
+管理IPCの変更を含む5つのVitestファイル・19テストが成功。続く削除段階で、JS管理mailbox/LocalLeaseの14ファイルと、C#管理envelope/journal/deadline/result/persistence・専用helper/検査の20ファイルを物理削除した。残された実機の履歴・DPAPI暗号文の消去や再生成は行っていない。

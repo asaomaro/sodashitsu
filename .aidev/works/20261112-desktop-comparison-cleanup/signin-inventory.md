@@ -27,10 +27,10 @@ ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com
 
 ## 残る整理とレビュー境界
 
-- 管理メールボックスの実行経路は標準named pipe request/replyへ置換済み。旧AdminEnvelope/Journal/Deadline/Result/PersistenceとTS対応の未使用ファイルは次の削除段階で物理削除する。SYSTEM CurrentUser DPAPIと既存identityは維持。GUI用一時Taskは使わず、新たな永続要求・結果・nonce・世代journalも作らない。
+- 管理メールボックスの実行経路は標準named pipe request/replyへ置換済み。旧AdminEnvelope/Journal/Deadline/Result/PersistenceとTS対応の未使用ファイルは物理削除済み。SYSTEM CurrentUser DPAPIと既存identityは維持。GUI用一時Taskは使わず、新たな永続要求・結果・nonce・世代journalも作らない。
 - ServiceBase・短縮名・旧名からの移行と停止/終了の競合を独立レビューするまで、このソースを実機へ適用しない。起動の見た目や旧記録の存在を正常稼働の証拠にしない。
 - Win32 APIを薄く包むScm/InstallerScm/UpgradeScmにも旧テスト用callback/状態が残る。標準ServiceController/SCM呼び出しへさらに縮める対象で、例外として承認したものではない。
-- 既存のscope/入力鮮度/描画ACK、JS LocalLeaseの独自寿命管理は引き続き点検対象。現在のアダプター判定は「必要最小限が証明済み」という意味ではない。
+- 既存のscope/入力鮮度/描画ACK、JS LocalLeaseは削除済み。scope/入力の独自寿命管理は引き続き点検対象。現在のアダプター判定は「必要最小限が証明済み」という意味ではない。
 
 ## 管理IPCの標準実装との対応
 
@@ -49,18 +49,18 @@ ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com
 | ファイル | 判断 |
 | --- | --- |
 | `scripts/remote-desktop/WindowsSigninAdminController.cs` | 削除対象：独自の実行記録・管理要求/結果・復旧・排他証明。SCMとOSの処理寿命へ置換 |
-| `scripts/remote-desktop/WindowsSigninAdminControllerChecks.cs` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/WindowsSigninAdminDeadline.cs` | 削除対象：独自の実行記録・管理要求/結果・復旧・排他証明。SCMとOSの処理寿命へ置換 |
-| `scripts/remote-desktop/WindowsSigninAdminEnrollment.cs` | 削除対象：独自の実行記録・管理要求/結果・復旧・排他証明。SCMとOSの処理寿命へ置換 |
-| `scripts/remote-desktop/WindowsSigninAdminEnrollmentChecks.cs` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/WindowsSigninAdminEnvelope.cs` | 削除対象：独自の実行記録・管理要求/結果・復旧・排他証明。SCMとOSの処理寿命へ置換 |
-| `scripts/remote-desktop/WindowsSigninAdminExecutionChecks.cs` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/WindowsSigninAdminInput.cs` | 削除対象：独自の実行記録・管理要求/結果・復旧・排他証明。SCMとOSの処理寿命へ置換 |
-| `scripts/remote-desktop/WindowsSigninAdminJournal.cs` | 削除対象：独自の実行記録・管理要求/結果・復旧・排他証明。SCMとOSの処理寿命へ置換 |
-| `scripts/remote-desktop/WindowsSigninAdminJournalChecks.cs` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/WindowsSigninAdminPersistence.cs` | 削除対象：独自の実行記録・管理要求/結果・復旧・排他証明。SCMとOSの処理寿命へ置換 |
-| `scripts/remote-desktop/WindowsSigninAdminPersistenceChecks.cs` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/WindowsSigninAdminResult.cs` | 削除対象：独自の実行記録・管理要求/結果・復旧・排他証明。SCMとOSの処理寿命へ置換 |
+| `scripts/remote-desktop/WindowsSigninAdminControllerChecks.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminDeadline.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminEnrollment.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminEnrollmentChecks.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminEnvelope.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminExecutionChecks.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminInput.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminJournal.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminJournalChecks.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminPersistence.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminPersistenceChecks.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/WindowsSigninAdminResult.cs` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `scripts/remote-desktop/WindowsSigninCandidate.cs` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
 | `scripts/remote-desktop/WindowsSigninCandidateChecks.cs` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
 | `scripts/remote-desktop/WindowsSigninCandidateNative.cs` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
@@ -131,18 +131,18 @@ ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com
 
 | ファイル | 判断 |
 | --- | --- |
-| `packages/server/src/desktop/DesktopSigninAdminBackend.node.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `packages/server/src/desktop/DesktopSigninAdminBackend.node.ts` | 削除対象：専用管理メールボックス/保存状態機械。明示したローカル管理処理へ置換 |
-| `packages/server/src/desktop/DesktopSigninAdminMailbox.node.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `packages/server/src/desktop/DesktopSigninAdminMailbox.node.ts` | 削除対象：専用管理メールボックス/保存状態機械。明示したローカル管理処理へ置換 |
-| `packages/server/src/desktop/DesktopSigninAdminRequest.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `packages/server/src/desktop/DesktopSigninAdminRequest.ts` | 削除対象：専用管理メールボックス/保存状態機械。明示したローカル管理処理へ置換 |
-| `packages/server/src/desktop/DesktopSigninAdminResult.node.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `packages/server/src/desktop/DesktopSigninAdminResult.node.ts` | 削除対象：独自の実行記録・管理要求/結果・復旧・排他証明。SCMとOSの処理寿命へ置換 |
-| `packages/server/src/desktop/DesktopSigninAdminTask.node.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `packages/server/src/desktop/DesktopSigninAdminTask.node.ts` | 削除対象：専用管理メールボックス/保存状態機械。明示したローカル管理処理へ置換 |
-| `packages/server/src/desktop/DesktopSigninAdministration.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `packages/server/src/desktop/DesktopSigninAdministration.ts` | 削除対象：専用管理メールボックス/保存状態機械。明示したローカル管理処理へ置換 |
+| `packages/server/src/desktop/DesktopSigninAdminBackend.node.test.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdminBackend.node.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdminMailbox.node.test.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdminMailbox.node.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdminRequest.test.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdminRequest.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdminResult.node.test.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdminResult.node.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdminTask.node.test.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdminTask.node.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdministration.test.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninAdministration.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `packages/server/src/desktop/DesktopSigninBridge.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
 | `packages/server/src/desktop/DesktopSigninBridge.ts` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
 | `packages/server/src/desktop/DesktopSigninCertificate.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
@@ -160,8 +160,8 @@ ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com
 | `packages/server/src/desktop/DesktopSigninEntry.ts` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
 | `packages/server/src/desktop/DesktopSigninIdentity.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
 | `packages/server/src/desktop/DesktopSigninIdentity.ts` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
-| `packages/server/src/desktop/DesktopSigninLocalLease.node.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `packages/server/src/desktop/DesktopSigninLocalLease.node.ts` | 削除対象：独自の排他証明または復旧・複数段階のcommit |
+| `packages/server/src/desktop/DesktopSigninLocalLease.node.test.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `packages/server/src/desktop/DesktopSigninLocalLease.node.ts` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `packages/server/src/desktop/DesktopSigninPresenceProcess.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
 | `packages/server/src/desktop/DesktopSigninPresenceProcess.ts` | 標準に置換対象：SCM start/stop/query・OS Job/handle・保護済み配布物の固定パス |
 | `packages/server/src/desktop/DesktopSigninReadonlyStore.test.ts` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
@@ -186,16 +186,16 @@ ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com
 | ファイル | 判断 |
 | --- | --- |
 | `scripts/remote-desktop/SigninAclPolicy.ps1` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
-| `scripts/remote-desktop/SigninAdminStorage.ps1` | 削除対象：専用管理メールボックス/保存状態機械。明示したローカル管理処理へ置換 |
+| `scripts/remote-desktop/SigninAdminStorage.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `scripts/remote-desktop/build-signin-bundle.mjs` | Sodashitsu用アダプター：同梱ビルド・配布一覧。実行時フレームワークを含めない |
 | `scripts/remote-desktop/build-signin-host.ps1` | Sodashitsu用アダプター：同梱ビルド・配布一覧。実行時フレームワークを含めない |
 | `scripts/remote-desktop/build-signin-package.mjs` | Sodashitsu用アダプター：同梱ビルド・配布一覧。実行時フレームワークを含めない |
-| `scripts/remote-desktop/commit-signin-vault.ps1` | 削除対象：独自の排他証明または復旧・複数段階のcommit |
+| `scripts/remote-desktop/commit-signin-vault.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `scripts/remote-desktop/control-signin-admin.ps1` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
 | `scripts/remote-desktop/control-signin-service.ps1` | 標準に置換対象：SCM start/stop/query・OS Job/handle・保護済み配布物の固定パス |
 | `scripts/remote-desktop/create-signin-partial-identity-proof.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `scripts/remote-desktop/install-signin-service.ps1` | 標準に置換対象：SCM start/stop/query・OS Job/handle・保護済み配布物の固定パス |
-| `scripts/remote-desktop/read-signin-admin.ps1` | 削除対象：専用管理メールボックス/保存状態機械。明示したローカル管理処理へ置換 |
+| `scripts/remote-desktop/read-signin-admin.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `scripts/remote-desktop/read-signin-enrollment.ps1` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
 | `scripts/remote-desktop/recover-signin-claimed-initialize.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `scripts/remote-desktop/recover-signin-initial.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
@@ -205,12 +205,12 @@ ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com
 | `scripts/remote-desktop/recover-signin-unclaimed.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `scripts/remote-desktop/signin-bootstrap.mjs` | 標準へ置換済み：ServiceBase/SCM/OSプロセスhandle/Job・通常の配布物配置。残る共通コードは独立レビューで確認 |
 | `scripts/remote-desktop/upgrade-signin-service.ps1` | 標準に置換対象：SCM start/stop/query・OS Job/handle・保護済み配布物の固定パス |
-| `scripts/remote-desktop/validate-signin-admin-controller.ps1` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/validate-signin-admin-enrollment.ps1` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/validate-signin-admin-execution.ps1` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/validate-signin-admin-journal.ps1` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/validate-signin-admin-persistence.ps1` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
-| `scripts/remote-desktop/validate-signin-admin.ps1` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
+| `scripts/remote-desktop/validate-signin-admin-controller.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/validate-signin-admin-enrollment.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/validate-signin-admin-execution.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/validate-signin-admin-journal.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/validate-signin-admin-persistence.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
+| `scripts/remote-desktop/validate-signin-admin.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `scripts/remote-desktop/validate-signin-bootstrap.mjs` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
 | `scripts/remote-desktop/validate-signin-candidate.ps1` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
 | `scripts/remote-desktop/validate-signin-claimed-initialize.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
@@ -243,5 +243,5 @@ ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com
 | `scripts/remote-desktop/validate-signin-worker.ps1` | テスト専用（対象の削除時に一緒に削除。本番コンパイル・配布へ含めない） |
 | `scripts/remote-desktop/virtual-display-driver/prepare-signing.py` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
 | `scripts/remote-desktop/virtual-display-driver/test-prepare-signing.py` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
-| `scripts/remote-desktop/write-signin-admin-result.ps1` | 削除対象：専用管理メールボックス/保存状態機械。明示したローカル管理処理へ置換 |
+| `scripts/remote-desktop/write-signin-admin-result.ps1` | 削除済み：旧フレームワークと対応検査。保存された実機の状態は変更しない |
 | `scripts/remote-desktop/write-signin-enrollment.ps1` | Sodashitsu用アダプター候補：既存の接続/identity/DPAPI/画面境界。標準APIへ縮小対象（優位性による例外扱いではない） |
