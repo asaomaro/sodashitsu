@@ -14,7 +14,7 @@ export function desktopSecretProtector(platform=process.platform):DesktopSecretP
  const script=fileURLToPath(new URL("../../../../scripts/remote-desktop/protect-endpoint-key.ps1",import.meta.url));
  const call=(operation:"protect"|"unprotect",value:Uint8Array):Promise<Uint8Array>=>new Promise((resolve,reject)=>{
   if(!value.length||value.length>65536){reject(Error("Endpoint key protection failed"));return;}
-  const executable=desktopWindowsPowerShell(),input=new Uint8Array(value),child=spawn(executable,["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File",script,"-Operation",operation],{stdio:["pipe","pipe","pipe"],windowsHide:true,cwd:win32.dirname(executable),env:{...process.env,PSModulePath:win32.join(win32.dirname(executable),"Modules")}}),chunks:Buffer[]=[];let size=0,done=false;
+  const executable=desktopWindowsPowerShell(),input=new Uint8Array(value),child=spawn(executable,["-NoLogo","-NoProfile","-NonInteractive","-File",script,"-Operation",operation],{stdio:["pipe","pipe","pipe"],windowsHide:true,cwd:win32.dirname(executable),env:{...process.env,PSModulePath:win32.join(win32.dirname(executable),"Modules")}}),chunks:Buffer[]=[];let size=0,done=false;
   const finish=(result?:Uint8Array)=>{if(done){result?.fill(0);return;}done=true;input.fill(0);clearTimeout(timer);for(const chunk of chunks)chunk.fill(0);if(result)resolve(result);else{child.kill();reject(Error("Endpoint key protection failed"));}};
   const timer=setTimeout(()=>finish(),5000);timer.unref();
   child.stdout.on("data",(data:Buffer)=>{if(done){data.fill(0);return;}size+=data.length;if(size>65536){data.fill(0);finish();return;}chunks.push(data);});child.stderr.on("data",()=>{});child.stdout.on("error",()=>finish());child.stderr.on("error",()=>finish());

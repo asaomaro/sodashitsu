@@ -1,4 +1,7 @@
-import {expect,it,vi} from 'vitest';
+import * as childProcess from "node:child_process";
+import {PassThrough} from "node:stream";
+import {DesktopEndpointStore} from "@sodashitsu/client-core/desktop/DesktopEndpointStore.node";
+import {afterEach,expect,it,vi} from 'vitest';
 import {desktopSigninAdminCommand,type DesktopSigninAdminCommandDependencies} from './DesktopSigninAdminCommand.js';
 const owner='S-1-5-21-1-2-3-1001',provider='a'.repeat(64),viewer='b'.repeat(64);
 function fixture(){
@@ -29,4 +32,18 @@ it('disables enrollment without deleting or regenerating the existing endpoint i
 });
 it('keeps the existing eight-viewer limit',async()=>{
  const f=fixture();f.state.peers=Array.from({length:8},(_,i)=>({fingerprint:String(i).repeat(64),role:'viewer' as const,label:'viewer'}));await expect(f.run({kind:'trust',peer:{fingerprint:viewer,label:'new'}})).resolves.toEqual({outcome:'incomplete'});expect(f.store.trust).not.toHaveBeenCalled();
+});
+
+vi.mock("node:child_process",async importOriginal=>{const actual=await importOriginal<typeof import("node:child_process")>();return {...actual,execFile:vi.fn(actual.execFile)};});
+vi.mock("@sodashitsu/client-core/desktop/DesktopWindowsPowerShell.node",()=>({desktopWindowsPowerShell:()=>"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"}));
+afterEach(()=>{vi.restoreAllMocks();vi.mocked(childProcess.execFile).mockRestore();});
+it("uses normal execution policy for the fixed enrollment helper",async()=>{
+ vi.spyOn(DesktopEndpointStore.prototype,"status").mockResolvedValue({initialized:false});
+ vi.spyOn(DesktopEndpointStore.prototype,"settled").mockResolvedValue();vi.spyOn(DesktopEndpointStore.prototype,"close").mockImplementation(()=>{});
+ vi.mocked(childProcess.execFile).mockImplementation(((...args:unknown[])=>{
+  const child={stdin:new PassThrough()};queueMicrotask(()=>(args[3] as (error:null,stdout:string,stderr:string)=>void)(null,"signin_enrollment_updated",""));
+  return child as unknown as ReturnType<typeof childProcess.execFile>;
+ }) as typeof childProcess.execFile);
+ expect(await desktopSigninAdminCommand(owner,"/generated-unused-state",{kind:"disable"})).toMatchObject({outcome:"success"});
+ const args=vi.mocked(childProcess.execFile).mock.calls[0]![1];expect(args).toContain("-File");expect(args).not.toContain("-ExecutionPolicy");expect(args).not.toContain("Bypass");
 });

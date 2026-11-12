@@ -29,7 +29,7 @@ if(Test-SodaSigninStorageAcl $read){throw 'Machine-scope storage reused CurrentU
 if(-not [SodaDesktopSigninVault]::SystemPrimary()) {
     $info=[Diagnostics.ProcessStartInfo]::new()
     $info.FileName=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
-    $info.Arguments='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $PSScriptRoot 'read-signin-enrollment.ps1')+'" -OwnerSid '+$user
+    $info.Arguments='-NoLogo -NoProfile -NonInteractive -File "'+(Join-Path $PSScriptRoot 'read-signin-enrollment.ps1')+'" -OwnerSid '+$user
     $info.WorkingDirectory=[Environment]::GetFolderPath('System');$info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
     $child=[Diagnostics.Process]::new();$child.StartInfo=$info
     try {

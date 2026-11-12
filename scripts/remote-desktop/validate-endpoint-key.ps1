@@ -2,7 +2,7 @@ $ErrorActionPreference='Stop'
 $script=Join-Path $PSScriptRoot 'protect-endpoint-key.ps1'
 function Invoke-Generated([string]$operation,[byte[]]$bytes,[int]$expected) {
     $info=New-Object Diagnostics.ProcessStartInfo
-    $info.FileName=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe';$info.Arguments='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$script+'" -Operation '+$operation
+    $info.FileName=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe';$info.Arguments='-NoLogo -NoProfile -NonInteractive -File "'+$script+'" -Operation '+$operation
     $info.WorkingDirectory=[Environment]::GetFolderPath('System');$info.EnvironmentVariables['PSModulePath']=Join-Path $PSHOME 'Modules';$info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.RedirectStandardInput=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
     # Process.StandardInput constructs an AutoFlush text writer. On UTF8 hosts
     # its preamble can be written even before BaseStream is used. Binary tests

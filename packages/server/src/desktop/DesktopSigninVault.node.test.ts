@@ -21,7 +21,7 @@ it("captures only private pipes, parses the fixed owner and never prints credent
  const result=await p;expect(result.delegation().token).toBe(token);expect(JSON.stringify(result)).not.toContain(token);
  expect(raw.every(value=>value===0)).toBe(true);expect(diagnostic.every(value=>value===0)).toBe(true);
  const [executable,args,options]=f.spawn.mock.calls[0]!;
- expect(executable).toBe(shell);expect(args).toContain(owner);expect(args.join(" ")).not.toContain(token);
+ expect(executable).toBe(shell);expect(args).not.toContain("-ExecutionPolicy");expect(args).not.toContain("Bypass");expect(args).toContain(owner);expect(args.join(" ")).not.toContain(token);
  expect(options.stdio).toEqual(["ignore","pipe","pipe"]);expect(options.windowsHide).toBe(true);expect(options.cwd).toBe("C:\\Windows\\System32\\WindowsPowerShell\\v1.0");
  expect(log).not.toHaveBeenCalled();expect(error).not.toHaveBeenCalled();expect(warn).not.toHaveBeenCalled();expect(f.child.kill).not.toHaveBeenCalled();
 });

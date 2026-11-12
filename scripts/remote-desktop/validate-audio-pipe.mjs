@@ -8,7 +8,7 @@ const translate=async path=>process.platform==='win32'?path:(await desktopOwnedC
 try{
  await binary.prepare();
  const scriptPath=new URL('./build-audio-pipe-fixture.ps1',import.meta.url);const {fileURLToPath}=await import('node:url');const script=process.platform==='win32'?fileURLToPath(scriptPath):(await desktopOwnedChild('/usr/bin/wslpath',['-w',fileURLToPath(scriptPath)],'',{timeout:3000,limit:8192})).trim();
- const built=JSON.parse((await desktopOwnedChild(process.platform==='win32'?desktopWindowsPowerShell(process.env.SystemRoot):'/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script],'',{timeout:30000,limit:16384})).replace(/^\uFEFF/,''));
+ const built=JSON.parse((await desktopOwnedChild(process.platform==='win32'?desktopWindowsPowerShell(process.env.SystemRoot):'/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-File',script],'',{timeout:30000,limit:16384})).replace(/^\uFEFF/,''));
  assert.match(built.directory,/\\soda-audio-fixture-[a-f0-9]{32}$/);assert.equal(built.binary,built.directory+'\\audio-fixture.exe');fixture={binary:await translate(built.binary),directory:await translate(built.directory)};
  for(const mode of ['audio','microphone','audio-close','audio-reject','heartbeat-loss']){const kind=mode==='microphone'?'microphone':'audio';
   const server=spawn(fixture.binary,[['audio-reject','heartbeat-loss'].includes(mode)?'audio-close':mode],{stdio:['pipe','pipe','pipe'],windowsHide:true,shell:false});const serverClosed=once(server,'close');let lines='',readLine;

@@ -28,7 +28,7 @@ const defaults:DesktopSigninAdminCommandDependencies={
  store:stateDir=>new DesktopEndpointStore({stateDir}),uuid:randomUUID,
  enrollment:(ownerSid,operation,bytes)=>new Promise((resolve,reject)=>{
   const command=desktopWindowsPowerShell(),script=fileURLToPath(new URL('../../../../scripts/remote-desktop/write-signin-enrollment.ps1',import.meta.url));
-  const child=execFile(command,['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-OwnerSid',ownerSid,'-Operation',operation],{windowsHide:true,maxBuffer:128,cwd:win32.dirname(command),env:{...process.env,PSModulePath:win32.join(win32.dirname(command),'Modules')}},(error,stdout)=>{
+  const child=execFile(command,['-NoLogo','-NoProfile','-NonInteractive','-File',script,'-OwnerSid',ownerSid,'-Operation',operation],{windowsHide:true,maxBuffer:128,cwd:win32.dirname(command),env:{...process.env,PSModulePath:win32.join(win32.dirname(command),'Modules')}},(error,stdout)=>{
    if(error||stdout.trim()!=='signin_enrollment_updated')reject(Error('Signin enrollment update failed'));else resolve();
   });
   child.stdin!.on('error',reject);child.stdin!.end(bytes);
