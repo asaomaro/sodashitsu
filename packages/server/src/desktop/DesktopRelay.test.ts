@@ -1160,8 +1160,13 @@ it("keeps a new shared agent grant when the prior release ACK arrives after atta
   viewer.send({type:"agent_grant",enabled:true});await vi.waitFor(()=>expect(viewer.messages.some(m=>m.type==="agent_ticket")).toBe(true));
   const ticket=viewer.messages.find(m=>m.type==="agent_ticket")!.ticket as string;
   const attached=f.relay.agents.attach("shared-agent",ticket);
+  // The new grant is queued behind the old ordinary release completion.
+  // Deliver that real ACK after attach; only then may its grant command run.
+  await vi.waitFor(()=>expect(responses).toHaveLength(1));
+  expect(JSON.parse(responses[0]!).enabled).toBe(false);send(responses[0]!);
   await vi.waitFor(()=>expect(responses).toHaveLength(2));
-  spy.mockRestore();for(const response of responses)send(response);
+  expect(JSON.parse(responses[1]!).enabled).toBe(true);
+  spy.mockRestore();send(responses[1]!);
   await vi.waitFor(()=>expect(viewer.messages.filter(m=>m.type==="control")).toHaveLength(2));
   expect(viewer.messages.filter(m=>m.type==="agent_state").at(-1)).toMatchObject({active:true});
   expect(f.relay.agents.observe("shared-agent",attached.leaseId)).toMatchObject({frameSeq:1});
