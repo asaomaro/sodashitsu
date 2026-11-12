@@ -30,7 +30,6 @@ export const desktopRuntimeAssets = Object.freeze([
   'WindowsProtectedScope.cs',
   'WindowsProtectedScopeNative.cs',
   'WindowsProtectedWorker.cs',
-  'WindowsResourceFence.cs',
   'WindowsSigninAdminController.cs',
   'WindowsSigninAdminDeadline.cs',
   'WindowsSigninAdminEnrollment.cs',

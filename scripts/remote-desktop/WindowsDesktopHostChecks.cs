@@ -26,18 +26,15 @@ public static partial class SodaDesktopHost {
         }
     }
     public static void VerifyAuthenticationInput(){
-        if(ResourceFence!=null||Control||MemoryInput!=null||MemoryBatchInput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
-        var type=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopResourceFence");if(type==null)throw new InvalidOperationException("Missing resource fence");
+        if(Control||MemoryInput!=null||MemoryBatchInput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
+
         bool oldSecure=Secure,oldStopping=Stopping;long oldHeartbeat=LastHeartbeat;string oldMode=ProtectedMode;var oldLockState=SecureLockState;
         try{foreach(string mode in new[]{"enter","numpad","digit","numpad-digit","text","partial-enter","partial-digit","partial-text","normal","normal-digit","elevated","elevated-digit","modifier","modifier-digit","button","button-digit","lost"}){
             bool live=mode!="lost",partial=mode.StartsWith("partial-"),text=mode=="text"||mode=="partial-text",digit=mode=="digit"||mode.EndsWith("-digit");
             bool pulse=mode=="enter"||mode=="numpad"||mode=="digit"||mode=="numpad-digit"||mode=="text"||partial;int calls=0;var sizes=new List<int>();var output=new List<object>();
-            Keys.Clear();Buttons.Clear();ResourceFences.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();
+            Keys.Clear();Buttons.Clear();
             Secure=!mode.StartsWith("normal");ProtectedMode=mode.StartsWith("elevated")?"elevated-uac":null;SecureLockState=mode.StartsWith("normal")||mode.StartsWith("elevated")?null:(Func<int>)(()=>live?1:0);Control=true;Stopping=false;LastHeartbeat=Clock.ElapsedMilliseconds;
-            MemoryDesktop=()=>live;ResourceScope=()=>live;MemoryOutput=output.Add;
-            ResourceInput=type.GetMethod("ReleaseInput");ResourceCommand=type.GetMethod("Fence");
-            ResourceFence=Activator.CreateInstance(type,new object[]{(Func<bool>)ResourceNeutral,(Action)ReleaseHeldStrict,(Action)(()=>{}),(Action)(()=>{})});ResourceFences["control"]=ResourceFence;
-            string epoch=Guid.NewGuid().ToString("D");ResourceEpochs["control"]=epoch;
+            MemoryDesktop=()=>live;MemoryOutput=output.Add;
             if(mode.StartsWith("modifier"))Keys.Add(17);if(mode.StartsWith("button"))Buttons.Add(0);
             ushort key=(ushort)(mode=="numpad"?(13|0x100):mode=="numpad-digit"?99:digit?51:13);
             MemoryBatchInput=inputs=>{
@@ -55,11 +52,8 @@ public static partial class SodaDesktopHost {
             try{accepted=Apply(text?new Dictionary<string,object>{{"kind","text"},{"text","a"}}:new Dictionary<string,object>{{"kind","key"},{"code",mode=="numpad"?"NumpadEnter":mode=="numpad-digit"?"Numpad3":digit?"Digit3":"Enter"},{"down",true}});}catch(InvalidOperationException){failed=true;}
             if(partial){
                 if(!failed||!Stopping||!text&&!Keys.Contains(key))throw new InvalidOperationException("Partial authentication input was accepted or forgotten");
-                if(ResourceCleanup("control",epoch,true)||output.Count!=0)throw new InvalidOperationException("Partial authentication input produced cleanup proof");
             }else if(pulse){
                 if(failed||!accepted||calls!=1||sizes[0]!=2||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Authentication pulse retained input");
-                Release();if(!ResourceCleanup("control",epoch,true)||output.Count!=1)throw new InvalidOperationException("Neutral authentication transition lost cleanup proof");
-                var ack=Obj(Json.DeserializeObject(OutputJson.Serialize(output[0])));if((string)ack["type"]!="resource_fence_ack"||(string)ack["id"]!=epoch||!(bool)ack["terminal"])throw new InvalidOperationException("Authentication cleanup correlation changed");
                 Apply(new Dictionary<string,object>{{"kind","key"},{"code","Enter"},{"down",false}});if(calls!=1)throw new InvalidOperationException("Authentication key-up reached the new scope");
             }else if(mode=="lost"){
                 if(accepted||failed||calls!=0)throw new InvalidOperationException("Lost authentication scope received input");
@@ -67,41 +61,35 @@ public static partial class SodaDesktopHost {
                 if(failed||!accepted||calls!=1||sizes[0]!=1||!Keys.Contains(key))throw new InvalidOperationException("Ordinary or chorded Enter semantics changed");
                 Release();if(Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Ordinary input release failed");
             }
-            ResourceFence=null;
-        }}finally{Keys.Clear();Buttons.Clear();Control=false;MemoryInput=null;MemoryBatchInput=null;MemoryDesktop=null;MemoryOutput=null;ResourceFence=null;ResourceFences.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();ResourceReleased.UnionWith(new[]{"control","clipboard","microphone"});ResourceScope=null;ResourceInput=null;ResourceCommand=null;Secure=oldSecure;ProtectedMode=oldMode;SecureLockState=oldLockState;Stopping=oldStopping;LastHeartbeat=oldHeartbeat;}
+        }}finally{Keys.Clear();Buttons.Clear();Control=false;MemoryInput=null;MemoryBatchInput=null;MemoryDesktop=null;MemoryOutput=null;Secure=oldSecure;ProtectedMode=oldMode;SecureLockState=oldLockState;Stopping=oldStopping;LastHeartbeat=oldHeartbeat;}
         Console.WriteLine("authentication_input_generated_batch_transition_cleanup_partial_failure_and_ordinary_semantics_passed");
     }
-    public static void VerifyResourceInputFailures(){
-        if(ResourceFence!=null||Control||MemoryInput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
-        Type type=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopResourceFence");if(type==null)throw new InvalidOperationException("Missing resource fence");
-        var oldBounds=Bounds;var oldDriver=MonitorDriver;bool oldStopping=Stopping;long oldHeartbeat=LastHeartbeat;
-        try{foreach(string kind in new[]{"key","pointer","text"}){
-            Keys.Clear();Buttons.Clear();Control=true;Stopping=false;LastHeartbeat=Clock.ElapsedMilliseconds;MemoryDesktop=()=>true;MemoryOutput=value=>{throw new InvalidOperationException("Failed input produced cleanup ACK");};
-            MonitorDriver=new MemoryMonitors{Items=new[]{new SodaDesktopMonitorLayout.Item("a",new Rectangle(0,0,800,600),true,100)}};Bounds=new Rectangle(0,0,800,600);
-            ResourceScope=()=>true;ResourceInput=type.GetMethod("ReleaseInput");ResourceCommand=type.GetMethod("Fence");
-            ResourceFence=Activator.CreateInstance(type,new object[]{(Func<bool>)(()=>true),(Action)ReleaseHeldStrict,(Action)(()=>{}),(Action)(()=>{})});ResourceFences["control"]=ResourceFence;ResourceEpochs["control"]=Guid.NewGuid().ToString("D");
-            MemoryInput=value=>{if(value.type==1&&(value.data.key.flags&2)!=0||value.type==0&&(value.data.mouse.dwFlags&4)!=0)throw new InvalidOperationException("Generated key/button up failure");};
-            bool failed=false;try{
-                if(kind=="key"){Apply(new Dictionary<string,object>{{"kind","key"},{"code","KeyA"},{"down",true}});Apply(new Dictionary<string,object>{{"kind","key"},{"code","KeyA"},{"down",false}});}
-                else if(kind=="pointer"){Apply(new Dictionary<string,object>{{"kind","pointer"},{"x",0.5},{"y",0.5},{"button",0},{"event","down"}});Apply(new Dictionary<string,object>{{"kind","pointer"},{"x",0.5},{"y",0.5},{"button",0},{"event","up"}});}
-                else Apply(new Dictionary<string,object>{{"kind","text"},{"text","a"}});
-            }catch(InvalidOperationException){failed=true;}
-            if(!failed||!Stopping)throw new InvalidOperationException("Input failure was not terminal: "+kind);
-            if(kind=="key"&&!Keys.Contains(65)||kind=="pointer"&&!Buttons.Contains(0))throw new InvalidOperationException("Failed release was forgotten: "+kind);
-            Release();if(ResourceCleanup("control",Guid.NewGuid().ToString("D"),false)||ResourceCleanup("control",ResourceEpochs["control"],true))throw new InvalidOperationException("Failed input acknowledged as clean: "+kind);
-            ResourceFence=null;ResourceFences.Clear();ResourceEpochs.Clear();
-        }}finally{Keys.Clear();Buttons.Clear();Control=false;MemoryInput=null;MemoryDesktop=null;MemoryOutput=null;ResourceFence=null;ResourceFences.Clear();ResourceEpochs.Clear();ResourceScope=null;ResourceInput=null;ResourceCommand=null;MonitorDriver=oldDriver;Bounds=oldBounds;Stopping=oldStopping;LastHeartbeat=oldHeartbeat;}
-        Console.WriteLine("desktop_resource_input_failed_key_button_unicode_never_ack_passed");
+    public static void VerifyControlCompletion(){
+        var savedDesktop=MemoryDesktop;var savedInput=MemoryInput;var savedOutput=MemoryOutput;bool savedStopping=Stopping;bool savedSecure=Secure;
+        var sent=new List<INPUT>();var replies=new List<Dictionary<string,object>>();
+        try{
+            Secure=false;Stopping=false;MemoryDesktop=()=>true;MemoryInput=sent.Add;
+            MemoryOutput=value=>{if(Keys.Count!=0||Buttons.Count!=0)throw new Exception("Control completion preceded held input release");replies.Add(Obj(Json.DeserializeObject(OutputJson.Serialize(value))));};
+            Control=true;Keys.Add(65);Buttons.Add(0);SetControl(false,true,7);
+            if(Control||sent.Count!=2||replies.Count!=1||(string)replies[0]["type"]!="control"||(bool)replies[0]["enabled"]||Convert.ToInt64(replies[0]["seq"])!=7)throw new Exception("Control release completion changed");
+            replies.Clear();Keys.Add(66);MemoryInput=value=>{throw new InvalidOperationException("Generated release failure");};bool denied=false;
+            try{SetControl(false,true,8);}catch(InvalidOperationException){denied=true;}
+            if(!denied||!Stopping||replies.Count!=0||!Keys.Contains(66))throw new Exception("Failed release reported success or forgot held key");
+            MemoryInput=sent.Add;if(!Release()||Keys.Count!=0)throw new Exception("Source cleanup did not retry held key after input failure");
+            int before=sent.Count;Keys.Add(67);MemoryDesktop=()=>false;
+            if(Release()||sent.Count!=before||!Keys.Contains(67))throw new Exception("Normal source cleanup crossed the input desktop boundary");
+        }finally{Keys.Clear();Buttons.Clear();Control=false;MemoryDesktop=savedDesktop;MemoryInput=savedInput;MemoryOutput=savedOutput;Stopping=savedStopping;Secure=savedSecure;}
+        Console.WriteLine("desktop_control_completion_after_release_and_failure_cleanup_passed");
     }
     sealed class MemoryMonitors:SodaDesktopMonitorLayout.IDriver {public SodaDesktopMonitorLayout.Item[] Items;public int Reads;public SodaDesktopMonitorLayout.Item[] Read(){Reads++;return Items;}}
     public static void VerifyNativePointerWitness(){
-        if(Control||ResourceFence!=null||MemoryInput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
-        var oldDriver=MonitorDriver;var oldBounds=Bounds;bool oldSecure=Secure;var oldReleased=new HashSet<string>(ResourceReleased);
+        if(Control||MemoryInput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
+        var oldDriver=MonitorDriver;var oldBounds=Bounds;bool oldSecure=Secure;
         try{
-            foreach(string mode in new[]{"ok","disabled","secure","resource","modifier","target","failed"}){
+            foreach(string mode in new[]{"ok","disabled","secure","modifier","target","failed"}){
                 var output=new List<object>();int looked=0;Point seen=new Point();
-                Keys.Clear();Buttons.Clear();ResourceEpochs.Clear();ResourceEpochs["control"]=Guid.NewGuid().ToString("D");ResourceReleased.Remove("control");
-                Control=true;Stopping=false;LastHeartbeat=Clock.ElapsedMilliseconds;Secure=mode=="secure";InputAckPipe=false;NativePointerProof=mode!="disabled";ResourceFence=mode=="resource"?null:new object();
+                Keys.Clear();Buttons.Clear();
+                Control=true;Stopping=false;LastHeartbeat=Clock.ElapsedMilliseconds;Secure=mode=="secure";InputAckPipe=false;NativePointerProof=mode!="disabled";
                 Bounds=new Rectangle(-800,-100,800,600);MonitorDriver=new MemoryMonitors{Items=new[]{new SodaDesktopMonitorLayout.Item("generated",Bounds,true,100)}};
                 MemoryDesktop=()=>true;MemoryOutput=value=>output.Add(value);MemoryInput=value=>{if(mode=="failed"&&value.type==0&&(value.data.mouse.dwFlags&2)!=0)throw new InvalidOperationException("Generated failed down");};
                 MemoryPointerTarget=point=>{looked++;seen=point;return mode=="target"?Tuple.Create(0L,0):Tuple.Create(42L,7);};if(mode=="modifier")Keys.Add(17);
@@ -114,40 +102,39 @@ public static partial class SodaDesktopHost {
                 if(has!=(mode=="ok"))throw new InvalidOperationException("Native pointer admission mismatch: "+mode);
                 if(mode=="ok"){
                     var pointer=Obj(ack["pointer"]);
-                    if(seen!=new Point(-400,50)||Num(pointer,"x")!=-400||Num(pointer,"y")!=50||Convert.ToInt64(pointer["window"])!=42||Num(pointer,"pid")!=7||(string)pointer["epoch"]!=ResourceEpochs["control"])throw new InvalidOperationException("Native pointer coordinates or epoch mismatch");
+                    if(seen!=new Point(-400,50)||Num(pointer,"x")!=-400||Num(pointer,"y")!=50||Convert.ToInt64(pointer["window"])!=42||Num(pointer,"pid")!=7)throw new InvalidOperationException("Native pointer coordinates mismatch");
                     message["seq"]=2L;if(!ApplyInput(message,ref accepted)||Obj(Json.DeserializeObject(OutputJson.Serialize(output[1]))).ContainsKey("pointer"))throw new InvalidOperationException("Duplicate down forged physical witness");
                     down["event"]="up";message["seq"]=3L;if(!ApplyInput(message,ref accepted)||Obj(Json.DeserializeObject(OutputJson.Serialize(output[2]))).ContainsKey("pointer"))throw new InvalidOperationException("Pointer up produced down witness");
                     message["seq"]=4L;message["expiresAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-10;int before=output.Count;if(ApplyInput(message,ref accepted)||output.Count!=before)throw new InvalidOperationException("Expired native input produced witness");
                 }else if(mode!="target"&&looked!=0)throw new InvalidOperationException("Unpermitted native window lookup: "+mode);
             }
-        }finally{Keys.Clear();Buttons.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();foreach(string resource in oldReleased)ResourceReleased.Add(resource);ResourceFence=null;MemoryInput=null;MemoryOutput=null;MemoryDesktop=null;MemoryPointerTarget=null;LastAppliedPointer=null;NativePointerProof=false;InputAckPipe=false;Control=false;Stopping=false;Secure=oldSecure;MonitorDriver=oldDriver;Bounds=oldBounds;}
-        Console.WriteLine("desktop_native_pointer_generated_applied_down_epoch_coordinates_policy_and_failure_passed");
+        }finally{Keys.Clear();Buttons.Clear();MemoryInput=null;MemoryOutput=null;MemoryDesktop=null;MemoryPointerTarget=null;LastAppliedPointer=null;NativePointerProof=false;InputAckPipe=false;Control=false;Stopping=false;Secure=oldSecure;MonitorDriver=oldDriver;Bounds=oldBounds;}
+        Console.WriteLine("desktop_native_pointer_generated_applied_down_coordinates_policy_and_failure_passed");
     }
     sealed class MemoryVirtualLease:IDisposable {public void Dispose(){}}
     public static void VerifyVirtualNativePointerWitness(){
-        if(VirtualLease!=null||ResourceFence!=null||MemoryDesktop!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
-        var oldDriver=MonitorDriver;var oldBounds=Bounds;var oldReleased=new HashSet<string>(ResourceReleased);bool oldStopping=Stopping;
+        if(VirtualLease!=null||MemoryDesktop!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
+        var oldDriver=MonitorDriver;var oldBounds=Bounds;bool oldStopping=Stopping;
         try {
-            foreach(string mode in new[]{"ok","not-opted","lease-lost","secure","desktop-lost","layout-changed","same-name-recreated","selected-physical","bounds-changed","out-of-range","fence-lost"}){
+            foreach(string mode in new[]{"ok","not-opted","lease-lost","secure","desktop-lost","layout-changed","same-name-recreated","selected-physical","bounds-changed","out-of-range"}){
                 int looked=0;bool alive=mode!="lease-lost";Secure=mode=="secure";Stopping=false;
                 VirtualLease=new MemoryVirtualLease();VirtualAlive=()=>alive;VirtualNativePointerProof=mode!="not-opted";NativePointerProof=true;
                 MemoryDesktop=()=>mode!="desktop-lost";Bounds=new Rectangle(1600,-200,800,600);CaptureDevice="owned";
                 var fake=new MemoryMonitors{Items=new[]{new SodaDesktopMonitorLayout.Item("owned",Bounds,false,100),new SodaDesktopMonitorLayout.Item("physical",new Rectangle(0,0,1600,900),true,100)}};
                 MonitorDriver=fake;ActiveMonitors=new SodaDesktopMonitorLayout(fake,"owned");
-                ResourceFence=new object();ResourceEpochs["control"]=Guid.NewGuid().ToString("D");ResourceReleased.Remove("control");Buttons.Add(0);
+                Control=true;Buttons.Add(0);
                 MemoryPointerTarget=point=>{looked++;return Tuple.Create(42L,7);};
                 if(mode=="layout-changed")fake.Items=new[]{new SodaDesktopMonitorLayout.Item("owned",new Rectangle(1601,-200,800,600),false,100)};
                 if(mode=="same-name-recreated")alive=false; // original client validates PnP instance/container, not display-name equality
                 if(mode=="selected-physical")CaptureDevice="physical";
                 if(mode=="bounds-changed")Bounds=new Rectangle(1600,-200,801,600);
-                if(mode=="fence-lost")ResourceReleased.Add("control");
                 var proof=PointerWitness(mode=="out-of-range"?1.1:0.5,0.5);
                 if((proof!=null)!=(mode=="ok")||looked!=(mode=="ok"?1:0))throw new InvalidOperationException("Virtual native pointer guard: "+mode);
-                if(proof!=null&&(Num(proof,"x")!=2000||Num(proof,"y")!=100||(string)proof["epoch"]!=ResourceEpochs["control"]))throw new InvalidOperationException("Virtual native pointer coordinate/epoch mismatch");
-                Buttons.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();
+                if(proof!=null&&(Num(proof,"x")!=2000||Num(proof,"y")!=100))throw new InvalidOperationException("Virtual native pointer coordinate mismatch");
+                Buttons.Clear();
             }
-        }finally{Buttons.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();foreach(string resource in oldReleased)ResourceReleased.Add(resource);VirtualLease=null;VirtualAlive=null;VirtualNativePointerProof=false;NativePointerProof=false;ResourceFence=null;MemoryDesktop=null;MemoryPointerTarget=null;ActiveMonitors=null;CaptureDevice=null;Secure=false;Stopping=oldStopping;MonitorDriver=oldDriver;Bounds=oldBounds;}
-        Console.WriteLine("desktop_owned_virtual_native_pointer_11_memory_checks_passed");
+        }finally{Buttons.Clear();Control=false;VirtualLease=null;VirtualAlive=null;VirtualNativePointerProof=false;NativePointerProof=false;MemoryDesktop=null;MemoryPointerTarget=null;ActiveMonitors=null;CaptureDevice=null;Secure=false;Stopping=oldStopping;MonitorDriver=oldDriver;Bounds=oldBounds;}
+        Console.WriteLine("desktop_owned_virtual_native_pointer_10_memory_checks_passed");
     }
     public static void VerifyQueuedMonitorInput(){
         if(Control||CaptureDevice!=null||ActiveMonitors!=null||MemoryInput!=null||MemoryDesktop!=null||MemoryOutput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");

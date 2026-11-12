@@ -13,8 +13,7 @@ $richSource = if ($env:SODA_DESKTOP_LOAD_RICH_CLIPBOARD -ceq '1') { Get-Content 
 $codecSource = if ($env:SODA_DESKTOP_LOAD_CODECS -ceq '1') { Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsCodecProbe.cs') -Raw } else { '' }
 $virtualSource = if ($AllowVirtualDisplay) { @('WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw } } else { @() }
 $protectedSource = if ($AllowElevated -or $AllowUnlock -or $UnlockLease) { @('WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedHandshake.cs','WindowsProtectedWorker.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw } } else { @() }
-$resourceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsResourceFence.cs') -Raw
-$combined = $pipeSource + "`n" + $resourceSource + "`n" + ($protectedSource -join "`n") + "`n" + ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource + "`n" + $micSource
+$combined = $pipeSource + "`n" + ($protectedSource -join "`n") + "`n" + ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource + "`n" + $micSource
 $usings = [regex]::Matches($combined,'(?m)^using [^;]+;') | ForEach-Object { $_.Value } | Select-Object -Unique
 $combined = ($usings -join "`n") + "`n" + [regex]::Replace($combined,'(?m)^using [^;]+;','')
 Add-Type -TypeDefinition $combined -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll

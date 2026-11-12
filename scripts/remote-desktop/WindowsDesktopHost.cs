@@ -53,26 +53,6 @@ public static partial class SodaDesktopHost {
     static long QpcTimestamp(){long ticks=Stopwatch.GetTimestamp(),frequency=Stopwatch.Frequency;if(!Stopwatch.IsHighResolution||ticks<0||frequency<=0)throw new InvalidOperationException("Video clock");return checked(ticks/frequency*1000000+(ticks%frequency)*1000000/frequency);}
     static volatile bool Stopping=false;
     static bool Control=false;
-    static object ResourceFence;
-    static System.Reflection.MethodInfo ResourceInput,ResourceCommand;
-    static Func<bool> ResourceScope;
-    static readonly Dictionary<string,string> ResourceEpochs=new Dictionary<string,string>();
-    static readonly Dictionary<string,object> ResourceFences=new Dictionary<string,object>();
-    static readonly HashSet<string> ResourceReleased=new HashSet<string>{"control","clipboard","microphone"};
-    static bool ResourceActive(string resource){return ResourceFence==null||ResourceEpochs.ContainsKey(resource)&&!ResourceReleased.Contains(resource);}
-    static bool ResourceNeutral(){lock(Gate){return Keys.Count==0&&Buttons.Count==0||ResourceScope!=null&&ResourceScope();}}
-    static void ReleaseHeldStrict(){lock(Gate){Control=false;bool failed=false;
-        foreach(ushort key in new List<ushort>(Keys)){try{if(ResourceScope==null||!ResourceScope())throw new InvalidOperationException();Key(key,false);Keys.Remove(key);}catch{failed=true;}}
-        foreach(int button in new List<int>(Buttons)){try{if(ResourceScope==null||!ResourceScope())throw new InvalidOperationException();Emit(ButtonInput(button,false));Buttons.Remove(button);}catch{failed=true;}}
-        if(failed||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Input cleanup incomplete");
-    }}
-    static string ResourceId(Dictionary<string,object> value,string key){string id=value.ContainsKey(key)?value[key]as string:null;Guid parsed;if(!Guid.TryParseExact(id,"D",out parsed)||parsed==Guid.Empty||parsed.ToString("D")!=id)throw new InvalidOperationException("Resource correlation");return id;}
-    static string ResourceKind(Dictionary<string,object> value){string resource=value.ContainsKey("resource")?value["resource"]as string:null;if(resource!="control"&&resource!="clipboard"&&resource!="microphone")throw new InvalidOperationException("Resource kind");return resource;}
-    static void ResourceBegin(Dictionary<string,object> value){string resource=ResourceKind(value);if(ResourceFence==null||value.Count!=3||!ResourceReleased.Contains(resource))throw new InvalidOperationException("Resource epoch unavailable");ResourceEpochs[resource]=ResourceId(value,"id");ResourceReleased.Remove(resource);}
-    static bool ResourceCleanup(string resource,string id,bool terminal){
-        if(ResourceFence==null||!ResourceEpochs.ContainsKey(resource))return false;
-        return (bool)ResourceCommand.Invoke(ResourceFences[resource],new object[]{id,(Action<string>)(value=>{ResourceReleased.Add(resource);if(terminal)Output(new{type="resource_fence_ack",id=value,terminal=true});else Output(new{type="resource_fence_ack",id=value});})});
-    }
     static bool InputAckPipe=false;
     static bool NativePointerProof=false;
     static Dictionary<string,object> LastAppliedPointer;
@@ -90,7 +70,7 @@ public static partial class SodaDesktopHost {
     static void InputAck(long seq,Dictionary<string,object> pointer=null) {
         if(InputAckPipe){
             var culture=System.Globalization.CultureInfo.InvariantCulture;
-            if(pointer!=null)Console.Error.WriteLine("\nSODA_DESKTOP_POINTER_ACK "+seq.ToString(culture)+" "+pointer["epoch"]+" "+Convert.ToString(pointer["x"],culture)+" "+Convert.ToString(pointer["y"],culture)+" "+Convert.ToString(pointer["window"],culture)+" "+Convert.ToString(pointer["pid"],culture));
+            if(pointer!=null)Console.Error.WriteLine("\nSODA_DESKTOP_POINTER_ACK "+seq.ToString(culture)+" "+Convert.ToString(pointer["x"],culture)+" "+Convert.ToString(pointer["y"],culture)+" "+Convert.ToString(pointer["window"],culture)+" "+Convert.ToString(pointer["pid"],culture));
             Console.Error.WriteLine("\nSODA_DESKTOP_INPUT_ACK "+seq.ToString(culture));Console.Error.Flush();
         }
         else if(pointer!=null)Output(new {type="input_ack",seq,pointer});
@@ -113,14 +93,14 @@ public static partial class SodaDesktopHost {
             ActiveMonitors.Bounds==Bounds&&SourceMatches(CaptureDevice);
     }
     static Dictionary<string,object> PointerWitness(double x,double y) {
-        if(!NativePointerProof||Secure||(VirtualLease!=null&&!VirtualNativePointerSource())||ResourceFence==null||!ResourceActive("control")||!ResourceEpochs.ContainsKey("control")||Keys.Count!=0||Buttons.Count!=1||!Buttons.Contains(0))return null;
+        if(!Control||!NativePointerProof||Secure||(VirtualLease!=null&&!VirtualNativePointerSource())||Keys.Count!=0||Buttons.Count!=1||!Buttons.Contains(0))return null;
         Point pixel=new Point(Bounds.Left+(int)Math.Round(x*(Bounds.Width-1)),Bounds.Top+(int)Math.Round(y*(Bounds.Height-1)));
         if(VirtualLease!=null&&!Bounds.Contains(pixel))return null;
         Tuple<long,int> target;
         if(MemoryPointerTarget!=null)target=MemoryPointerTarget(pixel);
         else {IntPtr window=GetAncestor(WindowFromPoint(pixel),2);uint pid;GetWindowThreadProcessId(window,out pid);target=window!=IntPtr.Zero&&pid>0&&pid<=Int32.MaxValue?Tuple.Create(window.ToInt64(),(int)pid):null;}
         if(target==null||target.Item1==0||target.Item2<=0)return null;
-        return new Dictionary<string,object>{{"epoch",ResourceEpochs["control"]},{"x",pixel.X},{"y",pixel.Y},{"window",target.Item1},{"pid",target.Item2}};
+        return new Dictionary<string,object>{{"x",pixel.X},{"y",pixel.Y},{"window",target.Item1},{"pid",target.Item2}};
     }
     static Dictionary<string,object> Obj(object value) { return (Dictionary<string,object>)value; }
     static int PositiveBridgePid(Dictionary<string,object> msg) {object value;if(!msg.TryGetValue("clientPid",out value)||!(value is int))throw new InvalidOperationException("Audio bridge PID");int pid=(int)value;if(pid<=0)throw new InvalidOperationException("Audio bridge PID");return pid;}
@@ -183,12 +163,12 @@ public static partial class SodaDesktopHost {
     static Func<INPUT[],uint> MemoryBatchInput=null;
     static void Emit(INPUT value) { EmitInputs(new[]{value}); }
     static void EmitInputs(INPUT[] values) {
-        try { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");uint sent;
+        try { if(!AllowedDesktop())throw new InvalidOperationException("Input desktop ended");uint sent;
             if(MemoryBatchInput!=null)sent=MemoryBatchInput(values);
             else if(MemoryInput!=null){foreach(var value in values)MemoryInput(value);sent=(uint)values.Length;}
             else sent=SendInput((uint)values.Length,values,Marshal.SizeOf(typeof(INPUT)));
             if(sent!=values.Length)throw new InvalidOperationException("Input denied"); }
-        catch { if(ResourceFence!=null){Stopping=true;foreach(var fence in ResourceFences.Values)fence.GetType().GetMethod("Close").Invoke(fence,null);}throw; }
+        catch { Stopping=true;throw; }
     }
     static INPUT KeyInput(ushort token,bool down) {
         ushort vk=(ushort)(token&255);
@@ -219,14 +199,21 @@ public static partial class SodaDesktopHost {
         var owned=audio;audio=null;if(owned==null)return;
         try{owned.Dispose();}catch{Release();Environment.Exit(1);}
     }
-    static void Release() {
+    static bool Release() {
         lock(Gate) {
             Control=false;
-            if(ResourceFence!=null){try{if(!(bool)ResourceInput.Invoke(ResourceFence,null))Stopping=true;}catch{Stopping=true;}return;}
-            if(Secure && !AllowedDesktop()){Keys.Clear();Buttons.Clear();return;}
-            foreach(ushort key in Keys) { try { Key(key,false); } catch {} } Keys.Clear();
-            foreach(int button in Buttons) { try { Emit(ButtonInput(button,false)); } catch {} } Buttons.Clear();
+            if(Secure && !AllowedDesktop()){Keys.Clear();Buttons.Clear();Stopping=true;return false;}
+            bool complete=true;
+            foreach(ushort key in new List<ushort>(Keys)) {try{Key(key,false);Keys.Remove(key);}catch{complete=false;}}
+            foreach(int button in new List<int>(Buttons)) {try{Emit(ButtonInput(button,false));Buttons.Remove(button);}catch{complete=false;}}
+            if(!complete)Stopping=true;return complete;
         }
+    }
+    static void SetControl(bool enabled,bool allow,long sequence) {
+        if(sequence<1)throw new InvalidOperationException("Control sequence");
+        if(!Release())throw new InvalidOperationException("Input cleanup incomplete");
+        lock(Gate){Control=allow&&enabled;}
+        Output(new {type="control",enabled=Control,seq=sequence});
     }
     static bool Apply(Dictionary<string,object> input) {
         lock(Gate) {
@@ -455,19 +442,11 @@ public static partial class SodaDesktopHost {
         string videoCodec="h264",videoCodecFallback=null;
         Bitmap videoBitmap=null;Graphics videoResize=null;
         long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
-        if(config.ContainsKey("resourceFences")&&config["resourceFences"] is bool&&(bool)config["resourceFences"]){
-            Type resourceType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopResourceFence");
-            if(resourceType!=null){ResourceScope=()=>AllowedDesktop();ResourceInput=resourceType.GetMethod("ReleaseInput");ResourceCommand=resourceType.GetMethod("Fence");
-                ResourceFence=Activator.CreateInstance(resourceType,new object[]{(Func<bool>)ResourceNeutral,(Action)ReleaseHeldStrict,(Action)(()=>{}),(Action)(()=>{})});ResourceFences["control"]=ResourceFence;
-                ResourceFences["clipboard"]=Activator.CreateInstance(resourceType,new object[]{(Func<bool>)(()=>true),(Action)(()=>{}),(Action)(()=>{clipboardAllowed=false;Interlocked.Increment(ref clipboardGeneration);StopAudio(ref richClipboardWorker);richSubmit=null;}),(Action)(()=>{})});
-                ResourceFences["microphone"]=Activator.CreateInstance(resourceType,new object[]{(Func<bool>)(()=>true),(Action)(()=>{}),(Action)(()=>{}),(Action)(()=>{StopAudio(ref microphone);microphoneId=null;})});
-            }
-        }
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
-        VirtualNativePointerProof=!Secure&&VirtualLease!=null&&VirtualAlive!=null&&VirtualAlive()&&ResourceFence!=null&&
+        VirtualNativePointerProof=!Secure&&VirtualLease!=null&&VirtualAlive!=null&&VirtualAlive()&&
             options.ContainsKey("virtualNativeDrag")&&options["virtualNativeDrag"] is bool&&(bool)options["virtualNativeDrag"]&&
             !options.ContainsKey("monitors")&&!options.ContainsKey("monitorDevice")&&ActiveMonitors!=null&&ActiveMonitors.Selected==CaptureDevice&&ActiveMonitors.Bounds==Bounds;
-        NativePointerProof=!Secure&&(VirtualLease==null||VirtualNativePointerSource())&&ResourceFence!=null&&config.ContainsKey("nativePointerProof")&&config["nativePointerProof"] is bool&&(bool)config["nativePointerProof"];
+        NativePointerProof=!Secure&&(VirtualLease==null||VirtualNativePointerSource())&&config.ContainsKey("nativePointerProof")&&config["nativePointerProof"] is bool&&(bool)config["nativePointerProof"];
         bool protectedVideo=ProtectedVideoProof(config);
         bool protectedAudioClock=protectedVideo&&config.ContainsKey("protectedAudioClock")&&config["protectedAudioClock"] is string&&(string)config["protectedAudioClock"]=="windows-qpc-v1"&&options.ContainsKey("protectedAudio")&&options["protectedAudio"] is bool&&(bool)options["protectedAudio"]&&options.ContainsKey("nativeAudio")&&options["nativeAudio"] is bool&&(bool)options["nativeAudio"];
         bool nativeCeiling=(!Secure||protectedVideo) && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
@@ -500,7 +479,6 @@ public static partial class SodaDesktopHost {
             if(InputAckPipe)ready["inputAckPipe"]=true;
             if(NativePointerProof)ready["nativePointerProof"]=true;
             if(NativePointerProof&&VirtualNativePointerProof)ready["virtualNativeDragProof"]=true;
-            if(ResourceFence!=null)ready["resourceFences"]=true;
             if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;
             if(protectedAudioClock)ready["protectedAudioClock"]="windows-qpc-v1";
@@ -566,13 +544,11 @@ public static partial class SodaDesktopHost {
                                 richSubmit.Invoke(richClipboardWorker,new object[]{msg});
                             }catch{string richId=msg.ContainsKey("id")?msg["id"]as string:null;Guid parsedRich;if(richId!=null&&Guid.TryParse(richId,out parsedRich))Output(new{type="clipboard_rich_result",id=richId,ok=false,stage="done"});}
                         }
-                        else if(type=="resource_epoch"){ResourceBegin(msg);}
-                        else if(type=="resource_fence"){if(ResourceFence==null||msg.Count!=4)throw new InvalidOperationException("Resource fence unavailable");string resource=ResourceKind(msg),id=ResourceId(msg,"id"),epoch=ResourceId(msg,"epoch");if(ResourceEpochs.ContainsKey(resource)&&epoch==ResourceEpochs[resource]){preparation.Invalidate(false);if(!ResourceCleanup(resource,id,false))Stopping=true;}}
                         else if(type=="native_microphone") {
                             string requested=(string)msg["id"];Guid parsed;if(!Guid.TryParse(requested,out parsed))throw new InvalidOperationException("Microphone id");
-                            if((bool)msg["enabled"]){if(!ResourceActive("microphone")||!microphoneCeiling||microphone!=null)throw new InvalidOperationException("Microphone not permitted");
+                            if((bool)msg["enabled"]){if(!microphoneCeiling||microphone!=null)throw new InvalidOperationException("Microphone not permitted");
                                 microphone=(IDisposable)Activator.CreateInstance(microphoneType,new object[]{(string)msg["pipeName"],audioPipeBridge?PositiveBridgePid(msg):microphonePid,(Func<bool>)(()=>!Stopping&&AllowedDesktop()&&SourceMatches(sourceDevice)),microphoneEndpoint});microphoneId=requested;
-                            }else if(microphoneId==requested){StopAudio(ref microphone);microphoneId=null;}
+                            }else {if(microphoneId==requested){StopAudio(ref microphone);microphoneId=null;}Output(new {type="native_microphone",id=requested,enabled=false});}
                         }
                         else if(type=="native_audio") {
                             string requested=(string)msg["id"];Guid audioGuid;if(!Guid.TryParse(requested,out audioGuid))throw new InvalidOperationException("Audio id");
@@ -615,7 +591,7 @@ public static partial class SodaDesktopHost {
                         else if(type=="policy") {
                             int rate=Num(msg,"fps"),q=Num(msg,"quality");if(rate<1||rate>maxFps||q<20||q>maxQuality)throw new InvalidOperationException("Policy limit");
                             fps=rate;quality=q;args.Param[0].Dispose();args.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,(long)q);preparation.Invalidate(true);
-                        } else if(type=="clipboard_control") {clipboardAllowed=ResourceActive("clipboard") && clipboardCeiling && (bool)msg["enabled"];clipboardGeneration=Convert.ToInt64(msg["generation"]);}
+                        } else if(type=="clipboard_control") {clipboardAllowed=clipboardCeiling && (bool)msg["enabled"];clipboardGeneration=Convert.ToInt64(msg["generation"]);if(!clipboardAllowed){StopAudio(ref richClipboardWorker);richSubmit=null;}Output(new {type="clipboard_control",enabled=clipboardAllowed,generation=clipboardGeneration});}
                         else if(type=="clipboard") {
                             long id=Convert.ToInt64(msg["id"]),expires=Convert.ToInt64(msg["expiresAt"]),utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                             bool ok=false;string text=null;
@@ -629,7 +605,7 @@ public static partial class SodaDesktopHost {
                             if(text!=null)Output(new {type="clipboard_result",id,ok,text});else Output(new {type="clipboard_result",id,ok});
                         }
                         else if(type=="release") { preparation.Invalidate(false);lock(Gate){bool keep=Control;Release();Control=keep;} }
-                        else if(type=="control") { preparation.Invalidate(false);Release();lock(Gate){Control=ResourceActive("control") && allow && (bool)msg["enabled"];} }
+                        else if(type=="control") { preparation.Invalidate(false);SetControl((bool)msg["enabled"],allow,Convert.ToInt64(msg["seq"])); }
                         else if(type=="ack") { if(Convert.ToInt64(msg["seq"])!=pending)throw new InvalidOperationException();pending=0; }
                         else if(type=="input") {
                             if(ApplyInput(msg,ref inputSeq))preparation.Invalidate(false);
@@ -762,7 +738,7 @@ public static partial class SodaDesktopHost {
                 }
                 }
             }
-        } finally { agentRegions.Clear();Stopping=true;Release();StopAudio(ref microphone);StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose();if(ResourceFence!=null)foreach(var epoch in new Dictionary<string,string>(ResourceEpochs))ResourceCleanup(epoch.Key,epoch.Value,true); }
+        } finally { agentRegions.Clear();Stopping=true;Release();StopAudio(ref microphone);StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
     }
 }
 

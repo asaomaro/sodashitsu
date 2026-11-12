@@ -45,3 +45,13 @@ Classifications: **standard** = an established OS/application pattern implemente
 Phase 1 changes no wire records, current permission defaults, active Windows process, Task/service registration or installed executable. The old stopped service is not read or held as a source fallback; deletion of the deployed registration is a separate operational action and has not been performed. Normal sharing launches no SYSTEM helper. Enabling privileged features still requires the already documented one-time administrator preparation.
 
 Source-only Windows compilation and generated checks are pending the designated operator; Linux checks are recorded separately. Independent review is required before integration. This is not an all-clear for the follow-up rows above.
+
+## Phase 2: ordinary resource completion and source ownership
+
+The phase 2 snapshot removes `WindowsResourceFence`, its generated tests/validator, all Host resource epochs/fence/terminal records and the broker `SodaDesktopProtectedOutput` retirement parser/timer. Shipping and role-loading input lists no longer reference the deleted source. Host release retries its own held keys/buttons after an input failure and retains unsuccessful entries until source termination; it cannot acknowledge failed cleanup. Direct OS-desktop admission applies to normal cleanup as well as protected cleanup.
+
+Control commands/replies carry a monotonically increasing **existing-source command sequence**, with `{type:"control",enabled,seq}` produced after release. Clipboard completion uses the existing generation; microphone stop completion uses the existing stream id (including a requested id that is already stopped). The TS counterpart must match the current physical source and exact command sequence/generation/stream id; enqueueing a stop or seeing an unmatched old completion does not permit another helper to acquire ownership. No terminal resource receipt or new UUID is introduced.
+
+The native pointer ACK and Explorer selection request/result now contain the applied x/y/window/PID and existing selection nonce, with no epoch. Their TS consumer binds the witness to the actual source process and submitted input sequence and clears it after later input/control. A fresh helper has no old witness map. OLE/worker authority and source ownership checks remain; they are not replaced by another GUID.
+
+WinEvent/checkpoint, routing debounce, NativeDragSlot journal and remaining shipping Memory delegates are still explicit follow-ups, not retained better exceptions.

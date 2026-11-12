@@ -1,7 +1,7 @@
 let nativeCadence=false,nativeAdaptive=false,nativeCodecs=false,nativePointerProof=false;
 /** Synthetic desktop protocol source. Never captures a screen or sends OS input. */
 import { createServer } from "node:net";
-import { chmodSync, unlinkSync,writeSync } from "node:fs";
+import { chmodSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { createInterface } from "node:readline";
@@ -197,13 +197,6 @@ function run() {
     }
     lastCursor=performance.now();send(info);
   };
-  let resourceMode=false,resourceEpochs=new Map(),resourceReleased=new Set(["control","clipboard","microphone"]),resourceFailed=false;
-  const heldResourceFences=[];
-  function finishResourceFence(m){
-    if(m.epoch!==resourceEpochs.get(m.resource))throw Error("Generated delayed resource epoch");
-    if(m.resource==="control"){control=false;held.clear();}if(m.resource==="clipboard"){clipboardAllowed=false;clearRich();}if(m.resource==="microphone")stopMicrophone();resourceReleased.add(m.resource);if(lifecycle&&process.argv.includes("--resource-fence-release-marker"))appendFileSync(lifecycle,JSON.stringify({type:"resource_fence_done",resource:m.resource,id:m.id})+"\n");send({type:"resource_fence_ack",id:m.id});
-  }
-  process.on("exit",()=>{if(resourceMode&&!resourceFailed){held.clear();for(const epoch of resourceEpochs.values())try{writeSync(1,JSON.stringify({type:"resource_fence_ack",id:epoch,terminal:true})+"\n");}catch{}}});
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   const heldPointerAcks=[];
   function acknowledgeInput(seq,pointer){
@@ -219,10 +212,9 @@ function run() {
       if (m.type === "configure" && !options) {
         const expectedEnvAt=process.argv.indexOf("--expect-elevated-request");if(expectedEnvAt>=0&&process.env.SODA_DESKTOP_ELEVATED_REQUEST!==process.argv[expectedEnvAt+1])throw Error("Generated source request environment mismatch");
         if(configuredProtected&&(((m.options.elevatedDesktop===true||m.allowSharedProtected===true)&&m.allowElevated===true)||process.argv.includes("--protected-unconditional"))){protectedMode=configuredProtected;secure=true;}
-        resourceMode=m.resourceFences===true&&!process.argv.includes("--no-resource-fences");
         cursorEnabled=m.separateCursor===true&&process.argv.includes("--cursor")&&!secure&&m.options.image?.showCursor!==false;
         inputAckPipe=m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure;
-        nativePointerProof=m.nativePointerProof===true&&resourceMode&&!secure&&process.argv.includes("--pointer-witness-generated");
+        nativePointerProof=m.nativePointerProof===true&&!secure&&process.argv.includes("--pointer-witness-generated");
         const failureAt = process.argv.indexOf("--startup-failure");
         if (failureAt >= 0) {
           const code = process.argv[failureAt + 1], markerAt = process.argv.indexOf("--startup-marker");
@@ -256,7 +248,6 @@ function run() {
         send({
           type: "ready",
           ...(process.argv.includes("--agent-regions")&&!secure?{agentRegions:true}:{}),
-          ...(resourceMode?{resourceFences:true}:{}),
           ...(protectedMode?{protectedDesktop:protectedMode,...(m.allowSharedProtected===true&&!process.argv.includes("--no-shared-protected")?{sharedProtected:true}:{})}:{}),
           ...(virtualSource?{virtualDisplay:true}:{}),
           ...(virtualSource&&m.allowMonitors===true&&m.options.monitors===true&&monitorLayout&&!process.argv.includes("--no-virtual-monitors")?{virtualMonitors:true}:{}),
@@ -304,7 +295,7 @@ function run() {
         }
       } else if (m.type === "heartbeat") {lastSeen = performance.now();for(const pending of heldPointerAcks.splice(0))acknowledgeInput(pending.seq,pending.pointer);}
       else if (m.type === "ack" && m.seq === pending) pending = 0;
-      else if(m.type==="native_microphone"){if(m.enabled)startMicrophone(m);else if(microphone?.id===m.id)stopMicrophone();}
+      else if(m.type==="native_microphone"){if(m.enabled)startMicrophone(m);else {if(microphone?.id===m.id)stopMicrophone();send({type:"native_microphone",enabled:false,id:m.id});}}
       else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
       else if(m.type==="native_video") {
         if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:m.enabled?"native_start":"native_stop",id:m.id})+"\n");
@@ -319,23 +310,13 @@ function run() {
       }
       else if(m.type==="native_profile_resume"&&native&&m.id===native.id){const b=native.barrier;if(!b||b.stage!=="prepared"||m.generation!==b.generation||m.baseSeq!==native.seq)throw Error("Native resume fence");native.generation=b.generation;native.profile=b.profile;native.index=0;native.fps=b.fps;b.stage="resumed";}
       else if(m.type==="native_keyframe"&&native&&m.id===native.id)native.index=0;
-      else if(m.type==="resource_epoch"){if(!resourceMode||!resourceReleased.has(m.resource))throw Error("Generated resource epoch");resourceEpochs.set(m.resource,m.id);resourceReleased.delete(m.resource);}
-      else if(m.type==="resource_fence"){
-        if(!resourceMode||m.epoch!==resourceEpochs.get(m.resource))throw Error("Generated resource fence");
-        if(process.argv.includes("--fail-resource-cleanup")){resourceFailed=true;process.exit(1);}
-        if(!process.argv.includes("--stall-resource-fence")){
-          const markerAt=process.argv.indexOf("--resource-fence-release-marker");
-          if(markerAt>=0&&!existsSync(process.argv[markerAt+1])){if(heldResourceFences.length>=3)throw Error("Generated fence bound");heldResourceFences.push(m);if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"resource_fence_wait",resource:m.resource,id:m.id})+"\n");}
-          else finishResourceFence(m);
-        }
-      }
       else if(m.type==="native_rate"&&native&&m.id===native.id){if(native.barrier)return;if(!nativeCadence||!process.argv.includes("--native-cadence")||m.fps<1||m.fps>native.maxFps||m.kbps<128||m.kbps>native.maxBitrate)throw Error("Native rate ceiling");native.fps=m.fps;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"native_rate",id:m.id,fps:m.fps,kbps:m.kbps})+"\n");}
       else if(m.type==="native_bitrate"&&native&&m.id===native.id){}
       else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending[0])native.pending.shift();
       else if (m.type === "keyframe") {if(m.regions!==undefined){if(!process.argv.includes("--agent-regions"))throw Error("Regions unsupported");regions=m.regions;}forceFull = true;next=0;}
       else if(m.type==="policy" && options){options={...options,fps:m.fps,quality:m.quality};next=0;}
       else if(m.type==="clipboard_rich"){rich(m);}
-      else if(m.type==="clipboard_control"){clearRich();clipboardAllowed=m.enabled && process.argv.includes("--allow-clipboard");clipboardGeneration=m.generation;}
+      else if(m.type==="clipboard_control"){clearRich();clipboardAllowed=m.enabled && process.argv.includes("--allow-clipboard");clipboardGeneration=m.generation;send({type:"clipboard_control",enabled:clipboardAllowed,generation:clipboardGeneration});}
       else if(m.type==="clipboard"){
         let ok=clipboardAllowed && m.generation===clipboardGeneration && m.expiresAt>=Date.now();
         if(m.operation==="write"){ok=ok&&allowInput;if(ok)clipboard=m.text;send({type:"clipboard_result",id:m.id,ok});}
@@ -346,7 +327,7 @@ function run() {
         for(const value of queuedOutput)send(value);queuedOutput=[];
       }
       else if (m.type === "control") {
-        control = (!resourceMode||resourceEpochs.has("control")&&!resourceReleased.has("control"))&&m.enabled && allowInput;
+        control = m.enabled && allowInput;send({type:"control",seq:m.seq,enabled:control});
       } else if (m.type === "sas" && secure && !protectedMode && control) {
         if (unlockMarker) writeFileSync(unlockMarker,"unlocked");
         send({type:"session_unlocked"});
@@ -364,7 +345,7 @@ function run() {
         if(nativePlatform)nativeAcceptedInput=m.seq;
         if(process.argv.includes("--block-stdout-on-input")&&!blockedSeq) { blockedSeq=m.seq;outputBlocked=true;process.stdout.write('{"type":"input_ack","seq":'); }
         if (!process.argv.includes("--stall-input")) {
-          const pointer=nativePointerProof&&m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0?{epoch:resourceEpochs.get("control"),x:-400,y:50,window:42,pid:7}:undefined;
+          const pointer=nativePointerProof&&m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0?{x:-400,y:50,window:42,pid:7}:undefined;
           if(pointer&&process.argv.includes("--hold-pointer-witness-generated")){if(heldPointerAcks.length>=64)heldPointerAcks.shift();heldPointerAcks.push({seq:m.seq,pointer});}
           else acknowledgeInput(m.seq,pointer);
         }
@@ -375,7 +356,6 @@ function run() {
   });
   let idleCounter=0,nextIdle=0;
   setInterval(() => {
-    const releaseAt=process.argv.indexOf("--resource-fence-release-marker");if(releaseAt>=0&&existsSync(process.argv[releaseAt+1]))for(const fence of heldResourceFences.splice(0))finishResourceFence(fence);
     if(protectedMode&&protectedEndMarker&&existsSync(protectedEndMarker)&&!protectedEnded){protectedEnded=true;control=false;held.clear();note("scope-ended");send({type:"protected_desktop_failure",code:"source_changed"});setTimeout(()=>process.exit(0),20);return;}
     if(protectedEnded)return;
     const topologyAt=process.argv.indexOf("--topology-marker");if(!topologyStopped&&monitorLayout&&topologyAt>=0&&existsSync(process.argv[topologyAt+1])){topologyStopped=true;send({type:"monitor_topology_changed"});setTimeout(()=>process.exit(0),50);}

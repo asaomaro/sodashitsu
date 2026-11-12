@@ -11,7 +11,7 @@ namespace Sodashitsu.NativeDrag
 {
     public sealed class ExplorerSelectionRequest
     {
-        public string Nonce; public string Epoch; public int X; public int Y; public long Window; public int Process;
+        public string Nonce; public int X; public int Y; public long Window; public int Process;
     }
     public static class ExplorerSelectionWorker
     {
@@ -39,11 +39,10 @@ namespace Sodashitsu.NativeDrag
         }
         public static string Execute(ExplorerSelectionRequest request,ExplorerSelection.IDriver driver,Func<bool> authority,Func<long> clock)
         {
-            Guid epoch;
-            if(request==null||request.Nonce==null||request.Nonce.Length!=64||!System.Text.RegularExpressions.Regex.IsMatch(request.Nonce,"\\A[a-f0-9]{64}\\z")||!Guid.TryParseExact(request.Epoch,"D",out epoch)||epoch==Guid.Empty||request.Window==0||request.Process<=0)throw new InvalidOperationException("Invalid private selection request");
+            if(request==null||request.Nonce==null||request.Nonce.Length!=64||!System.Text.RegularExpressions.Regex.IsMatch(request.Nonce,"\\A[a-f0-9]{64}\\z")||request.Window==0||request.Process<=0)throw new InvalidOperationException("Invalid private selection request");
             ExplorerSelection.Snapshot selection=ExplorerSelection.Capture(new BoundDriver(driver,request,authority),request.X,request.Y,authority,clock);
             if(!authority())throw new InvalidOperationException("Pointer gesture expired");
-            string result=new JavaScriptSerializer().Serialize(new {nonce=request.Nonce,epoch=request.Epoch,window=selection.Window,pid=selection.Process,paths=selection.Paths});
+            string result=new JavaScriptSerializer().Serialize(new {nonce=request.Nonce,window=selection.Window,pid=selection.Process,paths=selection.Paths});
             if(Encoding.UTF8.GetByteCount(result)>4194304)throw new InvalidOperationException("Selection metadata limit");
             if(!authority())throw new InvalidOperationException("Pointer gesture expired");
             return result;
@@ -60,8 +59,8 @@ namespace Sodashitsu.NativeDrag
                 for(int i=0;i<2048;i++){int value=input.ReadByte();if(value<0)throw new InvalidOperationException("Selection input ended");if(value==10)break;bytes.WriteByte((byte)value);if(i==2047)throw new InvalidOperationException("Selection input limit");}
                 string text=new UTF8Encoding(false,true).GetString(bytes.ToArray());JavaScriptSerializer json=new JavaScriptSerializer();
                 Dictionary<string,object> fields=json.DeserializeObject(text) as Dictionary<string,object>;
-                if(fields==null||fields.Count!=6)throw new InvalidOperationException("Selection fields refused");
-                foreach(string key in new string[]{"Nonce","Epoch","X","Y","Window","Process"})if(!fields.ContainsKey(key))throw new InvalidOperationException("Selection fields refused");
+                if(fields==null||fields.Count!=5)throw new InvalidOperationException("Selection fields refused");
+                foreach(string key in new string[]{"Nonce","X","Y","Window","Process"})if(!fields.ContainsKey(key))throw new InvalidOperationException("Selection fields refused");
                 ExplorerSelectionRequest request=json.Deserialize<ExplorerSelectionRequest>(text);Stopwatch clock=Stopwatch.StartNew();
                 string result=Execute(request,new ExplorerSelection.NativeDriver(),delegate{return clock.ElapsedMilliseconds<750&&Physical(request);},delegate{return clock.ElapsedMilliseconds;});
                 Console.OutputEncoding=new UTF8Encoding(false,true);Console.WriteLine(result);Console.Out.Flush();return 0;

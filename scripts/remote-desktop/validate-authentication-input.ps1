@@ -1,11 +1,11 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Generated callbacks only. No actual desktop, input, SCM or service operations.
-$names=@('WindowsResourceFence.cs','WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs','WindowsDesktopUnlock.cs')
+$names=@('WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs','WindowsDesktopUnlock.cs')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('soda-authentication-input-'+[guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($root)|Out-Null
 $original=@{};foreach($name in $names){$original[$name]=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name));[IO.File]::WriteAllBytes((Join-Path $root $name),$original[$name])}
 $paths=($names|ForEach-Object {"'"+(Join-Path $root $_).Replace("'","''")+"'"}) -join ','
-$program="`$ErrorActionPreference='Stop';try{Add-Type -Path @($paths) -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll;[SodaDesktopHost]::VerifyAuthenticationInput()}catch{[Console]::Out.WriteLine(`$_.Exception.ToString());exit 1};exit 0"
+$program="`$ErrorActionPreference='Stop';try{Add-Type -Path @($paths) -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll;[SodaDesktopHost]::VerifyAuthenticationInput();[SodaDesktopHost]::VerifyControlCompletion()}catch{[Console]::Out.WriteLine(`$_.Exception.ToString());exit 1};exit 0"
 $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($program));$shell=Join-Path $PSHOME 'powershell.exe'
 try{
  $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Authentication input checks failed'}

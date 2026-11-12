@@ -30,30 +30,8 @@ public static class SodaDesktopProtectedScopeChecks {
             long observed=-1;var waiting=Task.Run(()=>epoch.Checkpoint(id=>posted.Set(),2000,out observed));Need(posted.Wait(1000),"Closing marker not queued");epoch.Dispose();Need(waiting.Wait(1000)&&!waiting.Result,"Observer shutdown did not reject pending snapshot");
         }
     }
-    static void CheckRetirementOutput(){
-        const string one="11111111-2222-4333-8444-555555555555",two="22222222-2222-4333-8444-555555555555";
-        Func<string,string> epoch=id=>"{\"type\":\"resource_epoch\",\"id\":\""+id+"\",\"resource\":\"control\"}";
-        Func<string,string> ack=id=>"{\"type\":\"resource_fence_ack\",\"id\":\""+id+"\",\"terminal\":true}";
-        bool notice;var output=new SodaDesktopProtectedOutput();Need(output.Input(epoch(one)),"Epoch forwarded");
-        Need(!output.Output("{\"type\":\"frame\"}",false,true,100,out notice)&&notice,"Revocation notice before buffered frame");
-        Need(output.Output(ack(one),false,true,101,out notice)&&!notice,"Buffered terminal ACK after worker exit lost");
-        Need(!output.Input("{\"type\":\"input\"}"),"Retired input forwarded");
-        Need(!output.Output("{\"type\":\"ready\"}",true,true,102,out notice),"Retired content resurrected");
-        Need(!output.Output(ack(one),true,true,103,out notice),"Terminal replay forwarded");
-        output=new SodaDesktopProtectedOutput();output.Input(epoch(one));Need(output.Output(ack(one),true,true,1,out notice)&&notice,"First terminal must notify before ACK even while worker live");
-        output=new SodaDesktopProtectedOutput();output.Input(epoch(one));Need(!output.Output(ack(one),false,false,1,out notice)&&!notice&&output.Ended,"Old generation provenance accepted");
-        output=new SodaDesktopProtectedOutput();output.Input(epoch(one));Need(!output.Output(ack(two),false,true,1,out notice)&&!notice&&output.Ended,"Unknown epoch started drain");
-        output=new SodaDesktopProtectedOutput();output.Input(epoch(one));output.Input(epoch(two));Need(!output.Output(ack(one),true,true,1,out notice)&&!notice,"Replaced epoch forwarded");Need(output.Output(ack(two),true,true,2,out notice)&&notice,"Current epoch lost");
-        foreach(string bad in new[]{ack(one).Replace("\"terminal\":true","\"terminal\":true,\"terminal\":true"),ack(one).Replace("\"terminal\":true","\"terminal\":true,\"extra\":0"),ack(one).Replace("\"id\"","\"i\\u0064\"")}){
-            output=new SodaDesktopProtectedOutput();output.Input(epoch(one));Need(!output.Output(bad,false,true,1,out notice)&&!notice,"Malformed terminal accepted");
-        }
-        output=new SodaDesktopProtectedOutput();output.Input(epoch(one));output.Output("frame",false,true,100,out notice);Need(!output.Output(ack(one),false,true,850,out notice)&&output.Ended,"Retirement deadline exceeded");
-        output=new SodaDesktopProtectedOutput();output.Input(epoch(one));for(int i=0;i<32;i++)output.Output("frame",false,true,i,out notice);Need(!output.Output(ack(one),false,true,32,out notice)&&output.Ended,"Retirement record bound exceeded");
-        output=new SodaDesktopProtectedOutput();output.Input(epoch(one));output.Output(new string('x',3*1024*1024),false,true,1,out notice);Need(!output.Output(new string('x',2*1024*1024),false,true,2,out notice)&&output.Ended,"Retirement byte bound exceeded");
-        output=new SodaDesktopProtectedOutput();output.Input(epoch(one));output.Output("frame",false,true,100,out notice);Need(!output.Output(ack(one),false,true,99,out notice)&&output.Ended,"Clock rollback accepted");
-    }
     public static void Run(){
-        CheckEpochFence();CheckRetirementOutput();
+        CheckEpochFence();
         var hostScope=Scope();var hostFacts=Facts(hostScope);var hostGuard=new SodaDesktopProtectedScope.Guard(hostScope);
         SodaDesktopHost.VerifyProtectedBoundaries(()=>hostGuard.Current(hostFacts),()=>hostGuard.Capture(hostFacts),frameTicket=>hostGuard.Publish((SodaDesktopProtectedScope.Guard.Ticket)frameTicket,hostFacts),()=>hostFacts.DesktopEpoch++);
         hostFacts=Facts(hostScope);hostGuard=new SodaDesktopProtectedScope.Guard(hostScope);

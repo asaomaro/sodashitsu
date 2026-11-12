@@ -10,7 +10,7 @@ const run=promisify(execFile),source=dirname(fileURLToPath(import.meta.url)),roo
 const groups={audio:['WindowsDesktopAudio.cs'],microphone:['WindowsDesktopMicrophone.cs'],pipe:['WindowsDesktopPipeKernel.cs'],richClipboard:['WindowsDesktopRichClipboard.cs'],codecs:['WindowsCodecProbe.cs'],virtualDisplay:['WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs'],protectedDesktop:['WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedHandshake.cs','WindowsProtectedWorker.cs']};
 const flags={audio:'SODA_DESKTOP_LOAD_AUDIO',microphone:'SODA_DESKTOP_LOAD_MICROPHONE',richClipboard:'SODA_DESKTOP_LOAD_RICH_CLIPBOARD',codecs:'SODA_DESKTOP_LOAD_CODECS'};
 const checks=['validate-audio.ps1','validate-microphone.ps1','WindowsAudioChecks.cs','WindowsMicrophoneChecks.cs','EndpointAclPolicy.ps1','check-endpoint-acl.ps1'];
-const core=['windows-helper.ps1','WindowsDesktopHost.cs','WindowsDesktopUnlock.cs','WindowsResourceFence.cs'],all=Object.keys(groups);
+const core=['windows-helper.ps1','WindowsDesktopHost.cs','WindowsDesktopUnlock.cs'],all=Object.keys(groups);
 const cases=[['none',[]],['audio',['audio','pipe']],['microphone',['microphone','pipe']],['clipboard',['richClipboard']],['codecs',['codecs']],['virtual',['virtualDisplay']],['protected',['protectedDesktop']],['all',all],['invalid-env',[]]];
 try{
  for(const name of [...core,...checks,...Object.values(groups).flat()])await cp(join(source,name),join(sdk,name));
