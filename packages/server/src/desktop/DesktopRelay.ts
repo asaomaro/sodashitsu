@@ -1259,7 +1259,7 @@ export class DesktopRelay {
               if (requested === undefined || (!requested && msg.enabled)) throw Error("Unexpected shared control response");
               // A grant/release can be followed immediately by a new request. A
               // response for that older request cannot revoke the newer grant.
-              if(v.controlRequests?.length){if(!this.send(v.provider,{type:"control",enabled:v.controlRequests[0]}))this.stop(v);return;}
+              if(v.controlRequests?.length){if(!v.provider||!this.send(v.provider,{type:"control",enabled:v.controlRequests[0]}))this.stop(v);return;}
               if (requested && !msg.enabled && v.control) { v.control = false; this.agents.revoke(v.agent); }
             }
             if (msg.enabled === v.control)
