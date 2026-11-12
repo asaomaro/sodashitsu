@@ -108,7 +108,7 @@ try {
     if ($existingTask -and $existingTask.State -notin @(1,3)) { throw 'The old runtime helper is still running.' }
     if (Test-Path -LiteralPath $executable) {
         $oldAcl=Get-Acl -LiteralPath $executable
-        [IO.File]::Replace($temp,$executable,$null,$false)
+        [IO.File]::Replace($temp,$executable,[System.Management.Automation.Language.NullString]::Value,$false)
         Set-Acl -LiteralPath $executable -AclObject $oldAcl
     } else { Move-Item -LiteralPath $stage -Destination $destination }
     $definition=New-SodaRuntimeTaskDefinition $scheduler $executable $destination
