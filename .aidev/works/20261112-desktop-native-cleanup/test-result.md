@@ -173,3 +173,45 @@ The obsolete profile-expiry assertions and native-age negative control were remo
 - Full fake rich-clipboard suite passes with caller deadline now+3000 and a current transaction continuing after 65001 ms. Two source negative controls: old 1500-ms acceptance rejects read begin; old idle/transaction expiry rejects the later chunk. Restored production passes. Logs: `old-rich-short-deadline.log`, `old-rich-transaction-age.log`, `rich-restored.log`. Production source was not mutated by these temporary-copy controls.
 - No full TS build, live Windows input/capture, service/task/installed-file/registry/key changes. Frozen-phase independent review and eventual combined source-only Windows compilation remain required. Prior reviewed closed SDK projections already passed public normal/prepared ValidateOnly with zero Checks files; this new source phase must join the final frozen projection.
 - Fresh snapshot request-ID producer and newly flagged drag whole-job liveness cleanup are separate pending phases, not covered by these results.
+
+
+## Final snapshot/lifecycle source phase
+
+Local proof is isolated under `/tmp/soda-native-last-proof/`. Fourteen-source production compile and reflection again pass with zero shipping Memory injection fields/generated validators. Explicit test-symbol core assembly passes capture-start snapshot request, discarded-capture retry, exact older/newer request retirement, current OS/Stopping, input/control/pointer, native queued output, virtual lease, frame scheduler/rate and routing checks. Snapshot checks are included in the existing authentication validator. Normal frame scheduling now accepts a live prepared frame after delayed ACK while still invalidating on actual input.
+
+The seven-source native-copy production assembly compiles. Focused fake tests compile with warnings as errors: lease bounds/permission/SHA/cancellation/stream/CopyTo/packet cases, all pump request-budget/scope/cancel cases, and thirteen worker cases pass. The added real 5.1-second authorized async extraction receives no heartbeat and completes with the real mutex released by its acquiring STA after data cancellation/OLE Finish. Pump fake clock also confirms an idle live pump at 900001 ms while its actual pending request still fails at the existing five-second budget. The generated DataObjects/ObjectBounds cases invoke Windows clipboard-format registration and are reserved for the reviewed Windows validation; they were not claimed as Linux pass.
+
+Three temporary-copy production mutants fail: restored JPEG200ms gate rejects the delayed live frame; restored worker5s admission rejects the live async extraction; restored pump15min lifetime rejects the idle live pump. Logs `old-age.log`, `old-worker.log`, `old-pump.log`; production files were not mutated. Restored/current generated and copy suites pass (`generated.log`, `copy.log`, release/reflection metadata and compile logs). The first local copy harness attempt correctly identified Windows-only RegisterClipboardFormat, then the Linux scope explicitly excluded those OS cases instead of substituting fake release code.
+
+Closed runtime asset bytes/hashes are refreshed in native-runtime-inventory.json. No full TS build, Windows operations, installed file/task/service/key/state/registry changes. Source review and the final combined closed-SDK Windows compile remain required; the parent may run that once after integration of the reviewed immutable sources. No repeated phase 1 checks are requested.
+
+Actual child subprocess proof also passes: closing the fake physical stdin while Drop or stdout is blocked causes cancellation/exit3; the existing startup budget still ends blocked input. Each child is a newly compiled temporary process; no production Windows process is touched. Marker `actual_source_eof_cancels_blocked_drop_and_output_startup_budget_preserved: stuck,blocked-output,blocked-input`.
+
+Raw negative-control output (temporary copies; leading stack lines):
+
+`old-age`
+
+```text
+Unhandled Exception:
+System.InvalidOperationException: Live prepared frame lost solely to ACK delay
+  at SodaDesktopTests.FramePreparationChecks.Run () [0x00528] in <2a7efdfa22eb4348a9db5d4a622da057>:0
+  at Age.Main () [0x00000] in <2a7efdfa22eb4348a9db5d4a622da057>:0
+```
+
+`old-worker`
+
+```text
+Unhandled Exception:
+System.Reflection.TargetInvocationException: Exception has been thrown by the target of an invocation. ---> System.Exception: generated assertion: worker result slow-async
+  at NativeDragWorkerChecks.Assert (System.Boolean value, System.String reason) [0x00011] in <f6e43014c39843699d0d700bfefc45e5>:0
+  at NativeDragWorkerChecks.Case (System.String mode, System.Boolean child) [0x00169] in <f6e43014c39843699d0d700bfefc45e5>:0
+```
+
+`old-pump`
+
+```text
+System.Exception: generated assertion: idle live pump expired solely to age
+  at NativeDragPumpChecks.Assert (System.Boolean value, System.String reason) [0x00011] in <71075d271cac4526b25765c8cd39e626>:0
+  at NativeDragPumpChecks.Deadlines () [0x0007e] in <71075d271cac4526b25765c8cd39e626>:0
+  at NativeDragPumpChecks.Main () [0x0000a] in <71075d271cac4526b25765c8cd39e626>:0
+```

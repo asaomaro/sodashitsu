@@ -21,7 +21,7 @@ internal static class NativeDragPumpChecks
         byte[] data=new byte[70000];for(int i=0;i<data.Length;i++)data[i]=(byte)(i%251);
         using(BlockingCollection<DragReadNeed> output=new BlockingCollection<DragReadNeed>(32))
         using(DragDataPump pump=new DragDataPump(Scope(),new DragEntry[]{Entry(data)},delegate{return 0;},output.Add))
-        using(DragLease lease=new DragLease(Scope(),new DragEntry[]{Entry(data)},pump.Fetch,delegate{return pump.Alive;},delegate{return 0;}))
+        using(DragLease lease=new DragLease(Scope(),new DragEntry[]{Entry(data)},pump.Fetch,delegate{return pump.Alive;}))
         {
             IntPtr target=Marshal.AllocHGlobal(data.Length);
             try
@@ -55,22 +55,15 @@ internal static class NativeDragPumpChecks
     }
     private static void Deadlines()
     {
-        foreach(string mode in new string[]{"chunk","idle","absolute","backward","clock","cancel"})
+        long idle=0;using(var live=new DragDataPump(Scope(),new DragEntry[]{Entry(new byte[]{1})},delegate{return idle;},delegate{})){idle=900001;Assert(live.Alive&&live.Beat(Scope()),"idle live pump expired solely to age");}
+        foreach(string mode in new string[]{"chunk","backward","clock","cancel"})
         using(BlockingCollection<DragReadNeed> output=new BlockingCollection<DragReadNeed>(32))
         {
             long now=0;bool fail=false;
             using(DragDataPump pump=new DragDataPump(Scope(),new DragEntry[]{Entry(new byte[]{1})},delegate{if(fail)throw new IOException();return now;},output.Add))
             {
-                Task<byte[]> fetch=Task.Factory.StartNew(delegate{return pump.Fetch(0);});DragReadNeed need=Take(output);
+                Task<byte[]> fetch=Task.Factory.StartNew(delegate{return pump.Fetch(0);});Take(output);
                 if(mode=="chunk"){now=4000;Assert(pump.Beat(Scope()),"valid heartbeat failed");now=5000;}
-                if(mode=="idle")now=5000;
-                if(mode=="absolute")
-                {
-                    // A pending request itself cannot survive heartbeat extensions.
-                    // Complete this request first, then test the independent absolute budget.
-                    pump.Accept(new DragPacket("bytes",0,0,need.Request,new byte[]{1}));pump.Accept(new DragPacket("end",0,0,need.Request,null));Assert(fetch.Wait(2000),"initial request not complete");Array.Clear(fetch.Result,0,fetch.Result.Length);
-                    for(now=4000;now<900000;now+=4000)Assert(pump.Beat(Scope()),"absolute heartbeat setup failed");now=900000;
-                }
                 if(mode=="backward")now=-1;
                 if(mode=="clock")fail=true;
                 if(mode=="cancel")pump.Dispose();

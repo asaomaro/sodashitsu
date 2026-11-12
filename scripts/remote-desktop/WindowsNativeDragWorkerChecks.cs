@@ -69,13 +69,13 @@ internal static class NativeDragWorkerChecks
             Drops++;data=source;lease=active;effect=1;
             if(Mode=="stuck"){Thread.Sleep(60000);return 0;}
             if(Mode=="cancel"){effect=0;return 0x40101;}
-            if(Mode=="async"||Mode=="failed-async")
+            if(Mode=="async"||Mode=="slow-async"||Mode=="failed-async")
             {
                 Assert(data.SetAsyncMode(true)==0&&data.StartOperation(null)==0,"worker target async start");if(Mode=="failed-async")data.EndOperation(unchecked((int)0x80004005),null,1);return 0x40100;
             }
             if(Mode!="blocked-output")Read();return 0x40100;
         }
-        public void Pump(){Read();Assert(data.EndOperation(0,null,1)==0,"worker target async completion");}
+        public void Pump(){if(Mode=="slow-async")Thread.Sleep(5100);Read();Assert(data.EndOperation(0,null,1)==0,"worker target async completion");}
     }
     private static void Initial(Pipe input,int deadline=750)
     {
@@ -87,10 +87,11 @@ internal static class NativeDragWorkerChecks
     private static int Case(string mode,bool child)
     {
         Pipe input=new Pipe();Output output=new Output(input){Corrupt=mode=="bad-sha",Block=mode=="blocked-output"};if(mode!="blocked-input")Initial(input,mode=="host-expire"?100:750);Backend backend=new Backend(mode);bool forced=false;EmptySlot slot=null;
+        if(child&&(mode=="stuck"||mode=="blocked-output"))ThreadPool.QueueUserWorkItem(delegate{Thread.Sleep(1000);input.End();});
         try
         {
             int result=NativeDragWorker.Run(input,output,backend,delegate{return slot=new EmptySlot(backend);},child?(Action<int>)Environment.Exit:delegate(int code){forced=true;});
-            bool success=mode=="sync"||mode=="async";
+            bool success=mode=="sync"||mode=="async"||mode=="slow-async";
             Assert(result==(success?0:3),"worker result "+mode);Assert(!forced,"unexpected generated force exit");
             Assert(output.Types.Contains("finished")==success,"failed/cancelled worker emitted completion");
             if(mode=="released"||mode=="denied"||mode=="late-release"||mode=="late-expire"||mode=="phase2-expire"||mode=="backend-expire"||mode=="host-expire")Assert(backend.Drops==0,"worker started without live gesture/desktop");
@@ -105,7 +106,7 @@ internal static class NativeDragWorkerChecks
         if(args.Length==2&&args[0]=="child")return Case(args[1],true);
         try
         {
-            foreach(string mode in new string[]{"sync","async","failed-async","cancel","released","denied","bad-sha","late-release","late-expire","phase2-expire","backend-expire","host-expire"})Case(mode,false);
+            foreach(string mode in new string[]{"sync","async","slow-async","failed-async","cancel","released","denied","bad-sha","late-release","late-expire","phase2-expire","backend-expire","host-expire"})Case(mode,false);
             foreach(string mode in new string[]{"stuck","blocked-input","blocked-output"})
             {
                 ProcessStartInfo start=new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"child "+mode){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};

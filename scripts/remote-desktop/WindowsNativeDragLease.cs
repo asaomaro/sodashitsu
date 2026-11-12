@@ -70,31 +70,26 @@ namespace Sodashitsu.NativeDrag
     internal sealed class DragLease : IDisposable
     {
         internal const long MaxBytes = 104857600;
-        internal const int MaxEntries = 1000, HeartbeatMs = 5000, AbsoluteMs = 900000;
+        internal const int MaxEntries = 1000;
         private readonly object gate = new object();
         private readonly object[] fetching;
         private readonly byte[][] cache;
         private readonly DragEntry[] entries;
         private readonly Func<int, byte[]> fetch;
         private readonly Func<bool> authority;
-        private readonly Func<long> clock;
         private readonly DragScope scope;
-        private readonly long born;
-        private long lastBeat, observed;
         private bool active = true;
         private int pending, readers, streams, copies;
         internal void BeginCopyTo() { lock (gate) { Check(); if (copies >= 16) throw new COMException("Native copy limit", unchecked((int)0x80030021)); copies++; } }
         internal void EndCopyTo() { lock (gate) { copies--; Monitor.PulseAll(gate); } }
         internal void ReserveStream() { lock (gate) { Check(); if (streams >= 4096) throw new COMException("Native drag stream limit", unchecked((int)0x80030008)); streams++; } }
         // fetch must be a finite cancellable IPC adapter: 5s per chunk, absolute operation deadline.
-        // WaitIdle(false) is NOT exit proof; the host retains its slot until native process exit.
-        internal DragLease(DragScope scope, IList<DragEntry> manifest, Func<int, byte[]> fetch, Func<bool> authority, Func<long> clock)
+        // WaitIdle(false) is NOT exit proof; the host retains the child until actual process exit.
+        internal DragLease(DragScope scope, IList<DragEntry> manifest, Func<int, byte[]> fetch, Func<bool> authority)
         {
-            if (scope == null || manifest == null || manifest.Count == 0 || manifest.Count > MaxEntries || fetch == null || authority == null || clock == null)
+            if (scope == null || manifest == null || manifest.Count == 0 || manifest.Count > MaxEntries || fetch == null || authority == null)
                 throw new ArgumentException("Invalid native drag lease");
-            this.scope = scope; this.fetch = fetch; this.authority = authority; this.clock = clock;
-            born = clock(); lastBeat = born; observed = born;
-            if (born < 0) throw new ArgumentException("Invalid monotonic clock");
+            this.scope = scope; this.fetch = fetch; this.authority = authority;
             entries = new DragEntry[manifest.Count]; fetching = new object[manifest.Count]; cache = new byte[manifest.Count][];
             Dictionary<string, bool> names = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
             long total = 0;
@@ -119,25 +114,15 @@ namespace Sodashitsu.NativeDrag
                 }
             }
         }
-        private long ReadTime()
+        private void Check()
         {
-            long now;
-            try { now = clock(); }
-            catch { CancelCore(); throw new COMException("Native drag clock unavailable", unchecked((int)0x80030102)); }
-            if (now < born || now < observed) { CancelCore(); throw new COMException("Native drag clock invalid", unchecked((int)0x80030102)); }
-            observed = now; return now;
-        }
-        private long Check()
-        {
-            ReadTime(); bool allowed = false;
+            bool allowed = false;
             try { allowed = authority(); } catch { }
-            long now = ReadTime();
-            if (!active || now < lastBeat || now - born >= AbsoluteMs || now - lastBeat >= HeartbeatMs || !allowed)
+            if (!active || !allowed)
             {
                 CancelCore();
                 throw new COMException("Native drag authority ended", unchecked((int)0x80030102));
             }
-            return now;
         }
         internal void Validate() { lock (gate) Check(); }
         internal bool Beat(DragScope expected)
@@ -145,7 +130,7 @@ namespace Sodashitsu.NativeDrag
             lock (gate)
             {
                 if (!scope.Matches(expected)) return false;
-                try { lastBeat = Check(); return true; } catch (COMException) { return false; }
+                try { Check(); return true; } catch (COMException) { return false; }
             }
         }
         internal int Count { get { lock (gate) { Check(); return entries.Length; } } }

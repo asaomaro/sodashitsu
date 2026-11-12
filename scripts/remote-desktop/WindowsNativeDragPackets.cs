@@ -106,7 +106,7 @@ namespace Sodashitsu.NativeDrag
                 else if (phase == 1 && type == "seal")
                 {
                     Keys(value, "type", "nonce", "seq"); if (entries.Count != declaredCount || total != declaredBytes) throw new IOException("Incomplete native drag manifest");
-                    using (DragLease validate = new DragLease(scope, entries, delegate { throw new IOException("No payload in metadata validation"); }, delegate { return true; }, delegate { return 0; })) { }
+                    using (DragLease validate = new DragLease(scope, entries, delegate { throw new IOException("No payload in metadata validation"); }, delegate { return true; })) { }
                     phase = 2;
                 }
                 else if (phase == 2 && type == "beat") { Keys(value, "type", "nonce", "seq"); }

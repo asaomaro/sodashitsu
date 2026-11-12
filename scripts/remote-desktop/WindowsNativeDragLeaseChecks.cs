@@ -27,9 +27,9 @@ internal static class WindowsNativeDragLeaseChecks
     private static DragEntry Entry(byte[] data) { return new DragEntry("generated.bin", false, data.Length, Sha(data)); }
     private static void Basic()
     {
-        byte[] data = Encoding.UTF8.GetBytes("generated native drag bytes"); long now = 0; int fetched = 0;
+        byte[] data = Encoding.UTF8.GetBytes("generated native drag bytes"); int fetched = 0;
         using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) },
-            delegate(int i) { fetched++; return (byte[])data.Clone(); }, delegate { return true; }, delegate { return now; }))
+            delegate(int i) { fetched++; return (byte[])data.Clone(); }, delegate { return true; }))
         {
             IntPtr memory = Marshal.AllocHGlobal(data.Length + 1);
             try
@@ -59,53 +59,35 @@ internal static class WindowsNativeDragLeaseChecks
         Reject(delegate { new DragEntry("a", false, 1, "bad"); }, "invalid SHA");
         Reject(delegate { new DragEntry("a", false, 0, new String('a',64)); }, "invalid empty SHA");
         Func<int, byte[]> fetch = delegate { throw new Exception("must not fetch"); };
-        Func<bool> live = delegate { return true; }; Func<long> clock = delegate { return 0; };
-        Reject(delegate { new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("A", false, 0, DragEntry.EmptySha), new DragEntry("a", false, 0, DragEntry.EmptySha) }, fetch, live, clock); }, "duplicate names");
-        Reject(delegate { new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("a/b", false, 0, DragEntry.EmptySha) }, fetch, live, clock); }, "missing parent");
-        Reject(delegate { new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("a", false, 60000000, DragEntry.EmptySha), new DragEntry("b", false, 60000000, DragEntry.EmptySha) }, fetch, live, clock); }, "total byte bound");
-        Reject(delegate { new DragLease(Scope(Gesture), new DragEntry[1001], fetch, live, clock); }, "entry count bound");
-        using (DragLease valid = new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("a", true, 0, null), new DragEntry("a/b", false, 0, DragEntry.EmptySha) }, fetch, live, clock))
+        Func<bool> live = delegate { return true; };
+        Reject(delegate { new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("A", false, 0, DragEntry.EmptySha), new DragEntry("a", false, 0, DragEntry.EmptySha) }, fetch, live); }, "duplicate names");
+        Reject(delegate { new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("a/b", false, 0, DragEntry.EmptySha) }, fetch, live); }, "missing parent");
+        Reject(delegate { new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("a", false, 60000000, DragEntry.EmptySha), new DragEntry("b", false, 60000000, DragEntry.EmptySha) }, fetch, live); }, "total byte bound");
+        Reject(delegate { new DragLease(Scope(Gesture), new DragEntry[1001], fetch, live); }, "entry count bound");
+        using (DragLease valid = new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("a", true, 0, null), new DragEntry("a/b", false, 0, DragEntry.EmptySha) }, fetch, live))
             Assert(valid.Count == 2, "declared parent accepted");
     }
     private static void Authority()
     {
-        byte[] data = new byte[] { 1 }; long now = 0; bool live = true;
-        Func<DragLease> create = delegate { return new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { return new byte[] { 1 }; }, delegate { return live; }, delegate { return now; }); };
-        using (DragLease stale = create()) { now = 5000; Reject(delegate { stale.Validate(); }, "heartbeat deadline"); now = 0; Assert(!stale.Beat(Scope(Gesture)), "clock rollback cannot revive"); }
-        now = 0;
-        using (DragLease absolute = create())
-        {
-            for (now = 3000; now < DragLease.AbsoluteMs; now += 3000) Assert(absolute.Beat(Scope(Gesture)), "live heartbeat");
-            Assert(!absolute.Beat(Scope(Gesture)), "heartbeat cannot extend absolute lifetime");
-        }
-        now = 0;
+        byte[] data = new byte[] { 1 }; bool live = true;
+        Func<DragLease> create = delegate { return new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { return new byte[] { 1 }; }, delegate { return live; }); };
+        using (DragLease current = create()) { current.Validate(); Assert(current.Beat(Scope(Gesture)), "current lease denied"); }
+
         using (DragLease changed = create()) { live = false; Reject(delegate { changed.Validate(); }, "authority revoke"); live = true; Assert(!changed.Beat(Scope(Gesture)), "authority cannot revive"); }
-        now = 0;
-        using (DragLease scoped = create()) { now = 4000; Assert(!scoped.Beat(Scope("44444444-4444-4444-8444-444444444444")), "wrong gesture heartbeat"); now = 5000; Reject(delegate { scoped.Validate(); }, "wrong gesture must not refresh"); }
+
+        using (DragLease scoped = create()) { Assert(!scoped.Beat(Scope("44444444-4444-4444-8444-444444444444")), "wrong gesture heartbeat"); scoped.Validate(); }
     }
     private static void AuthorityBoundary()
     {
-        foreach (long deadline in new long[] { 5000, 900000 })
-        {
-            long now = 0; int calls = 0; byte[] data = new byte[] { 1 };
-            using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { return new byte[] { 1 }; },
-                delegate { if (++calls == 6) now = deadline; return true; }, delegate { return now; }))
-            {
-                IntPtr memory = Marshal.AllocHGlobal(1);
-                try { Marshal.WriteByte(memory, 0, 77); Reject(delegate { lease.Copy(0, 0, 1, memory); }, "callback crossed deadline"); Assert(Marshal.ReadByte(memory) == 77, "expired callback published bytes"); now = 0; Assert(!lease.Beat(Scope(Gesture)), "clock rewind revived expired callback"); }
-                finally { Marshal.FreeHGlobal(memory); }
-            }
-        }
-        bool clockFails = false;
-        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("a", false, 0, DragEntry.EmptySha) }, delegate { return new byte[0]; }, delegate { return true; }, delegate { if (clockFails) throw new Exception("generated clock failure"); return 0; }))
-        {
-            clockFails = true; Reject(delegate { lease.Validate(); }, "clock exception accepted"); clockFails = false; Assert(!lease.Beat(Scope(Gesture)), "clock exception did not revoke irreversibly");
+        bool fail=true;
+        using(DragLease lease=new DragLease(Scope(Gesture),new DragEntry[]{Entry(new byte[]{1})},delegate{return new byte[]{1};},delegate{if(fail)throw new Exception("generated authority failure");return true;})){
+            Reject(delegate{lease.Validate();},"authority exception accepted");fail=false;Assert(!lease.Beat(Scope(Gesture)),"failed authority revived");
         }
     }
     private static void Integrity()
     {
         byte[] wanted = new byte[] { 1, 2, 3 }, wrong = new byte[] { 4, 5, 6 };
-        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(wanted) }, delegate { return wrong; }, delegate { return true; }, delegate { return 0; }))
+        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(wanted) }, delegate { return wrong; }, delegate { return true; }))
         {
             IntPtr memory = Marshal.AllocHGlobal(4);
             try { Marshal.WriteByte(memory, 0, 77); Reject(delegate { lease.Copy(0, 0, 3, memory); }, "unverified SHA bytes published"); Assert(Marshal.ReadByte(memory) == 77, "invalid contents touched output"); Assert(wrong[0] == 0 && wrong[1] == 0 && wrong[2] == 0, "rejected buffer not wiped"); }
@@ -115,7 +97,7 @@ internal static class WindowsNativeDragLeaseChecks
     private static void PendingCancellation()
     {
         byte[] data = new byte[] { 1, 2, 3 }; ManualResetEvent entered = new ManualResetEvent(false), release = new ManualResetEvent(false); bool rejected = false;
-        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { entered.Set(); release.WaitOne(3000); return data; }, delegate { return true; }, delegate { return 0; }))
+        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { entered.Set(); release.WaitOne(3000); return data; }, delegate { return true; }))
         {
             IntPtr memory = Marshal.AllocHGlobal(4);
             try
@@ -132,7 +114,7 @@ internal static class WindowsNativeDragLeaseChecks
     private static void Streams()
     {
         byte[] data = Encoding.UTF8.GetBytes("generated stream bytes");
-        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { return (byte[])data.Clone(); }, delegate { return true; }, delegate { return 0; }))
+        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { return (byte[])data.Clone(); }, delegate { return true; }))
         {
             NativeDragStream stream = new NativeDragStream(lease, 0, 0); IntPtr memory = Marshal.AllocHGlobal(64), count = Marshal.AllocHGlobal(8);
             try
@@ -158,8 +140,8 @@ internal static class WindowsNativeDragLeaseChecks
     private delegate int NativeStreamRead(IntPtr self, IntPtr data, uint count, IntPtr read);
     private static void DataObjects()
     {
-        byte[] data = Encoding.UTF8.GetBytes("generated native object bytes"); long now = 0; int fetched = 0;
-        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("root", true, 0, null), new DragEntry("root/generated.bin", false, data.Length, Sha(data)) }, delegate { fetched++; return (byte[])data.Clone(); }, delegate { return true; }, delegate { return now; }))
+        byte[] data = Encoding.UTF8.GetBytes("generated native object bytes"); int fetched = 0;
+        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { new DragEntry("root", true, 0, null), new DragEntry("root/generated.bin", false, data.Length, Sha(data)) }, delegate { fetched++; return (byte[])data.Clone(); }, delegate { return true; }))
         using (NativeDragDataObject source = new NativeDragDataObject(lease))
         {
             byte[] descriptor = source.DescriptorBytes();
@@ -202,17 +184,17 @@ internal static class WindowsNativeDragLeaseChecks
             Assert(source.EndOperation(0, null, 1) == 0 && source.ExtractionTerminal && source.CopyCompleted, "async COPY completion");
             Assert(source.EndOperation(0, null, 1) < 0, "duplicate async completion");
         }
-        now = 0;
-        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { return (byte[])data.Clone(); }, delegate { return true; }, delegate { return now; }))
+
+        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { return (byte[])data.Clone(); }, delegate { return true; }))
         using (NativeDragDataObject neverEnds = new NativeDragDataObject(lease))
         {
             Assert(neverEnds.SetAsyncMode(true) == 0 && neverEnds.StartOperation(null) == 0, "never-ending target start"); neverEnds.DropReturned(0x40100, 1);
-            for (now = 3000; now < DragLease.AbsoluteMs; now += 3000) Assert(lease.Beat(Scope(Gesture)), "active extraction heartbeat");
-            Assert(neverEnds.ExtractionTerminal && !neverEnds.CopyCompleted, "target cannot hold absolute deadline indefinitely"); now = 0;
+            Assert(lease.Beat(Scope(Gesture))&&!neverEnds.ExtractionTerminal,"live async extraction expired solely to age");lease.Cancel();
+            Assert(neverEnds.ExtractionTerminal && !neverEnds.CopyCompleted, "cancelled target remained live");
             Assert(neverEnds.EndOperation(0, null, 1) < 0, "late completion cannot reactivate");
         }
-        now = 0;
-        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { return (byte[])data.Clone(); }, delegate { return true; }, delegate { return now; }))
+
+        using (DragLease lease = new DragLease(Scope(Gesture), new DragEntry[] { Entry(data) }, delegate { return (byte[])data.Clone(); }, delegate { return true; }))
         using (NativeDragDataObject move = new NativeDragDataObject(lease))
         {
             Assert(move.SetAsyncMode(true) == 0 && move.StartOperation(null) == 0, "invalid effect start");
@@ -270,7 +252,7 @@ internal static class WindowsNativeDragLeaseChecks
     {
         byte[] data=new byte[70000];for(int i=0;i<data.Length;i++)data[i]=(byte)(i%251);
         foreach(int mode in new int[]{0,1,2,3})
-        using(DragLease lease=new DragLease(Scope(Gesture),new DragEntry[]{Entry(data)},delegate{return (byte[])data.Clone();},delegate{return true;},delegate{return 0;}))
+        using(DragLease lease=new DragLease(Scope(Gesture),new DragEntry[]{Entry(data)},delegate{return (byte[])data.Clone();},delegate{return true;}))
         {
             NativeDragStream source=new NativeDragStream(lease,0,0);WriteTarget target=new WriteTarget(mode,lease);IntPtr read=Marshal.AllocHGlobal(8),written=Marshal.AllocHGlobal(8);
             try
@@ -288,13 +270,13 @@ internal static class WindowsNativeDragLeaseChecks
     private static void FinalCopyAuthority()
     {
         foreach(int size in new int[]{1,65536,70000})
-        foreach(int revoke in new int[]{0,1,2})
+        foreach(int revoke in new int[]{0,1})
         {
-            byte[] data=new byte[size];long now=0;bool authorized=true;
-            using(DragLease lease=new DragLease(Scope(Gesture),new DragEntry[]{Entry(data)},delegate{return (byte[])data.Clone();},delegate{return authorized;},delegate{return now;}))
+            byte[] data=new byte[size];bool authorized=true;
+            using(DragLease lease=new DragLease(Scope(Gesture),new DragEntry[]{Entry(data)},delegate{return (byte[])data.Clone();},delegate{return authorized;}))
             {
                 WriteTarget target=new WriteTarget(0,lease);
-                target.AfterWrite=delegate { if(target.Bytes.Length==size) { if(revoke==0)lease.Cancel();else if(revoke==1)authorized=false;else now=900000; } };
+                target.AfterWrite=delegate { if(target.Bytes.Length==size) { if(revoke==0)lease.Cancel();else authorized=false; } };
                 IntPtr read=Marshal.AllocHGlobal(8),written=Marshal.AllocHGlobal(8);
                 try
                 {
@@ -312,12 +294,12 @@ internal static class WindowsNativeDragLeaseChecks
     private static void ObjectBounds()
     {
         byte[] data=new byte[]{1};
-        using(DragLease lease=new DragLease(Scope(Gesture),new DragEntry[]{Entry(data)},delegate{return new byte[]{1};},delegate{return true;},delegate{return 0;}))
+        using(DragLease lease=new DragLease(Scope(Gesture),new DragEntry[]{Entry(data)},delegate{return new byte[]{1};},delegate{return true;}))
         {
             for(int i=0;i<4096;i++)new NativeDragStream(lease,0,0);
             Reject(delegate{new NativeDragStream(lease,0,0);},"native stream creation budget");
         }
-        using(DragLease lease=new DragLease(Scope(Gesture),new DragEntry[]{Entry(data)},delegate{return new byte[]{1};},delegate{return true;},delegate{return 0;}))
+        using(DragLease lease=new DragLease(Scope(Gesture),new DragEntry[]{Entry(data)},delegate{return new byte[]{1};},delegate{return true;}))
         using(NativeDragDataObject source=new NativeDragDataObject(lease))
         {
             System.Runtime.InteropServices.ComTypes.FORMATETC format=DragFormats.Format(DragFormats.Preferred,System.Runtime.InteropServices.ComTypes.TYMED.TYMED_HGLOBAL,-1);

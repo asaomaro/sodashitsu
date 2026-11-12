@@ -339,6 +339,19 @@ public static partial class SodaDesktopHost {
         public long started;
         public bool full;
         public string contentId;
+        public string[] snapshotIds;
+    }
+    sealed class SnapshotRequests {
+        readonly HashSet<string> pending=new HashSet<string>(StringComparer.Ordinal);
+        public void Add(object raw){
+            var ids=raw as object[];if(ids==null||ids.Length<1||ids.Length>64)throw new InvalidOperationException("Snapshot request ids");
+            var incoming=new HashSet<string>(StringComparer.Ordinal);
+            foreach(var value in ids){Guid parsed;var id=value as string;if(id==null||!Guid.TryParseExact(id,"D",out parsed))throw new InvalidOperationException("Snapshot request id");incoming.Add(id);}
+            foreach(var id in incoming)if(!pending.Contains(id)&&pending.Count>=64)throw new InvalidOperationException("Snapshot request limit");else pending.Add(id);
+        }
+        public bool Active {get{return pending.Count!=0;}}
+        public string[] Capture(){var ids=new string[pending.Count];pending.CopyTo(ids);return ids;}
+        public void Commit(string[] ids){if(ids!=null)foreach(var id in ids)pending.Remove(id);}
     }
     static bool AdmitPrepared(){
         if(Stopping||!AllowedDesktop()){Stopping=true;return false;}return true;
@@ -547,7 +560,7 @@ public static partial class SodaDesktopHost {
                 });
                 reader.IsBackground=true;reader.Start();
                 var preparation=new SodaDesktopFramePreparation<PreparedFrame>(!Secure);
-                bool forceFull=true,initialized=false;string contentId=null;
+                bool forceFull=true,initialized=false;string contentId=null;var snapshotRequests=new SnapshotRequests();
                 byte[] current=deltas || colorMode!="full"?new byte[w*h*3]:null,previous=deltas?new byte[w*h*3]:null;
                 using(var sha=SHA256.Create()) {
                 while(!Stopping) {
@@ -611,7 +624,7 @@ public static partial class SodaDesktopHost {
                         else if(type=="native_video_ack") {
                             if(video!=null && (string)msg["id"]==videoId) {videoWindow.Ack(Convert.ToInt64(msg["seq"]));}
                         }
-                        else if(type=="keyframe"){if(msg.ContainsKey("regions")){if(Secure)throw new InvalidOperationException("Region verification unavailable");agentRegions.Configure(msg["regions"]);if(agentRegions.Active&&current==null)current=new byte[w*h*3];}forceFull=true;preparation.Invalidate(true);}
+                        else if(type=="keyframe"){if(msg.ContainsKey("snapshotIds"))snapshotRequests.Add(msg["snapshotIds"]);if(msg.ContainsKey("regions")){if(Secure)throw new InvalidOperationException("Region verification unavailable");agentRegions.Configure(msg["regions"]);if(agentRegions.Active&&current==null)current=new byte[w*h*3];}forceFull=true;preparation.Invalidate(true);}
                         else if(type=="policy") {
                             int rate=Num(msg,"fps"),q=Num(msg,"quality");if(rate<1||rate>maxFps||q<20||q>maxQuality)throw new InvalidOperationException("Policy limit");
                             fps=rate;quality=q;args.Param[0].Dispose();args.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,(long)q);preparation.Invalidate(true);
@@ -706,14 +719,16 @@ public static partial class SodaDesktopHost {
                     if(revision!=preparedRevision){preparation.Invalidate(false);preparedRevision=revision;}
                     if(!Stopping && preparation.CanPrepare(now,pending,video!=null&&DeferNativeSnapshots,forceFull,Interlocked.Read(ref LastNativeInput))) {
                         if(!AllowedDesktop()){Stopping=true;break;}
+                        // Copy correlation before the OS capture starts, never from the publication queue.
+                        string[] capturedSnapshotIds=snapshotRequests.Capture();
                         long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor&&(cursorPump==null||!cursorPump.Active),ref dxgi,beforeCaptureDispose);
                         var rects=new List<Rectangle>();
                         bool changed=true;string capturedId=contentId;
-                        var prepared=new PreparedFrame {started=frameStarted};
+                        var prepared=new PreparedFrame {started=frameStarted,snapshotIds=capturedSnapshotIds};
                         if(deltas || colorMode!="full" || agentRegions.Active)ReadPixels(scaled,current,colorMode);
                         if(deltas){rects=DirtyTiles(current,previous,w,h,initialized);changed=rects.Count>0;if(changed)capturedId=BitConverter.ToString(sha.ComputeHash(current)).Replace("-","").ToLowerInvariant();}
                         double capture=t.Elapsed.TotalMilliseconds;t.Restart();
-                        bool full=!deltas || forceFull || frameStarted-lastFull>=30000;
+                        bool full=!deltas || forceFull || capturedSnapshotIds.Length!=0 || frameStarted-lastFull>=30000;
                         long area=0;foreach(var r in rects)area+=(long)r.Width*r.Height;
                         if(changed && (rects.Count>8 || area>=(long)w*h*3/5))full=true;
                         bool report=changed || full || frameStarted-lastReport>=1000;
@@ -732,6 +747,7 @@ public static partial class SodaDesktopHost {
                             double encode=t.Elapsed.TotalMilliseconds;
                             if(!AdmitPrepared())break;
                             var info=new Dictionary<string,object>{{"seq",sequence+1},{"width",w},{"height",h},{"format",format},{"captureMs",capture},{"encodeMs",encode}};
+                            if(full&&capturedSnapshotIds.Length!=0)info["snapshotIds"]=capturedSnapshotIds;
                             if(agentRegions.Active)info["regions"]=agentRegions.Proofs(current);
                             if(deltas)info["contentId"]=capturedId;
                             if(update!=null)info["update"]=update;
@@ -748,7 +764,7 @@ public static partial class SodaDesktopHost {
                         if(!PublishPrepared(outgoing))return;
                         sequence++;pending=sequence;
                         lastReport=outgoing.started;contentId=outgoing.contentId;
-                        if(outgoing.full){lastFull=outgoing.started;forceFull=false;}
+                        if(outgoing.full){snapshotRequests.Commit(outgoing.snapshotIds);lastFull=outgoing.started;forceFull=snapshotRequests.Active;}
                         if(deltas){var swap=previous;previous=current;current=swap;initialized=true;}
                     }
                     });
@@ -928,23 +944,21 @@ public static class SodaDesktopDisplay {
     }
 }
 
-// One prepared frame alongside the single frame awaiting ACK. No transport/schema change.
-// Ready-age excludes capture/encode time so slow captures can still make progress.
+// One prepared frame alongside the single frame awaiting ACK; actual input invalidates pixels.
 public sealed class SodaDesktopFramePreparation<T> where T:class {
     T prepared;
     readonly bool overlap;
-    long readyAt;
     public SodaDesktopFramePreparation(bool prepareWhileAwaitingAck=true){overlap=prepareWhileAwaitingAck;}
     public long Next {get;private set;}
     public bool CanPrepare(long now,long pending=0,bool nativeVideo=false,bool forceFull=false,long lastNativeInput=-1000){return prepared==null&&now>=Next&&(overlap||pending==0)&&(!nativeVideo||forceFull||now-lastNativeInput>=150);}
     public void Set(T frame,long started,long completed,int fps){
         if(prepared!=null||frame==null||fps<1)throw new InvalidOperationException("Frame preparation overflow");
-        prepared=frame;readyAt=completed;Next=started+Math.Max(1,1000/fps);
+        prepared=frame;Next=started+Math.Max(1,1000/fps);
     }
     public T Take(long pending,long now,int fps){
         if(pending!=0||prepared==null)return null;
         T frame=prepared;prepared=null;
-        return now-readyAt<=200?frame:null;
+        return frame;
     }
     public void Invalidate(bool immediate){prepared=null;if(immediate)Next=0;}
 }

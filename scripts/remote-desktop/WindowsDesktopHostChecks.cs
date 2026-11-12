@@ -22,6 +22,16 @@ public static partial class SodaDesktopHost {
     static Func<INPUT[],uint> MemoryBatchInput;
     static Action MemoryPreparedWait;
 
+    public static void VerifySnapshotRequests(){
+        string first=Guid.NewGuid().ToString("D"),second=Guid.NewGuid().ToString("D");var requests=new SnapshotRequests();
+        var before=requests.Capture();requests.Add(new object[]{first});if(before.Length!=0)throw new Exception("Pre-request capture gained snapshot correlation");
+        var discarded=requests.Capture();if(discarded.Length!=1||discarded[0]!=first||!requests.Active)throw new Exception("Snapshot not captured");
+        requests.Add(new object[]{second});var retry=requests.Capture();if(retry.Length!=2)throw new Exception("Discarded capture lost pending requests");
+        requests.Commit(discarded);var next=requests.Capture();if(next.Length!=1||next[0]!=second)throw new Exception("Older publication retired newer request");
+        requests.Commit(next);if(requests.Active)throw new Exception("Published snapshot not retired");
+        bool rejected=false;try{requests.Add(new object[]{"invalid"});}catch(InvalidOperationException){rejected=true;}if(!rejected)throw new Exception("Invalid snapshot request admitted");
+        Console.WriteLine("snapshot_capture_start_discard_retry_and_exact_commit_checks_passed");
+    }
     public static void VerifySharedProtectedProof() {
         var config=new Dictionary<string,object>();
         foreach(string mode in new string[]{null,"elevated-default","elevated-uac"}) {

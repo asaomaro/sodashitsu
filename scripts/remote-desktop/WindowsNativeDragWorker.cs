@@ -83,7 +83,7 @@ namespace Sodashitsu.NativeDrag
     {
         private sealed class State
         {
-            internal int Abort,Done,Phase;internal long Begin,LastBeat,GestureDeadline;internal DragDataPump Pump;internal DragLease Lease;internal NativeDragDataObject Data;
+            internal int Abort,Done,Phase;internal long Begin,GestureDeadline;internal DragDataPump Pump;internal DragLease Lease;internal NativeDragDataObject Data;
         }
         private static void Signal(ManualResetEvent value) { try { value.Set(); } catch(ObjectDisposedException) { } }
         private static void FinalAdmission(State state,Stopwatch clock)
@@ -122,7 +122,7 @@ namespace Sodashitsu.NativeDrag
                     while(Volatile.Read(ref state.Done)==0)
                     {
                         long now=clock.ElapsedMilliseconds;int phase=Volatile.Read(ref state.Phase);
-                        bool expired=phase==0?now>=6000:phase==1?(now-Interlocked.Read(ref state.Begin)>=750||now>=Interlocked.Read(ref state.GestureDeadline)):now-Interlocked.Read(ref state.LastBeat)>=5000||now-Interlocked.Read(ref state.Begin)>=900000;
+                        bool expired=phase==0?now>=6000:phase==1?(now-Interlocked.Read(ref state.Begin)>=750||now>=Interlocked.Read(ref state.GestureDeadline)):false;
                         if(expired||state.Pump!=null&&!state.Pump.Alive)Interlocked.Exchange(ref state.Abort,1);
                         if(Volatile.Read(ref state.Abort)!=0)
                         {
@@ -162,7 +162,7 @@ namespace Sodashitsu.NativeDrag
                                 }
                                 else if(packet.Type=="beat")
                                 {
-                                    if(state.Pump==null||state.Lease==null||!state.Pump.Beat(packets.Scope)||!state.Lease.Beat(packets.Scope))throw new IOException("Native heartbeat expired");Interlocked.Exchange(ref state.LastBeat,clock.ElapsedMilliseconds);
+                                    if(state.Pump==null||state.Lease==null||!state.Pump.Beat(packets.Scope)||!state.Lease.Beat(packets.Scope))throw new IOException("Native heartbeat expired");
                                 }
                                 else if(packet.Type=="bytes"||packet.Type=="end")
                                 {
@@ -175,8 +175,8 @@ namespace Sodashitsu.NativeDrag
                     emit(new{type="ready",nonce,now=clock.ElapsedMilliseconds});manifestReady.WaitOne();
                     if(Volatile.Read(ref state.Abort)!=0||(clock.ElapsedMilliseconds-Interlocked.Read(ref state.Begin)>=750||clock.ElapsedMilliseconds>=Interlocked.Read(ref state.GestureDeadline))||!backend.Allowed()||!backend.LeftHeld())throw new IOException("Native gesture expired");
                     state.Pump=new DragDataPump(packets.Scope,packets.Manifest,delegate{return clock.ElapsedMilliseconds;},delegate(DragReadNeed need){emit(new{type="need",nonce,request=need.Request,index=need.Index,offset=need.Offset,length=need.Length});});
-                    state.Lease=new DragLease(packets.Scope,packets.Manifest,state.Pump.Fetch,delegate{return Volatile.Read(ref state.Abort)==0&&state.Pump.Alive&&backend.Allowed();},delegate{return clock.ElapsedMilliseconds;});
-                    state.Data=new NativeDragDataObject(state.Lease);Admit(state,clock,backend);Interlocked.Exchange(ref state.LastBeat,clock.ElapsedMilliseconds);Volatile.Write(ref state.Phase,2);Signal(pumpReady);
+                    state.Lease=new DragLease(packets.Scope,packets.Manifest,state.Pump.Fetch,delegate{return Volatile.Read(ref state.Abort)==0&&state.Pump.Alive&&backend.Allowed();});
+                    state.Data=new NativeDragDataObject(state.Lease);Admit(state,clock,backend);Volatile.Write(ref state.Phase,2);Signal(pumpReady);
                     Admit(state,clock,backend);uint effect;int result=backend.Drop(state.Data,state.Lease,delegate{FinalAdmission(state,clock);},out effect);state.Data.DropReturned(result,effect);
                     while(!state.Data.ExtractionTerminal&&Volatile.Read(ref state.Abort)==0)backend.Pump();
                     if(Volatile.Read(ref state.Abort)!=0||!state.Data.CopyCompleted||(result!=0&&result!=0x40100)||effect!=1)throw new IOException("Native copy cancelled");

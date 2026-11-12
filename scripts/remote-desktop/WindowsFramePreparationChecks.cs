@@ -29,12 +29,12 @@ namespace SodaDesktopTests {
             q.Set("first",0,300,30);Check(!q.CanPrepare(301),"Prepared frame overwritten");
             Check(q.Take(1,301,30)==null,"Sent before prior ACK");
             Check(q.Take(0,301,30)=="first","Slow capture must make progress");
-            q.Set("old",302,350,30);Check(q.Take(0,551,30)==null,"Stale prepared frame sent");
+            q.Set("old",302,350,30);Check(q.Take(0,551,30)=="old","Live prepared frame lost solely to ACK delay");
             Check(q.CanPrepare(551),"Stale frame blocked fresh capture");
             q.Set("delta",552,560,30);q.Invalidate(false);Check(q.Take(0,561,30)==null,"Input did not invalidate stale pixels");
             Check(!q.CanPrepare(561),"Input bypassed FPS limit");q.Invalidate(true);Check(q.CanPrepare(561),"Keyframe not immediate");
             q.Set("full",561,570,30);Check(q.Take(0,571,30)=="full","Full retry not delivered");
-            q.Set("low-rate-old",600,700,1);Check(q.Take(0,901,1)==null,"Low FPS weakened freshness limit");
+            q.Set("low-rate-old",600,700,1);Check(q.Take(0,901,1)=="low-rate-old","Low FPS prepared frame lost solely to age");
             var active=new SodaDesktopFramePreparation<string>();
             Check(!active.CanPrepare(1000,0,true,false,1000),"Native drag allowed background image work");
             Check(!active.CanPrepare(1149,0,true,false,1000),"Native activity quiet period was too short");

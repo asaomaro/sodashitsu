@@ -25,21 +25,20 @@ namespace Sodashitsu.NativeDrag
         private readonly DragScope scope;
         private readonly Func<long> clock;
         private readonly Action<DragReadNeed> send;
-        private readonly long born;
-        private long observed,lastBeat;
+        private long observed;
         private bool dead;
         internal DragDataPump(DragScope scope,IList<DragEntry> entries,Func<long> clock,Action<DragReadNeed> send)
         {
             if(scope==null||clock==null||send==null)throw new ArgumentException("Invalid native data pump");
-            using(DragLease validate=new DragLease(scope,entries,delegate{throw new IOException("No metadata payload");},delegate{return true;},delegate{return 0;})){}
+            using(DragLease validate=new DragLease(scope,entries,delegate{throw new IOException("No metadata payload");},delegate{return true;})){}
             this.scope=scope;this.clock=clock;this.send=send;this.entries=new DragEntry[entries.Count];entries.CopyTo(this.entries,0);
-            born=observed=lastBeat=clock();if(born<0)throw new ArgumentException("Invalid native data clock");
+            observed=clock();if(observed<0)throw new ArgumentException("Invalid native data clock");
         }
         private long Check()
         {
             long now;
             try{now=clock();}catch{CancelCore();throw new IOException("Native data clock unavailable");}
-            if(dead||now<observed||now-born>=900000||now-lastBeat>=5000){CancelCore();throw new IOException("Native data lifetime ended");}
+            if(dead||now<observed){CancelCore();throw new IOException("Native data lifetime ended");}
             observed=now;
             foreach(Pending request in pending.Values)
                 if(now-request.Since>=5000){CancelCore();throw new IOException("Native data request expired");}
@@ -52,7 +51,7 @@ namespace Sodashitsu.NativeDrag
         internal bool Alive {get{lock(gate){try{Check();return true;}catch{return false;}}}}
         internal bool Beat(DragScope expected)
         {
-            lock(gate){if(!scope.Matches(expected))return false;try{lastBeat=Check();return true;}catch{return false;}}
+            lock(gate){if(!scope.Matches(expected))return false;try{Check();return true;}catch{return false;}}
         }
         private DragReadNeed Need(Pending request){return new DragReadNeed(request.Id,request.Index,request.Offset,Math.Min(65536,request.Data.Length-request.Offset));}
         private void Send(DragReadNeed need)

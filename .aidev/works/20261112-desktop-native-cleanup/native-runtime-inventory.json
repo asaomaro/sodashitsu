@@ -1,5 +1,5 @@
 {
-  "scope": "Closed SDK asset bytes at native slot/test-seam review boundary; sign-in sources independently owned; not deployment approval",
+  "scope": "Closed SDK bytes at final native snapshot/lifecycle review boundary; sign-in sources independently owned; not deployment approval",
   "assets": [
     {
       "name": "EndpointAclPolicy.ps1",
@@ -39,7 +39,7 @@
     },
     {
       "name": "WindowsDesktopHost.cs",
-      "sha256": "4e125f7080a24eedaf80019221ffb8cda28f3c8f67c6accc8b816f5bf840489f"
+      "sha256": "514088c2588bf20625a7746a72f65e23c41fe599e8e1e784f28b83a5b3b30304"
     },
     {
       "name": "WindowsDesktopMicrophone.cs",
@@ -71,15 +71,15 @@
     },
     {
       "name": "WindowsNativeDragLease.cs",
-      "sha256": "af362e3ecc216528f8fef04c1072a7498394ac734ada16e4b788b573504e8f50"
+      "sha256": "e7c1cde4d42f2fc84c0c723bb63b910473412956dac509b6ab34be731f5b6688"
     },
     {
       "name": "WindowsNativeDragPackets.cs",
-      "sha256": "28409584e0e91c99767a37bed5d7114f144f86b3bc16402629771103f24bb8fa"
+      "sha256": "c1bc51d285ce2079f1c10c53577ea90312a8c71f5cc71d226611101a30f101ba"
     },
     {
       "name": "WindowsNativeDragPump.cs",
-      "sha256": "f3dc2f5c2ac6dc7a95789b3797cb18a955a95506788b1c0ec2cb965f7eeef45e"
+      "sha256": "de046d3229c9f0923ab4cee9184f7167e15e546e7353e9b3005b8ff0d7a35783"
     },
     {
       "name": "WindowsNativeDragSlot.cs",
@@ -91,7 +91,7 @@
     },
     {
       "name": "WindowsNativeDragWorker.cs",
-      "sha256": "f1ac212ef62d4247ba1cf3d5897c8846f06b6cf87e6c53eff2b5d6fe8cefb67a"
+      "sha256": "0a271dd3b63676fdcc28e318bab55fdaa85ae1fba7f13e213ab5d27481ac5e60"
     },
     {
       "name": "WindowsNativeRoleHost.cs",
