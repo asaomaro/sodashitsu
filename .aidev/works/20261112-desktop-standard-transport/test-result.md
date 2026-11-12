@@ -846,3 +846,7 @@ Error: 別のドラッグが処理中か期限切れです
 
 
 ```
+
+## Phase 11 macOS output
+
+Swift production and generated selftests updated: healthy pipe backpressure exceeding500ms completes; admitted JSON completes across same-source input revision changes; queued invalid source writes0bytes; actual source loss during partial output fails and invokes ordinary cleanup. Negative-control mutation reinserts former500ms policy. Swift compiler/runtime is unavailable in this Linux workspace; these source/selftest changes are not a claimed macOS run or OLD FAIL execution. Independent review must inspect main/IO queue and gate ordering, and actual macOS CI remains the platform validation.

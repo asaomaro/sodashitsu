@@ -12,6 +12,7 @@ video_source=source.with_name("macos-native-video.swift").read_text()
 audio_source=source.with_name("macos-native-audio.swift").read_text()+"\n"+source.with_name("macos-system-audio.swift").read_text()+"\n"+source.with_name("macos-native-microphone.swift").read_text()
 microphone_source=source.with_name("macos-native-microphone.swift").read_text()
 cases = [
+    ("writer-age", "    while offset<data.count {", "    let deadline=milliseconds()+500;while offset<data.count {if milliseconds()>deadline{return .failed}", "healthy output applies backpressure without an age cutoff"),
     ("display-live-snapshot", 'guard let first=current(),active(),let confirmed=current(),confirmed==first else {return nil};return confirmed', 'guard let first=current(),active() else {return nil};return first', "display mode live query cannot accept stale snapshot"),
     ("display-exact-transfer", 'let scale=exact ? 1.0:min', 'let scale=false ? 1.0:min', "explicit display dimensions override transfer width with exact pixels"),
     ("display-release-order", 'input?.release();lease?.restore()', 'lease?.restore();input?.release()', "display cleanup releases held key and button before restoring mode"),
@@ -32,6 +33,7 @@ cases = [
     ("release-source", 'if releaseAllowed() { try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers)) }', 'try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers))', "source revocation clears trackers without injection"),
 ]
 rich_cases = [
+    ("writer-age", "    while offset<data.count {", "    let deadline=milliseconds()+500;while offset<data.count {if milliseconds()>deadline{return .failed}", "healthy output applies backpressure without an age cutoff"),
     ("rich-offset", '"stage":"chunk","offset":next,"data":chunk', '"stage":"chunk","offset":next-chunk.count,"data":chunk', "rich clipboard pull replies next offset"),
     ("rich-late-cancel", 'pending.cancelled=true', 'pending.cancelled=false', "rich clipboard cancelled output never revives after cache eviction"),
     ("rich-source", 'version==c.version', 'true', "rich clipboard permission query cannot hide local clipboard change"),

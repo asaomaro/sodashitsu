@@ -300,13 +300,12 @@ func nativeCodecCandidatesAfterQuery(query:()->Bool,validAfterQuery:()->Bool) ->
 }
 enum RecordWriteResult: Equatable { case complete, discarded, failed }
 enum WriteAttempt { case wrote(Int), again, interrupted, failed }
-func writeRecord(_ data: Data, valid: () -> Bool, clock: () -> Double,
+func writeRecord(_ data: Data, valid: () -> Bool, live: () -> Bool = {true},
                  attempt: (Int) -> WriteAttempt, wait: () -> Void) -> RecordWriteResult {
-    let deadline=clock()+500
+    guard valid() else {return .discarded}
     var offset=0
     while offset<data.count {
-        guard valid() else { return offset==0 ? .discarded:.failed }
-        guard clock()<=deadline else { return .failed }
+        guard live() else { return offset==0 ? .discarded:.failed }
         switch attempt(offset) {
         case .wrote(let count):
             guard count>0,count<=data.count-offset else { return .failed };offset+=count
@@ -319,15 +318,16 @@ func writeRecord(_ data: Data, valid: () -> Bool, clock: () -> Double,
 }
 
 final class BoundedWriter {
-    private let queue=DispatchQueue.main
+    private let queue=DispatchQueue(label:"soda.desktop.output")
     private let countLock=NSLock()
     private let gate: NSRecursiveLock
     private let fd: Int32
     private let failure: () -> Void
+    private let live: () -> Bool
     private var bytes=0, count=0
     private var failed=false
-    init(fd: Int32, gate: NSRecursiveLock, failure: @escaping () -> Void) {
-        self.fd=fd;self.gate=gate;self.failure=failure
+    init(fd: Int32, gate: NSRecursiveLock, live: @escaping () -> Bool, failure: @escaping () -> Void) {
+        self.fd=fd;self.gate=gate;self.live=live;self.failure=failure
         let flags=fcntl(fd,F_GETFL)
         if flags>=0 { _=fcntl(fd,F_SETFL,flags|O_NONBLOCK) }
     }
@@ -340,8 +340,14 @@ final class BoundedWriter {
         bytes+=data.count;count+=1;countLock.unlock()
         queue.async {
             defer { self.countLock.lock();self.bytes-=data.count;self.count-=1;self.countLock.unlock() }
-            self.gate.lock();defer { self.gate.unlock() }
-            let result=writeRecord(data,valid:{valid?() ?? true},clock:milliseconds,attempt:{ offset in
+            // AppKit/source authority is queried on main only for admission and
+            // brief scope checks. The serial IO owner never holds the input gate
+            // or main event loop while polling or writing the pipe.
+            let admitted=DispatchQueue.main.sync {self.gate.lock();defer{self.gate.unlock()};return valid?() ?? true}
+            let ending=value["type"] as? String == "platform_failure"
+            let result=writeRecord(data,valid:{admitted},live:{
+                ending || DispatchQueue.main.sync {self.gate.lock();defer{self.gate.unlock()};return self.live()}
+            },attempt:{ offset in
                 let written=data.withUnsafeBytes { raw in Darwin.write(self.fd,raw.baseAddress!.advanced(by:offset),data.count-offset) }
                 if written>0 { return .wrote(written) }
                 if written<0 && errno==EINTR { return .interrupted }
@@ -514,7 +520,7 @@ final class DesktopSource {
     private var queuedCommands=0
     private var commandFailed=false
     private let commandLock=NSLock()
-    lazy var output=BoundedWriter(fd:STDOUT_FILENO,gate:gate,failure:{ [weak self] in DispatchQueue.main.async { self?.stop("backend_failure") } })
+    lazy var output=BoundedWriter(fd:STDOUT_FILENO,gate:gate,live:{[weak self] in self?.sourceActive()==true},failure:{ [weak self] in DispatchQueue.main.async { self?.stop("backend_failure") } })
     func locked<T>(_ body: () throws -> T) rethrows -> T { gate.lock();defer { gate.unlock() };return try body() }
     func sessionActive() -> Bool {
         guard let raw=CGSessionCopyCurrentDictionary() as? [String:Any],
@@ -981,7 +987,7 @@ func generatedTests() throws -> Int {
         try source.command(["type":"keyframe","regions":[spec]])
         try check(!source.publishable(regionTicket),"regional config invalidates in-flight capture")
         var regionWrites=0
-        let regionBefore=writeRecord(Data([1,2,3]),valid:{source.publishable(regionTicket)},clock:milliseconds,attempt:{_ in regionWrites+=1;return .wrote(3)},wait:{})
+        let regionBefore=writeRecord(Data([1,2,3]),valid:{source.publishable(regionTicket)},attempt:{_ in regionWrites+=1;return .wrote(3)},wait:{})
         try check(regionBefore == .discarded && regionWrites==0,"regional config invalidates queued publication")
         let newTicket=FrameTicket(revision:source.input!.revision,started:milliseconds(),inputSeq:0)
         try check(source.publishable(newTicket),"regional config permits a new capture")
@@ -989,10 +995,10 @@ func generatedTests() throws -> Int {
         try check(!source.publishable(newTicket) && source.regions.specs.isEmpty,"regional clear invalidates capture and authority")
         let ticket=FrameTicket(revision:source.input!.revision,started:milliseconds(),inputSeq:0)
         currentFacts=false;var writes=0
-        let before=writeRecord(Data([1,2,3]),valid:{source.publishable(ticket)},clock:milliseconds,attempt:{_ in writes+=1;return .wrote(3)},wait:{})
+        let before=writeRecord(Data([1,2,3]),valid:{source.publishable(ticket)},attempt:{_ in writes+=1;return .wrote(3)},wait:{})
         try check(before == .discarded && writes==0,"queued source revocation never writes")
         currentFacts=true
-        let during=writeRecord(Data([1,2,3]),valid:{source.publishable(ticket)},clock:milliseconds,attempt:{_ in writes+=1;currentFacts=false;return .wrote(1)},wait:{})
+        let during=writeRecord(Data([1,2,3]),valid:{source.publishable(ticket)},live:{source.sourceActive()},attempt:{_ in writes+=1;currentFacts=false;return .wrote(1)},wait:{})
         try check(during == .failed && writes==1,"source revoked during partial publication stops record")
     }
     var textActive=true,textEvents=[String]()
@@ -1017,9 +1023,13 @@ func generatedTests() throws -> Int {
     try check(DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,rotation:0) != DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,rotation:180),"same-size display rotation retires source")
     try check(DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,mode:1) != DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,mode:2),"same-size display mode change retires source")
     try check(DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,identity:"first") != DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,identity:"replacement"),"display UUID change retires reused ID and geometry")
-    var clock:Double=0
-    let blocked=writeRecord(Data([1]),valid:{true},clock:{clock},attempt:{_ in .again},wait:{clock+=501})
-    try check(blocked == .failed,"blocked output has a finite deadline")
+    var waits=0
+    let blocked=writeRecord(Data([1]),valid:{true},attempt:{_ in waits<4 ? .again:.wrote(1)},wait:{waits+=1;Thread.sleep(forTimeInterval:0.15)})
+    try check(blocked == .complete && waits==4,"healthy output applies backpressure without an age cutoff")
+    var revision=0,parts=0
+    let admitted=writeRecord(Data([1,2,3]),valid:{revision==0},attempt:{_ in parts+=1;revision+=1;return .wrote(1)},wait:{})
+    try check(admitted == .complete && parts==3,"admitted JSON completes while ordinary input revision changes")
+
     guard let bitmap=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:8,pixelsHigh:8,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:32,bitsPerPixel:32),let pixels=bitmap.bitmapData else { throw GeneratedFailure(detail:"generated bitmap allocation") }
     for p in stride(from:0,to:256,by:4) { pixels[p]=0;pixels[p+1]=255;pixels[p+2]=0;pixels[p+3]=255 }
     guard let jpeg=bitmap.representation(using:.jpeg,properties:[.compressionFactor:0.65]),let decoded=NSBitmapImageRep(data:jpeg) else { throw GeneratedFailure(detail:"generated JPEG encode") }
