@@ -235,6 +235,8 @@ Native/Signin closed Windows source compilation and explicit native generated/CO
 
 ## Configured PowerShell policy at owned helper boundaries
 
+**Historical result, superseded after actual SYSTEM validation:** the four production helper overrides below are restored as process-only embedded-application policy. SYSTEM's untouched default is Restricted and rejected the fixed ACL helper before execution; this earlier owner-context validation did not cover SYSTEM. See `../20261112-desktop-comparison-cleanup/signin-process-policy-test-result.md`. Developer validator wrappers remain separate.
+
 Removed four production `-ExecutionPolicy Bypass` overrides (endpoint DPAPI, endpoint metadata, Signin vault read, Signin enrollment) and the same obsolete override in three developer validator wrappers. All fixed bundled local scripts now use the configured Windows execution policy. Sites using AllSigned must use their existing signing policy; no bypass fallback is added.
 
 Actual mocked spawn/execFile boundary checks cover each of the four production invocations. Current focused suites pass 30 tests. Restoring only the four original argument pairs causes four failures; exact source bytes were restored and all 30 tests pass again. Logs `/tmp/soda-final-integration-20261113/powershell-policy-{old,restored}.{stdout,stderr}`. Raw old-argument assertion output:

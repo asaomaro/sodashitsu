@@ -277,3 +277,9 @@ WindowsProtectedEpochの物理削除はNative担当の通常helper/prepared/prot
 | `control-signin-admin`→SYSTEM service pipe | status/initialize/trust/revoke/enroll/disableだけ | 停止時排他、BA/SY ACL/接続者token/remote拒否/SCM PID認証。viewer権限では接続不可 |
 
 Endpoint/Dispatchの120秒session/offer寿命と永続request-ID集合/1000回上限を削除。完了したJSON-RPC IDは再使用できる。並行16channel・16KiB要求/64KiB出力backpressureと単一RPCの5秒処理上限は資源/処理境界として維持し、健康な接続の寿命にはしない。暗号化transport自体のping/pong/失われた接続の検出は別の通常liveness処理である。
+
+## 同梱PowerShell helperのprocess policy（実機確認後の訂正）
+
+`4783a437`で4つのNode spawnから外した`-ExecutionPolicy Bypass`は、SYSTEMの未設定ポリシー（実効Restricted）で固定同梱スクリプトの起動自体を壊したため、child processだけの設定として復元する。独自実装優位の例外ではなく、[Microsoftが明示するembedded application向けの標準用途](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-5.1)に合わせる。
+
+対象は`DesktopEndpointProtector.node.ts`（既存DPAPI）、`DesktopWindowsMetadata.node.ts`（固定ACL/commit）、`DesktopSigninVault.node.ts`（既存enrollment読取）、`DesktopSigninAdminCommand.ts`（固定enrollment書込）の4箇所だけ。固定absolute PowerShell、同梱script path/allowlist、固定module path、protected package、OS ACL、NU拒否、BA/SYとOS peer認証は維持する。registry/CurrentUser/LocalMachine/GroupPolicyを変更せず、暗号形式・保存bytesも変えない。[powershell.exeのExecutionPolicy引数はsession設定でregistryを変えない](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_powershell_exe?view=powershell-5.1)。

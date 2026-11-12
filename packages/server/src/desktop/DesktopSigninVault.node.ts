@@ -42,7 +42,7 @@ export function desktopSigninVaultReader(deps:DesktopSigninVaultDependencies=def
       if(deps.platform!=="win32" || ownerSid.length>184 || !/^S-1-[0-9]+(?:-[0-9]+){1,15}$/.test(ownerSid) || !live()){finish();return;}
       const executable=deps.shell();
       const script=fileURLToPath(new URL("../../../../scripts/remote-desktop/read-signin-enrollment.ps1",import.meta.url));
-      child=deps.spawn(executable,["-NoLogo","-NoProfile","-NonInteractive","-File",script,"-OwnerSid",ownerSid],{
+      child=deps.spawn(executable,["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File",script,"-OwnerSid",ownerSid],{
         stdio:["ignore","pipe","pipe"],windowsHide:true,cwd:win32.dirname(executable),
         env:{...process.env,PSModulePath:win32.join(win32.dirname(executable),"Modules")},
       });

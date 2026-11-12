@@ -37,7 +37,7 @@ it('keeps the existing eight-viewer limit',async()=>{
 vi.mock("node:child_process",async importOriginal=>{const actual=await importOriginal<typeof import("node:child_process")>();return {...actual,execFile:vi.fn(actual.execFile)};});
 vi.mock("@sodashitsu/client-core/desktop/DesktopWindowsPowerShell.node",()=>({desktopWindowsPowerShell:()=>"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"}));
 afterEach(()=>{vi.restoreAllMocks();vi.mocked(childProcess.execFile).mockRestore();});
-it("uses normal execution policy for the fixed enrollment helper",async()=>{
+it("uses an embedded-helper process policy for the fixed enrollment writer",async()=>{
  vi.spyOn(DesktopEndpointStore.prototype,"status").mockResolvedValue({initialized:false});
  vi.spyOn(DesktopEndpointStore.prototype,"settled").mockResolvedValue();vi.spyOn(DesktopEndpointStore.prototype,"close").mockImplementation(()=>{});
  vi.mocked(childProcess.execFile).mockImplementation(((...args:unknown[])=>{
@@ -45,5 +45,9 @@ it("uses normal execution policy for the fixed enrollment helper",async()=>{
   return child as unknown as ReturnType<typeof childProcess.execFile>;
  }) as typeof childProcess.execFile);
  expect(await desktopSigninAdminCommand(owner,"/generated-unused-state",{kind:"disable"})).toMatchObject({outcome:"success"});
- const args=vi.mocked(childProcess.execFile).mock.calls[0]![1];expect(args).toContain("-File");expect(args).not.toContain("-ExecutionPolicy");expect(args).not.toContain("Bypass");
+ const [executable,args,options]=vi.mocked(childProcess.execFile).mock.calls[0]!;
+ expect(executable).toBe("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+ expect(args.slice(0,6)).toEqual(["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File"]);
+ expect(args[6]).toMatch(/write-signin-enrollment\.ps1$/);expect(args).not.toContain("-Command");
+ expect(options).toMatchObject({windowsHide:true,cwd:"C:\\Windows\\System32\\WindowsPowerShell\\v1.0",env:{PSModulePath:"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules"}});
 });

@@ -7,10 +7,15 @@ import {desktopWindowsMetadata} from "./DesktopWindowsMetadata.node.js";
 vi.mock("node:child_process",()=>({spawn:vi.fn()}));
 vi.mock("./DesktopWindowsPowerShell.node.js",()=>({desktopWindowsPowerShell:()=>"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"}));
 afterEach(()=>vi.clearAllMocks());
-it.each(["protect","metadata"])("runs bundled %s scripts under the configured Windows execution policy",async operation=>{
+it.each(["protect","unprotect","check-endpoint-acl.ps1","commit-endpoint-vault.ps1"] as const)("runs fixed %s with an embedded-helper process policy",async operation=>{
  const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),stdout:new PassThrough(),stderr:new PassThrough(),kill:vi.fn()});
  vi.mocked(spawn).mockReturnValue(child as unknown as ReturnType<typeof spawn>);
- const pending=operation==="protect"?desktopSecretProtector("win32").protect(new Uint8Array([1])):desktopWindowsMetadata("check-endpoint-acl.ps1",[],"generated_ok");
- child.stdout.emit("data",operation==="protect"?Buffer.from([2]):Buffer.from("generated_ok"));child.emit("close",0);await pending;
- const args=vi.mocked(spawn).mock.calls[0]![1];expect(args).toContain("-File");expect(args).not.toContain("-ExecutionPolicy");expect(args).not.toContain("Bypass");
+ const key=operation==="protect"||operation==="unprotect",pending=key?desktopSecretProtector("win32")[operation](new Uint8Array([1])):desktopWindowsMetadata(operation,[],"generated_ok");
+ child.stdout.emit("data",key?Buffer.from([2]):Buffer.from("generated_ok"));child.emit("close",0);await pending;
+ const [executable,args,options]=vi.mocked(spawn).mock.calls[0]!;
+ expect(executable).toBe("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+ expect(args!.slice(0,6)).toEqual(["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File"]);
+ expect(args![6]!.replaceAll("\\","/").endsWith("/"+(key?"protect-endpoint-key.ps1":operation))).toBe(true);
+ expect(args).not.toContain("-Command");expect(args).not.toContain("Set-ExecutionPolicy");
+ expect(options).toMatchObject({windowsHide:true,cwd:"C:\\Windows\\System32\\WindowsPowerShell\\v1.0",env:{PSModulePath:"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules"}});
 });
