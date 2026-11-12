@@ -71,3 +71,22 @@ The mutant sources were temporary copies, recompiled for each run. Current and r
 ```
 
 `node --check synthetic-helper.mjs` and `git diff --check` pass. Closed SDK verification passed with 110 runtime resources and 212 local references before the final OS-input guard edit; source bytes are rechecked for the frozen snapshot at integration. No full TS build was repeated.
+
+## Phase 3 local verification
+
+Isolated Mono compiled the exact changed Host/Unlock, partial Checks, direct native scope, immutable scope, handshake/worker and routing sources. Existing generated authentication/control completion/pointer/virtual-pointer and protected input/queued image/queued native video checks pass. All scope wire and owner/session/process/desktop mutation checks remain; only checks for the deleted observer/epoch/ticket infrastructure were removed.
+
+```text
+authentication_input_generated_batch_transition_cleanup_partial_failure_and_ordinary_semantics_passed
+desktop_control_completion_after_release_and_failure_cleanup_passed
+desktop_native_pointer_generated_applied_down_coordinates_policy_and_failure_passed
+{"type":"monitor_topology_changed"}
+desktop_owned_virtual_native_pointer_10_memory_checks_passed
+protected_host_boundaries_passed: queued frame discarded; key/mouse release and direct input blocked after transition; generated facts/input only
+protected_output_gate_passed: generated frame blocked after scope transition while stdout gate was held
+protected_native_output_passed: generated native frame scope, local proof, original budget and output commit
+protected_scope_checks_passed: canonical v2 tuple/ack, modes/purpose, owner/logon/session/process/nonce, direct OS identity/desktop admission at input and queued output; fake facts only
+desktop_capture_routing_checks_passed
+```
+
+`git diff --check` passes. No full TS build, Windows execution, direct OS identity/desktop querying, capture/input or production mutation occurred for this phase. Independent review and frozen Windows source compilation remain required. The native-video negative validator's mutation target was updated to the direct guard so the existing queued-output negative control remains meaningful after ticket removal.

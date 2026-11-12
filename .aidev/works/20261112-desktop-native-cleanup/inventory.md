@@ -55,3 +55,11 @@ Control commands/replies carry a monotonically increasing **existing-source comm
 The native pointer ACK and Explorer selection request/result now contain the applied x/y/window/PID and existing selection nonce, with no epoch. Their TS consumer binds the witness to the actual source process and submitted input sequence and clears it after later input/control. A fresh helper has no old witness map. OLE/worker authority and source ownership checks remain; they are not replaced by another GUID.
 
 WinEvent/checkpoint, routing debounce, NativeDragSlot journal and remaining shipping Memory delegates are still explicit follow-ups, not retained better exceptions.
+
+## Phase 3: direct desktop admission
+
+Removed the entire native protected observer (WinEvent hook, private atom/window, observer thread, generated marker tokens, synchronous checkpoints and observer timeout revocation), `DesktopEpoch`, `Guard`/capture tickets and Host capture/publish callback layer. The authenticated immutable worker scope still checks actual SYSTEM identity, owner/logon, session/active session, retained broker/worker PID plus creation time, lock state and input/thread desktop. The same direct `AllowedDesktop` guard is rechecked at OS input and after waiting for queued output. No epoch, replacement GUID, replacement observer or new retry/timer was introduced. As with R1's capture recreation, observing a changed source ends the current source; this implementation does not claim to prove every unobserved away-and-back transition.
+
+Startup `SelectSource` now reads the actual session/desktop once and routes normal, secure or transition. Its 80 attempts, four-sample stability state and 25 ms sleeps are gone. The privileged worker still independently authenticates its OS source before using it.
+
+The standalone `WindowsProtectedEpoch.cs` file remains only because sign-in source/builds still consume it in their independently owned phase. All native helper/preparation/protected validator/role-loading references are removed. Its final physical deletion is assigned to the sign-in cleanup once those consumers disappear. The runtime asset entry is not removed prematurely while those consumers remain.

@@ -108,22 +108,20 @@ public static partial class SodaDesktopHost {
     static bool Secure;
     static Func<int> SecureLockState;
     static Func<bool> SecureGuard;
-    static Func<object> ProtectedCapture;
-    static Func<object,bool> ProtectedPublish;
     static bool SecureAttentionAllowed=true;
     static string ProtectedMode;
     static bool ProtectedVideoProof(Dictionary<string,object> config) {
         object value,raw;Dictionary<string,object> options;
-        return Secure&&(ProtectedMode=="elevated-default"||ProtectedMode=="elevated-uac")&&ProtectedCapture!=null&&ProtectedPublish!=null&&SecureGuard!=null&&
+        return Secure&&(ProtectedMode=="elevated-default"||ProtectedMode=="elevated-uac")&&SecureGuard!=null&&
             config.TryGetValue("allowProtectedVideo",out value)&&value is bool&&(bool)value&&
             config.TryGetValue("options",out raw)&&(options=raw as Dictionary<string,object>)!=null&&
             options.TryGetValue("features",out value)&&value is bool&&(bool)value&&options.TryGetValue("protectedVideo",out value)&&value is bool&&(bool)value;
     }
-    static bool PublishProtectedNative(object payload,object ticket,long started,Action committed) {
+    static bool PublishProtectedNative(object payload,long started,Action committed) {
         if(MemoryPreparedWait!=null)MemoryPreparedWait();
         lock(OutputGate) {
             string wire=MemoryOutput==null?OutputJson.Serialize(payload):null;
-            if(!AllowedDesktop()||!PublishScope(ticket)){Stopping=true;return false;}
+            if(!AllowedDesktop()){Stopping=true;return false;}
             long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000)return false;
             committed();
             if(MemoryOutput!=null)MemoryOutput(payload);else{Console.Out.WriteLine(wire);Console.Out.Flush();}
@@ -133,17 +131,15 @@ public static partial class SodaDesktopHost {
     static bool SharedProtectedProof(Dictionary<string,object> config,string mode) {
         object flag;return (mode=="elevated-default"||mode=="elevated-uac")&&config.TryGetValue("allowSharedProtected",out flag)&&flag is bool&&(bool)flag;
     }
-    static void SetProtectedGuards(Func<bool> current,Func<object> capture,Func<object,bool> publish,string mode){Secure=true;SecureGuard=current;ProtectedCapture=capture;ProtectedPublish=publish;SecureAttentionAllowed=false;ProtectedMode=mode;}
-    static void ClearProtectedGuards(){Secure=false;SecureGuard=null;ProtectedCapture=null;ProtectedPublish=null;SecureAttentionAllowed=true;ProtectedMode=null;}
+    static void SetProtectedGuards(Func<bool> current,string mode){Secure=true;SecureGuard=current;SecureAttentionAllowed=false;ProtectedMode=mode;}
+    static void ClearProtectedGuards(){Secure=false;SecureGuard=null;SecureAttentionAllowed=true;ProtectedMode=null;}
     static bool CanSecureAttention(){return Secure&&SecureAttentionAllowed&&Control&&AllowedDesktop();}
-    static object CaptureScope(){return ProtectedCapture==null?null:ProtectedCapture();}
-    static bool PublishScope(object ticket){return ProtectedPublish==null||ticket!=null&&ProtectedPublish(ticket);}
     // Delegates come only from the authenticated installed worker, never configure.
-    public static void RunProtected(Func<bool> current,Func<object> capture,Func<object,bool> publish,string mode=null) {
-        if(current==null||capture==null||publish==null)throw new ArgumentNullException();
+    public static void RunProtected(Func<bool> current,string mode=null) {
+        if(current==null)throw new ArgumentNullException();
         if(mode!=null&&mode!="elevated-default"&&mode!="elevated-uac")throw new ArgumentException("Protected worker role rejected");
         if(!System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem||!current())throw new InvalidOperationException("Protected desktop unavailable");
-        SetProtectedGuards(current,capture,publish,mode);
+        SetProtectedGuards(current,mode);
         try{Run(0,true,false,false,null);}
         finally{ClearProtectedGuards();}
     }
@@ -321,10 +317,9 @@ public static partial class SodaDesktopHost {
         public long started;
         public bool full;
         public string contentId;
-        public object scopeTicket;
     }
-    static bool AdmitPrepared(PreparedFrame frame){
-        if(!AllowedDesktop()||!PublishScope(frame.scopeTicket)){Stopping=true;return false;}return true;
+    static bool AdmitPrepared(){
+        if(!AllowedDesktop()){Stopping=true;return false;}return true;
     }
     static Action MemoryPreparedWait=null;
     static bool PublishPrepared(PreparedFrame frame){
@@ -333,7 +328,7 @@ public static partial class SodaDesktopHost {
         lock(OutputGate){
             string wire=MemoryOutput==null?OutputJson.Serialize(payload):null;
             // Check after waiting for stdout and after JSON/base64 preparation.
-            if(!AdmitPrepared(frame))return false;
+            if(!AdmitPrepared())return false;
             if(MemoryOutput!=null)MemoryOutput(payload);
             else{Console.Out.WriteLine(wire);Console.Out.Flush();}
             return true;
@@ -631,8 +626,8 @@ public static partial class SodaDesktopHost {
                     }
                     if(!Stopping && video!=null && videoWindow.CanSend && (videoProfile==null||(videoProfile.Configured&&(!videoProfile.Prepared||videoProfile.Resumed))) && Clock.Elapsed.TotalMilliseconds>=videoNext) {
                         try {
-                            long protectedStarted=protectedVideo?Clock.ElapsedMilliseconds:0;object protectedTicket=protectedVideo?CaptureScope():null;
-                            if(protectedVideo&&protectedTicket==null){Stopping=true;break;}
+                            long protectedStarted=protectedVideo?Clock.ElapsedMilliseconds:0;
+                            if(protectedVideo&&!AllowedDesktop()){Stopping=true;break;}
                             double videoStarted=Clock.Elapsed.TotalMilliseconds;
                             var captureTimer=Stopwatch.StartNew();double conversionMs=0;
                             Point cursor=Cursor.Position;bool cursorVisible=showCursor&&(cursorPump==null||!cursorPump.Active)&&Bounds.Contains(cursor);
@@ -666,7 +661,7 @@ public static partial class SodaDesktopHost {
                             if(packet.codec!=null)encoded["codec"]=packet.codec;
                             if(protectedVideo) {
                                 Action commitVideo=()=>{videoSeq=nextVideoSeq;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;};
-                                if(!PublishProtectedNative(encoded,protectedTicket,protectedStarted,commitVideo)) {
+                                if(!PublishProtectedNative(encoded,protectedStarted,commitVideo)) {
                                     commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
                                     if(Stopping)break;
                                 }
@@ -686,11 +681,11 @@ public static partial class SodaDesktopHost {
                     long revision=Interlocked.Read(ref inputRevision);
                     if(revision!=preparedRevision){preparation.Invalidate(false);preparedRevision=revision;}
                     if(!Stopping && preparation.CanPrepare(now,pending,video!=null&&DeferNativeSnapshots,forceFull,Interlocked.Read(ref LastNativeInput))) {
-                        object scopeTicket=CaptureScope();if(!PublishScope(scopeTicket)){Stopping=true;break;}
+                        if(!AllowedDesktop()){Stopping=true;break;}
                         long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor&&(cursorPump==null||!cursorPump.Active),ref dxgi,beforeCaptureDispose);
                         var rects=new List<Rectangle>();
                         bool changed=true;string capturedId=contentId;
-                        var prepared=new PreparedFrame {started=frameStarted,scopeTicket=scopeTicket};
+                        var prepared=new PreparedFrame {started=frameStarted};
                         if(deltas || colorMode!="full" || agentRegions.Active)ReadPixels(scaled,current,colorMode);
                         if(deltas){rects=DirtyTiles(current,previous,w,h,initialized);changed=rects.Count>0;if(changed)capturedId=BitConverter.ToString(sha.ComputeHash(current)).Replace("-","").ToLowerInvariant();}
                         double capture=t.Elapsed.TotalMilliseconds;t.Restart();
@@ -711,7 +706,7 @@ public static partial class SodaDesktopHost {
                             } else update=new {kind="unchanged",baseSeq=sequence};
                             byte[] image=stream.ToArray();if(image.Length>2*1024*1024)throw new InvalidOperationException("Frame limit");
                             double encode=t.Elapsed.TotalMilliseconds;
-                            if(!AdmitPrepared(prepared))break;
+                            if(!AdmitPrepared())break;
                             var info=new Dictionary<string,object>{{"seq",sequence+1},{"width",w},{"height",h},{"format",format},{"captureMs",capture},{"encodeMs",encode}};
                             if(agentRegions.Active)info["regions"]=agentRegions.Proofs(current);
                             if(deltas)info["contentId"]=capturedId;

@@ -7,7 +7,7 @@ import {promisify} from 'node:util';
 import assert from 'node:assert/strict';
 if(process.platform!=='win32')throw Error('Windows generated helper compilation only');
 const run=promisify(execFile),source=dirname(fileURLToPath(import.meta.url)),root=await mkdtemp(join(process.env.LOCALAPPDATA,'hr-')),sdk=join(root,'sdk'),held=join(root,'held');await mkdir(sdk);await mkdir(held);
-const groups={audio:['WindowsDesktopAudio.cs'],microphone:['WindowsDesktopMicrophone.cs'],pipe:['WindowsDesktopPipeKernel.cs'],richClipboard:['WindowsDesktopRichClipboard.cs'],codecs:['WindowsCodecProbe.cs'],virtualDisplay:['WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs'],protectedDesktop:['WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedHandshake.cs','WindowsProtectedWorker.cs']};
+const groups={audio:['WindowsDesktopAudio.cs'],microphone:['WindowsDesktopMicrophone.cs'],pipe:['WindowsDesktopPipeKernel.cs'],richClipboard:['WindowsDesktopRichClipboard.cs'],codecs:['WindowsCodecProbe.cs'],virtualDisplay:['WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs'],protectedDesktop:['WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedHandshake.cs','WindowsProtectedWorker.cs']};
 const flags={audio:'SODA_DESKTOP_LOAD_AUDIO',microphone:'SODA_DESKTOP_LOAD_MICROPHONE',richClipboard:'SODA_DESKTOP_LOAD_RICH_CLIPBOARD',codecs:'SODA_DESKTOP_LOAD_CODECS'};
 const checks=['validate-audio.ps1','validate-microphone.ps1','WindowsAudioChecks.cs','WindowsMicrophoneChecks.cs','EndpointAclPolicy.ps1','check-endpoint-acl.ps1'];
 const core=['windows-helper.ps1','WindowsDesktopHost.cs','WindowsDesktopUnlock.cs'],all=Object.keys(groups);

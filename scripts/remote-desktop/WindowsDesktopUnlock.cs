@@ -202,20 +202,11 @@ public static partial class SodaDesktopUnlock {
         try{uint needed;var name=new StringBuilder(256);return GetUserObjectInformation(desktop,2,name,512,out needed)&&name.ToString()=="Winlogon";}
         finally{CloseDesktop(desktop);}
     }
-    static string SelectSource(Func<int> state,Func<bool> inputDefault,Func<bool> secure,Action pause) {
-        string previous=null;int stable=0;
-        for(int i=0;i<80;i++) {
-            int locked=state();
-            string candidate=locked==1?"normal":locked==0?(inputDefault()?"normal":secure()?"secure":null):null;
-            stable=candidate!=null&&candidate==previous?stable+1:1;previous=candidate;
-            if(candidate!=null&&stable>=4)return candidate;
-            pause();
-        }
-        return "transition";
+    static string SelectSource(Func<int> state,Func<bool> inputDefault,Func<bool> secure) {
+        int locked=state();
+        return locked==1?"normal":locked==0?(inputDefault()?"normal":secure()?"secure":"transition"):"transition";
     }
-    public static string SelectSource() {
-        return SelectSource(LockState,InputIsDefault,SecureDesktopCandidate,()=>Thread.Sleep(25));
-    }
+    public static string SelectSource() {return SelectSource(LockState,InputIsDefault,SecureDesktopCandidate);}
     public static void SourceTransition() {WorkerFailure(Console.Out,"source_transition");}
     static void WorkerFailure(TextWriter writer,string code) {
         // Only fixed stage identifiers, never exception text, paths, images or input.

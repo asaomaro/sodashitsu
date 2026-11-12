@@ -48,7 +48,7 @@ public sealed class SodaDesktopProtectedScope {
         public bool System;
         public int Session,ActiveSession,LockState,BrokerPid,WorkerPid;
         public string Owner,Logon,Desktop,ThreadDesktop;
-        public long Generation,BrokerStarted,WorkerStarted,DesktopEpoch;
+        public long Generation,BrokerStarted,WorkerStarted;
         public Guid Nonce;
     }
     public string Failure(Facts facts){
@@ -61,26 +61,5 @@ public sealed class SodaDesktopProtectedScope {
         if(facts.LockState!=(Role==Mode.LockedWinlogon?0:1))return "worker_lock_state";
         if(facts.Desktop!=(Role==Mode.ElevatedDefault?"Default":"Winlogon")||facts.ThreadDesktop!=facts.Desktop)return "worker_desktop";
         return null;
-    }
-    public sealed class Guard {
-        readonly SodaDesktopProtectedScope scope;
-        readonly object gate=new object();
-        bool revoked,epochBound;long epoch;
-        public Guard(SodaDesktopProtectedScope scope){if(scope==null)throw new ArgumentNullException("scope");this.scope=scope;}
-        public sealed class Ticket {
-            internal readonly Guid Nonce;internal readonly long Generation,Epoch;
-            internal Ticket(Guid nonce,long generation,long epoch){Nonce=nonce;Generation=generation;Epoch=epoch;}
-        }
-        bool Check(Facts facts){if(revoked)return false;if(scope.Failure(facts)!=null||epochBound&&facts.DesktopEpoch!=epoch){revoked=true;return false;}epoch=facts.DesktopEpoch;epochBound=true;return true;}
-        public bool Current(Facts facts){lock(gate){return Check(facts);}}
-        public Ticket Capture(Facts facts){lock(gate){return Check(facts)?new Ticket(scope.Nonce,scope.Generation,facts.DesktopEpoch):null;}}
-        public bool Publish(Ticket ticket,Facts facts){
-            lock(gate){if(ticket==null||!Check(facts))return false;
-            if(ticket.Nonce!=scope.Nonce||ticket.Generation!=scope.Generation||ticket.Epoch!=facts.DesktopEpoch){revoked=true;return false;}return true;}
-        }
-        public void Release<T>(ICollection<T> held,Func<Facts> read,Action<T> keyUp){
-            try{foreach(var key in new List<T>(held)){lock(gate){if(!Check(read()))break;keyUp(key);}}}
-            finally{held.Clear();}
-        }
     }
 }

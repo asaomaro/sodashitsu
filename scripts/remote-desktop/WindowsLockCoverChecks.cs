@@ -7,9 +7,9 @@ namespace SodaDesktopTests {
         static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);}
         static object Call(Type type,string name,params object[] values){return type.GetMethod(name,BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,values);}
         public static void Run(){
-            var source=typeof(SodaDesktopUnlock).GetMethod("SelectSource",BindingFlags.NonPublic|BindingFlags.Static,null,new[]{typeof(Func<int>),typeof(Func<bool>),typeof(Func<bool>),typeof(Action)},null);
+            var source=typeof(SodaDesktopUnlock).GetMethod("SelectSource",BindingFlags.NonPublic|BindingFlags.Static,null,new[]{typeof(Func<int>),typeof(Func<bool>),typeof(Func<bool>)},null);
             foreach(int state in new[]{-1,0,1})foreach(bool inputDefault in new[]{false,true}) {
-                string actual=(string)source.Invoke(null,new object[]{new Func<int>(()=>state),new Func<bool>(()=>inputDefault),new Func<bool>(()=>!inputDefault),new Action(()=>{})});
+                string actual=(string)source.Invoke(null,new object[]{new Func<int>(()=>state),new Func<bool>(()=>inputDefault),new Func<bool>(()=>!inputDefault)});
                 string expected=state<0?"transition":state==1||inputDefault?"normal":"secure";
                 Check(actual==expected,"Locked Default did not use normal capture");
             }

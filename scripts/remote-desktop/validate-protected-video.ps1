@@ -1,7 +1,7 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Generated scope facts and memory output only. No capture, encoder, OS input or service.
-$names=@('WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedScopeChecks.cs','WindowsDesktopUnlock.cs','WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs')
+$names=@('WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedScopeChecks.cs','WindowsDesktopUnlock.cs','WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('soda-protected-video-'+[guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($root)|Out-Null
 $original=@{};foreach($name in $names){$original[$name]=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name));[IO.File]::WriteAllBytes((Join-Path $root $name),$original[$name])}
 $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe';$paths=($names|ForEach-Object {"'"+(Join-Path $root $_).Replace("'","''")+"'"}) -join ','
@@ -10,7 +10,7 @@ try{
  $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Generated protected video checks failed'}
  if($NegativeControls){
   $variants=@(
-   @('native-scope','if(!AllowedDesktop()||!PublishScope(ticket))','if(Clock.ElapsedMilliseconds<0)','Protected native frame survived scope transition while queued'),
+   @('native-scope',"if(!AllowedDesktop()){Stopping=true;return false;}`n            long now=","if(Clock.ElapsedMilliseconds<0){Stopping=true;return false;}`n            long now=",'Protected native frame survived scope transition while queued'),
    @('native-deadline','long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000)return false;','long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000000000)return false;','Expired protected native frame published'),
    @('native-permission','config.TryGetValue("allowProtectedVideo",out value)&&value is bool&&(bool)value&&','true&&','Protected native video local flag missing')
   )

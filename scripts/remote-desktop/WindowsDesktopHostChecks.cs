@@ -147,10 +147,10 @@ public static partial class SodaDesktopHost {
             if(!Stopping||Control||Keys.Count!=0||sent.Count!=3||sent[0].data.key.vk!=65||(sent[0].data.key.flags&2)!=0||sent[1].type!=0||sent[2].data.key.vk!=65||(sent[2].data.key.flags&2)==0||notices!=1||fake.Reads!=4)throw new InvalidOperationException("Queued input after topology change was not rejected and released");
         }finally{Release();MemoryInput=null;MemoryDesktop=null;MemoryOutput=null;ActiveMonitors=null;CaptureDevice=null;MonitorDriver=oldDriver;Bounds=oldBounds;Stopping=oldStopping;LastHeartbeat=oldHeartbeat;MonitorNotice=oldNotice;}
     }
-    public static void VerifyProtectedNativeOutput(Func<bool> current,Func<object> capture,Func<object,bool> publish,Action transition) {
+    public static void VerifyProtectedNativeOutput(Func<bool> current,Action transition) {
         if(Secure||MemoryOutput!=null||MemoryPreparedWait!=null)throw new InvalidOperationException("Fresh validation process required");
         bool oldStopping=Stopping;int frames=0,commits=0;System.Threading.Tasks.Task<bool> waiting=null;
-        SetProtectedGuards(current,capture,publish,"elevated-default");MemoryOutput=value=>frames++;Stopping=false;
+        SetProtectedGuards(current,"elevated-default");MemoryOutput=value=>frames++;Stopping=false;
         using(var reached=new ManualResetEventSlim(false))try {
             var options=new Dictionary<string,object>{{"features",true},{"protectedVideo",true}};var config=new Dictionary<string,object>{{"options",options}};
             if(ProtectedVideoProof(config))throw new Exception("Protected native video local flag missing");
@@ -165,14 +165,14 @@ public static partial class SodaDesktopHost {
             ProtectedMode="elevated-default";config["allowProtectedVideo"]=true;options["features"]=false;
             if(ProtectedVideoProof(config))throw new Exception("Protected native video feature proof missing");options["features"]=true;options["protectedVideo"]=false;
             if(ProtectedVideoProof(config))throw new Exception("Protected native video request missing");options["protectedVideo"]=true;
-            object ticket=CaptureScope(),payload=new {type="native_frame",id="generated",data="AQID"};Action commit=()=>commits++;
+            object payload=new {type="native_frame",id="generated",data="AQID"};Action commit=()=>commits++;
             if(Math.Abs(QpcTimestamp()-(long)(Stopwatch.GetTimestamp()*1000000.0/Stopwatch.Frequency))>100000)throw new Exception("Protected video QPC clock");
-            if(!PublishProtectedNative(payload,ticket,Clock.ElapsedMilliseconds,commit)||frames!=1||commits!=1)throw new Exception("Stable protected native frame rejected");
-            if(PublishProtectedNative(payload,ticket,Clock.ElapsedMilliseconds-1001,commit)||frames!=1||commits!=1)throw new Exception("Expired protected native frame published");
-            if(PublishProtectedNative(payload,ticket,Clock.ElapsedMilliseconds+100,commit)||frames!=1||commits!=1)throw new Exception("Future protected native frame published");
+            if(!PublishProtectedNative(payload,Clock.ElapsedMilliseconds,commit)||frames!=1||commits!=1)throw new Exception("Stable protected native frame rejected");
+            if(PublishProtectedNative(payload,Clock.ElapsedMilliseconds-1001,commit)||frames!=1||commits!=1)throw new Exception("Expired protected native frame published");
+            if(PublishProtectedNative(payload,Clock.ElapsedMilliseconds+100,commit)||frames!=1||commits!=1)throw new Exception("Future protected native frame published");
             MemoryPreparedWait=()=>reached.Set();long started=Clock.ElapsedMilliseconds;
             lock(OutputGate) {
-                waiting=System.Threading.Tasks.Task.Run(()=>PublishProtectedNative(payload,ticket,started,commit));
+                waiting=System.Threading.Tasks.Task.Run(()=>PublishProtectedNative(payload,started,commit));
                 if(!reached.Wait(1000))throw new Exception("Protected native frame did not wait for output gate");transition();
             }
             if(!waiting.Wait(1000)||waiting.Result||frames!=1||commits!=1||!Stopping)throw new Exception("Protected native frame survived scope transition while queued");
@@ -181,12 +181,12 @@ public static partial class SodaDesktopHost {
         }
         Console.WriteLine("protected_native_output_passed: generated native frame scope, local proof, original budget and output commit");
     }
-    public static void VerifyProtectedQueuedOutput(Func<bool> current,Func<object> capture,Func<object,bool> publish,Action transition){
+    public static void VerifyProtectedQueuedOutput(Func<bool> current,Action transition){
         if(Secure||MemoryInput!=null||MemoryOutput!=null||MemoryPreparedWait!=null)throw new InvalidOperationException("Fresh validation process required");
         bool oldStopping=Stopping;int frames=0;System.Threading.Tasks.Task<bool> waiting=null;
-        SetProtectedGuards(current,capture,publish,"elevated-default");MemoryOutput=value=>frames++;Stopping=false;
+        SetProtectedGuards(current,"elevated-default");MemoryOutput=value=>frames++;Stopping=false;
         using(var reached=new ManualResetEventSlim(false))try{
-            var frame=new PreparedFrame{scopeTicket=CaptureScope(),image=new byte[]{1,2,3},info=new Dictionary<string,object>{{"seq",1}}};
+            var frame=new PreparedFrame{image=new byte[]{1,2,3},info=new Dictionary<string,object>{{"seq",1}}};
             MemoryPreparedWait=()=>reached.Set();
             lock(OutputGate){
                 waiting=System.Threading.Tasks.Task.Run(()=>PublishPrepared(frame));
@@ -200,19 +200,19 @@ public static partial class SodaDesktopHost {
         }
         Console.WriteLine("protected_output_gate_passed: generated frame blocked after scope transition while stdout gate was held");
     }
-    public static void VerifyProtectedBoundaries(Func<bool> current,Func<object> capture,Func<object,bool> publish,Action transition){
+    public static void VerifyProtectedBoundaries(Func<bool> current,Action transition){
         if(Secure||MemoryInput!=null||MemoryDesktop!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
         bool oldStopping=Stopping;var sent=new List<INPUT>();
-        SetProtectedGuards(current,capture,publish,"elevated-default");MemoryInput=sent.Add;Stopping=false;
+        SetProtectedGuards(current,"elevated-default");MemoryInput=sent.Add;Stopping=false;
         try{
             Control=true;if(CanSecureAttention())throw new Exception("Protected secure attention allowed");Control=false;
-            var frame=new PreparedFrame{scopeTicket=CaptureScope()};
-            if(!AdmitPrepared(frame))throw new Exception("Stable prepared frame rejected");
+
+            if(!AdmitPrepared())throw new Exception("Stable prepared frame rejected");
             Keys.Add(65);Key(65,true);Buttons.Add(0);Emit(ButtonInput(0,true));Release();
             if(sent.Count!=4||Keys.Count!=0||Buttons.Count!=0)throw new Exception("Stable protected release failed");
             Keys.Add(65);Key(65,true);Buttons.Add(0);Emit(ButtonInput(0,true));
             transition();
-            if(AdmitPrepared(frame)||!Stopping)throw new Exception("Queued protected frame survived scope transition");
+            if(AdmitPrepared()||!Stopping)throw new Exception("Queued protected frame survived scope transition");
             Release();if(sent.Count!=6||Keys.Count!=0||Buttons.Count!=0)throw new Exception("Protected release reached new desktop");
             bool denied=false;try{Key(66,true);}catch(InvalidOperationException){denied=true;}
             if(!denied||sent.Count!=6)throw new Exception("Protected Emit bypassed scope guard");

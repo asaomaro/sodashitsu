@@ -23,12 +23,11 @@ public static class SodaDesktopProtectedWorker {
             var role=Role(mode);long started=self.StartTime.ToUniversalTime().Ticks;int session=self.SessionId;
             var scope=SodaDesktopProtectedHandshake.Receive(reader,peer=>peer.MatchesPeer(role,nonce,SodaDesktopUnlock.Owner,session,brokerPid,brokerStarted,self.Id,started));
             using(var native=new SodaDesktopProtectedScopeNative(scope)){
-                var guard=new SodaDesktopProtectedScope.Guard(scope);
-                Func<bool> current=()=>guard.Current(native.Read(SodaDesktopUnlock.LockState));
+                Func<bool> current=()=>scope.Failure(native.Read(SodaDesktopUnlock.LockState))==null;
                 SodaDesktopProtectedHandshake.Confirm(writer,scope,current);
                 Console.SetIn(reader);Console.SetOut(writer);
                 try{
-                    SodaDesktopHost.RunProtected(current,()=>guard.Capture(native.Read(SodaDesktopUnlock.LockState)),ticket=>guard.Publish((SodaDesktopProtectedScope.Guard.Ticket)ticket,native.Read(SodaDesktopUnlock.LockState)),mode);
+                    SodaDesktopHost.RunProtected(current,mode);
                 }catch{
                     Failure(writer,current()?"worker_unavailable":"source_changed");return;
                 }
