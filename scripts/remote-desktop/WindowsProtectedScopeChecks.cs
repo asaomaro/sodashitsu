@@ -8,6 +8,7 @@ public static class SodaDesktopProtectedScopeChecks {
     static SodaDesktopProtectedScope.Facts Facts(SodaDesktopProtectedScope scope){return new SodaDesktopProtectedScope.Facts{System=true,Owner=scope.Owner,Logon=scope.Logon,Session=scope.Session,ActiveSession=scope.Session,Generation=scope.Generation,Nonce=scope.Nonce,BrokerPid=scope.BrokerPid,BrokerStarted=scope.BrokerStarted,WorkerPid=scope.WorkerPid,WorkerStarted=scope.WorkerStarted,Desktop=scope.Role==SodaDesktopProtectedScope.Mode.ElevatedDefault?"Default":"Winlogon",ThreadDesktop=scope.Role==SodaDesktopProtectedScope.Mode.ElevatedDefault?"Default":"Winlogon",LockState=scope.Role==SodaDesktopProtectedScope.Mode.LockedWinlogon?0:1};}
     static void Reject(string wire){bool rejected=false;try{SodaDesktopProtectedScope.Decode(wire);}catch(FormatException){rejected=true;}Need(rejected,"Invalid scope wire accepted");}
     public static void Run(){
+        SodaDesktopHost.VerifyStoppedQueuedOutput();
         var hostScope=Scope();var hostFacts=Facts(hostScope);
         SodaDesktopHost.VerifyProtectedBoundaries(()=>hostScope.Failure(hostFacts)==null,()=>hostFacts.Desktop="Winlogon");
         hostFacts=Facts(hostScope);

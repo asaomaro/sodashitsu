@@ -90,3 +90,29 @@ desktop_capture_routing_checks_passed
 ```
 
 `git diff --check` passes. No full TS build, Windows execution, direct OS identity/desktop querying, capture/input or production mutation occurred for this phase. Independent review and frozen Windows source compilation remain required. The native-video negative validator's mutation target was updated to the direct guard so the existing queued-output negative control remains meaningful after ticket removal.
+
+## Independent review correction: stopped queued publication
+
+The reviewer found a real race after phase 3: an observed transition set the existing `Stopping` flag while a frame waited for stdout, but the OS desktop could become valid again before that frame acquired the output gate. Both image admission and native-video publication now reject `Stopping`, as well as checking the current OS source.
+
+A generated test holds the actual output gate, queues image and native-video publication, marks the source stopped during a desktop transition, restores valid desktop facts and releases the gate. Neither frame may be emitted. Reverting just the two production guards to their exact previous form fails:
+
+```text
+authentication_input_generated_batch_transition_cleanup_partial_failure_and_ordinary_semantics_passed
+desktop_control_completion_after_release_and_failure_cleanup_passed
+desktop_native_pointer_generated_applied_down_coordinates_policy_and_failure_passed
+{"type":"monitor_topology_changed"}
+desktop_owned_virtual_native_pointer_10_memory_checks_passed
+System.Exception: Stopped source published after desktop returned
+  at SodaDesktopHost.VerifyStoppedQueuedOutput () [0x001c7] in <3041fa32b0db4760ad8ea62940d415ad>:0
+  at SodaDesktopProtectedScopeChecks.Run () [0x00006] in <3041fa32b0db4760ad8ea62940d415ad>:0
+  at Checks.Main () [0x00014] in <3041fa32b0db4760ad8ea62940d415ad>:0
+```
+
+Current and restored source copies pass all generated checks; the production file was not modified by the mutant compilation:
+
+```json
+{"generatedChecks":"passed","negativeControls":1,"sourceBytesUnchanged":true,"hostSha256":"c1392ba0e09b19a80fe7a859854ede95813d46326b011574ca42a3e2076b23c9"}
+```
+
+This reuses the existing stop state; it adds no epoch, observer, timer or transition counter. No Windows execution occurred for this correction before review.

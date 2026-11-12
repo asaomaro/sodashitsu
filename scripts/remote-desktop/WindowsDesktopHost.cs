@@ -121,7 +121,7 @@ public static partial class SodaDesktopHost {
         if(MemoryPreparedWait!=null)MemoryPreparedWait();
         lock(OutputGate) {
             string wire=MemoryOutput==null?OutputJson.Serialize(payload):null;
-            if(!AllowedDesktop()){Stopping=true;return false;}
+            if(Stopping||!AllowedDesktop()){Stopping=true;return false;}
             long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000)return false;
             committed();
             if(MemoryOutput!=null)MemoryOutput(payload);else{Console.Out.WriteLine(wire);Console.Out.Flush();}
@@ -319,7 +319,7 @@ public static partial class SodaDesktopHost {
         public string contentId;
     }
     static bool AdmitPrepared(){
-        if(!AllowedDesktop()){Stopping=true;return false;}return true;
+        if(Stopping||!AllowedDesktop()){Stopping=true;return false;}return true;
     }
     static Action MemoryPreparedWait=null;
     static bool PublishPrepared(PreparedFrame frame){

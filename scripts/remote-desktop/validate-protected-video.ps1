@@ -10,7 +10,7 @@ try{
  $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Generated protected video checks failed'}
  if($NegativeControls){
   $variants=@(
-   @('native-scope',"if(!AllowedDesktop()){Stopping=true;return false;}`n            long now=","if(Clock.ElapsedMilliseconds<0){Stopping=true;return false;}`n            long now=",'Protected native frame survived scope transition while queued'),
+   @('native-scope',"if(Stopping||!AllowedDesktop()){Stopping=true;return false;}`n            long now=","if(Clock.ElapsedMilliseconds<0){Stopping=true;return false;}`n            long now=",'Protected native frame survived scope transition while queued'),
    @('native-deadline','long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000)return false;','long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000000000)return false;','Expired protected native frame published'),
    @('native-permission','config.TryGetValue("allowProtectedVideo",out value)&&value is bool&&(bool)value&&','true&&','Protected native video local flag missing')
   )

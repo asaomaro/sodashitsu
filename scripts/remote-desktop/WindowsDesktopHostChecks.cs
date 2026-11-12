@@ -200,6 +200,26 @@ public static partial class SodaDesktopHost {
         }
         Console.WriteLine("protected_output_gate_passed: generated frame blocked after scope transition while stdout gate was held");
     }
+    public static void VerifyStoppedQueuedOutput(){
+        if(Secure||MemoryOutput!=null||MemoryPreparedWait!=null)throw new InvalidOperationException("Fresh validation process required");
+        bool oldStopping=Stopping,desktop=true;int frames=0;System.Threading.Tasks.Task<bool> image=null,video=null;
+        SetProtectedGuards(()=>desktop,"elevated-default");MemoryOutput=value=>frames++;Stopping=false;
+        using(var queued=new CountdownEvent(2))try{
+            MemoryPreparedWait=()=>queued.Signal();
+            var frame=new PreparedFrame{image=new byte[]{1,2,3},info=new Dictionary<string,object>{{"seq",1}}};
+            lock(OutputGate){
+                image=System.Threading.Tasks.Task.Run(()=>PublishPrepared(frame));
+                video=System.Threading.Tasks.Task.Run(()=>PublishProtectedNative(new{type="native_frame"},Clock.ElapsedMilliseconds,()=>{}));
+                if(!queued.Wait(1000))throw new Exception("Stopped publication did not queue at output gate");
+                desktop=false;Stopping=true;desktop=true;
+            }
+            if(!System.Threading.Tasks.Task.WaitAll(new System.Threading.Tasks.Task[]{image,video},1000)||image.Result||video.Result||frames!=0)throw new Exception("Stopped source published after desktop returned");
+        }finally{
+            if(image!=null&&!image.IsCompleted)image.Wait(2000);if(video!=null&&!video.IsCompleted)video.Wait(2000);
+            MemoryPreparedWait=null;MemoryOutput=null;ClearProtectedGuards();Stopping=oldStopping;
+        }
+        Console.WriteLine("stopped_queued_image_and_native_video_rejected_after_desktop_return_passed");
+    }
     public static void VerifyProtectedBoundaries(Func<bool> current,Action transition){
         if(Secure||MemoryInput!=null||MemoryDesktop!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
         bool oldStopping=Stopping;var sent=new List<INPUT>();
