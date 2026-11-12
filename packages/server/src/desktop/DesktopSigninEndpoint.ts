@@ -24,7 +24,6 @@ export class DesktopSigninEndpoint {
   constructor(private readonly options:{
     enrollment:DesktopSigninEnrollment;identity:Pick<DesktopSigninIdentity,"endpoint">;active():boolean;signal:AbortSignal;
     worker?:(options:WorkerOptions)=>Worker;socket?:(url:string,options:WebSocket.ClientOptions)=>WebSocket;
-    now?:()=>number;
   }){options.signal.addEventListener("abort",this.#abort,{once:true});if(!this.live())void this.close();}
   private live():boolean{try{return !this.#closed&&!this.options.signal.aborted&&this.options.active()&&!this.#closed&&!this.options.signal.aborted;}catch{return false;}}
   async start(owner:string,raw:Start,scope:DesktopSigninCallScope):Promise<{started:true}>{
@@ -38,12 +37,12 @@ export class DesktopSigninEndpoint {
       const fingerprint=createHash("sha256").update(Buffer.from(p.hello.identity,"hex")).digest("hex");
       const permit=await this.options.identity.endpoint(fingerprint,scope);
       if(!this.live()||scope.signal.aborted||!scope.active()||!permit.active()||!this.live())throw failure();
-      const controller=new AbortController(),now=this.options.now??(()=>performance.now()),deadline=now()+120000;
+      const controller=new AbortController();
       let resolver!:()=>void;const stopped=new Promise<void>(resolve=>{resolver=resolve;});
-      let transport:WebSocket|undefined,agent:HttpAgent|undefined,timer:ReturnType<typeof setTimeout>|undefined,finalized=false,connected=false,started=false,granted=false,grantPending=false;
+      let transport:WebSocket|undefined,agent:HttpAgent|undefined,finalized=false,connected=false,started=false,granted=false,grantPending=false;
       let settings={width:1280,fps:10,quality:65},allowControl=false;const offer=randomUUID();
       const active=()=>{
-        let valid=false;try{valid=!!ctx&&!ctx.closed&&!controller.signal.aborted&&this.live()&&scope.active()&&!scope.signal.aborted&&permit.active()&&this.live();if(valid)valid=now()<deadline;valid=valid&&!!ctx&&!ctx.closed&&!controller.signal.aborted&&!this.#closed&&!this.options.signal.aborted&&!scope.signal.aborted;}catch{}
+        let valid=false;try{valid=!!ctx&&!ctx.closed&&!controller.signal.aborted&&this.live()&&scope.active()&&!scope.signal.aborted&&permit.active()&&this.live();valid=valid&&!!ctx&&!ctx.closed&&!controller.signal.aborted&&!this.#closed&&!this.options.signal.aborted&&!scope.signal.aborted;}catch{}
         return valid;
       };
       const finished=()=>{
@@ -52,12 +51,11 @@ export class DesktopSigninEndpoint {
         void (async()=>{if(current.helper){quiet(()=>current.helper!.close());await current.helper.settled();}})().catch(()=>{this.#closed=true;for(const other of this.#contexts)if(other!==current)other.close();}).finally(()=>{this.#contexts.delete(current);current.resolve();});
       };
       ctx={owner,closed:false,creating:false,stopped,resolve:resolver,finish:finished,close:()=>{
-        if(!ctx)return;ctx.closed=true;controller.abort();clearTimeout(timer);scope.signal.removeEventListener("abort",abort);
+        if(!ctx)return;ctx.closed=true;controller.abort();scope.signal.removeEventListener("abort",abort);
         quiet(()=>ctx!.helper?.close());quiet(()=>ctx!.wire?.close());const socket=transport;transport=undefined;quiet(()=>socket?.terminate());const ownedAgent=agent;agent=undefined;ownedAgent?.destroy();drain?.dispose();finished();
       }};
       const context=ctx,abort=()=>context.close();let drain:DesktopEndpointDrain|undefined;
       this.#contexts.add(context);scope.signal.addEventListener("abort",abort,{once:true});
-      timer=setTimeout(context.close,120000);timer.unref();
       const send=(lane:"control"|"image",kind:number,bytes:Uint8Array)=>{
         if(!active())throw failure();const record=new Uint8Array(bytes.length+1);record[0]=kind;record.set(bytes,1);drain!.track(context.wire!.send(lane,record));
       };
@@ -76,7 +74,7 @@ export class DesktopSigninEndpoint {
           if(started||granted)throw failure();
           const envelope=RemoteDesktopViewerMessage.parse(message);if(envelope.type!=="start"||envelope.machineId!==p.machineId)throw failure();
           const parsed=DesktopOptions.parse(envelope.options);settings={width:parsed.width,fps:parsed.fps,quality:parsed.quality};started=true;
-          send("control",1,utf8.encode(JSON.stringify({type:"signin_required",id:offer,allowInput:permit.allowInput,validForMs:Math.max(1,Math.floor(deadline-now()))})));return;
+          send("control",1,utf8.encode(JSON.stringify({type:"signin_required",id:offer,allowInput:permit.allowInput})));return;
         }
         if(message.type==="signin_grant"){
           const grant=DesktopSigninGrant.parse(message);
@@ -90,10 +88,9 @@ export class DesktopSigninEndpoint {
           finally{context.creating=false;grantPending=false;if(context.closed)finished();}
           return;
         }
-        if(message.type==="heartbeat"&&!granted){RemoteDesktopViewerMessage.parse(message);return;}
         if(message.type==="stop"){RemoteDesktopViewerMessage.parse(message);context.helper?.close();drain!.begin(true);return;}
         if(!granted||!context.helper)throw failure();const command=RemoteDesktopViewerMessage.parse(message);
-        if(!["control","release","ack","input","quality","heartbeat","keyframe"].includes(command.type)||!allowControl&&(command.type==="input"||command.type==="control"&&command.enabled))throw failure();context.helper.send(command);
+        if(!["control","release","ack","input","quality","keyframe"].includes(command.type)||!allowControl&&(command.type==="input"||command.type==="control"&&command.enabled))throw failure();context.helper.send(command);
       };
       drain=new DesktopEndpointDrain({active,terminal:()=>context.wire!.send("control",new Uint8Array([4])),close:context.close});
       const url=new URL(p.url);agent=new (url.protocol==="wss:"?HttpsAgent:HttpAgent)({keepAlive:false,maxSockets:1,maxTotalSockets:1});

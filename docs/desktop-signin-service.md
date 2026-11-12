@@ -102,3 +102,16 @@ SYSTEMホストが検証済みの同梱Nodeにstdin/stdoutで1操作だけを渡
 
 専用接続の閲覧と許可した入力の範囲は従来どおりです。音声・マイク・ファイル・クリップボード・
 エージェント・Ctrl+Alt+Delを新たに許可する変更ではありません。
+
+## 専用接続の権限と寿命
+
+専用Nodeアプリが登録するRPCは`client.hello`・`desktop.capabilities`・
+`desktop.endpoint.status`・`desktop.endpoint.start`だけです。通常サーバーのpane/exec/settingsや
+管理操作のhandlerは登録しません。既存EndpointStoreは読取専用で開き、署名済みviewerとの
+暗号化接続ではenrollmentと現在のviewer trustの両方を確認します。閲覧だけの同意から
+入力への昇格はできません。管理用pipeはこのviewer接続とは別のOS管理者専用境界です。
+
+健康な接続や操作同意に固定120秒の寿命は設けません。OSのsource/所有者の喪失、
+接続終了、trustの失効、明示的な停止で閉じます。失効後は、次の入力だけでなく
+native側から出る次の画面も送信しません。定期的なDPAPI/policy証明pollはありません。
+agent APIで利用者が指定する許可期限は別機能で、ここでは変更しません。

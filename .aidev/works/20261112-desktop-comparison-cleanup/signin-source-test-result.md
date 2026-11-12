@@ -118,11 +118,11 @@ signin_scope_direct_process_session_consent_and_replay_passed
 
 Unhandled Exception:
 System.InvalidOperationException: Healthy presence expired by time without ownership loss
-  at SodaDesktopSigninPresence.VerifyGeneratedData () [0x00257] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0 
-  at ScopePresenceProof.Main () [0x00005] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0 
+  at SodaDesktopSigninPresence.VerifyGeneratedData () [0x00257] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0
+  at ScopePresenceProof.Main () [0x00005] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0
 [ERROR] FATAL UNHANDLED EXCEPTION: System.InvalidOperationException: Healthy presence expired by time without ownership loss
-  at SodaDesktopSigninPresence.VerifyGeneratedData () [0x00257] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0 
-  at ScopePresenceProof.Main () [0x00005] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0 
+  at SodaDesktopSigninPresence.VerifyGeneratedData () [0x00257] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0
+  at ScopePresenceProof.Main () [0x00005] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0
 
 restored
 signin_scope_direct_process_session_consent_and_replay_passed
@@ -133,3 +133,99 @@ signin_worker_generated_data_and_abi_passed
 ```
 
 Signin関連11ファイルのVitest・163テストが成功（この時点のEndpoint/Dispatch追加検査を含む）。scoped標準tscを8GBで実行して成功。full server型検査はRootが統合時1回にまとめる。Windows OS token/ACL/session0/Winlogon/UAC/SCM起動、実DPAPIはここでは実行しない。
+
+## 専用RPC/暗号化接続の寿命と権限
+
+Endpoint/Dispatch/SigninRequiredから120秒のsession/offer制限を除去し、完了したJSON-RPC IDの永続記憶と1000回上限を削除。再使用したIDで1500回の要求と12時間健康なidle dispatchを検査。修正前のDispatchだけを戻して実行し、意図した2検査の失敗とバイト一致復元を確認した生出力:
+
+```
+
+ RUN  v5.0.1 /workspaces/sodashitsu-signin-cleanup/packages/server
+
+ ❯ src/desktop/DesktopSigninDispatch.test.ts (40 tests | 2 failed | 38 skipped) 19ms
+   × keeps a healthy idle channel for hours and rejects pre-aborted dispatchers 14ms
+   × accepts more than a thousand requests and reuses completed JSON-RPC IDs 4ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 38 skipped (40)
+   Start at  23:51:07
+   Duration  963ms (transform 77%, import 21%, tests 2%)
+
+undefined
+/workspaces/sodashitsu-signin-cleanup/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/desktop/DesktopSigninDispatch.test.ts -t healthy idle|more than a thousand
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopSigninDispatch.test.ts > keeps a healthy idle channel for hours and rejects pre-aborted dispatchers
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      1008,
+      "Desktop signin connection is unavailable",
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/desktop/DesktopSigninDispatch.test.ts:73:208
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/desktop/DesktopSigninDispatch.test.ts > accepts more than a thousand requests and reuses completed JSON-RPC IDs
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      1008,
+      "Desktop signin connection is unavailable",
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/desktop/DesktopSigninDispatch.test.ts:97:28
+     95| it("accepts more than a thousand requests and reuses completed JSON-RP…
+     96|   const f=fixture();await f.hello();for(let i=0;i<1500;i++){f.request(…
+     97|   expect(f.conn.close).not.toHaveBeenCalled();expect(f.handlers.capabi…
+       |                            ^
+     98| });
+     99| it.each(["result-size","backpressure","error","serialize","post-serial…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+dispatch_old_lifetime_and_request_quota_negative_exact_restore_passed
+```
+
+実EndpointStore/Identityと実WebSocket/DesktopEndpointWireによる暗号化viewer fixtureで、trust revoke後の入力拒否と、client命令なしでnativeから出る次pixelsの送信拒否・接続/helperの終了を確認。view-onlyは妥当な現行schemaのinput/controlおよびadmin/execを拒否。Dispatchはexec/pane/file/plugin/endpoint管理/agentの全未知methodを転送しない。詳細API一覧はinventoryに記録。
+
+closed runtime-assetsだけを新しい一時フォルダへコピーし、Checksファイルがゼロであることと5つのpublic Signin source setがコンパイルできることを再確認:
+
+```
+closed asset build-signin-host.ps1 compiled without Checks
+closed asset control-signin-service.ps1 compiled without Checks
+closed asset control-signin-admin.ps1 compiled without Checks
+closed asset install-signin-service.ps1 compiled without Checks
+closed asset upgrade-signin-service.ps1 compiled without Checks
+```
+
+最初のEndpoint寿命fixtureはperformance全体を12時間進め、独立した暗号化wireの無通信タイムアウトまで発生させていたため採用しなかった。修正部分だけを捕まえるDispatch/nativeの健康寿命検査を使用し、失効のEndpoint検査は実際のtrust変更で確認した。
+
+最終共有wireはTransport担当c2d03150のdesktop schema/Workerと3946684dのsnapshot ID schemaを取り込んだ。browser JSON heartbeatは廃止し、native IPCの既存heartbeatだけを保持。最後の使用者を失ったnative Snapshot.Fingerprintも削除した。復元後、最終sourceで実行した生出力:
+
+```
+Test Files  11 passed (11)
+Tests       162 passed (162)
+Test Files  2 passed (2)
+Tests       13 passed (13)
+```
+
+前者はSigninの11 serverテスト、後者はprotocol desktop/desktopSigninの2テスト。scoped標準tsc（全DesktopSignin source/test + main、8GB）はexit0。full serverの重複実行はしていない。独立レビュー未完了、Windows実機操作ゼロの状態でsourceをfreezeする。

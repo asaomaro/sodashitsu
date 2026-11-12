@@ -34,11 +34,6 @@ public static class SodaDesktopSigninPackageNative {
         internal readonly Info Value;readonly uint type;
         internal Snapshot(Info value,uint type){Value=value;this.type=type;}
         internal bool Regular(bool directory,long maximum){return type==1&&(Value.Attributes&1024)==0&&((Value.Attributes&16)!=0)==directory&&(directory||Value.Links==1&&Value.SizeHigh==0&&Value.SizeLow>0&&Value.SizeLow<=maximum);}
-        internal string Fingerprint(){
-            if(!Regular(false,1))throw Failure();using(var memory=new MemoryStream())using(var writer=new BinaryWriter(memory)){
-                writer.Write(Value.Volume);writer.Write(Value.IndexHigh);writer.Write(Value.IndexLow);writer.Write(Value.CreatedHigh);writer.Write(Value.CreatedLow);writer.Write(Value.WriteHigh);writer.Write(Value.WriteLow);writer.Write(Value.Attributes);writer.Write(Value.SizeHigh);writer.Write(Value.SizeLow);writer.Flush();using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(memory.ToArray())).Replace("-","").ToLowerInvariant();
-            }
-        }
         internal bool Same(Snapshot other,bool directory,long maximum){
             return other!=null&&Regular(directory,maximum)&&other.Regular(directory,maximum)&&Value.Volume==other.Value.Volume&&Value.IndexHigh==other.Value.IndexHigh&&Value.IndexLow==other.Value.IndexLow&&Value.Attributes==other.Value.Attributes&&
                 (directory||Value.SizeLow==other.Value.SizeLow&&Value.WriteLow==other.Value.WriteLow&&Value.WriteHigh==other.Value.WriteHigh);

@@ -1,7 +1,7 @@
 # サインインの独自実装の除去台帳
 
 基準: `a29196e6`。Windows実機での設定変更は行わず、ソースのみを整理する。
-この台帳は完了報告ではない。「対象」は未実装。既存コードが相互依存していることは残す根拠にしない。
+以下はソース整理後の全件分類。正しさの最終判定は独立レビューとWindows実機確認へ残す。既存コードが相互依存していることは残す根拠にしない。
 「独自実装の方が優れている」として残す例外は **0 件**。
 
 ## 標準の比較元と境界
@@ -265,3 +265,15 @@ WindowsProtectedEpochの物理削除はNative担当の通常helper/prepared/prot
 | `scripts/remote-desktop/WindowsSigninNativeHostGeneratedChecks.cs` | テスト専用partial。本番buildとruntime-assetsへ含めない |
 | `packages/server/src/desktop/DesktopSigninAdminCommand.ts` | Sodashitsu用アダプター：固定6操作を既存EndpointStore/DPAPIに渡す。汎用exec/任意pathなし |
 | `packages/server/src/desktop/DesktopSigninReadonlyStore.test.ts` | テスト専用：writeAllowed=falseが実ファイルを作らないことを確認 |
+
+## 専用アプリのAPI権限境界
+
+| 入口 | 登録/許可する操作 | 拒否/保持する境界 |
+| --- | --- | --- |
+| `DesktopSigninRuntime`→`DesktopSigninDispatch` | `client.hello`, `desktop.capabilities`, `desktop.endpoint.status`, `desktop.endpoint.start` | 汎用ComposeServer/WsGateway/pane/exec/settings handlerを構成しない。helloは公開metadataでありviewer認証ではない |
+| `DesktopSigninIdentity`→既存EndpointStore | `verifiedEndpoint(fingerprint,"viewer")`、初期status | enrollment allowlistと現在のviewer-role trust両方。通常service storeはwriteAllowed=false |
+| `DesktopSigninEndpoint`暗号化viewer wire | protocol opt-in→明示signin offer/grant→view、許可済みcontrol/input/quality/frameACK/keyframe | agent/admin/exec/file/clipboard等を登録しない。view-onlyは入力/操作権追加不可。trust失効は実permit.activeで入力時と出力時に確認し、失効後pixelsを送らない |
+| 固定native worker pipe | 明示control同意と入力sequence、実broker/worker/session/Winlogon候補 | Webから届くframe番号/時刻/nonceを入力許可に使わない。画像ACKは転送backpressureだけ |
+| `control-signin-admin`→SYSTEM service pipe | status/initialize/trust/revoke/enroll/disableだけ | 停止時排他、BA/SY ACL/接続者token/remote拒否/SCM PID認証。viewer権限では接続不可 |
+
+Endpoint/Dispatchの120秒session/offer寿命と永続request-ID集合/1000回上限を削除。完了したJSON-RPC IDは再使用できる。並行16channel・16KiB要求/64KiB出力backpressureと単一RPCの5秒処理上限は資源/処理境界として維持し、健康な接続の寿命にはしない。暗号化transport自体のping/pong/失われた接続の検出は別の通常liveness処理である。

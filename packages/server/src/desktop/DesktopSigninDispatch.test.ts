@@ -44,11 +44,10 @@ it.each(["exec","workspace.exec","terminal.input","file.read","plugin.call","des
   const f=fixture();await f.hello();f.request("bad",method,{secret:"never log"});await flush();
   expect(f.conn.close).toHaveBeenCalledOnce();expect(f.handlers.start).not.toHaveBeenCalled();expect(f.handlers.capabilities).not.toHaveBeenCalled();
 });
-it.each(["before-hello","second-hello","duplicate-id","binary","malformed","oversize","extra-field","wrong-origin","wrong-machine","agent-role","unregistered-key"])("rejects %s at the channel boundary",async mode=>{
+it.each(["before-hello","second-hello","binary","malformed","oversize","extra-field","wrong-origin","wrong-machine","agent-role","unregistered-key"])("rejects %s at the channel boundary",async mode=>{
   const f=fixture();if(mode!=="before-hello")await f.hello();
   if(mode==="before-hello")f.request("1","desktop.endpoint.status");
   else if(mode==="second-hello")f.request("2","client.hello",{protocol:1,kind:"external"});
-  else if(mode==="duplicate-id")f.request("hello","desktop.endpoint.status");
   else if(mode==="binary")f.binary();
   else if(mode==="malformed")f.raw("{invalid");
   else if(mode==="oversize")f.raw("あ".repeat(6000));
@@ -56,12 +55,12 @@ it.each(["before-hello","second-hello","duplicate-id","binary","malformed","over
   else {const p=start();if(mode==="wrong-origin")p.url="wss://elsewhere.invalid/desktop-e2e";if(mode==="wrong-machine")p.machineId="b".repeat(32);if(mode==="agent-role")p.hello.role="agent";if(mode==="unregistered-key")p.hello.identity="04"+"d".repeat(128);f.request("2","desktop.endpoint.start",p);}
   await flush();expect(f.conn.close).toHaveBeenCalledOnce();expect(f.handlers.start).not.toHaveBeenCalled();expect(f.handlers.status).not.toHaveBeenCalled();
 });
-it.each(["disconnect","abort","owner","deadline","lifetime","parallel"])("cancels pending start on %s and discards its late completion",async mode=>{
+it.each(["disconnect","abort","owner","deadline","parallel"])("cancels pending start on %s and discards its late completion",async mode=>{
   const f=fixture();await f.hello();let finish!:(value:{started:true})=>void;
   f.handlers.start.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
   f.request("start","desktop.endpoint.start",start());await flush();
   const scope=f.handlers.start.mock.calls[0]![2];expect(scope.active()).toBe(true);
-  if(mode==="disconnect")f.disconnect();if(mode==="abort")f.abort.abort();if(mode==="owner")f.lose();if(mode==="deadline")f.clock(5000);if(mode==="lifetime")f.clock(120000);
+  if(mode==="disconnect")f.disconnect();if(mode==="abort")f.abort.abort();if(mode==="owner")f.lose();if(mode==="deadline")f.clock(5000);
   if(mode==="parallel")f.request("next","desktop.capabilities");
   finish({started:true});await flush();
   expect(f.conn.sendText).toHaveBeenCalledTimes(1);expect(scope.active()).toBe(false);expect(scope.signal.aborted).toBe(true);expect(f.handlers.clientGone).toHaveBeenCalledOnce();
@@ -70,13 +69,9 @@ it("bounds a stalled request with a timer, even without further messages",async(
   vi.useFakeTimers();const f=fixture();await f.hello();f.handlers.start.mockImplementation(()=>new Promise(()=>{}));f.request("s","desktop.endpoint.start",start());
   await vi.advanceTimersByTimeAsync(5000);expect(f.conn.close).toHaveBeenCalledOnce();expect(f.handlers.start.mock.calls[0]![2].signal.aborted).toBe(true);
 });
-it("expires idle channels and rejects pre-aborted dispatchers",async()=>{
-  vi.useFakeTimers();const f=fixture();await f.hello();await vi.advanceTimersByTimeAsync(120000);expect(f.conn.close).toHaveBeenCalledOnce();
+it("keeps a healthy idle channel for hours and rejects pre-aborted dispatchers",async()=>{
+  vi.useFakeTimers();const f=fixture();await f.hello();f.clock(12*60*60*1000);await vi.advanceTimersByTimeAsync(12*60*60*1000);f.request("late","desktop.capabilities");await flush();expect(f.conn.close).not.toHaveBeenCalled();expect(f.handlers.capabilities).toHaveBeenCalledOnce();
   f.abort.abort();const c=connection();f.dispatch.accept(c.conn);expect(c.conn.close).toHaveBeenCalledOnce();
-});
-it("checks idle lifetime using the clock before the timer callback runs",async()=>{
-  const f=fixture();await f.hello();f.clock(120000);f.request("late","desktop.capabilities");await flush();
-  expect(f.handlers.capabilities).not.toHaveBeenCalled();expect(f.conn.close).toHaveBeenCalledOnce();
 });
 it.each(["entry","completion","serialization"])("rejects synchronous abort from the host active callback at %s",async mode=>{
   const f=fixture();await f.hello();
@@ -97,9 +92,9 @@ it("caps concurrent channels and reclaims a closed channel",()=>{
   expect(more[14]!.conn.close).not.toHaveBeenCalled();expect(more[15]!.conn.close).toHaveBeenCalledOnce();
   f.disconnect();const c=connection();f.dispatch.accept(c.conn);expect(c.conn.close).not.toHaveBeenCalled();f.dispatch.close();expect(c.conn.close).toHaveBeenCalledOnce();
 });
-it("limits retained request IDs without unbounded replay memory",async()=>{
-  const f=fixture();await f.hello();for(let i=1;i<1000;i++){f.request(String(i),"desktop.capabilities");await flush();}
-  expect(f.conn.close).not.toHaveBeenCalled();f.request("1000","desktop.capabilities");expect(f.conn.close).toHaveBeenCalledOnce();expect(f.handlers.capabilities).toHaveBeenCalledTimes(999);
+it("accepts more than a thousand requests and reuses completed JSON-RPC IDs",async()=>{
+  const f=fixture();await f.hello();for(let i=0;i<1500;i++){f.request("reusable","desktop.capabilities");await flush();}
+  expect(f.conn.close).not.toHaveBeenCalled();expect(f.handlers.capabilities).toHaveBeenCalledTimes(1500);
 });
 it.each(["result-size","backpressure","error","serialize","post-serialize-owner"])("contains %s without logging handler diagnostics",async mode=>{
   const f=fixture();await f.hello();const log=vi.spyOn(console,"log"),error=vi.spyOn(console,"error"),warn=vi.spyOn(console,"warn");

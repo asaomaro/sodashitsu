@@ -23,12 +23,8 @@ interface Channel {close(): void;}
 const reason = "Desktop signin connection is unavailable";
 const quiet = (run: () => void) => {try {run();} catch {}};
 
-/** Finite RPC boundary for a future dedicated service, NOT an authorization
- * proof for Winlogon. The host must validate its package, load the protected
- * enrollment, enforce its revision and signed-out worker epoch, and revoke on
- * changes. Never attach this to the general WsGateway or run the repo as SYSTEM.
- * Root's supplied hello proves no peer identity; the sealed endpoint must do so.
- */
+/** Desktop-only RPC adapter. The sealed endpoint separately verifies the signed
+ * viewer identity and current trust; a relay-provided hello grants no authority. */
 export class DesktopSigninDispatch {
   readonly #channels = new Set<Channel>();
   #closed = false;
@@ -57,26 +53,22 @@ export class DesktopSigninDispatch {
     const owner = randomUUID(), controller = new AbortController();
     const policy = this.options.enrollment.publicStatus();
     const now = this.options.now ?? (() => performance.now());
-    const expires = now() + 120000;
     let closed = false, busy = false, hello = false, deadline = Infinity;
     let requestTimer: ReturnType<typeof setTimeout> | undefined;
-    const ids = new Set<string>();
     const active = () => {
       if (closed) return false;
-      if (!this.live() || closed || controller.signal.aborted || now() >= expires || now() >= deadline) {channel.close(); return false;}
+      if (!this.live() || closed || controller.signal.aborted || now() >= deadline) {channel.close(); return false;}
       return true;
     };
     const channel: Channel = {close: () => {
       if (closed) return;
       closed = true;
-      clearTimeout(lifetimeTimer); clearTimeout(requestTimer);
+      clearTimeout(requestTimer);
       this.#channels.delete(channel);
       controller.abort();
       quiet(() => this.options.handlers.clientGone(owner));
       quiet(() => connection.close(1008, reason));
     }};
-    const lifetimeTimer = setTimeout(channel.close, 120000);
-    lifetimeTimer.unref();
     this.#channels.add(channel);
     const scope: DesktopSigninCallScope = Object.freeze({
       active, signal: controller.signal, revision: policy.revision,
@@ -86,14 +78,13 @@ export class DesktopSigninDispatch {
     connection.onBinary(channel.close);
     connection.onText(text => {
       if (!active()) return;
-      if (busy || Buffer.byteLength(text, "utf8") > 16*1024 || ids.size >= 1000) {channel.close(); return;}
+      if (busy || Buffer.byteLength(text, "utf8") > 16*1024) {channel.close(); return;}
       busy = true;
       deadline = now() + 5000;
       requestTimer = setTimeout(channel.close, 5000); requestTimer.unref();
       void (async () => {
         const message = this.options.enrollment.classify(new TextEncoder().encode(text));
-        if (ids.has(message.id) || (!hello && message.method !== "client.hello") || (hello && message.method === "client.hello")) throw new Error(reason);
-        ids.add(message.id);
+        if ((!hello && message.method !== "client.hello") || (hello && message.method === "client.hello")) throw new Error(reason);
         if (!active()) throw new Error(reason);
         let result: unknown;
         switch (message.method) {
