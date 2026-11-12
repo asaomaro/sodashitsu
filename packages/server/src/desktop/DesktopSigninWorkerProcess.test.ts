@@ -14,7 +14,7 @@ function fixture(control=true){
   const child=new Child(),abort=new AbortController(),records:{bytes:Uint8Array;binary:boolean}[]=[],closed=vi.fn(),unsafeStop=vi.fn();
   const spawn=vi.fn<DesktopSigninWorkerDependencies["spawn"]>(()=>child as unknown as ReturnType<DesktopSigninWorkerDependencies["spawn"]>);
   const process=new DesktopSigninWorkerProcess({control,settings:{width:1280,fps:10,quality:65},active:()=>{onActive?.();return active;},signal:abort.signal,record:(bytes,binary)=>records.push({bytes:new Uint8Array(bytes),binary}),closed},{platform:"win32",now:()=>now,spawn,unsafeStop});processes.push(process);
-  return {process,child,abort,spawn,records,closed,unsafeStop,onCheck:(callback:()=>void)=>{onActive=callback;},clock:(value:number)=>{now=value;},lose:()=>{active=false;},output:(message:unknown)=>child.stdout.write(Buffer.from(JSON.stringify(message)+"\n")),finish:()=>{child.stdout.write(Buffer.from('{"type":"signin_stopped"}\n'));child.emit("close",0);}};
+  return {process,child,abort,spawn,records,closed,unsafeStop,onCheck:(callback:()=>void)=>{onActive=callback;},clock:(value:number)=>{now=value;},lose:()=>{active=false;},output:(message:unknown)=>child.stdout.write(Buffer.from(JSON.stringify(message)+"\n")),finish:()=>{child.emit("close",0);}};
 }
 it("spawns only the fixed installed broker with pipes and a bounded explicit configuration",()=>{
   const f=fixture();const [command,args,options]=f.spawn.mock.calls[0]!;
@@ -40,16 +40,13 @@ it.each(["future-ack","replay","unsupported-command","wrong-ready","second-frame
   expect(f.closed).toHaveBeenCalledOnce();f.finish();
 });
 it("never upgrades a view-only native worker to input",()=>{const f=fixture(false);expect(f.spawn.mock.calls[0]![1]).toEqual(["--broker","view"]);f.output({...ready,allowInput:false});f.process.send({type:"control",enabled:true});expect(f.closed).toHaveBeenCalledOnce();f.finish();});
-it.each(["exit0-without-proof","exit1-with-proof","trailing-data"])("requires terminal proof plus exit0 on %s",async mode=>{
-  const f=fixture();if(mode!=="exit0-without-proof")f.output({type:"signin_stopped"});if(mode==="trailing-data")f.output({type:"frame",private:"generated"});f.child.emit("close",mode==="exit1-with-proof"?1:0);
-  await expect(f.process.settled()).rejects.toThrow("Signin worker is unavailable");expect(f.unsafeStop).toHaveBeenCalledOnce();f.child.emit("close",0);expect(f.unsafeStop).toHaveBeenCalledOnce();
+it("accepts only actual successful process close with complete output",async()=>{
+ const success=fixture();success.process.close();success.child.emit("close",0);await expect(success.process.settled()).resolves.toBeUndefined();expect(success.unsafeStop).not.toHaveBeenCalled();
+ for(const mode of ["exit-failure","partial-output"]){const f=fixture();if(mode==="partial-output")f.child.stdout.write(Buffer.from('{"type":'));f.child.emit("close",mode==="exit-failure"?1:0);await expect(f.process.settled()).rejects.toThrow();expect(f.unsafeStop).toHaveBeenCalledOnce();}
 });
-it("terminates the dedicated owner if teardown is not confirmed within eight seconds",async()=>{
-  vi.useFakeTimers();const f=fixture();f.process.close();await vi.advanceTimersByTimeAsync(8000);await expect(f.process.settled()).rejects.toThrow();expect(f.child.kill).toHaveBeenCalledOnce();expect(f.unsafeStop).toHaveBeenCalledOnce();
-});
-it("checks ready/lifetime deadlines before timer callbacks and rejects data after owner loss",()=>{
+it("checks startup deadline and actual owner loss without a healthy lifetime cap",()=>{
   vi.useFakeTimers();const f=fixture();f.clock(10000);f.output(ready);expect(f.records).toHaveLength(0);expect(f.closed).toHaveBeenCalledOnce();f.finish();
-  const g=fixture();g.output(ready);g.clock(120000);g.process.send({type:"heartbeat"});expect(g.closed).toHaveBeenCalledOnce();g.finish();
+  const g=fixture();g.output(ready);g.clock(600000);g.process.send({type:"heartbeat"});expect(g.closed).not.toHaveBeenCalled();g.process.close();g.finish();
   const h=fixture();h.lose();h.output(ready);expect(h.records).toHaveLength(0);h.finish();
 });
 it("handles fragmented unicode and rejects an oversized incomplete native record",()=>{
@@ -59,10 +56,10 @@ it("handles fragmented unicode and rejects an oversized incomplete native record
 it("survives synchronous owner abort during native spawn without writing configuration",async()=>{
   const child=new Child(),abort=new AbortController(),unsafeStop=vi.fn(),closed=vi.fn();
   const process=new DesktopSigninWorkerProcess({control:false,settings:{width:1280,fps:10,quality:65},active:()=>true,signal:abort.signal,record:vi.fn(),closed},{platform:"win32",now:()=>0,spawn:()=>{abort.abort();return child as never;},unsafeStop});processes.push(process);
-  expect(child.stdin.read()).toBeNull();expect(child.stdin.destroyed).toBe(true);expect(closed).toHaveBeenCalledOnce();child.stdout.write(Buffer.from('{"type":"signin_stopped"}\n'));child.emit("close",0);await expect(process.settled()).resolves.toBeUndefined();
+  expect(child.stdin.read()).toBeNull();expect(child.stdin.destroyed).toBe(true);expect(closed).toHaveBeenCalledOnce();child.emit("close",0);await expect(process.settled()).resolves.toBeUndefined();
 });
 it("rejects a stop marker followed by an incomplete UTF8 byte in the same chunk",async()=>{
-  const f=fixture();f.child.stdout.write(Buffer.concat([Buffer.from('{"type":"signin_stopped"}\n'),Buffer.from([0xc2])]));f.child.emit("close",0);
+  const f=fixture();f.process.close();f.child.stdout.write(Buffer.from([0xc2]));f.child.emit("close",0);
   await expect(f.process.settled()).rejects.toThrow("Signin worker is unavailable");expect(f.unsafeStop).toHaveBeenCalledOnce();
 });
 it.each(["unissued","duplicate","quota"])("bounds native input acknowledgements on %s",mode=>{

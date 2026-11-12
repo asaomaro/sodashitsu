@@ -23,10 +23,10 @@ const allowed=new Set(["control","release","ack","input","quality","heartbeat","
 /** Dedicated service only. No arbitrary command or path is accepted. The native
  * host must hold the installed package and private runtime for this lifetime. */
 export class DesktopSigninWorkerProcess {
-  #child:Child|undefined;#spawning=true;#closing=false;#done=false;#notified=false;#ack=false;#ready=false;#unsafeTail=false;
+  #child:Child|undefined;#spawning=true;#closing=false;#done=false;#notified=false;#ready=false;
   #line="";#lineBytes=0;readonly #decoder=new TextDecoder("utf-8",{fatal:true});
   #lastSeq=0;#pending=0;#input=0;readonly #inputs=new Set<number>();
-  readonly #deadline:number;readonly #readyUntil:number;
+  readonly #readyUntil:number;
   #beat:ReturnType<typeof setInterval>|undefined;#readyTimer:ReturnType<typeof setTimeout>|undefined;#stopTimer:ReturnType<typeof setTimeout>|undefined;
   readonly #stopped:Promise<void>;#resolve!:()=>void;#reject!:(error:Error)=>void;
   readonly #abort=()=>this.close();
@@ -36,7 +36,7 @@ export class DesktopSigninWorkerProcess {
     record(bytes:Uint8Array,binary:boolean):void;closed():void;
   },private readonly deps:DesktopSigninWorkerDependencies=defaults){
     this.#stopped=new Promise((resolve,reject)=>{this.#resolve=resolve;this.#reject=reject;});void this.#stopped.catch(()=>{});
-    const now=deps.now();this.#deadline=now+120000;this.#readyUntil=now+10000;
+    const now=deps.now();this.#readyUntil=now+10000;
     if(deps.platform!=="win32"||!this.live())throw unavailable();
     const parsed=optionsSchema.safeParse(options.settings);if(!parsed.success)throw unavailable();const settings=parsed.data;options.signal.addEventListener("abort",this.#abort,{once:true});
     try{
@@ -59,7 +59,7 @@ export class DesktopSigninWorkerProcess {
     }
   }
   private live():boolean {
-    try{return !this.#closing&&!this.#done&&!this.options.signal.aborted&&this.options.active()&&this.deps.now()<this.#deadline&&!this.#closing&&!this.#done&&!this.options.signal.aborted;}catch{return false;}
+    try{return !this.#closing&&!this.#done&&!this.options.signal.aborted&&this.options.active()&&!this.#closing&&!this.#done&&!this.options.signal.aborted;}catch{return false;}
   }
   private notify():void {if(this.#notified)return;this.#notified=true;try{this.options.closed();}catch{}}
   private write(value:unknown):void {
@@ -87,7 +87,6 @@ export class DesktopSigninWorkerProcess {
   private receive(bytes:Buffer):void {
     if(this.#done){bytes.fill(0);return;}
     try{
-      if(this.#ack&&bytes.length)this.#unsafeTail=true;
       if(bytes.length>3000000)throw unavailable();
       const text=this.#decoder.decode(bytes,{stream:true});bytes.fill(0);
       let start=0,index:number;
@@ -96,14 +95,10 @@ export class DesktopSigninWorkerProcess {
         const line=this.#line+part;this.#line="";this.#lineBytes=0;this.record(line.endsWith("\r")?line.slice(0,-1):line);start=index+1;
         if(this.#done)return;
       }
-      const rest=text.slice(start);if(this.#ack&&rest.length)this.#unsafeTail=true;this.#lineBytes+=Buffer.byteLength(rest,"utf8");if(this.#lineBytes>3000000)throw unavailable();this.#line+=rest;
+      const rest=text.slice(start);this.#lineBytes+=Buffer.byteLength(rest,"utf8");if(this.#lineBytes>3000000)throw unavailable();this.#line+=rest;
     }catch{bytes.fill(0);this.close();}
   }
   private record(text:string):void {
-    if(this.#ack){this.#unsafeTail=true;return;}
-    if(text==='{"type":"signin_stopped"}'){
-      if(this.#ack)throw unavailable();this.#ack=true;this.close();return;
-    }
     if(this.#closing)return;
     if(!this.live()||!this.#ready&&this.deps.now()>=this.#readyUntil)throw unavailable();
     const message=JSON.parse(text) as {type?:string};
@@ -127,14 +122,14 @@ export class DesktopSigninWorkerProcess {
   private stopChild():void {
     if(this.#spawning||this.#done||!this.#child||this.#stopTimer)return;
     // Discard unsent commands and signal EOF; the broker stops its Job rather
-    // than draining the worker's input queue. Keep stdout until stop proof/exit.
+    // than draining the worker's input queue. Keep stdout until actual process close.
     this.#stopTimer=setTimeout(()=>{if(this.#done)return;try{this.#child?.kill();}catch{}this.finished(null);},8000);this.#stopTimer.unref();
     try{this.#child.stdin.destroy();}catch{}
   }
   private finished(code:number|null):void {
     if(this.#done)return;let complete=false;try{complete=this.#decoder.decode().length===0&&this.#line.length===0&&this.#lineBytes===0;}catch{}
     this.#done=true;this.#closing=true;this.clear();this.notify();this.#line="";this.#lineBytes=0;this.#inputs.clear();
-    if(code===0&&this.#ack&&!this.#unsafeTail&&complete){this.#resolve();return;}
+    if(code===0&&complete){this.#resolve();return;}
     this.#reject(unavailable());try{this.deps.unsafeStop();}catch{}
   }
   private clear():void {

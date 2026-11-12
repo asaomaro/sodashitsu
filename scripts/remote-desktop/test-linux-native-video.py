@@ -103,25 +103,25 @@ class Flow(unittest.TestCase):
         self.assertFalse(old_valid())
         self.assertTrue(new_valid())
 
-    def test_final_source_query_consumes_original_capture_budget(self):
+    def test_slow_source_query_keeps_the_current_bounded_video(self):
         self.start()
         reservation = self.flow.reserve()
         self.query = lambda: setattr(self, "now", 1001)
         self.flow.complete(reservation, key, 640, 360, 1)
-        self.assertIsNone(self.flow.current)
-        self.assertFalse(any(value["type"] == "native_frame" for value, _ in self.output))
+        self.assertIsNotNone(self.flow.current)
+        self.assertTrue(any(value["type"] == "native_frame" for value, _ in self.output))
 
-    def test_late_publisher_ends_predictive_chain_without_gap(self):
+    def test_delayed_admitted_publication_keeps_its_source_identity(self):
         self.start()
         _, valid = self.encode()
         self.encode(delta)
         second_valid = self.output[-1][1]
-        self.now = 1001
-        self.assertFalse(valid())
-        self.assertIsNone(self.flow.current)
-        self.assertFalse(second_valid())
+        self.now = 60000
+        self.assertTrue(valid())
+        self.assertIsNotNone(self.flow.current)
+        self.assertTrue(second_valid())
 
-    def test_source_revoke_pending_ack_and_encoder_stall_are_finite(self):
+    def test_source_revoke_stops_while_bounded_pending_work_can_wait(self):
         self.start()
         self.encode()
         self.allowed = False
@@ -130,14 +130,16 @@ class Flow(unittest.TestCase):
         self.allowed = True
         self.start()
         self.encode()
-        self.now += 2001
+        self.now += 60000
         self.flow.tick()
-        self.assertIsNone(self.flow.current)
+        self.assertIsNotNone(self.flow.current)
+        self.assertEqual(len(self.flow.current["pending"]),1)
         self.start()
         self.flow.reserve()
-        self.now += 1001
+        self.now += 60000
         self.flow.tick()
-        self.assertIsNone(self.flow.current)
+        self.assertIsNotNone(self.flow.current)
+        self.assertIsNotNone(self.flow.inflight)
 
     def test_one_encoding_job_and_keyframe_request(self):
         identifier = self.start()
@@ -151,17 +153,11 @@ class Flow(unittest.TestCase):
         self.flow.complete(reservation, delta, 640, 360, 2)
         self.assertIsNone(self.flow.current)
 
-    def test_ack_deadline_is_checked_without_waiting_for_tick(self):
-        identifier = self.start()
-        self.encode()
-        self.now = 2001
-        self.flow.acknowledge({"id": identifier, "seq": 1})
-        self.assertIsNone(self.flow.current)
-        self.start()
-        self.encode()
-        self.now += 2001
-        self.assertIsNone(self.flow.reserve())
-        self.assertIsNone(self.flow.current)
+    def test_delayed_ack_returns_credit_on_the_current_stream(self):
+        identifier=self.start();self.encode();self.now=60000
+        self.flow.acknowledge({"id":identifier,"seq":1})
+        self.assertEqual(self.flow.current["pending"],[])
+        self.assertIsNotNone(self.flow.reserve())
 
     def test_permission_callback_cannot_make_old_tick_stop_replacement(self):
         self.start()
@@ -300,15 +296,12 @@ class Flow(unittest.TestCase):
             self.assertIs(self.flow.inflight,reservation)
             self.start();self.assertIsNone(self.flow.reserve())
 
-    def test_uuid_ledger_survives_many_stops_and_canonicalizes_case(self):
-        first=self.start();self.flow.stop(False)
-        for _ in range(33):self.start();self.flow.stop(False)
-        for spelling in (first,first.upper()):
-            with self.assertRaises(video.VideoFailure):
-                self.flow.start({"type":"native_video","id":spelling,"enabled":True,"fps":30,"bitrateKbps":2500})
-        while len(self.flow.seen)<1024:self.start();self.flow.stop(False)
-        with self.assertRaises(video.VideoFailure):self.start()
-        self.assertEqual(len(self.flow.seen),1024)
+    def test_many_distinct_streams_do_not_exhaust_a_healthy_helper(self):
+        current=self.start()
+        with self.assertRaises(video.VideoFailure):self.flow.start({"type":"native_video","id":current.upper(),"enabled":True,"fps":30,"bitrateKbps":2500})
+        self.flow.stop(False)
+        for _ in range(1100):self.start();self.flow.stop(False)
+        self.assertIsNotNone(self.start())
 
     def test_first_hardware_frame_failure_retires_before_software_retry(self):
         made=[]
@@ -373,11 +366,10 @@ class Profiles(unittest.TestCase):
     def test_profile_waits_for_draw_ack_before_a_new_encoding_job(self):
         identifier=self.begin_profile(ack=False);self.assertIsNone(self.flow.reserve())
         self.flow.acknowledge({"id":identifier,"seq":1});self.assertIsNotNone(self.flow.reserve())
-    def test_profile_timeout_source_loss_and_cancel_wipe_held_key_without_publication(self):
-        for reason in ("timeout","source","cancel"):
+    def test_profile_source_loss_and_cancel_wipe_held_key_without_publication(self):
+        for reason in ("source","cancel"):
             self.setUp();identifier=self.prepare();held=self.flow.current["profile"]["held"];frames=sum(value["type"]=="native_frame" for value,_ in self.output)
-            if reason=="timeout":self.now+=1001;self.flow.resume(self.resume_request(identifier))
-            elif reason=="source":self.allowed=False;self.flow.tick()
+            if reason=="source":self.allowed=False;self.flow.tick()
             else:self.flow.stop()
             self.assertIsNone(self.flow.current);self.assertEqual(held,bytes(len(held)));self.assertEqual(sum(value["type"]=="native_frame" for value,_ in self.output),frames)
     def test_profile_rejects_unnegotiated_upscale_aspect_and_rate_ceiling(self):
@@ -387,14 +379,14 @@ class Profiles(unittest.TestCase):
         self.flow.adaptive=True
         for fields in ({"generation":3},{"width":1280},{"height":170},{"fps":31},{"bitrateKbps":2501}):
             with self.assertRaises(video.VideoFailure):self.flow.profile({**command,**fields})
-    def test_resume_publication_cannot_extend_the_original_profile_deadline(self):
+    def test_matching_profile_resume_survives_delayed_publication(self):
         identifier=self.begin_profile();self.now=2500;reservation=self.flow.reserve();self.flow.complete(reservation,key,320,180,int(self.now*1000))
         self.now=3020;queries=[0]
         def active():
             queries[0]+=1
             if queries[0]==2:self.now=3035
         self.query=active;self.flow.resume(self.resume_request(identifier))
-        self.assertIsNone(self.flow.current);self.assertEqual(sum(value["type"]=="native_frame" for value,_ in self.output),1)
+        self.assertIsNotNone(self.flow.current);self.assertEqual(sum(value["type"]=="native_frame" for value,_ in self.output),2)
     def test_same_stream_reentrant_profile_is_not_overwritten_after_scope_query(self):
         self.flow.adaptive=True;identifier=self.start();self.encode();self.flow.acknowledge({"id":identifier,"seq":1})
         command={"type":"native_profile","id":identifier,"generation":2,"width":320,"height":180,"fps":15,"bitrateKbps":1200}

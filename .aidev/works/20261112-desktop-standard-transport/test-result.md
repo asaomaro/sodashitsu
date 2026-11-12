@@ -401,3 +401,117 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 
 
 ```
+
+## Phase 6
+
+Python native-video:41 tests passed,5 environment/codec skips. Portal NativeVideoReplacement and Guards:22 passed. Signin WorkerProcess:27 passed. macOS source selftests updated; Swift compiler unavailable here. Old source negative controls restore only production files, retain new tests, then restore/byte-compare: delayed ACK, delayed publication/profile,1100 stream requests and delayed actual encoder close fail before the change (`/tmp/transport-phase6-old-fail.log`). Healthy signin beyond120s fails on old source (`/tmp/transport-phase6-worker-old-fail.log`). Raw OLD FAIL evidence:
+
+```text
+ of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopSigninWorkerProcess.test.ts (27 tests | 1 failed | 26 skipped) 15ms
+   × checks startup deadline and actual owner loss without a healthy lifetime cap 14ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninWorkerProcess.test.ts > checks startup deadline and actual owner loss without a healthy lifetime cap
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array []
+
+
+Number of calls: 1
+
+ ❯ src/desktop/DesktopSigninWorkerProcess.test.ts:49:109
+     47| it("checks startup deadline and actual owner loss without a healthy li…
+     48|   vi.useFakeTimers();const f=fixture();f.clock(10000);f.output(ready);…
+     49|   const g=fixture();g.output(ready);g.clock(600000);g.process.send({ty…
+       |                                                                                                             ^
+     50|   const h=fixture();h.lose();h.output(ready);expect(h.records).toHaveL…
+     51| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 26 skipped (27)
+   Start at  23:29:52
+   Duration  867ms (transform 76%, import 21%, tests 2%)
+
+
+```
+
+Portable OLD FAIL evidence:
+
+```text
+EFEF
+======================================================================
+ERROR: test_delayed_ack_returns_credit_on_the_current_stream (__main__.Flow.test_delayed_ack_returns_credit_on_the_current_stream)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-native-video.py", line 159, in test_delayed_ack_returns_credit_on_the_current_stream
+    self.assertEqual(self.flow.current["pending"],[])
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+
+======================================================================
+ERROR: test_many_distinct_streams_do_not_exhaust_a_healthy_helper (__main__.Flow.test_many_distinct_streams_do_not_exhaust_a_healthy_helper)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-native-video.py", line 303, in test_many_distinct_streams_do_not_exhaust_a_healthy_helper
+    for _ in range(1100):self.start();self.flow.stop(False)
+                         ^^^^^^^^^^^^
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-native-video.py", line 36, in start
+    self.flow.start({"type": "native_video", "enabled": True, "id": identifier,
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/linux-native-video.py", line 267, in start
+    raise VideoFailure("settings")
+owned_video.VideoFailure: settings
+
+======================================================================
+FAIL: test_delayed_admitted_publication_keeps_its_source_identity (__main__.Flow.test_delayed_admitted_publication_keeps_its_source_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-native-video.py", line 120, in test_delayed_admitted_publication_keeps_its_source_identity
+    self.assertTrue(valid())
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_matching_profile_resume_survives_delayed_publication (__main__.Profiles.test_matching_profile_resume_survives_delayed_publication)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-native-video.py", line 389, in test_matching_profile_resume_survives_delayed_publication
+    self.assertIsNotNone(self.flow.current);self.assertEqual(sum(value["type"]=="native_frame" for value,_ in self.output),2)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.006s
+
+FAILED (failures=2, errors=2)
+E
+======================================================================
+ERROR: test_healthy_pending_start_waits_for_actual_encoder_close (__main__.NativeVideoReplacement.test_healthy_pending_start_waits_for_actual_encoder_close)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-portal-helper.py", line 88, in test_healthy_pending_start_waits_for_actual_encoder_close
+    identifier=self.start(h);clock[0]=60000;h.pump_native();factory.assert_not_called();self.assertEqual(h.native.current["id"],identifier)
+                                                                                                         ~~~~~~~~~~~~~~~~^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+
+----------------------------------------------------------------------
+Ran 1 test in 0.014s
+
+FAILED (errors=1)
+
+```

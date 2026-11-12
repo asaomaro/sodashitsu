@@ -41,12 +41,9 @@ rich_cases = [
 native_cases=[
     ("native-profile-reentry", "guard revision==started,stream.profile==nil else", "guard true else", "profile scope query cannot overwrite a newer same-stream profile"),
     ("native-profile-format", "Int(base)==profile.baseSeq", "true", "profile refuses mismatched format ACK"),
-    ("native-profile-deadline", "deadline:profile.at+3000", "deadline:nil", "profile publication cannot extend original deadline"),
     ("native-h264-codec-case", 'String(format:"avc1.%02x%02x%02x",sps[1],sps[2],sps[3])', 'String(format:"avc1.%02X%02X%02X",sps[1],sps[2],sps[3])', "generated VideoToolbox canonical codec spelling"),
     ("native-hevc-codec", 'String(rbsp[12])', 'String(0)', "generated HEVC actual SPS profile tier level"),
-    ("native-ack-deadline", ' && (stream.pending.first==nil || (time>=stream.pending[0].at && time<=stream.pending[0].at+2000))', '', "native video late ack cannot erase deadline"),
     ("native-inflight", 'guard inflight==nil,!retiring,stream.pending.count<stream.window', 'guard !retiring,stream.pending.count<stream.window', "native video single physical encoding job"),
-    ("native-ledger", '!seen.contains(id)', 'true', "native video UUID cannot replay after ledger window or case change"),
 ]
 microphone_cases=[("microphone-final-authority", "try verify();guard active() else {return false};try submit()", "try verify();try submit()", "metadata query cannot extend authority")]
 for name, before, after, expected in cases+rich_cases+native_cases+microphone_cases:

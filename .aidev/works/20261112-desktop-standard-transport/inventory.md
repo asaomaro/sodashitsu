@@ -55,3 +55,7 @@ The remaining browser receiver.active age gate is removed from canInput. Live co
 ## Phase 3 handoff invariants
 
 Same-source old commands, native stop and subsequent grants share the physical helper FIFO. A different helper cannot obtain a resource while old ownership awaits the exact stop reply. A stale or unsolicited control false reply cannot satisfy a new release because it lacks the current control seq. Clipboard generation and microphone stream id provide their existing correlation. Source close retires only that source. Native cleanup failure must release every owned key/button before reporting failure or closing; the C# phase supplies that regression.
+
+## Phase 6 portable media and signin lifetime
+
+Linux and macOS retain current-source identity, one encoder job, bounded three-frame credit, stream/generation/baseSeq and actual encoder retirement. Capture1s, ACK2s, profile3s and pending-replacement2s time-only teardown are removed. The append-only1024 stream-ID ledger is removed; callers already generate nonreused UUIDs. Native encoder failure and actual scope loss still stop the stream. The signin WorkerProcess no longer expires a healthy source after120s or requires a synthetic stopped receipt in addition to real process close: success requires actual close0 and complete UTF8/newline output. Startup admission and actual owner/source loss remain distinct.

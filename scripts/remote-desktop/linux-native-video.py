@@ -231,7 +231,6 @@ class NativeVideoFlow:
         self.codecs = codecs
         self.adaptive = adaptive
         self.current = None
-        self.seen = set()
         self.revision = 0
         self.inflight = None
 
@@ -262,7 +261,7 @@ class NativeVideoFlow:
         fps, kbps, window = value.get("fps"), value.get("bitrateKbps"), value.get("window", 1)
         if (not integer(fps, 1, self.maximum_fps) or not integer(kbps, 128, 50000)
                 or not integer(window, 1, 3) or window not in (1, 3)
-                or value.get("codec", "h264") not in (NativeBitstream.FAMILIES if self.codecs else ("h264",)) or value["id"] in self.seen or len(self.seen) >= 1024
+                or value.get("codec", "h264") not in (NativeBitstream.FAMILIES if self.codecs else ("h264",))
                 or self.current is not None and value["id"] == self.current["id"]):
             raise VideoFailure("settings")
         self.stop()
@@ -277,29 +276,18 @@ class NativeVideoFlow:
                   "seq": 0, "timestamp": -1, "pending": [], "encoding": None,
                   "next": self.clock(), "key": True, "dead": False, "codec": None,
                   "size": None, "max_size": None, "generation": 1, "profile": None}
-        self.seen.add(value["id"])
         self.current = stream
         self.revision += 1
         return stream
 
-    def live(self, stream, captured=None):
+    def live(self, stream):
         granted = self.active()
-        now = self.clock()
-        return (granted and self.current is stream and not stream["dead"]
-                and (captured is None or captured <= now <= captured + 1000)
-                and (not stream["pending"] or stream["pending"][0][1] <= now <= stream["pending"][0][1] + 2000)
-                and (not stream["profile"] or stream["profile"]["at"]<=now<stream["profile"]["at"]+3000)
-                and (not stream["profile"] or stream["profile"].get("held") is None or stream["profile"]["captured"]<=now<=stream["profile"]["captured"]+1000))
+        return granted and self.current is stream and not stream["dead"]
 
     def tick(self):
         stream = self.current
-        if stream is None:
-            return
-        if (not self.live(stream)
-                or stream["pending"] and self.clock() - stream["pending"][0][1] > 2000
-                or stream["encoding"] is not None and self.clock() - stream["encoding"][0] > 1000):
-            if self.current is stream:
-                self.stop()
+        if stream is not None and not self.live(stream) and self.current is stream:
+            self.stop()
 
     def rate(self, value):
         kind = value.get("type")
@@ -339,7 +327,7 @@ class NativeVideoFlow:
             return
         if self.revision!=revision or stream["profile"] is not None:return
         self.revision+=1
-        stream["profile"]={"at":self.clock(),"generation":value["generation"],"width":value["width"],"height":value["height"],"fps":value["fps"],"kbps":value["bitrateKbps"],"stage":"draining","held":None,"bitstream":NativeBitstream(stream["family"])}
+        stream["profile"]={"generation":value["generation"],"width":value["width"],"height":value["height"],"fps":value["fps"],"kbps":value["bitrateKbps"],"stage":"draining","held":None,"bitstream":NativeBitstream(stream["family"])}
 
     def resume(self, value):
         if not self.adaptive or set(value)!={"type","id","generation","baseSeq"} or value.get("type")!="native_profile_resume" or not identifier(value.get("id")):
@@ -351,14 +339,14 @@ class NativeVideoFlow:
                 or not integer(value.get("generation"),2,0xffffffff) or not integer(value.get("baseSeq"),1,0xffffffff)
                 or value["baseSeq"]!=stream["seq"] or profile.get("baseSeq")!=stream["seq"] or stream["pending"]):
             raise VideoFailure("profile_resume_fence")
-        if not self.live(stream,profile["captured"]) or stream["profile"] is not profile:
+        if not self.live(stream) or stream["profile"] is not profile:
             if self.current is stream:self.stop()
             return
         held=profile["held"];profile["held"]=None
         self.revision+=1
         stream["profile"]=None;stream["generation"]=profile["generation"];stream["size"]=None;stream["codec"]=None
         stream["fps"],stream["kbps"]=profile["fps"],profile["kbps"];stream["bitstream"]=profile["bitstream"];stream["next"]=self.clock()
-        try:self.publish(stream,(profile["captured"],True,object()),bytes(held),profile["width"],profile["height"],profile["timestamp"],0,profile["encode_ms"],deadline=profile["at"]+3000)
+        try:self.publish(stream,(profile["captured"],True,object()),bytes(held),profile["width"],profile["height"],profile["timestamp"],0,profile["encode_ms"])
         finally:held[:]=b"\0"*len(held)
 
     def reserve(self, captured=None):
@@ -366,7 +354,7 @@ class NativeVideoFlow:
         if stream is None:
             return None
         captured = self.clock() if captured is None else captured
-        if not self.live(stream, captured):
+        if not self.live(stream):
             if self.current is stream:
                 self.stop()
             return None
@@ -401,13 +389,13 @@ class NativeVideoFlow:
         if profile is not None:
             try:
                 if (stream["profile"] is not profile or profile["stage"]!="encoding" or stream["pending"]
-                        or not self.live(stream,token[0]) or (width,height)!=(profile["width"],profile["height"])
+                        or not self.live(stream) or (width,height)!=(profile["width"],profile["height"])
                         or not integer(timestamp,0,9007199254740991) or timestamp<=stream["timestamp"]):raise VideoFailure("profile_frame")
                 data,codec,key=profile["bitstream"].normalize(data)
                 if not key or not codec:raise VideoFailure("profile_keyframe")
                 profile.update(stage="waiting",held=bytearray(data),codec=codec,captured=token[0],timestamp=timestamp,encode_ms=encode_ms,baseSeq=stream["seq"])
                 def valid():
-                    permitted=self.live(stream,token[0])
+                    permitted=self.live(stream)
                     return permitted and self.current is stream and stream["profile"] is profile and profile["stage"]=="waiting"
                 if not valid():
                     if self.current is stream:self.stop()
@@ -418,9 +406,9 @@ class NativeVideoFlow:
             return
         self.publish(stream,token,data,width,height,timestamp,capture_ms,encode_ms)
 
-    def publish(self,stream,token,data,width,height,timestamp,capture_ms=0,encode_ms=0,deadline=None):
+    def publish(self,stream,token,data,width,height,timestamp,capture_ms=0,encode_ms=0):
         try:
-            if (not self.live(stream, token[0]) or deadline is not None and self.clock()>=deadline or not integer(width, 2, 1920)
+            if (not self.live(stream) or not integer(width, 2, 1920)
                     or not integer(height, 2, 2400) or width % 2 or height % 2
                     or not integer(timestamp, 0, 9007199254740991)
                     or timestamp <= stream["timestamp"] or stream["seq"] >= 0xffffffff):
@@ -439,9 +427,9 @@ class NativeVideoFlow:
             stream["timestamp"] = timestamp
             stream["seq"] += 1
             seq = stream["seq"]
-            stream["pending"].append((seq, self.clock()))
+            stream["pending"].append(seq)
             def valid():
-                if self.live(stream, token[0]) and (deadline is None or self.clock()<deadline):
+                if self.live(stream):
                     return True
                 if self.current is stream:
                     self.stop()
@@ -466,7 +454,7 @@ class NativeVideoFlow:
                 self.stop()
             return
         seq = value.get("seq")
-        if not integer(seq, 1, 0xffffffff) or not stream["pending"] or seq != stream["pending"][0][0]:
+        if not integer(seq, 1, 0xffffffff) or not stream["pending"] or seq != stream["pending"][0]:
             raise VideoFailure("ack_order")
         stream["pending"].pop(0)
 
@@ -688,7 +676,7 @@ class H264Worker:
                 stream, token = reservation
                 def valid():
                     with self.gate:
-                        return not self.stopped.is_set() and self.flow.live(stream, token[0]) and (len(token)<4 or token[3] is None or stream["profile"] is token[3])
+                        return not self.stopped.is_set() and self.flow.live(stream) and (len(token)<4 or token[3] is None or stream["profile"] is token[3])
                 try:
                     if not valid():
                         raise VideoFailure("cancelled")

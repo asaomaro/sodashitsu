@@ -809,15 +809,15 @@ class PortalHelper:
         self.native.tick()
         if self.audio_actor and not self.audio_live(self.audio_actor.id):self.audio_actor.stop()
         if self.native_pending:
-            waiting=self.native_pending;stream,deadline=waiting
-            permitted=self.native.live(stream);now=self.native.clock()
+            waiting=self.native_pending;stream=waiting
+            permitted=self.native.live(stream)
             if self.native_pending is not waiting:return
-            if self.native.current is not stream or not permitted or not deadline-2000<=now<=deadline:
+            if self.native.current is not stream or not permitted:
                 self.native_pending=None
                 if self.native.current is stream:self.native.stop()
         if self.native_worker and self.native_worker.closed.is_set():
             self.native_worker=None
-            if self.native_pending and self.native.current is self.native_pending[0]:
+            if self.native_pending and self.native.current is self.native_pending:
                 self.native_pending=None
                 self.native_worker=_native_video.H264Worker(self.Gst,self.video,self.native,self.output_gate)
             elif self.native.current:self.native.stop()
@@ -838,7 +838,7 @@ class PortalHelper:
                 if stream is not None:
                     if self.native_worker and not self.native_worker.closed.is_set():
                         self.native_worker.stop()
-                        self.native_pending=(stream,self.native.clock()+2000)
+                        self.native_pending=stream
                     else:
                         self.native_pending=None
                         self.native_worker=_native_video.H264Worker(self.Gst,self.video,self.native,self.output_gate)

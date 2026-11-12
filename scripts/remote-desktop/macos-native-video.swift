@@ -191,7 +191,7 @@ func generatedNativeVideoTests() throws -> Int {
     try check(rejected && controller.current?.seq==1,"native video same id cannot reset sequence")
     now=34;controller.offer(image,captured:now);try check(encoders[0].completions.count==2,"native video independent capture after encode completes")
     now+=2001;try controller.command(["type":"native_video_ack","id":first,"seq":1])
-    try check(controller.current==nil && frame.1?()==false,"native video late ack cannot erase deadline")
+    try check(controller.current?.id==first && frame.1?()==true,"native video delayed ACK keeps current source")
     let replacement=UUID().uuidString.lowercased();try start(replacement);try check(controller.current==nil && encoders.count==1,"native video retirement holds physical encoder slot")
     encoders[0].completions[1](.success(packet));try check(spin({controller.inflight==nil}),"native video stale completion drains job")
     encoders[0].retire?();try check(spin({controller.quiescent}),"native video old encoder retired")
@@ -203,7 +203,7 @@ func generatedNativeVideoTests() throws -> Int {
     alive=false;controller.tick();try check(controller.current==nil,"native video source revocation ends stream")
     encoders[1].retire?();try check(spin({controller.quiescent}),"native video revoked encoder retired")
 
-    for reason in ["cancel","expiry","source"] {
+    for reason in ["cancel","delay","source"] {
         var clock:Double=0,permitted=true,owned=[GeneratedNativeEncoder]()
         let pending=NativeVideoController(gate:NSRecursiveLock(),active:{permitted},now:{clock},emit:{_,_ in},factory:{_ in let encoder=GeneratedNativeEncoder();owned.append(encoder);return encoder})
         func begin(_ id:String) throws {try pending.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500])}
@@ -211,11 +211,12 @@ func generatedNativeVideoTests() throws -> Int {
         let waiting=UUID().uuidString.lowercased();try begin(waiting)
         try check(pending.current==nil && owned.count==1,"native replacement holds physical slot")
         if reason=="cancel" {try pending.command(["type":"native_video","id":waiting,"enabled":false])}
-        else if reason=="expiry" {clock=2001}
+        else if reason=="delay" {clock=60000}
         else {permitted=false}
         owned[0].retire?();try check(spin({pending.quiescent}),"native replacement old encoder drains")
         pending.tick();pending.offer(image,captured:clock)
-        try check(pending.current==nil && owned.count==1,"native replacement cancellation never resurrects source")
+        if reason=="delay" {try check(pending.current?.id==waiting && owned.count==2,"healthy replacement waits for physical retirement");pending.stop();owned[1].retire?()}
+        else {try check(pending.current==nil && owned.count==1,"native replacement cancellation never resurrects source")}
     }
 
     var rateClock:Double=0,rateEncoders=[GeneratedNativeEncoder]()
@@ -283,7 +284,8 @@ func generatedNativeVideoTests() throws -> Int {
     fenceClock=2500;profileFence.offer(image,captured:fenceClock);fenceEncoders[1].completions[0](.success(scaledPacket));try check(spin({profileFence.inflight==nil}),"profile fence held completion")
     fenceClock=2990;var fenceQueries=0;fenceQuery={fenceQueries+=1;if fenceQueries==2 {fenceClock=3001}}
     try profileFence.command(["type":"native_profile_resume","id":fenceID,"generation":2,"baseSeq":1])
-    try check(profileFence.current==nil && fenceRecords.filter{$0["type"] as? String=="native_frame"}.count==1,"profile publication cannot extend original deadline")
+    try check(profileFence.current?.id==fenceID && fenceRecords.filter{$0["type"] as? String=="native_frame"}.count==2,"profile publication keeps a healthy delayed source")
+    profileFence.stop()
     fenceEncoders[1].retire?();try check(spin({profileFence.quiescent}),"profile fence encoder retired")
 
     var profileQuery:(()->Void)?,reentryEncoders=[GeneratedNativeEncoder]()
@@ -295,29 +297,23 @@ func generatedNativeVideoTests() throws -> Int {
     try check(reentrantProfile.current?.profile?.width==16,"profile scope query cannot overwrite a newer same-stream profile")
     reentrantProfile.stop(notify:false);reentryEncoders[0].retire?();try check(spin({reentrantProfile.quiescent}),"profile reentry encoder retired")
 
-    for reason in ["timeout","source"] {
+    for reason in ["delay","source"] {
         var clock:Double=0,permitted=true,owned=[GeneratedNativeEncoder](),records=[[String:Any]]()
         let transaction=NativeVideoController(gate:NSRecursiveLock(),active:{permitted},now:{clock},emit:{value,_ in records.append(value)},adaptive:true,factory:{_ in let encoder=GeneratedNativeEncoder();owned.append(encoder);return encoder})
         let id=UUID().uuidString.lowercased();try transaction.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500]);transaction.offer(image,captured:0);owned[0].completions[0](.success(packet));try check(spin({transaction.inflight==nil}),"profile cancellation initial frame")
         try transaction.command(["type":"native_video_ack","id":id,"seq":1]);try transaction.command(["type":"native_profile","id":id,"generation":2,"width":32,"height":32,"fps":15,"bitrateKbps":1200])
         clock=34;transaction.offer(image,captured:clock);owned[0].retire?();try check(spin({transaction.quiescent}),"profile cancellation old retirement");transaction.offer(image,captured:clock);owned[1].completions[0](.success(scaledPacket));try check(spin({transaction.inflight==nil}),"profile cancellation held frame")
         let waiting=transaction.current?.profile
-        if reason=="timeout" {clock=1035}else{permitted=false}
-        transaction.tick();try check(transaction.current==nil && waiting?.held==nil && records.filter{$0["type"] as? String=="native_frame"}.count==1,"profile expiry or source loss discards held key")
+        if reason=="delay" {clock=60000}else{permitted=false}
+        transaction.tick()
+        if reason=="delay" {try check(transaction.current?.id==id && waiting?.held != nil,"healthy profile waits for matching format ACK");try transaction.command(["type":"native_profile_resume","id":id,"generation":2,"baseSeq":1]);try check(records.filter{$0["type"] as? String=="native_frame"}.count==2,"delayed profile is published");transaction.stop()}
+        else {try check(transaction.current==nil && waiting?.held==nil && records.filter{$0["type"] as? String=="native_frame"}.count==1,"source loss discards held key")}
         owned[1].retire?();try check(spin({transaction.quiescent}),"profile cancelled encoder retires")
     }
 
-    let ledger=NativeVideoController(gate:NSRecursiveLock(),active:{true},now:{0},emit:{_,_ in})
-    func ledgerStart(_ id:String) throws {try ledger.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500])}
-    let original=UUID().uuidString.lowercased();try ledgerStart(original);ledger.stop(notify:false)
-    for _ in 0..<33 {try ledgerStart(UUID().uuidString.lowercased());ledger.stop(notify:false)}
-    for spelling in [original,original.uppercased()] {
-        var denied=false;do {try ledgerStart(spelling)} catch {denied=true}
-        try check(denied,"native video UUID cannot replay after ledger window or case change")
-    }
-    for _ in 0..<990 {try ledgerStart(UUID().uuidString.lowercased());ledger.stop(notify:false)}
-    var exhausted=false;do {try ledgerStart(UUID().uuidString.lowercased())} catch {exhausted=true}
-    try check(exhausted && ledger.current==nil,"native video bounded sticky UUID ledger fails closed")
+    let many=NativeVideoController(gate:NSRecursiveLock(),active:{true},now:{0},emit:{_,_ in})
+    for _ in 0..<1100 {try many.command(["type":"native_video","id":UUID().uuidString.lowercased(),"enabled":true,"fps":30,"bitrateKbps":2500]);many.stop(notify:false)}
+    try check(many.quiescent,"distinct stream IDs do not exhaust the helper")
 
     // Actual software VideoToolbox encode uses this generated CGImage only.
     let encoder=ToolboxH264Encoder(fps:30,kbps:2500,hardware:false),box=GeneratedNativePacketBox(),encoded=DispatchSemaphore(value:0)
@@ -434,16 +430,16 @@ struct NativeEncoderSettings {
     let fps:Int,kbps:Int,family:String,size:(Int,Int)?
 }
 final class NativeVideoProfile {
-    let generation:Int,width:Int,height:Int,fps:Int,kbps:Int,at:Double
+    let generation:Int,width:Int,height:Int,fps:Int,kbps:Int
     var phase="draining",held:NativeH264Packet?,captured:Double=0,baseSeq=0
-    init(generation:Int,width:Int,height:Int,fps:Int,kbps:Int,at:Double) {self.generation=generation;self.width=width;self.height=height;self.fps=fps;self.kbps=kbps;self.at=at}
+    init(generation:Int,width:Int,height:Int,fps:Int,kbps:Int) {self.generation=generation;self.width=width;self.height=height;self.fps=fps;self.kbps=kbps}
     func clear() {held=nil}
 }
 final class NativeVideoStream {
     let id:String,window:Int,maxFPS:Int,maxKbps:Int,family:String
     var fps:Int,kbps:Int
     var dead=false,seq=0,timestamp:Int64 = -1,key=true,next:Double=0,codec:String?,width:Int?,height:Int?
-    var pending=[(seq:Int,at:Double)]()
+    var pending=[Int]()
     var generation=1,maximum:(Int,Int)?,profile:NativeVideoProfile?
     init(id:String,fps:Int,kbps:Int,window:Int,family:String="h264") { self.id=id;self.fps=fps;self.kbps=kbps;self.window=window;self.maxFPS=fps;self.maxKbps=kbps;self.family=family }
 }
@@ -456,21 +452,21 @@ final class NativeVideoController {
     let gate:NSRecursiveLock,active:()->Bool,now:()->Double,emit:([String:Any],(() -> Bool)?) throws -> Void
     let factory:(NativeEncoderSettings)throws->NativeH264Encoder
     private(set) var current:NativeVideoStream?,inflight:NativeVideoJob?
-    private var encoder:NativeH264Encoder?,retiring=false,seen=Set<String>(),revision=UUID()
-    private var pendingStart:(stream:NativeVideoStream,at:Double)?
+    private var encoder:NativeH264Encoder?,retiring=false,revision=UUID()
+    private var pendingStart:NativeVideoStream?
     let cadence:Bool,codecs:Bool,adaptive:Bool
     init(gate:NSRecursiveLock,active:@escaping()->Bool,now:@escaping()->Double=milliseconds,emit:@escaping([String:Any],(() -> Bool)?)throws->Void,cadence:Bool=false,codecs:Bool=false,adaptive:Bool=false,factory:@escaping(NativeEncoderSettings)throws->NativeH264Encoder={ToolboxH264Encoder(fps:$0.fps,kbps:$0.kbps,family:$0.family,target:$0.size)}) {
         self.gate=gate;self.active=active;self.now=now;self.emit=emit;self.factory=factory;self.cadence=cadence;self.codecs=codecs;self.adaptive=adaptive
     }
     func locked<T>(_ action:()throws->T) rethrows -> T { gate.lock();defer {gate.unlock()};return try action() }
-    func live(_ stream:NativeVideoStream,captured:Double?=nil) -> Bool {
-        let granted=active(),time=now();let profile=stream.profile
-        return granted && current===stream && !stream.dead && (captured==nil || (time>=captured! && time<=captured!+1000)) && (stream.pending.first==nil || (time>=stream.pending[0].at && time<=stream.pending[0].at+2000)) && (profile==nil || (time>=profile!.at && time<profile!.at+3000 && (profile!.held==nil || (time>=profile!.captured && time<=profile!.captured+1000))))
+    func live(_ stream:NativeVideoStream) -> Bool {
+        let granted=active()
+        return granted && current===stream && !stream.dead
     }
     func stop(_ expected:NativeVideoStream?=nil,notify:Bool=true) {
         locked {
             if let expected=expected,current !== expected { return };revision=UUID()
-            if let waiting=pendingStart {pendingStart=nil;waiting.stream.dead=true;if notify {try? emit(["type":"native_video_stopped","id":waiting.stream.id],nil)}}
+            if let waiting=pendingStart {pendingStart=nil;waiting.dead=true;if notify {try? emit(["type":"native_video_stopped","id":waiting.id],nil)}}
             if let stream=current { current=nil;stream.dead=true;stream.pending.removeAll();stream.profile?.clear();stream.profile=nil;if notify {try? emit(["type":"native_video_stopped","id":stream.id],nil)} }
             retireEncoder()
         }
@@ -484,13 +480,13 @@ final class NativeVideoController {
     /** One bounded explicit replacement; never create a second physical encoder. */
     private func activatePending() {
         guard let waiting=pendingStart else {return}
-        let permitted=active(),time=now()
-        guard pendingStart?.stream === waiting.stream else {return}
-        guard permitted,time>=waiting.at,time<=waiting.at+2000 else {
-            pendingStart=nil;waiting.stream.dead=true;try? emit(["type":"native_video_stopped","id":waiting.stream.id],nil);return
+        let permitted=active()
+        guard pendingStart === waiting else {return}
+        guard permitted else {
+            pendingStart=nil;waiting.dead=true;try? emit(["type":"native_video_stopped","id":waiting.id],nil);return
         }
         guard quiescent else {return}
-        pendingStart=nil;current=waiting.stream
+        pendingStart=nil;current=waiting
     }
     func command(_ value:[String:Any]) throws {
         try locked {
@@ -498,13 +494,13 @@ final class NativeVideoController {
             let id=uuid.uuidString.lowercased()
             if kind=="native_video" {
                 guard Set(value.keys).isSubset(of:["type","id","enabled","fps","bitrateKbps","window","codec"]),let enabled=boolean(value["enabled"]) else { throw NativeError("backend_failure") }
-                if !enabled {if current?.id==id || pendingStart?.stream.id==id {stop(notify:false)};return}
-                guard let fps=integer(value["fps"],1,60),let kbps=integer(value["bitrateKbps"],128,50000),let window=integer(value["window"] ?? 1,1,3),[1,3].contains(window),(value["codec"]==nil || (value["codec"] is String && (codecs ? ["h264","h264-444","hevc","av1"]:["h264"]).contains(value["codec"] as? String ?? ""))),!seen.contains(id),seen.count<1024,current?.id != id else { throw NativeError("unsupported") }
+                if !enabled {if current?.id==id || pendingStart?.id==id {stop(notify:false)};return}
+                guard let fps=integer(value["fps"],1,60),let kbps=integer(value["bitrateKbps"],128,50000),let window=integer(value["window"] ?? 1,1,3),[1,3].contains(window),(value["codec"]==nil || (value["codec"] is String && (codecs ? ["h264","h264-444","hevc","av1"]:["h264"]).contains(value["codec"] as? String ?? ""))),current?.id != id else { throw NativeError("unsupported") }
                 stop();let started=revision,granted=active()
                 guard started==revision else {return}
                 guard granted else {try emit(["type":"native_video_stopped","id":id],nil);return}
-                seen.insert(id);let stream=NativeVideoStream(id:id,fps:Int(fps),kbps:Int(kbps),window:Int(window),family:value["codec"] as? String ?? "h264");revision=UUID()
-                if quiescent {current=stream} else {pendingStart=(stream,now())};return
+                let stream=NativeVideoStream(id:id,fps:Int(fps),kbps:Int(kbps),window:Int(window),family:value["codec"] as? String ?? "h264");revision=UUID()
+                if quiescent {current=stream} else {pendingStart=stream};return
             }
             guard let stream=current,stream.id==id else {return}
             if kind=="native_profile" {
@@ -516,16 +512,16 @@ final class NativeVideoController {
                 let started=revision
                 guard live(stream) else {stop(stream);return}
                 guard revision==started,stream.profile==nil else {return};revision=UUID()
-                stream.profile=NativeVideoProfile(generation:Int(generation),width:Int(width),height:Int(height),fps:Int(fps),kbps:Int(kbps),at:now());return
+                stream.profile=NativeVideoProfile(generation:Int(generation),width:Int(width),height:Int(height),fps:Int(fps),kbps:Int(kbps));return
             }
             if kind=="native_profile_resume" {
                 guard adaptive,Set(value.keys)==Set(["type","id","generation","baseSeq"]),let profile=stream.profile,profile.phase=="waiting",
                       let generation=integer(value["generation"],2,0xffffffff),Int(generation)==profile.generation,
                       let base=integer(value["baseSeq"],1,0xffffffff),Int(base)==profile.baseSeq,profile.baseSeq==stream.seq,stream.pending.isEmpty,
                       let packet=profile.held else {throw NativeError("backend_failure")}
-                guard live(stream,captured:profile.captured),stream.profile===profile else {if current===stream {stop(stream)};return}
+                guard live(stream),stream.profile===profile else {if current===stream {stop(stream)};return}
                 revision=UUID();profile.held=nil;stream.profile=nil;stream.generation=profile.generation;stream.codec=nil;stream.width=nil;stream.height=nil;stream.fps=profile.fps;stream.kbps=profile.kbps;stream.next=now()
-                do {try publish(stream,captured:profile.captured,key:true,packet:packet,deadline:profile.at+3000)} catch {stop(stream)};return
+                do {try publish(stream,captured:profile.captured,key:true,packet:packet)} catch {stop(stream)};return
             }
             if kind=="native_rate" || kind=="native_bitrate" {
                 guard kind != "native_rate" || cadence else {throw NativeError("unsupported")}
@@ -537,18 +533,18 @@ final class NativeVideoController {
             if kind=="native_keyframe" {stream.key=true;return}
             guard kind=="native_video_ack",Set(value.keys).isSubset(of:["type","id","seq"]),let seq=integer(value["seq"],1,0xffffffff) else {throw NativeError("backend_failure")}
             guard live(stream) else {stop(stream);return}
-            guard stream.pending.first?.seq==Int(seq) else {throw NativeError("backend_failure")};stream.pending.removeFirst()
+            guard stream.pending.first==Int(seq) else {throw NativeError("backend_failure")};stream.pending.removeFirst()
         }
     }
     func tick() {
-        locked { activatePending();guard let stream=current else {return};if !live(stream) || (inflight != nil && now()-inflight!.captured>1000) {stop(stream)} }
+        locked { activatePending();guard let stream=current else {return};if !live(stream)  {stop(stream)} }
     }
     var quiescent:Bool {locked {encoder==nil && !retiring && inflight==nil}}
     var captureFPS:Int { locked {current?.fps ?? 0} }
     func offer(_ image:CGImage,captured:Double) {
         locked {
             guard let stream=current else {return}
-            guard captured.isFinite,captured>=0,captured<=safeInteger/1000,live(stream,captured:captured) else {stop(stream);return}
+            guard captured.isFinite,captured>=0,captured<=safeInteger/1000,live(stream) else {stop(stream);return}
             guard inflight==nil,!retiring,stream.pending.count<stream.window,captured>=stream.next else {return}
             let profile=stream.profile
             if let profile=profile {
@@ -561,10 +557,10 @@ final class NativeVideoController {
                 if encoder==nil {encoder=try factory(NativeEncoderSettings(fps:profile?.fps ?? stream.fps,kbps:profile?.kbps ?? stream.kbps,family:stream.family,size:profile.map{($0.width,$0.height)} ?? (stream.width != nil && stream.height != nil ? (stream.width!,stream.height!):nil)))}
                 guard current===stream,!retiring,let encoder=encoder else {throw NativeError("source_changed")}
                 encoder.rate(profile?.kbps ?? stream.kbps,valid:{ [weak self] in
-                    guard let self=self else {return false};return self.locked {self.inflight===job && self.current===stream && !stream.dead && (job.profile==nil || stream.profile===job.profile) && self.now()>=job.captured && self.now()<=job.captured+1000}
+                    guard let self=self else {return false};return self.locked {self.inflight===job && self.current===stream && !stream.dead && (job.profile==nil || stream.profile===job.profile)}
                 })
                 encoder.encode(image,timestamp:Int64(captured*1000),key:job.key,valid:{ [weak self] in
-                    guard let self=self else {return false};return self.locked {self.inflight===job && self.current===stream && !stream.dead && (job.profile==nil || stream.profile===job.profile) && self.now()>=job.captured && self.now()<=job.captured+1000}
+                    guard let self=self else {return false};return self.locked {self.inflight===job && self.current===stream && !stream.dead && (job.profile==nil || stream.profile===job.profile)}
                 },completion:{ [weak self] result in DispatchQueue.main.async {self?.complete(job,result)} })
             } catch {if encoder==nil {inflight=nil};stop(stream)}
         }
@@ -576,29 +572,29 @@ final class NativeVideoController {
             do {
                 let packet=try result.get()
                 if let profile=job.profile {
-                    guard stream.profile===profile,profile.phase=="encoding",stream.pending.isEmpty,live(stream,captured:job.captured),packet.key,
+                    guard stream.profile===profile,profile.phase=="encoding",stream.pending.isEmpty,live(stream),packet.key,
                           packet.width==profile.width,packet.height==profile.height,packet.data.count>0,packet.data.count<=512*1024-9,
                           packet.codec.lowercased().hasPrefix(stream.family=="hevc" ? "hev1.":stream.family=="av1" ? "av01.":stream.family=="h264-444" ? "avc1.f4":"avc1.") else {throw NativeError("backend_failure")}
                     profile.phase="waiting";profile.held=packet;profile.captured=job.captured;profile.baseSeq=stream.seq
                     try emit(["type":"native_profile_applied","id":stream.id,"generation":profile.generation,"baseSeq":stream.seq,"width":packet.width,"height":packet.height,"codec":packet.codec],{ [weak self] in
-                        guard let self=self else {return false};return self.locked {let permitted=self.live(stream,captured:job.captured);return permitted && self.current===stream && stream.profile===profile && profile.phase=="waiting"}
+                        guard let self=self else {return false};return self.locked {let permitted=self.live(stream);return permitted && self.current===stream && stream.profile===profile && profile.phase=="waiting"}
                     });return
                 }
                 try publish(stream,captured:job.captured,key:job.key,packet:packet)
             } catch {stop(stream)}
         }
     }
-    private func publish(_ stream:NativeVideoStream,captured:Double,key:Bool,packet:NativeH264Packet,deadline:Double?=nil) throws {
+    private func publish(_ stream:NativeVideoStream,captured:Double,key:Bool,packet:NativeH264Packet) throws {
                 guard packet.codec.lowercased().hasPrefix(stream.family=="hevc" ? "hev1.":stream.family=="av1" ? "av01.":stream.family=="h264-444" ? "avc1.f4":"avc1.") else {throw NativeError("backend_failure")}
-                guard live(stream,captured:captured),(deadline==nil || now()<deadline!),packet.data.count<=512*1024-9,packet.data.count>0,packet.width>=2,packet.width<=1920,packet.height>=2,packet.height<=2400,packet.width%2==0,packet.height%2==0,!key || packet.key,stream.seq<0xffffffff,(stream.codec==nil || stream.codec==packet.codec),(stream.width==nil || stream.width==packet.width && stream.height==packet.height) else {throw NativeError("backend_failure")}
+                guard live(stream),packet.data.count<=512*1024-9,packet.data.count>0,packet.width>=2,packet.width<=1920,packet.height>=2,packet.height<=2400,packet.width%2==0,packet.height%2==0,!key || packet.key,stream.seq<0xffffffff,(stream.codec==nil || stream.codec==packet.codec),(stream.width==nil || stream.width==packet.width && stream.height==packet.height) else {throw NativeError("backend_failure")}
                 let timestamp=Int64(captured*1000);guard timestamp>stream.timestamp else {throw NativeError("backend_failure")}
                 if stream.maximum==nil {stream.maximum=(packet.width,packet.height)}
-                stream.codec=packet.codec;stream.width=packet.width;stream.height=packet.height;stream.timestamp=timestamp;stream.seq+=1;stream.pending.append((stream.seq,now()))
+                stream.codec=packet.codec;stream.width=packet.width;stream.height=packet.height;stream.timestamp=timestamp;stream.seq+=1;stream.pending.append(stream.seq)
                 var record:[String:Any]=["type":"native_frame","id":stream.id,"seq":stream.seq,"timestamp":timestamp,"key":packet.key,"codec":packet.codec,"width":packet.width,"height":packet.height,"captureMs":0,"conversionMs":0,"encodeMs":max(0,now()-captured),"data":packet.data.base64EncodedString()]
                 if codecs {record["codecName"]=stream.family}
                 if adaptive {record["generation"]=stream.generation}
                 try emit(record,{ [weak self] in
-                    guard let self=self else {return false};return self.locked {if self.live(stream,captured:captured) && (deadline==nil || self.now()<deadline!) {return true};self.stop(stream);return false}
+                    guard let self=self else {return false};return self.locked {if self.live(stream) {return true};self.stop(stream);return false}
                 })
     }
 }
