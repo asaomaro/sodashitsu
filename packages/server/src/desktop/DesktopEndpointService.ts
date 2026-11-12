@@ -465,7 +465,7 @@ export class DesktopEndpointService {
       const code=formatDesktopAgentGrant({version:1,machineId:context.machine,origin:context.origin.replace(/^ws/,"http"),provider,recipient:message.recipient!,scope:granted.scope,ticket:granted.ticket,expiresAt:granted.expiresAt});
       emit({type:"agent_endpoint_ticket",code,expiresAt:granted.expiresAt});
     }catch{
-      if(context.active()&&revision===context.grantRevision)emit({type:"agent_endpoint_error",message:"接続先で許可したエージェントと共有状態を確認してください。"});
+      if(context.active())emit({type:"agent_endpoint_error",message:revision===context.grantRevision?"接続先で許可したエージェントと共有状態を確認してください。":"許可の発行を取り消しました。"});
     }finally{context.agentPending=false;this.agentCredentials--;}
   }
   private async agentRequest(context:Context,raw:Uint8Array):Promise<string>{

@@ -993,3 +993,79 @@ AssertionError: expected false to be true // Object.is equality
 ## Integration agent E2E fixture correction
 
 Primary agent E2E reached successful requested snapshot and applied agent action, then timed out on human canvas click. Playwright trace and screenshot show the agent-grant button in the intentionally open information/settings overlay intercepting the canvas center. openNativeTab explicitly opens settings; the test omitted the user action to close it before human input and reopen before the next grant. Baselinea291 has the same CSS and spec sequence. Fixture now uses the visible information/settings button and observes aria-expanded before each interaction; no forced click, DOM bypass, production UI change or broad rerun. Integration owner reruns only the failing primary case after its batch.
+
+## Final integration corrections: ordinary completion and current fixtures
+
+Two product defects were identified from actual browser traces. Shared control Relay counted every user request while Provider coalesced repeated pending grants: repeated requests left an unmatched FIFO entry; true/false/true could reject a valid reply and close. The existing queue now serializes one in-flight command, coalesces duplicate intent, and retains a mandatory false cleanup barrier before a later grant (at most3 entries). Real helper tests hold cleanup, prove exact provider command order, held-key cleanup and successful subsequent input for repeated/replaced intent. Pending encrypted-agent credential cancellation now completes its still-active UI request via existing agent_endpoint_error; closed contexts receive no completion and stale credentials still cannot publish.
+
+OLD production Relay/EndpointService independently fail3 regressions (repeat, replace, active cancelled request); closed-context negative control staysPASS. Sources restored/byte-compared. New product tests4 PASS. Relevant Relay current-wire/pointer/audio/monitor/file-copy tests13 PASS; ack-stall/physical-pong tests2 PASS. Obsolete fixture expectations were corrected: pointer stderr no removed epoch token, file activation expects completed owner release, monitor handoff awaits real existing completion, audio payload is not a video draw ACK, browser heartbeats use protocol pong. No compatibility branch is restored.
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopEndpointService.test.ts (14 tests | 1 failed | 12 skipped) 17ms
+   × completes a cancelled pending agent grant only for its still-active context: true 14ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (356 tests | 2 failed | 354 skipped) 2699ms
+   × coalesces the latest shared control intent behind ordinary completion: repeat 1372ms
+   × coalesces the latest shared control intent behind ordinary completion: replace 1324ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopEndpointService.test.ts > completes a cancelled pending agent grant only for its still-active context: true
+AssertionError: expected [] to deeply equal [ { …(2) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "message": "許可の発行を取り消しました。",
+-     "type": "agent_endpoint_error",
+-   },
+- ]
++ []
+
+ ❯ src/desktop/DesktopEndpointService.test.ts:344:981
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > coalesces the latest shared control intent behind ordinary completion: repeat
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > coalesces the latest shared control intent behind ordinary completion: replace
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktop/DesktopRelay.test.ts:2163:138
+    2161|  v.send({type:"control",enabled:true});await vi.waitFor(()=>expect(sha…
+    2162|  if(mode==="replace")v.send({type:"control",enabled:false});v.send({ty…
+    2163|  await writeFile(f.endedMarker,"cleanup complete");await vi.waitFor(()…
+       |                                                                                                                                          ^
+    2164|  expect(commands).toEqual(mode==="replace"?[true,false,true,false,true…
+    2165|  const held=(await readFile(f.ledger,"utf8")).trim().split("\n").map(l…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 1 passed | 366 skipped (370)
+   Start at  01:13:08
+   Duration  4.59s (transform 47%, tests 42%, import 10%)
+
+  Transform  |@sodashitsu/server| transforming modules took 3.03s · 47% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+```

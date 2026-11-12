@@ -939,7 +939,7 @@ it("forwards explicit native audio but never renews input freshness, and stops i
  const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMedia:true,command:[...cfg.command,"--native-audio"]});
  const v=await f.viewer("audio");v.send({...start,options:{width:640,fps:10,quality:65,features:true}});await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(v.messages.find(m=>m.type==="ready")?.nativeAudio).toBe(true);
  v.send({type:"media",enabled:true,settings:{transport:"native",audio:true}});await expect.poll(()=>v.messages.some(m=>m.type==="native_audio_status"&&m.state==="running")).toBe(true);await expect.poll(()=>v.frames.filter(isDesktopAudio).length).toBeGreaterThan(2);
- const server=Array.from((f.relay as any).viewers)[0] as any;expect(server.media.lastAck).toBe(1);expect(server.control).toBe(false);
+ const server=Array.from((f.relay as any).viewers)[0] as any;expect(server.media.lastAck).toBe(0);expect(server.control).toBe(false);
  v.send({type:"media",enabled:false});await expect.poll(()=>(f.provider as any).active.native.active).toBeUndefined();expect(server.media).toBeUndefined();v.send({type:"stop"});
 });
 
@@ -1642,7 +1642,7 @@ it("uses independent physical monitor sources and shares only matching same-moni
  const physical=(f.provider as any).physicalHelpers as Set<unknown>;expect(physical.size).toBe(2);expect(decodeDesktopFrame(left.frames[0]!).info.width).toBe(320);expect(decodeDesktopFrame(right.frames[0]!).info.width).toBe(640);expect(decodeDesktopFrame(same.frames[0]!).info.width).toBe(320);
  expect(left.messages.find(m=>m.type==="ready")?.monitorLayout).toMatchObject({selected:"left"});expect(right.messages.find(m=>m.type==="ready")?.monitorLayout).toMatchObject({selected:"right"});
  left.send({type:"control",enabled:true});await expect.poll(()=>left.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);right.send({type:"control",enabled:true});await expect.poll(()=>right.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);
- left.send({type:"control",enabled:false});await expect.poll(()=>left.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);await expect.poll(()=>(f.provider as any).resources.pending.size).toBe(0);right.send({type:"control",enabled:true});await expect.poll(()=>right.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
+ left.send({type:"control",enabled:false});await expect.poll(()=>left.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);await Promise.all([...(f.provider as any).shared].map((s:any)=>(f.provider as any).resources.releasing(s,"control")));right.send({type:"control",enabled:true});await expect.poll(()=>right.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
  left.send({type:"stop"});same.send({type:"stop"});right.send({type:"stop"});await expect.poll(()=>physical.size).toBe(0);
 });
 it("requires explicit independent capability and refuses incompatible mode or same-monitor settings",async()=>{
@@ -1691,7 +1691,7 @@ it.each(["pipe","json","shared","folder","virtual","virtual-shared"])("copies a 
  const state=f.provider as any,share=shared?[...state.shared][0]:state.active,gesture=crypto.randomUUID();
  const prepared=await run({action:"native_prepare",gesture,origin:f.origin,seq:1});expect(prepared.ok).toBe(true);expect(capture).toHaveBeenCalledWith(expect.objectContaining({x:-400,y:50,window:42,pid:7}),expect.any(Number),expect.any(AbortSignal));
  const offer=prepared.result.native;expect(offer.entries[0].name).toBe(mode==="folder"?"selected-folder":"selected-generated.txt");if(mode==="folder")expect(offer.entries).toEqual(expect.arrayContaining([expect.objectContaining({name:"selected-folder\\empty",directory:true,bytes:0})]));expect(offer.generation).toBe(gesture);expect(JSON.stringify(offer)).not.toContain(root);
- const activated=await run({action:"native_activate",gesture,lease:offer.lease});expect(activated.ok).toBe(true);expect(state.resources.identity(share,"control")?.source).toBe(share.process.resourceChannel);expect(share.control).toBe(false);expect(share.pointerWitness).toBeUndefined();
+ const activated=await run({action:"native_activate",gesture,lease:offer.lease});expect(activated.ok).toBe(true);expect(state.resources.identity(share,"control")).toBeUndefined();expect(state.resources.releasing(share,"control")).toBeUndefined();expect(share.control).toBe(false);expect(share.pointerWitness).toBeUndefined();
  const read=await run({action:"native_read",gesture,lease:offer.lease,request:crypto.randomUUID(),index:mode==="folder"?offer.entries.findIndex((entry:any)=>entry.name.endsWith("data.txt")):0,offset:0,length:23});expect(read.ok).toBe(true);expect(Buffer.from(read.result.data,"base64").toString()).toBe("generated native source");
  if(shared){
   const other=await f.viewer(protocols);other.send({...start,options});await expect.poll(()=>other.frames.length).toBeGreaterThan(0);other.send({type:"control",enabled:true});await expect.poll(()=>other.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
@@ -2147,3 +2147,23 @@ it("keeps healthy browser and headless sockets alive without JavaScript heartbea
 it("closes a half-open physical viewer when protocol pongs stop",async()=>{const f=await fixture(),viewer=await f.viewer();viewer.send(start);await vi.waitFor(()=>expect(viewer.frames.length).toBe(1));const relay=f.relay as any,v=[...relay.viewers][0];(viewer.ws as any)._autoPong=false;v.lastSeen=performance.now()-11000;const old=v.lastSeen;relay.timer._onTimeout();await new Promise(resolve=>setTimeout(resolve,30));expect(v.lastSeen).toBe(old);v.lastSeen=performance.now()-13000;relay.timer._onTimeout();await vi.waitFor(()=>expect(viewer.ws.readyState).toBe(WebSocket.CLOSED));await vi.waitFor(()=>expect((f.provider as any).active).toBeUndefined());});
 
 it("expires an agent command held in the helper queue using its existing caller budget",async()=>{const f=await fixture(),viewer=await f.viewer();viewer.send(start);await vi.waitFor(()=>expect(viewer.frames.length).toBe(1));const v=[...(f.relay as any).viewers][0],share=(f.provider as any).active,lease=f.relay.agents.attach("queued-agent",f.relay.agents.grant(v.agent).ticket).leaseId;await vi.waitFor(()=>expect(share.control).toBe(true));const observed=f.relay.agents.observe("queued-agent",lease),stdin=share.process.stdin,write=stdin.write.bind(stdin),held:any[]=[];const hook=vi.spyOn(stdin,"write").mockImplementation((raw:any,...args:any[])=>{held.push([raw,args]);return true;});try{const pending=f.relay.agents.act("queued-agent",lease,observed.observationId,[{kind:"text",text:"EXPIRED_AGENT"}],performance.now()+150),rejected=expect(pending).rejects.toThrow();await vi.waitFor(()=>expect(held.some(([raw])=>JSON.parse(String(raw)).type==="input")).toBe(true));const command=held.map(([raw])=>JSON.parse(String(raw))).find(m=>m.type==="input");await rejected;await new Promise(resolve=>setTimeout(resolve,80));const cleanup=(f.provider as any).resources.releasing(share,"control");expect(cleanup).toBeDefined();hook.mockRestore();for(const[raw,args]of held)write(raw,...args);await cleanup;expect(await readFile(f.record,"utf8").catch(()=>"")).not.toContain("EXPIRED_AGENT");expect(viewer.messages.some(m=>m.type==="input_ack"&&m.seq===command.seq)).toBe(false);expect(share.control).toBe(false);}finally{hook.mockRestore();viewer.send({type:"stop"});}});
+
+it.each(["repeat","replace"])("coalesces the latest shared control intent behind ordinary completion: %s",async mode=>{
+ const f=await fixture(),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,command:[...cfg.command,"--control-release-marker",f.endedMarker,"--input-ledger",f.ledger]});
+ const v=await f.viewer("shared");v.send({...start,options:{...start.options,features:true,sharedDesktop:true}});
+ await vi.waitFor(()=>expect(v.frames.length).toBe(1));
+ const commands:boolean[]=[],share=[...(f.provider as any).shared][0];
+ share.ws.on("message",(raw:unknown)=>{const m=JSON.parse(String(raw));if(m.type==="control")commands.push(m.enabled);});
+ v.send({type:"control",enabled:true});await vi.waitFor(()=>expect(v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true));
+ v.send({type:"input",seq:1,input:{kind:"key",code:"KeyB",down:true}});await vi.waitFor(()=>expect(v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true));
+ v.send({type:"control",enabled:false});await vi.waitFor(()=>expect(v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false));
+ v.send({type:"control",enabled:true});await vi.waitFor(()=>expect(share.pendingControl).toBe(true));
+ if(mode==="replace")v.send({type:"control",enabled:false});v.send({type:"control",enabled:true});
+ await writeFile(f.endedMarker,"cleanup complete");await vi.waitFor(()=>expect(v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true));
+ expect(commands).toEqual(mode==="replace"?[true,false,true,false,true]:[true,false,true]);
+ const held=(await readFile(f.ledger,"utf8")).trim().split("\n").map(line=>JSON.parse(line));
+ expect(held.some(e=>e.type==="key-down"&&e.held.includes("KeyB"))).toBe(true);expect(held.filter(e=>e.type==="control").every(e=>e.held.length===0)).toBe(true);
+ expect((f.provider as any).resources.releasing(share,"control")).toBeUndefined();expect(v.ws.readyState).toBe(WebSocket.OPEN);
+ v.send({type:"input",seq:2,input:{kind:"key",code:"KeyA",down:true}});await vi.waitFor(()=>expect(v.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true));v.send({type:"stop"});
+});

@@ -373,7 +373,13 @@ export class DesktopRelay {
     if (!this.viewers.has(v) || !v.provider) return false;
     if (v.sharedDesktop) {
       const queue = v.controlRequests ??= [];
-      if (queue.length >= 32) { this.stop(v); return false; }
+      if(queue.length){
+        // Keep a required false/release barrier even when a later true wins.
+        // Duplicate intents need no extra provider completion.
+        const release=queue[0]===true&&(queue.includes(false)||!enabled);
+        queue.splice(1);if(release)queue.push(false);
+        if(enabled&&(release||queue[0]===false))queue.push(true);return true;
+      }
       queue.push(enabled);
     }
     const sent = this.send(v.provider, { type: "control", enabled });
@@ -1253,7 +1259,7 @@ export class DesktopRelay {
               if (requested === undefined || (!requested && msg.enabled)) throw Error("Unexpected shared control response");
               // A grant/release can be followed immediately by a new request. A
               // response for that older request cannot revoke the newer grant.
-              if (v.controlRequests?.length) return;
+              if(v.controlRequests?.length){if(!this.send(v.provider,{type:"control",enabled:v.controlRequests[0]}))this.stop(v);return;}
               if (requested && !msg.enabled && v.control) { v.control = false; this.agents.revoke(v.agent); }
             }
             if (msg.enabled === v.control)
