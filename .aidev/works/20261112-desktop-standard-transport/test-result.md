@@ -1073,3 +1073,183 @@ AssertionError: expected false to be true // Object.is equality
 Integration fixture-only alignment: GPU native-video test now recognizes a single protocol passed as either string or normalized array, so its intentional physical lane-close targets the actual socket. Encrypted raw takeover asserts the existing refresh control becomes enabled before clicking; unlike the real UI takeover case, raw wire traffic provides no local control intent and correctly leaves the UI read-only. Both still prove pending backend cancellation and no late credential. Native drag pointer/release fixtures and signin startup dependencies use the current interfaces, with no epoch/result receipt or removed now injection. Synthetic priority stderr ACK drops the removed epoch token. Integration owner runs only affected browser cases and E2E typecheck; no broad rerun.
 
 Final targeted410-test run left one fixture failure: shared-agent test intercepted the old release reply then expected the new grant reply before delivering it. Existingqueue serialization correctly waits for that ordinary completion. Fixture now attaches the agent, observes exactly one held false reply, delivers it, waits for actual second true reply, delivers that reply and retains agent-active/observe assertions. Targeted case PASS. No product code or built artifact changed.
+
+
+## Post-integration audit follow-up
+
+Source base 6ccb932a; source commit 7f12f1fdbcfdee8a199e8fe9db039f76eb4038c5; isolated author worktree `/workspaces/sodashitsu-transport-final-timers`. Independent final_cleanup_audit approved source before integration. No production/Windows operation was performed for this source phase.
+
+Six focused files (SharedNative, SharedNativeRate, AgentRecipient, AgentAccess, SigninBridge and bridgeFrames) pass 106 tests. An existing whole-server typecheck was stopped as overly broad and replaced by a private tsconfig extending the real server typecheck, with only these affected roots; final scoped tsc --noEmit exits 0 with no diagnostics. No new checked-in test/build harness was added.
+
+For the negative control, only the three modified desktop implementation files were restored from source base 6ccb932a, keeping the new regressions and shared decoder code. All nine behavior cases fail: delayed helper/profile/viewer/draw completion; fresh viewer grant after idle RPC age; 1000 completed observations; completed request-ID reuse; 1000 completed Signin channels; and closed channel-ID reuse. Patched files were restored byte-for-byte, then the exact nine cases pass. Existing source-stop, grant expiry, operation timeout, pending request cancellation, concurrent 16-channel and malformed header/record/backpressure checks also pass in the 106-test run.
+
+Raw old-source output (exit 1):
+
+```text
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-final-timers
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopSigninBridge.test.ts (22 tests | 2 failed | 20 skipped) 59ms
+   × serves a new channel after a thousand completed channels on the same live connector 56ms
+   × reuses closed channel IDs without imposing an order on independent live channels 2ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopAgentRecipient.test.ts (16 tests | 3 failed | 13 skipped) 57ms
+   × reuses completed request IDs while retaining the private owner and rejecting general RPC 11ms
+   × accepts a fresh viewer grant after the private endpoint has existed for two minutes 3ms
+   × keeps a valid grant after a thousand completed observation requests 42ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopSharedNative.test.ts (36 tests | 4 failed | 32 skipped) 28ms
+   × completes a delayed shared profile exchange without retiring healthy owners: helper 14ms
+   × completes a delayed shared profile exchange without retiring healthy owners: viewer 3ms
+   × completes a delayed shared profile exchange without retiring healthy owners: settle 4ms
+   × completes a delayed shared profile exchange without retiring healthy owners: draw 4ms
+
+ Test Files  3 failed (3)
+      Tests  9 failed | 65 skipped (74)
+   Start at  04:24:04
+   Duration  1.10s (transform 70%, import 23%, tests 7%, worker 1%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopAgentRecipient.test.ts > reuses completed request IDs while retaining the private owner and rejecting general RPC
+Error: Private desktop agent request rejected
+ ❯ failure src/desktop/DesktopEndpointAgentRpc.ts:8:19
+      6| const methods=["desktop.agent.attach","desktop.agent.observe","desktop…
+      7| const Envelope=z.object({id:z.string().regex(/^[1-9][0-9]{0,15}$/),met…
+      8| const failure=()=>Error("Private desktop agent request rejected");
+       |                   ^
+      9| /** Provider-private finite RPC owner. Never register on the public RP…
+     10|  * Recipient is supplied by the authenticated endpoint, never by a JSO…
+ ❯ DesktopEndpointAgentRpc.request src/desktop/DesktopEndpointAgentRpc.ts:70:45
+ ❯ src/desktop/DesktopAgentRecipient.test.ts:39:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopAgentRecipient.test.ts > accepts a fresh viewer grant after the private endpoint has existed for two minutes
+Error: Private desktop agent request rejected
+ ❯ failure src/desktop/DesktopEndpointAgentRpc.ts:8:19
+      6| const methods=["desktop.agent.attach","desktop.agent.observe","desktop…
+      7| const Envelope=z.object({id:z.string().regex(/^[1-9][0-9]{0,15}$/),met…
+      8| const failure=()=>Error("Private desktop agent request rejected");
+       |                   ^
+      9| /** Provider-private finite RPC owner. Never register on the public RP…
+     10|  * Recipient is supplied by the authenticated endpoint, never by a JSO…
+ ❯ DesktopEndpointAgentRpc.request src/desktop/DesktopEndpointAgentRpc.ts:70:45
+ ❯ src/desktop/DesktopAgentRecipient.test.ts:104:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopAgentRecipient.test.ts > keeps a valid grant after a thousand completed observation requests
+Error: Private desktop agent request rejected
+ ❯ failure src/desktop/DesktopEndpointAgentRpc.ts:8:19
+      6| const methods=["desktop.agent.attach","desktop.agent.observe","desktop…
+      7| const Envelope=z.object({id:z.string().regex(/^[1-9][0-9]{0,15}$/),met…
+      8| const failure=()=>Error("Private desktop agent request rejected");
+       |                   ^
+      9| /** Provider-private finite RPC owner. Never register on the public RP…
+     10|  * Recipient is supplied by the authenticated endpoint, never by a JSO…
+ ❯ DesktopEndpointAgentRpc.request src/desktop/DesktopEndpointAgentRpc.ts:70:45
+ ❯ src/desktop/DesktopAgentRecipient.test.ts:116:58
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSharedNative.test.ts > completes a delayed shared profile exchange without retiring healthy owners: helper
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSharedNative.test.ts > completes a delayed shared profile exchange without retiring healthy owners: viewer
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSharedNative.test.ts > completes a delayed shared profile exchange without retiring healthy owners: settle
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktop/DesktopSharedNative.test.ts:204:26
+    202|   const audio=f.native.audioSource(f.a,f.ids.get(f.a)!)!;
+    203|   await vi.advanceTimersByTimeAsync(5001);
+    204|   expect(audio.active()).toBe(true);
+       |                          ^
+    205|   expect(f.policies).toEqual([true]);
+    206|   expect([...f.messages.values()].flat().some(m=>m.type==="native_vide…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSharedNative.test.ts > completes a delayed shared profile exchange without retiring healthy owners: draw
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/desktop/DesktopSharedNative.test.ts:206:84
+    204|   expect(audio.active()).toBe(true);
+    205|   expect(f.policies).toEqual([true]);
+    206|   expect([...f.messages.values()].flat().some(m=>m.type==="native_vide…
+       |                                                                                    ^
+    207|   expect(f.commands.some(m=>m.type==="native_video"&&!m.enabled)).toBe…
+    208|   if(kind==="helper") {f.apply(1);f.resume(f.a);f.resume(f.b);}
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninBridge.test.ts > serves a new channel after a thousand completed channels on the same live connector
+AssertionError: expected [ …(1000) ] to have a length of 1001 but got 1000
+
+- Expected
++ Received
+
+- 1001
++ 1000
+
+ ❯ src/desktop/DesktopSigninBridge.test.ts:51:27
+     49|   for(let id=1;id<=1001;id++) {
+     50|     f.open(id);f.bridge.receive(frame(F.TEXT,id,new TextEncoder().enco…
+     51|     expect(f.connections).toHaveLength(id);
+       |                           ^
+     52|     f.bridge.receive(frame(F.CLOSE,id,encodeJson({code:1000,reason:"ge…
+     53|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninBridge.test.ts > reuses closed channel IDs without imposing an order on independent live channels
+AssertionError: expected [ { bufferedAmount: +0, …(7) } ] to have a length of 2 but got 1
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ src/desktop/DesktopSigninBridge.test.ts:84:63
+     82|
+     83| it("reuses closed channel IDs without imposing an order on independent…
+     84|   const f=fixture();f.open(3);f.open(1);expect(f.connections).toHaveLe…
+       |                                                               ^
+     85|   f.bridge.receive(frame(F.CLOSE,3,encodeJson({code:1000,reason:"gener…
+     86|   f.open(3);expect(f.connections).toHaveLength(3);f.connections.at(-1)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+
+```
+
+Restored implementation output (exit 0):
+
+```text
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-final-timers
+
+
+ Test Files  3 passed (3)
+      Tests  9 passed | 65 skipped (74)
+   Start at  04:25:25
+   Duration  1.02s (transform 71%, import 22%, tests 6%, worker 1%)
+
+
+```
