@@ -76,13 +76,13 @@ public static partial class SodaDesktopHost {
     static bool InputAckPipe=false;
     static bool NativePointerProof=false;
     static Dictionary<string,object> LastAppliedPointer;
-    static Func<Point,Tuple<long,int>> MemoryPointerTarget;
+    static Func<Point,Tuple<long,int>> MemoryPointerTarget=null;
     static bool DeferNativeSnapshots=false;
     static long LastNativeInput=-1000;
     static long LastHeartbeat=0;
     static Rectangle Bounds;static SodaDesktopMonitorLayout ActiveMonitors;static int MonitorNotice;static string CaptureDevice;
     static SodaDesktopMonitorLayout.IDriver MonitorDriver=new SodaDesktopMonitorLayout.NativeDriver();
-    static Func<bool> MemoryDesktop;static Action<INPUT> MemoryInput;static Action<object> MemoryOutput;
+    static Func<bool> MemoryDesktop=null;static Action<INPUT> MemoryInput=null;static Action<object> MemoryOutput=null;
     static bool SourceMatches(string device){SodaDesktopMonitorLayout.Item[] ignored;return SourceMatches(device,out ignored);}
     static bool SourceMatches(string device,out SodaDesktopMonitorLayout.Item[] current){current=null;if(ActiveMonitors==null)return SodaDesktopDisplay.Matches(device,Bounds);bool same=false;try{current=MonitorDriver.Read();same=ActiveMonitors.MatchesItems(current);}catch{}if(!same&&Interlocked.CompareExchange(ref MonitorNotice,1,0)==0)Output(new{type="monitor_topology_changed"});return same;}
 
@@ -180,7 +180,7 @@ public static partial class SodaDesktopHost {
         try { uint needed; var name=new StringBuilder(256); return GetUserObjectInformation(h,2,name,512,out needed) && name.ToString()=="Default"; }
         finally { CloseDesktop(h); }
     }
-    static Func<INPUT[],uint> MemoryBatchInput;
+    static Func<INPUT[],uint> MemoryBatchInput=null;
     static void Emit(INPUT value) { EmitInputs(new[]{value}); }
     static void EmitInputs(INPUT[] values) {
         try { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");uint sent;
@@ -339,7 +339,7 @@ public static partial class SodaDesktopHost {
     static bool AdmitPrepared(PreparedFrame frame){
         if(!AllowedDesktop()||!PublishScope(frame.scopeTicket)){Stopping=true;return false;}return true;
     }
-    static Action MemoryPreparedWait;
+    static Action MemoryPreparedWait=null;
     static bool PublishPrepared(PreparedFrame frame){
         var payload=new {type="frame",info=frame.info,data=Convert.ToBase64String(frame.image)};
         if(MemoryPreparedWait!=null)MemoryPreparedWait();
