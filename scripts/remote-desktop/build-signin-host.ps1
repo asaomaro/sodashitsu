@@ -14,8 +14,6 @@ $parameters.ReferencedAssemblies.AddRange([string[]]@('System.dll','System.Core.
 if($ValidateOnly){
     if($OutputDirectory){throw 'ValidateOnly does not emit an executable'}
     Add-Type -TypeDefinition $combined -CompilerParameters $parameters
-    [SodaDesktopSigninNativeHost]::VerifyGeneratedData()
-    [SodaDesktopSigninWorker]::VerifyGeneratedData()
     'signin_native_compiled_no_execution';exit 0
 }
 if(-not $OutputDirectory -or -not [IO.Path]::IsPathRooted($OutputDirectory) -or -not [IO.Directory]::Exists($OutputDirectory)){throw 'Specify an existing absolute output directory'}

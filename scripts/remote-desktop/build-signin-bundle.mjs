@@ -8,7 +8,7 @@ export async function buildSigninBundle(){
  const entry=fileURLToPath(new URL("../../packages/server/src/signin/main.ts",import.meta.url));
  const bundle=await rolldown({input:entry,platform:"node",external:isBuiltin,transform:{define:{"import.meta.url":"__soda_bundle_url","process.env.WS_NO_BUFFER_UTIL":'"1"',"process.env.WS_NO_UTF_8_VALIDATE":'"1"'}},onwarn:warning=>{throw new Error("Signin bundle warning: "+warning.code);}});
  try{
-  const {output}=await bundle.generate({format:"cjs",exports:"named",polyfillRequire:false,inlineDynamicImports:true,sourcemap:false,minify:false});
+  const {output}=await bundle.generate({format:"cjs",exports:"named",polyfillRequire:false,inlineDynamicImports:true,sourcemap:false,minify:false,banner:'const __soda_bundle_url = require("node:url").pathToFileURL(__filename).href;'});
   if(output.length!==1||output[0].type!=="chunk"||output[0].imports.some(id=>!isBuiltin(id))||output[0].dynamicImports.length)throw new Error("Signin bundle must be self-contained");
   const code=output[0].code;if(!code||Buffer.byteLength(code)>16777216||code.includes("import.meta"))throw new Error("Signin bundle exceeds its contract");return code;
  }finally{await bundle.close();}
