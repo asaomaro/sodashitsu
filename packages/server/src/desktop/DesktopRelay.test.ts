@@ -362,6 +362,18 @@ it("accepts human input after native video stops without requiring a draw receip
   await expect.poll(()=>localAcks.mock.calls.some(([data])=>typeof data==="string"&&JSON.parse(data).type==="input_ack"&&JSON.parse(data).seq===6)).toBe(true);
   } finally {helperWrites.mockRestore();localAcks.mockRestore();}
 });
+it("accepts human native input without any painted-frame receipt", async()=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true);
+ const viewer=await f.viewer("native");viewer.send(start);
+ await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
+ viewer.send({type:"control",enabled:true});await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ const server=Array.from((f.relay as any).viewers)[0] as any;
+ // Model a negotiated native stream before a draw. This checks the relay's
+ // input decision; decoder/renderer behavior has separate browser coverage.
+ server.media={id:crypto.randomUUID(),generation:1,seq:0,native:true,pending:[],window:3};
+ viewer.send({type:"input",seq:1,frameSeq:server.seq,input:{kind:"text",text:"NO_DRAW_RECEIPT"}});
+ await expect.poll(async()=>readFile(f.record,"utf8").catch(()=>""),{timeout:1000}).toContain("NO_DRAW_RECEIPT");
+});
 it("reconnects when an installed worker ends after secure ready and the parent verifies a different desktop",async()=>{
   const f=await fixture(true,false,true,true,true,false,undefined,"source_transition"),viewer=await f.viewer();
   viewer.send(start);
