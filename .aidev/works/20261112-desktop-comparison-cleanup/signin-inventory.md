@@ -19,6 +19,10 @@
 第1段階: 独自JSローダーを除去、Worker/Presence/NativeHostの埋込チェックをテスト専用partialへ移動。Node検証とbundle/nativePackageの2テストが成功。C#のコンパイルとWindows実機は未実施。
 第2段階: 未受理・再起動・claim後初期化の復旧とSCM critical processの起動世代証明を削除。これらの呼び出しは削除対象の中だけに閉じており、runtime-assetsにも含まれていない。履歴ファイルや登録されたサービスへは触れない。
 
+第3段階: `ServiceBase`へ置換し、サービス名をowner hash先頭16文字に短縮。Host/Workerの実行記録による許可を除去し、SCMと実プロセスhandle/作成時刻を使う。installerは初期journalを作らず、upgraderは既存データを触らず標準のコード退避と置換を行う。旧全64桁サービス名からの明示移行をupgraderに含めた。独自dispatcherの検査とjournal前提のcontroller検査は削除。
+
+ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com/en-us/dotnet/api/system.serviceprocess.servicebase?view=netframework-4.8.1)。長い自前の名前だけが独自dispatcherを必要にしていたため、名前を変えた。短縮名は認証identityではなくSCMの検索キーであり、owner/パッケージ/フルhashのパス照合を維持する。
+
 ## C# 全件
 
 | ファイル | 判断 |

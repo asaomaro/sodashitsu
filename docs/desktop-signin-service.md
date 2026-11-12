@@ -1,161 +1,80 @@
-# 専用サインインサービスのローカル制御（実機で一部確認済み）
+# 専用サインインサービスのローカル制御
 
-サインアウト後の接続に使う専用サービスの、ローカル管理ツールです。初回導入、正常停止後の更新、記録に一致する更新途中の再開・手動設定復元を実装しています。2026年11月7日までにWindows実機1台で専用サービスの正常停止・標準更新・起動を確認しました。一般の異常終了を自動復旧するツールではありません。現在は自動で導入・起動しません。通常サーバーのbuild/handoffとは独立しています。
+サインアウト中の接続に使う専用サービスを、Windows SCMで導入・更新・開始・停止します。
+通常の操舵室サーバーと、サーバーが起動する一時SYSTEM Taskとは別の機能です。
+導入や更新のコマンドがサービスを自動起動することはありません。
 
-## 実機で確認した範囲と残る制限
+この版ではServiceBaseを使い、独自の開始要求・claim・観測ACK・停止receiptと、その履歴を
+照合する専用復旧を廃止しました。新しい版のWindows実機確認は未実施です。
+2026年11月7日までの実ロック/PIN画面・入力・通常操舵室への復帰の確認は旧版の結果です。
 
-同一boot内で暗号化接続の実ロック/PIN画面を取得し、許可済み入力で認証後、通常操舵室の自動復帰・既存2pane・通常desktopの画像を確認しました。[実機記録](../.aidev/works/20261106-signin-readonly-source/tasks.md#再開後の同bootサインイン成功2026-11-07)と、その直前の「17a1実画面とサインイン」に標準更新・起動の確認を記載しています。次回再起動後の自律復帰、全導入・途中復旧経路の実機確認を済ませたものではありません。
+## 配置と認証情報
 
-専用接続は引き続き最長120秒の閲覧と許可した入力だけです。音声・マイク・ファイル・クリップボード・エージェント・Ctrl+Alt+Delは提供しません。追加機能の許可元・受信者・保存先・寿命は[U9の権限設計](remote-desktop-status.md)として未決であり、通常ユーザーの接続の許可を流用しません。署名済み仮想画面ドライバーの配布待ちや実仮想画面の検証も、このサインイン成功とは別です。
+サービス名は `SodaDesktopSignin-` とowner SIDのSHA-256の先頭16文字です。
+コードとデータの固定パス、配布物のowner SIDとの照合には従来どおりSHA-256の全64文字を使います。
+同じ短縮名が登録済みなら、別の所有者のサービスとして採用しません。
 
-## コンパイルだけ確認する
+コードは管理者とSYSTEMだけが変更できるProgram Files配下に置きます。SYSTEMホストが
+マニフェストと同梱コードを確認し、保持したままNode標準ローダーで同梱アプリを起動します。
+Nodeの独自VMローダーを未信頼コードの隔離には使いません。
 
-64bit Windows PowerShell 5.1で、同じrevisionのリポジトリを使います。
+既存のidentity・trust・enrollmentの保存先とDPAPI形式は変更していません。更新はデータの
+スロットを移動・削除・再生成しません。以前のruns/admin履歴も、起動許可として参照せず保持します。
+管理要求が未処理・未確認の場合、鍵の初期化や要求の再送をせず、その要求を確認してください。
+
+## 初回導入
+
+64bit Windows PowerShell 5.1で、レビュー済み配布元と所有者の実SID、
+`signin-package.json`の生バイトのSHA-256を指定します。
 
 ```powershell
-powershell.exe -NoProfile -File scripts/remote-desktop/control-signin-service.ps1 `
-  -ValidateOnly -OwnerSid 'S-1-5-21-1-2-3-1001' -ManifestSha256 ('a' * 64)
+powershell.exe -NoProfile -File scripts/remote-desktop/install-signin-service.ps1 `
+  -ValidateOnly -SourceDirectory 'C:\reviewed-release' -OwnerSid '<owner SID>' `
+  -ManifestSha256 '<64桁のSHA-256>'
 ```
 
-この例は生成用のSIDとハッシュを使います。SCM、配置済みファイル、鍵や登録情報へアクセスせず、C#をコンパイルするだけです。
+`-ValidateOnly`は配布元を検証します。配置先やSCMを変更せず、配布物を実行しません。
+導入は昇格した管理者が同じ引数から`-ValidateOnly`を外して行います。
+既存のコード・データ・サービスを上書きしません。サービスは手動起動で、停止したままです。
 
-## 配置済みサービスの操作
+## 更新と旧サービス名からの移行
 
-明示的に導入・確認したサービスに対して、昇格した管理者PowerShellから実行します。`-OwnerSid`には所有者の実SID、`-ManifestSha256`にはレビュー済みの配置済み`signin-package.json`の生バイトのSHA-256を指定します。ツールは固定パスと設定、ファイルの権限・リンク・ハッシュ、管理者の権限、所有者の実アカウントを検査します。別のサービス名・実行ファイル・コマンド・認証情報は引数にできません。
+先に対象サービスを停止します。更新コマンドは停止を要求せず、停止済みであることを確認します。
 
-- `-Action status`：サービスと実行記録の状態をJSONで返します。開始・停止しません。
-- `-Action start`：通常の起動要求を一度だけ保存し、実サービスのPID・作成時刻・実行ファイル・SYSTEM/session0を確認したハンドルを保持して、開始のACKを返します。`observation-acknowledged`は起動条件を確認した意味で、接続成功や閲覧・入力の許可を表しません。
-- `-Action stop`：動作中の同じプロセスを保持して停止を要求し、SCMの停止、実プロセスの終了、終了コード0、子孫Job全回収の記録、同じバリアの排他取得を確認して、独立した停止記録を保存します。実プロセスの終了よりSCMの停止通知が先に届いた場合も、保持したハンドルで待ちます。
+```powershell
+powershell.exe -NoProfile -File scripts/remote-desktop/upgrade-signin-service.ps1 `
+  -OwnerSid '<owner SID>' -OldManifestSha256 '<配置済み配布物のSHA-256>' `
+  -SourceDirectory 'C:\reviewed-release' -ManifestSha256 '<新配布物のSHA-256>'
+```
 
-通常のNode処理が正常終了した場合、サービス本体は停止要求までバリアと配置済みコードを保持します。後から`stop`で同じサービス本体を確認できます。異常終了や強制終了は正常停止の証拠になりません。
+`-ValidateOnly`を付けるとコンパイルだけを確認し、SCMと配置済みデータにアクセスしません。
+実際の更新は、配置済みコードと配布元を検証し、新コードをステージしてから旧コードを
+`*.previous-*`へ移動し、新コードを固定パスへ配置します。以前のコードを自動削除しません。
 
-管理実行は`-Mode admin -AdminNonce ... -AdminSha256 ...`で、実際の暗号化済みpending要求のnonceとハッシュを指定します。要求の準備と結果の確認は、後述の`control-signin-admin.ps1`で行います。管理実行の開始では、ACK時に保持した同じハンドルで自然終了まで観測します。返り値の`adminResult: inspect-required`はリソースの正常停止を示すだけで、要求が成功した意味ではありません。結果の確認・ack前に通常動作へ自動移行しません。
+従来の全64文字を使う長いサービス名がある場合、その正確な実行パス・SYSTEMアカウント・
+停止状態・設定を確認してから、短い名前へ移行します。新サービスを無効状態で登録し、
+旧サービスの登録を削除した後、新サービスを手動起動へ設定します。既存のBootサービスや
+他のサービス・Taskを一括削除しません。移行後も自動で起動しません。
 
-途中の書き込み、古い記録、不明なファイル、確認できない終了は復旧を必要とする状態として扱います。起動要求の再送、鍵や登録情報の消去、ACLの修復、サービスの再登録、プロセスの強制終了は自動で行いません。
+途中で失敗した場合は、SCMの状態と保存された配布物を、管理者がWindows標準ツールで確認します。
+独自の復旧ticket、boot証明、履歴の再生成、自動rollbackはありません。
 
-## 検証範囲
+## 開始・停止・状態
 
-生成した通常権限のHost・子プロセス・Jobと一時ファイルで、起動要求、ACK、終了、停止記録、別世代の起動を通して検証します。SCMはテスト用の呼び出しに置き換えます。記録の読み書きは、所有者単位の管理mutexとは別のjournal mutexで直列化します。公開途中のファイルを復旧状態と取り違えず、残された不明な途中ファイルを自動修復しません。
+`control-signin-service.ps1 -OwnerSid … -ManifestSha256 … -Action status|start|stop`を使います。
+`-ValidateOnly`はコンパイルだけです。実操作は昇格した管理者のローカル呼び出しに限ります。
+開始・停止はSCMへ要求し、実行中のプロセスはSCMのPIDと保持したOSハンドルで確認します。
+子プロセスはWindows Jobで管理します。保存したPIDやrun journalは開始の条件にしません。
 
-実際のサービスの登録・開始・停止、保護画面の取得・入力、実鍵やtrustの登録、音声デバイスはこの生成検証に含みません。関連APIは[QueryServiceStatusEx](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-queryservicestatusex)、[GetProcessTimes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes)を参照してください。
+## 登録情報の管理
 
-## 管理要求の準備・結果確認・ack
+既存の`control-signin-admin.ps1`は`prepare`・`result`・`acknowledge`を扱います。
+入力は標準入力のUTF8 JSONで、tokenをコマンド引数に載せません。操作は
+`status`・`initialize`・`trust`・`revoke`・`enroll`・`disable`です。
+prepareで返されたnonceとcipherSha256を、サービス開始の
+`-Mode admin -AdminNonce … -AdminSha256 …`へ渡します。終了後にresultを確認し、
+同じnonce・cipherSha256・resultSha256でacknowledgeします。
+この管理用メールボックスは後続の整理対象で、Windows標準のサービス管理には使いません。
 
-`control-signin-admin.ps1`は、`prepare`・`result`・`acknowledge`を扱います。同じ実ownerとレビュー済みmanifest SHA（64桁の小文字16進数）を指定してください。サービス停止、同じバリアの排他取得、初期状態または独立確認済みの正常停止が必要です。サービスを自動で開始・停止しません。
-
-`-Action prepare`は標準入力のパイプからUTF8の操作JSONを最大16384バイト受け取り、10秒以内のEOFを要求します。登録用token等を引数へ載せません。操作は`status`・`initialize`・`trust`・`revoke`・`enroll`・`disable`の6種類で、未知の項目・コマンド・パスは受け付けません。生成したnonceと期限を付け、機械DPAPIとprivateな固定保存先へ保存します。返り値はnonce・暗号化済み要求のSHA・期限・操作名だけです。
-
-操作のJSONの例は`{"kind":"status"}`です。`trust`は`peer:{fingerprint,label}`、`revoke`は`fingerprint`、`enroll`は`origin,machineId,token,allowInput,peers`と任意のpublicな`caPem`を持ちます。viewerのfingerprintは64桁、machineIdは32桁の小文字16進数です。各peerはfingerprintとlabelだけで、最大8件です。enrollには最低1件必要です。
-
-UTF8ファイルから渡す場合は、Windowsの`cmd.exe /d /c "type operation.json | powershell.exe ..."`のようにバイト列を保つパイプを使います。入力ファイルに登録tokenを保存した場合は、そのファイルの権限と削除を自身で管理してください。
-
-`-ValidateOnly`はコンパイルのみです。`-ValidateOperationOnly`は入力を検証して`{"state":"operation-validated","operation":"status"}`のように2項目だけを返します。この事前検証は管理者の確認・SCM・保存を行いません。日本語labelや登録tokenを出力しません。両方の検証スイッチは同時指定できません。
-
-準備後は、返されたnonceとcipherSha256を`control-signin-service.ps1 -Action start -Mode admin -AdminNonce ... -AdminSha256 ...`へ指定します。自然終了とリソースの正常停止を確認した後、`control-signin-admin.ps1 -Action result -Nonce ... -CipherSha256 ...`で結果を確認します。`success`と`incomplete`を区別し、公開statusだけを表示します。
-
-確認した結果を片付ける場合だけ、同じnonce・cipherSha256と結果の`resultSha256`を`-Action acknowledge -Nonce ... -CipherSha256 ... -ResultSha256 ...`へ渡します。`incomplete`も明示的に確認・ackできますが、操作の再試行や巻き戻しを意味しません。結果がない・照合できない・途中のファイルが残る場合は削除せず、復旧が必要な状態を保ちます。ack後も通常サービスを自動起動しません。
-
-## 初回導入（実機未検証）
-
-`install-signin-service.ps1`は、レビュー済みの配布フォルダを固定配置へコピーして専用サービスを登録します。既存のサービス・コード・保存先があれば導入処理を中止し、上書き・修復・自動起動はしません。通常サーバーのbuild/handoffで実行される処理ではありません。
-
-まず`-ValidateOnly -SourceDirectory ... -OwnerSid ... -ManifestSha256 ...`を指定します。このモードは配布元のmanifestの生バイトSHAと閉じたファイル一覧、各ファイルのサイズとSHAを検証し、配布物を実行しません。配置先・SCM・管理者権限の検証や変更も行いません。
-
-実導入は64bit Windowsの昇格した管理者が、確認した同じ引数から`-ValidateOnly`だけを外して明示的に行う操作です。所有者単位の管理mutexを保持し、privateなステージへコピーし、保持したファイルとディレクトリの同一性を検証して固定先へ公開します。初期記録はmanifestと排他バリアに結び付けます。サービスはまず無効状態で登録し、設定・配置・初期記録を確認して導入途中の印を取り除いた後、手動起動へ変更します。返り値の`started`は`false`です。鍵・trust・登録情報は作成しません。
-
-途中失敗のファイルや無効サービスは自動で消しません。再実行で上書きもせず、明示的な復旧を必要とする状態を保ちます。導入途中の印はファイル・ディレクトリのどちらでも通常起動を拒否します。
-
-生成検証では一時フォルダへのコピー、DPAPI初期記録、バリア、SCMの代替呼び出しを通しています。実際のSCM登録・設定変更、privateファイル作成APIによる実所有者/ACLの確認、SYSTEM起動は未検証です。実導入前に、配布物とこの手順のレビュー、実機で実行する操作の承認が必要です。
-
-## 初回導入完了直後の無効設定からの復旧（実機未検証）
-
-`recover-signin-initial.ps1`は、初回導入がすべて完了し、導入途中の印を取り除いた後、手動起動設定への変更前に中断した場合だけを対象にします。`-OwnerSid`とレビュー済みの`-ManifestSha256`を指定します。まず`-ValidateOnly`でコンパイルだけを確認できます。このモードはSCMや保存先に触れません。
-
-実行時は昇格した管理者、所有者mutex、同じ配布物の保持、同じバリアの排他取得、無効かつ停止中の完全なサービス設定を必要とします。初期DPAPI記録がpackage/barrierと一致し、admin/runtimeが空で、保存先の項目が正確な一覧と一致する場合だけ、手動起動へ戻します。停止状態のPIDは使用しません。初期記録を作り直す処理や、印・残骸の削除は行いません。
-
-開始要求後の記録、管理要求、鍵や登録情報、導入途中の印、不明なファイルがある場合は拒否します。更新途中や一般の異常終了を直すツールではありません。成功してもサービスを起動しません。実際のSCM設定変更は未検証です。
-
-## 正常停止後の配布物更新（実機未検証）
-
-`upgrade-signin-service.ps1`は、現行仕様の専用サービスを別のレビュー済み配布物へ更新する明示的なローカル操作です。旧版互換や移行用の分岐はありません。`-OwnerSid`、配置済みmanifestの生バイトSHAを`-OldManifestSha256`、新配布物を`-SourceDirectory`と`-ManifestSha256`で指定します。`-ValidateOnly`はコンパイルのみで、SCM・配置先・配布元に触れません。
-
-実行時は64bit Windowsの昇格した管理者で、所有者mutex、既存配布物の保持、サービスの手動起動・停止設定を確認します。同じバリアの排他取得と、初期記録または独立確認済みの正常停止記録が必要です。開始待ち・独立確認前の停止・不明な記録・管理要求・導入途中の印があれば拒否します。
-
-新配布物をprivateステージへコピー・確認した後、サービスを無効設定へ変更します。そこからprivateな更新記録を保持し、旧コードと旧実行記録をUUID名の保存先へ移し、同じディレクトリと記録であることを検証して新配布物へ切り替えます。既存の鍵・信頼設定・登録情報・runtime・バリアは削除や再作成をしません。旧コードと記録の保存先を結果に返します。
-
-すべてを検証してこの更新の印を取り除いた後、手動起動設定へ戻します。サービスは起動しません。無効化前のコピー失敗では旧設定が保たれます。無効化後の中断では、コード・記録・ステージ・印を自動削除したり、手動起動へ戻したりしません。途中状態の復旧は別途必要です。再実行して上書き・自動修復する機能はありません。
-
-生成した一時配布物・DPAPI記録・排他バリアとSCMの代替呼び出しで検証します。実際のSCM変更、配置先のACL作成、実SYSTEM起動、実機更新は未検証です。
-
-## 更新途中の確認・再開と、正常記録からの手動設定復元（実機未検証）
-
-`recover-signin-maintenance.ps1`は、現行仕様の更新記録に一致する途中状態だけを扱います。`-ValidateOnly`はコンパイル専用です。実操作には昇格した管理者・実所有者・所有者mutexが必要で、起動・停止・強制終了はしません。
-
-`-Action inspect -OwnerSid ... -OldManifestSha256 ... -ManifestSha256 ...`は、privateな更新記録の閉じた項目と生バイトSHAを返します。SCMやファイルの状態を変更しません。`-Action resume`は同じ引数に、確認したSHAを`-MarkerSha256`として加えます。記録の所有者・新旧配布物・ディレクトリID・実行ID・停止証拠・バリア・保存先の名前が一致する必要があります。
-
-再開では、無効・停止の完全なサービス設定と同じバリアの排他取得を確認します。旧世代の初期記録または独立正常停止記録を再検証したうえで、列挙したコード配置から未実施の切り替えだけを行います。保持を解除した移動元は、native検査後にも権限を確認し、記録の期待IDと一致する場合だけ移動します。移動後も同じIDと内容を確認します。
-
-新世代の`runs`が空、未作成、または記録と一致する初期状態なら続行できます。単独の書きかけ`initial.writing`は、そのフォルダ全体を`runs-incomplete-<更新UUID>`へ元のバイトのまま退避します。書きかけの内容を正常停止の証拠として扱いません。旧世代の独立した証拠・更新記録・無効設定・排他状態に基づき、記録された新runIdで初期記録を作ります。ほかのファイル、開始待ち・実行中・未確認停止、不明な配置、退避先との衝突は拒否します。退避後の再中断で同じ退避先と衝突した場合も、双方を保持して別途の対応を必要とします。
-
-更新の印を取り除いた直後に中断した場合は、`-Action restore -OwnerSid ... -ManifestSha256 ...`で現在の配布物を指定します。印がなく、現在のpackageとバリアに一致する初期または独立正常停止記録があり、adminが空で、無効・停止設定を検証できた場合だけ手動設定へ戻します。runtime・鍵・信頼設定・登録情報は保持します。
-
-成功してもサービスを起動しません。一般の異常終了や、独立した正常停止証拠のない実行履歴を消して再開する機能ではありません。生成した一時配布物・DPAPI・バリア・SCM代替で検証し、実際のSCM変更・実機復旧は未実施です。
-
-## 専用stateの保存先
-
-SYSTEM専用の鍵・登録情報・管理要求・実行記録は、コードとは別の`%ProgramFiles%\Sodashitsu\DesktopSigninData\<owner SIDのSHA-256>`へ置きます。専用rootと各owner slotはSYSTEM/Administratorsだけがアクセスできる固定ACLです。コードの更新・退避でstateを移動・再生成しません。
-
-標準ProgramDataの祖先には一般ユーザーの属性変更権限もあるため、現在の祖先検査を緩めずにこの保存先を使います。既存のProgramDataやProgram FilesのACLを修復・変更して通すことはしません。旧`%ProgramData%\sodashitsu\desktop-signin\<owner hash>`がある場合や存在確認ができない場合、導入・更新・復旧・stateアクセスを拒否します。旧stateの自動コピー・削除・別の鍵の自動生成は行いません。既存の旧配置を使う場合は、別途レビューした移行が必要です。
-
-## 初回導入マーカーが残っている場合の明示的な完了
-
-`recover-signin-install.ps1`は、専用サービスの初回登録後に中断し、`install.transition`が残った未起動の配置だけを扱います。管理者で、レビュー済みの同じownerとmanifestを指定します。`-ValidateOnly`はコンパイルだけです。
-
-`-Action inspect`はコード・stateのprivate ACL、canonicalな初回marker、停止/無効の固定サービス構成、同じpackage/barrierに結び付いたinitial journal、空のadmin/runtimeを確認し、markerのSHA256を返します。サービスやmarkerを変更しません。
-
-同じ検査結果で完了する場合だけ、`-Action complete -MarkerSha256 <inspectの値>`を指定します。すべての証拠を保持し直して照合し、サービスのowner/DACLを設定・同じhandleで読み戻してからmarkerを除去し、最後にmanualへ変更します。サービスは起動しません。初期SCM ACLで許容する一般ユーザーのquery/interrogate/user-controlは停止中・無効の初回状態だけに限定し、start/change-config/ownership/DACL変更は許可しません。通常のサービス検査の基準は維持します。
-
-marker除去前に失敗すれば、その状態と無効サービスを残します。marker除去後・manual変更前の中断は、従来の`recover-signin-initial.ps1`で照合できます。鍵・trust・登録情報・journalの再生成、未知の配置の削除や採用はしません。
-
-## 固定サービス名のnative起動
-
-固定名は `SodaDesktopSignin-` とowner SIDの64桁SHA-256を組み合わせた82文字です。.NET ServiceBaseの80文字制限を避けるため、登録済みの名前を短縮せずnative SCM dispatcherを使います。サービスへ渡す追加の起動引数は拒否します。stop/shutdownは25秒の停止期限を持ち、全cleanupが終わるまでSTOPPEDを報告しません。
-
-`validate-signin-service-dispatch.ps1 -NegativeControls` は通常権限の生成adapterで名前と起動/停止/失敗を検査します。実SCM・鍵・trustは操作しません。既存の `validate-signin-host.ps1` は子プロセス/Jobと配布用EXE生成を含みます。起動失敗で未確認のpending要求が残った場合は、修正版のEXEを上書きして再送することはできません。要求とjournalを保持して明示的な復旧を行います。
-
-## 旧版の実行履歴
-
-未受理・再起動・claim後初期化の専用復旧コマンドは廃止しました。サービスの起動可否を
-独自の履歴やSCMプロセスの世代で管理する仕組みは、標準のSCMによる管理へ置き換える対象です。
-このソース整理は実機のファイル・サービス設定を変更しません。既存のruns/adminの記録、
-DPAPIで保護されたidentity・trust・enrollmentは保存したままです。旧履歴を削除したり、
-初期化要求を再実行する操作として扱わないでください。
-
-### サービスの起動段階を確認する
-
-専用サービスが `WIN32_EXIT_CODE=1066` で停止した場合、この版以降の
-`SERVICE_EXIT_CODE` は次の固定番号です。Windowsの `sc.exe query` で確認できます。
-古い版や分類できない失敗は `1`、正常終了は `0` です。
-
-| 番号 | 失敗した段階 |
-| --- | --- |
-| 101 | 導入済みパッケージの検証 |
-| 102 | 保護されたruntimeと排他ファイルの保持 |
-| 103 | 実行記録のオープン |
-| 104 | 実行記録による起動許可 |
-| 105 | 専用Nodeプロセスの起動・再開 |
-| 106 | プロセス待機中の確認 |
-| 107 | 子プロセスの終了結果・保持状態・正常終了の確認 |
-| 108 | 実行記録への完了記録 |
-| 109 | 完了後の停止要求の待機 |
-
-番号は最終的に失敗を検出した箇所を示します。例えば107だけでは、Node内部の
-どの処理が失敗したかまでは分かりません。例外本文・ファイルパス・子プロセスの出力・
-鍵・画面・入力内容はこの番号に含めません。後始末が終わる前に停止完了を報告せず、
-この番号を理由に再試行・鍵の初期化・起動許可の省略は行いません。
-
-
-Windowsの鍵ストアは、1回の読取で必要な複数パスの権限を同じ補助プロセス内で確認します。
-各パスと祖先は毎回検査し、結果を次の読取へキャッシュしません。鍵や必須設定のファイルが
-存在しない場合も祖先を確認します。起動時の確認負荷を減らす変更で、サインインの許可条件や
-確認結果の5秒期限は変わりません。
+専用接続の閲覧と許可した入力の範囲は従来どおりです。音声・マイク・ファイル・クリップボード・
+エージェント・Ctrl+Alt+Delを新たに許可する変更ではありません。

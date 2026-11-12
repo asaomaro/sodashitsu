@@ -1,6 +1,6 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
-$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunAdmission.cs','WindowsSigninRunJournal.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninControllerMutex.cs','WindowsSigninRunStorage.cs','WindowsSigninRunSession.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsSigninHostChecks.cs','WindowsSigninRunSessionChecks.cs')
+$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninControllerMutex.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsSigninHostChecks.cs')
 $owner='S-1-5-21-1-2-3-1001'
 $combined=($files|ForEach-Object {[IO.File]::ReadAllText((Join-Path $PSScriptRoot $_))}) -join "`n"
 $combined=$combined.Replace('__SIGNIN_OWNER_SID__',$owner)
@@ -40,10 +40,7 @@ try {
             @('finite-exit-code','&&code==0;','&&code!=259;','Finite child exit code was ignored'),
             @('private-runtime','                if(ace.AccessMask!=0)return false;','','Foreign runtime read accepted'),
             @('parent-environment','EnvironmentBlock=block.Append(''\0'').ToString();','block.Append("SODA_SIGNIN_HOST_SECRET=generated-private-parent-marker\0");EnvironmentBlock=block.Append(''\0'').ToString();','Parent environment retained'),
-            @('post-create-revocation','Require(current());if(admit!=null)','Require(true);if(admit!=null)','Post-create revocation accepted'),
-            @('admission','Require(admit());Require(current());Require(confirm());','admit();Require(current());Require(confirm());','Unconfirmed child admission resumed'),
-            @('post-admission','Require(admit());Require(current());Require(confirm());','Require(admit());Require(confirm());','Post-admission revocation resumed child'),
-            @('post-inspection-deadline','Require(confirm());','confirm();','Post-admission inspection expired before native resume'),
+            @('post-create-revocation','Require(current());Require(ResumeThread(process.Thread)==1);','Require(ResumeThread(process.Thread)==1);','Post-create revocation accepted'),
             @('handle-inheritance','Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x20002),handles,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero));','Require(true);','Unexpected handle inherited'),
             @('job-membership','return owned;','return false;','Grandchild not owned by job'),
             @('job-accounting','return data.Active;','return data.Active+1;','Cooperative child did not finish cleanly')

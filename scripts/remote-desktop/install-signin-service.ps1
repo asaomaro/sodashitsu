@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference='Stop'
 # Local source bytes are inspected, never executed. ValidateOnly never checks or
 # modifies SCM, target paths, privileges, identity/trust or an installed service.
-$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunJournal.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninControllerMutex.cs','WindowsSigninInstallSource.cs','WindowsSigninInstallFiles.cs','WindowsSigninInstallerScm.cs','WindowsSigninInstaller.cs')
+$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninControllerMutex.cs','WindowsSigninInstallSource.cs','WindowsSigninInstallFiles.cs','WindowsSigninInstallerScm.cs','WindowsSigninInstaller.cs')
 Add-Type -Path ($names|ForEach-Object {Join-Path $PSScriptRoot $_}) -ReferencedAssemblies System.dll,System.Core.dll,System.Security.dll,System.Web.Extensions.dll
 try{
  if($ValidateOnly){[SodaDesktopSigninInstaller]::Preview($SourceDirectory,$OwnerSid,$ManifestSha256)|ConvertTo-Json -Compress;exit 0}

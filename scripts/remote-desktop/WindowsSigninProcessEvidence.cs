@@ -55,9 +55,13 @@ internal static class SodaDesktopSigninProcessEvidence {
         try{if(handle==null||handle.IsInvalid)throw Failure();result=new Pin(handle,new Identity(pid,created),image,system,scope);if(!result.Current())throw Failure();return result;}
         catch{if(result!=null)result.Dispose();else if(handle!=null)handle.Dispose();throw;}
     }
-    internal static Pin Open(string owner,SodaDesktopSigninRunRecord started,Func<bool> scope){
-        if(started==null||started.Kind!="started"||started.Owner!=SodaDesktopSigninPackage.OwnerSid(owner))throw Failure();
-        return OpenCore(checked((uint)(long)started.Field("pid")),(string)started.Field("createdFiletime"),SodaDesktopSigninServicePolicy.Executable(owner),true,scope);
+    internal static Pin Open(string owner,uint pid,Func<bool> scope){
+        SafeProcessHandle handle=OpenProcess(0x00101000,false,pid);Pin result=null;
+        try{
+            if(handle==null||handle.IsInvalid)throw Failure();
+            result=new Pin(handle,new Identity(pid,Creation(handle)),SodaDesktopSigninServicePolicy.Executable(owner),true,scope);
+            if(!result.Current())throw Failure();return result;
+        }catch{if(result!=null)result.Dispose();else if(handle!=null)handle.Dispose();throw;}
     }
     internal static Identity Self(){
         if(!SodaDesktopSigninVault.SystemPrimary())throw Failure();using(var process=System.Diagnostics.Process.GetCurrentProcess()){

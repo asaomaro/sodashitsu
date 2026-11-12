@@ -23,11 +23,9 @@ public static class SodaDesktopSigninAdminController {
         var timer=Stopwatch.StartNew();using(var mutex=SodaDesktopSigninControllerMutex.Acquire(owner,10000))using(var package=SodaDesktopSigninPackageNative.VerifyController(owner,manifest)){
             Func<bool> current=()=>timer.ElapsedMilliseconds<90000&&mutex.Current()&&package.Current();using(var scm=SodaDesktopSigninScm.Open(owner,false,current))using(var pin=SodaDesktopSigninQuiescence.Open(owner))using(var exclusive=pin.Exclusive()){
                 string barrier=exclusive.Fingerprint;Func<bool> stopped=()=>current()&&exclusive.Current()&&exclusive.Fingerprint==barrier&&scm.Query().State==1;
-                using(var run=SodaDesktopSigninRunStorage.OpenController(owner,package.ManifestSha256,barrier,SodaDesktopSigninRunJournal.Role.Reader,stopped)){
-                    Require(run.State()=="initial"||run.State()=="complete");string directory=Path.Combine(Path.GetDirectoryName(SodaDesktopSigninVault.StoragePath(owner)),"admin");
+                string directory=Path.Combine(Path.GetDirectoryName(SodaDesktopSigninVault.StoragePath(owner)),"admin");
                     if(action=="prepare"){Require(operation!=null&&nonce==null&&cipherSha256==null&&resultSha256==null);return PrepareCore(directory,owner,operation,stopped,SodaDesktopSigninQuiescence.Private,createFile:SodaDesktopSigninPackageNative.CreatePrivateFile);}
                     Require(operation==null);return ResultCore(directory,owner,nonce,cipherSha256,resultSha256,action=="acknowledge",stopped,SodaDesktopSigninQuiescence.Private,createFile:SodaDesktopSigninPackageNative.CreatePrivateFile);
-                }
             }
         }
     }

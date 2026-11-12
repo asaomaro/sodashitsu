@@ -35,13 +35,10 @@ public static class SodaDesktopSigninInstaller {
             // is complete; this never executes any source/copy program.
             using(var verified=verifyPublished())using(var pin=barrier())using(var exclusive=pin.Exclusive()){
                 Require(verified!=null&&verified.Current()&&exclusive.Current());string fingerprint=exclusive.Fingerprint;Func<bool> preparing=()=>authority()&&verified.Current()&&files.Current()&&exclusive.Current()&&exclusive.Fingerprint==fingerprint;
-                var initial=new Dictionary<string,object>{{"version",1},{"purpose","desktop-signin-run"},{"kind","initial"},{"ownerSid",owner},{"runId",Guid.NewGuid().ToString("D")},{"packageSha256",source.ManifestSha256},{"barrierSha256",fingerprint},{"createdAt",DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}};
-                using(var journal=new SodaDesktopSigninRunJournal(Path.Combine(paths.Slot,"runs"),owner,source.ManifestSha256,fingerprint,SodaDesktopSigninRunJournal.Role.Installer,preparing,acl=>policy(paths.Slot,acl),new string[0],createFile:createFile))journal.Initialize(SodaDesktopSigninRunRecord.Build(initial,owner));
-                service.CreateDisabled(()=>preparing()&&InitialCurrent(paths,owner,source.ManifestSha256,fingerprint,preparing,policy));
-                files.ClearMarker();service.EnableManual(()=>preparing()&&files.MarkerCleared&&InitialCurrent(paths,owner,source.ManifestSha256,fingerprint,preparing,policy));
+                service.CreateDisabled(()=>preparing());
+                files.ClearMarker();service.EnableManual(()=>preparing()&&files.MarkerCleared);
                 Require(preparing()&&files.MarkerCleared);return new Dictionary<string,object>{{"installed",true},{"started",false},{"service",SodaDesktopSigninServicePolicy.Name(owner)},{"ownerSid",owner},{"packageSha256",source.ManifestSha256}};
             }
         }
     }
-    static bool InitialCurrent(SodaDesktopSigninInstallFiles.Paths paths,string owner,string manifest,string fingerprint,Func<bool> current,Func<string,byte[],bool> policy){using(var journal=new SodaDesktopSigninRunJournal(Path.Combine(paths.Slot,"runs"),owner,manifest,fingerprint,SodaDesktopSigninRunJournal.Role.Reader,current,acl=>policy(paths.Slot,acl),new string[0]))return journal.State()=="initial";}
 }

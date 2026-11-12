@@ -11,7 +11,8 @@ public static class SodaDesktopSigninServicePolicy {
         internal uint Type,Start,ErrorControl,ResetPeriod,Delayed,FailureOnCrash,Triggers,LaunchProtected;
         internal uint[] Actions;internal byte[] Security;
     }
-    public static string Name(string owner){return "SodaDesktopSignin-"+SodaDesktopSigninPackage.Slot(owner);}
+    public static string Name(string owner){return "SodaDesktopSignin-"+SodaDesktopSigninPackage.Slot(owner).Substring(0,16);}
+    internal static string LegacyName(string owner){return "SodaDesktopSignin-"+SodaDesktopSigninPackage.Slot(owner);}
     public static string Executable(string owner){return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner),"DesktopSigninNative.exe");}
     internal static bool Acl(byte[] bytes){
         try{
@@ -71,12 +72,13 @@ public static class SodaDesktopSigninServicePolicy {
     static uint Value(IntPtr service,int level){using(var buffer=Read(service,level))return unchecked((uint)Marshal.ReadInt32(buffer.Pointer));}
     /** Checks only existing configuration, never signals the service/process.
      * Callers still need protected package, owner mutex and quiescence proof. */
+    internal static void InspectLegacy(string owner,bool disabled){InspectStart(owner,disabled,false,true);}
     public static void Inspect(string owner){InspectStart(owner,false);}
     internal static void InspectDisabled(string owner){InspectStart(owner,true);}
     internal static void InspectInitialDisabled(string owner){InspectStart(owner,true,true);}
     static void InspectStart(string owner,bool disabled){InspectStart(owner,disabled,false);}
-    static void InspectStart(string owner,bool disabled,bool initial){
-        owner=SodaDesktopSigninPackage.OwnerSid(owner);string name=Name(owner),executable=Executable(owner);IntPtr manager=IntPtr.Zero,service=IntPtr.Zero;
+    static void InspectStart(string owner,bool disabled,bool initial,bool legacy=false){
+        owner=SodaDesktopSigninPackage.OwnerSid(owner);string name=legacy?LegacyName(owner):Name(owner),executable=Executable(owner);IntPtr manager=IntPtr.Zero,service=IntPtr.Zero;
         try{
             manager=OpenSCManagerW(null,null,1);if(manager==IntPtr.Zero)throw Failure();service=OpenServiceW(manager,name,0x00020001);if(service==IntPtr.Zero)throw Failure();var facts=new Facts{Name=name};
             using(var buffer=Read(service,0))Configuration(buffer,facts);

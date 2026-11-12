@@ -9,7 +9,7 @@ $ErrorActionPreference='Stop'
 if($ValidateOnly -and $ValidateOperationOnly){throw 'Choose compilation or input validation'}
 # Prepare reads only a bounded pipe, before acquiring any installation lease.
 # No request JSON, token, certificate or private key is a command-line argument.
-$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunJournal.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninRunStorage.cs','WindowsSigninControllerMutex.cs','WindowsSigninScm.cs','WindowsSigninAdminDeadline.cs','WindowsSigninAdminJournal.cs','WindowsSigninAdminResult.cs','WindowsSigninAdminEnrollment.cs','WindowsSigninAdminController.cs','WindowsSigninAdminInput.cs')
+$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninControllerMutex.cs','WindowsSigninScm.cs','WindowsSigninAdminDeadline.cs','WindowsSigninAdminJournal.cs','WindowsSigninAdminResult.cs','WindowsSigninAdminEnrollment.cs','WindowsSigninAdminController.cs','WindowsSigninAdminInput.cs')
 Add-Type -Path ($names|ForEach-Object {Join-Path $PSScriptRoot $_}) -ReferencedAssemblies System.dll,System.Core.dll,System.Security.dll,System.Web.Extensions.dll
 if($ValidateOnly){'signin_admin_controller_compiled_no_scm_storage_or_input_operations';exit 0}
 $operation=$null

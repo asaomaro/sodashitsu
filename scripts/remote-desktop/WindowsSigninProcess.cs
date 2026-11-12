@@ -37,20 +37,19 @@ internal static class SodaDesktopSigninProcess {
         if(job==IntPtr.Zero||!TerminateJobObject(job,1))return false;var timer=Stopwatch.StartNew();
         while(timer.ElapsedMilliseconds<8000){if(EmptyJob(job))return true;Thread.Sleep(10);}return false;
     }
-    // Both sides derive this name from the protected, observed run. Never accept
-    // a job name or parent PID from Node, an environment variable, or an RPC.
-    internal static string HostJobName(string owner,SodaDesktopSigninRunRecord started){
-        Require(started!=null&&started.Kind=="started"&&started.Owner==SodaDesktopSigninPackage.OwnerSid(owner));
-        return @"Global\SodaDesktopSigninWorkers-"+SodaDesktopSigninPackage.Slot(owner)+"-"+started.RunId+"-"+started.Field("pid")+"-"+started.Field("createdFiletime");
+    // An OS process handle and creation time bind the short-lived worker Job.
+    internal static string HostJobName(string owner,SodaDesktopSigninProcessEvidence.Identity host){
+        Require(host!=null);
+        return @"Global\SodaDesktopSigninWorkers-"+SodaDesktopSigninPackage.Slot(owner)+"-"+host.Pid+"-"+host.Created;
     }
     internal sealed class HostJobs:IDisposable {
         IntPtr job;bool stopped;
-        internal HostJobs(string owner,SodaDesktopSigninRunRecord started){
+        internal HostJobs(string owner,SodaDesktopSigninProcessEvidence.Identity host){
             Require(SodaDesktopSigninVault.SystemPrimary()&&Process.GetCurrentProcess().SessionId==0);
-            using(var self=Process.GetCurrentProcess())Require(self.Id==(long)started.Field("pid")&&self.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture)==(string)started.Field("createdFiletime"));
+            using(var self=Process.GetCurrentProcess())Require(self.Id==host.Pid&&self.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture)==host.Created);
             var acl=new System.Security.AccessControl.RawSecurityDescriptor("O:SYG:SYD:P(A;;GA;;;SY)");byte[] bytes=new byte[acl.BinaryLength];acl.GetBinaryForm(bytes,0);IntPtr descriptor=Marshal.AllocHGlobal(bytes.Length);
             try{Marshal.Copy(bytes,0,descriptor,bytes.Length);var sa=new SA{Size=Marshal.SizeOf(typeof(SA)),Descriptor=descriptor};
-                job=CreateJobObjectW(ref sa,HostJobName(owner,started));int error=Marshal.GetLastWin32Error();Require(job!=IntPtr.Zero);
+                job=CreateJobObjectW(ref sa,HostJobName(owner,host));int error=Marshal.GetLastWin32Error();Require(job!=IntPtr.Zero);
                 // A preexisting object is never adopted, modified or terminated.
                 if(error==183){Close(ref job);throw new InvalidOperationException("Signin worker job already exists");}
                 var limits=new Limits();limits.Basic.Flags=0x2000;Require(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(typeof(Limits))));Require(EmptyJob(job));
@@ -93,8 +92,8 @@ internal static class SodaDesktopSigninProcess {
         }}
         public void Dispose(){lock(gate){if(!Stop())throw SodaDesktopSigninHost.Failure();Close(ref stopWrite);Close(ref process);Close(ref job);}}
     }
-    internal static Child Start(SodaDesktopSigninHost.Plan plan,Func<bool> current,Func<bool> admit=null,Func<bool> confirm=null){
-        Layouts();Require(plan!=null&&current!=null&&(admit==null)==(confirm==null)&&current());
+    internal static Child Start(SodaDesktopSigninHost.Plan plan,Func<bool> current){
+        Layouts();Require(plan!=null&&current!=null&&current());
         IntPtr stopWrite=IntPtr.Zero,job=IntPtr.Zero,list=IntPtr.Zero,handles=IntPtr.Zero,jobValue=IntPtr.Zero,environment=IntPtr.Zero;
         var inherited=new IntPtr[3];var process=new PI();bool initialized=false,transferred=false;
         try {
@@ -116,7 +115,7 @@ internal static class SodaDesktopSigninProcess {
             environment=Marshal.StringToHGlobalUni(plan.EnvironmentBlock);
             Require(current());
             Require(CreateProcessW(plan.Application,new StringBuilder("\""+plan.Application+"\" "+plan.Arguments),IntPtr.Zero,IntPtr.Zero,true,0x80000|0x08000000|0x400|4,environment,plan.WorkingDirectory,ref startup,out process));
-            Require(current());if(admit!=null){Require(admit());Require(current());Require(confirm());}Require(ResumeThread(process.Thread)==1);
+            Require(current());Require(ResumeThread(process.Thread)==1);
             var result=new Child(process.Process,job,stopWrite);stopWrite=IntPtr.Zero;transferred=true;return result;
         }finally{
             if(!transferred&&process.Process!=IntPtr.Zero){

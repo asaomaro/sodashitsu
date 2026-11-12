@@ -44,18 +44,30 @@ internal static class SodaDesktopSigninWorkerNative {
         internal DiagnosticFailure(int code):base("Signin worker is unavailable"){Code=code>=201&&code<=215?code:1;}
     }
     internal sealed class HostBinding:IDisposable {
-        internal IntPtr Parent,Aggregate;SodaDesktopSigninRunJournal journal;SodaDesktopSigninProcessEvidence.Pin host;SodaDesktopSigninRunRecord started;Func<bool> scope;
+        internal IntPtr Parent,Aggregate;
+        SodaDesktopSigninScm service;SodaDesktopSigninProcessEvidence.Pin host;Func<bool> scope;
         internal static HostBinding Open(string owner,string package,string barrier,Func<bool> current){
-            var result=new HostBinding();int stage=203;try{result.scope=current;result.journal=SodaDesktopSigninRunStorage.OpenController(owner,package,barrier,SodaDesktopSigninRunJournal.Role.Reader,current);
-                stage=204;Require(result.journal.State()=="observed");result.started=result.journal.StartedRecord();stage=205;result.host=SodaDesktopSigninProcessEvidence.Open(owner,result.started,current);
-                stage=206;result.Parent=OpenProcess(0x00101080,false,checked((uint)(long)result.started.Field("pid")));Require(result.Parent!=IntPtr.Zero);stage=207;Require(result.Current());
-                stage=208;result.Aggregate=OpenJobObjectW(0x0005,false,SodaDesktopSigninProcess.HostJobName(owner,result.started));Require(result.Aggregate!=IntPtr.Zero);stage=209;Require(result.Current());return result;
+            var result=new HostBinding();int stage=203;
+            try{
+                result.scope=current;
+                using(var service=new System.ServiceProcess.ServiceController(SodaDesktopSigninServicePolicy.Name(owner)))service.WaitForStatus(System.ServiceProcess.ServiceControllerStatus.Running);
+                result.service=SodaDesktopSigninScm.Open(owner,false,current);
+                var status=result.service.Query();Require(status.State==4);
+                stage=205;result.host=SodaDesktopSigninProcessEvidence.Open(owner,status.Pid,current);
+                stage=206;result.Parent=OpenProcess(0x00101080,false,status.Pid);Require(result.Parent!=IntPtr.Zero);
+                stage=207;Require(result.Current());
+                stage=208;result.Aggregate=OpenJobObjectW(0x0005,false,SodaDesktopSigninProcess.HostJobName(owner,result.host.Process));Require(result.Aggregate!=IntPtr.Zero);
+                stage=209;Require(result.Current());return result;
             }catch{result.Dispose();throw new DiagnosticFailure(stage);}
         }
         internal bool Current(){
-            try{ulong created,exited,kernel,user;return scope!=null&&scope()&&host!=null&&host.Current()&&Parent!=IntPtr.Zero&&WaitForSingleObject(Parent,0)==258&&GetProcessTimes(Parent,out created,out exited,out kernel,out user)&&created.ToString(System.Globalization.CultureInfo.InvariantCulture)==(string)started.Field("createdFiletime")&&journal.State()=="observed"&&journal.StartedRecord().Digest()==started.Digest()&&scope()&&host.Current();}catch{return false;}
+            try{
+                if(scope==null||!scope()||host==null||!host.Current()||Parent==IntPtr.Zero)return false;
+                var status=service.Query();ulong created,exited,kernel,user;
+                return status.State==4&&status.Pid==host.Process.Pid&&WaitForSingleObject(Parent,0)==258&&GetProcessTimes(Parent,out created,out exited,out kernel,out user)&&created.ToString(System.Globalization.CultureInfo.InvariantCulture)==host.Process.Created&&scope()&&host.Current();
+            }catch{return false;}
         }
-        public void Dispose(){Close(ref Aggregate);Close(ref Parent);if(host!=null){host.Dispose();host=null;}if(journal!=null){journal.Dispose();journal=null;}}
+        public void Dispose(){Close(ref Aggregate);Close(ref Parent);if(host!=null){host.Dispose();host=null;}if(service!=null){service.Dispose();service=null;}}
     }
     static void Require(bool value){if(!value)throw new InvalidOperationException("Signin worker is unavailable");}
     static void Close(ref IntPtr value){if(value!=IntPtr.Zero)CloseHandle(value);value=IntPtr.Zero;}
