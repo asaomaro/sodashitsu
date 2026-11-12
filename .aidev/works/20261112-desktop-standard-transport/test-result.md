@@ -1069,3 +1069,5 @@ AssertionError: expected false to be true // Object.is equality
 
 
 ```
+
+Integration fixture-only alignment: GPU native-video test now recognizes a single protocol passed as either string or normalized array, so its intentional physical lane-close targets the actual socket. Encrypted raw takeover asserts the existing refresh control becomes enabled before clicking; unlike the real UI takeover case, raw wire traffic provides no local control intent and correctly leaves the UI read-only. Both still prove pending backend cancellation and no late credential. Native drag pointer/release fixtures and signin startup dependencies use the current interfaces, with no epoch/result receipt or removed now injection. Synthetic priority stderr ACK drops the removed epoch token. Integration owner runs only affected browser cases and E2E typecheck; no broad rerun.

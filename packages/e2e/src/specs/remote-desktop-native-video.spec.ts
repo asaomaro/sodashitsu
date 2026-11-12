@@ -64,7 +64,7 @@ for (const { fixtureName, failDecoder, stallImages } of [
     if (fixtureName==="h264-gpu-surface-generated.json") await page.addInitScript(()=>{
       const Base=WebSocket;
       window.WebSocket=class extends Base {
-        constructor(url:string|URL, protocols?:string|string[]){super(url,protocols);if(protocols==="soda-desktop-video-lane-v1")(window as any).__generatedVideoSocket=this;}
+        constructor(url:string|URL, protocols?:string|string[]){super(url,protocols);if((typeof protocols==="string"?[protocols]:protocols??[]).includes("soda-desktop-video-lane-v1"))(window as any).__generatedVideoSocket=this;}
         override send(data:string|ArrayBufferLike|Blob|ArrayBufferView){
           if(typeof data==="string"&&JSON.parse(data).type==="video_viewer"){
             // Ensure main ready precedes lane ready, as on a slower extra connection.

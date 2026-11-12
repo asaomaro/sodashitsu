@@ -82,9 +82,11 @@ for(const mode of ["leave","takeover","raw takeover"] as const) test(`leaving du
  try{
   await f.grantButton.click();await expect(f.grantButton).toBeDisabled();await expect.poll(()=>begun).toBe(true);if(mode==="leave"){await f.view.focus();await f.view.press("Escape");await f.view.press("Escape");}
   else if(mode==="takeover")await f.view.getByRole("button",{name:"操作する",exact:true}).click();
+  // A raw wire takeover cancels the backend request but deliberately supplies no
+  // local UI control intent; the browser rejects its unsolicited grant.
   else await page.evaluate(()=>{const endpoint=(window as unknown as{__generatedEndpoint:{send(value:string):void}}).__generatedEndpoint;endpoint.send(JSON.stringify({type:"control",enabled:true}));});
   await expect.poll(()=>cancelled).toBe(true);if(mode==="leave")expect(await f.view.evaluate(element=>element.contains(document.activeElement))).toBe(false);
-  release();await expect.poll(()=>finished).toBe(true);const refresh=f.view.getByRole("button",{name:"候補を更新",exact:true});await refresh.click();await expect(refresh).toBeEnabled();await expect(f.code).toHaveCount(0);await expect(f.view.locator('[data-desktop-status]')).toHaveText(mode==="leave"?"閲覧中":"操作中");
+  release();await expect.poll(()=>finished).toBe(true);const refresh=f.view.getByRole("button",{name:"候補を更新",exact:true});await expect(refresh).toBeEnabled();await refresh.click();await expect(refresh).toBeEnabled();await expect(f.code).toHaveCount(0);await expect(f.view.locator('[data-desktop-status]')).toHaveText(mode==="takeover"?"操作中":"閲覧中");
  }finally{release();await Promise.allSettled(tasks);DesktopEndpointStore.prototype.endpoint=original;DesktopRelay.prototype.revokeEndpointAgent=revoke;await f.close();}
 });
 test("encrypted MCP child preserves image/tool responses and release",async({page,appServer})=>{

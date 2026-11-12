@@ -203,7 +203,7 @@ function run() {
   let heldControlRelease;
   const applyControl=m=>{held.clear();control=m.enabled&&allowInput;send({type:"control",seq:m.seq,enabled:control});};
   function acknowledgeInput(seq,pointer){
-    if(inputAckPipe){if(pointer)process.stderr.write(`SODA_DESKTOP_POINTER_ACK ${seq} ${pointer.epoch} ${pointer.x} ${pointer.y} ${pointer.window} ${pointer.pid}\n`);process.stderr.write("SODA_DESKTOP_INPUT_ACK "+seq+"\n");}
+    if(inputAckPipe){if(pointer)process.stderr.write(`SODA_DESKTOP_POINTER_ACK ${seq} ${pointer.x} ${pointer.y} ${pointer.window} ${pointer.pid}\n`);process.stderr.write("SODA_DESKTOP_INPUT_ACK "+seq+"\n");}
     else send({type:"input_ack",seq,...(pointer?{pointer}:{})});
   }
   lines.on("close", () => process.exit(0));

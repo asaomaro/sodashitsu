@@ -45,7 +45,7 @@ async function fixture(sealed:boolean,vue=false){
  const trees:Record<string,string>={"/core/":join(base,"client-core/dist"),"/protocol/":join(base,"protocol/dist"),"/zod/":dirname(require.resolve("zod/package.json"))};
  const modules=new Map<string,string>();
  for(const name of ["nativeDrag","fileClient"]){const source=await readFile(join(base,"web/src/desktop",name+".ts"),"utf8");modules.set("/"+name+".js",ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);}
- let descriptor:ReturnType<DesktopNativeGateway["descriptor"]>,held=false,at=0,seq=0,released=false;const generation=randomUUID(),session=randomUUID(),actions:any[]=[],controls:any[]=[],wires:DesktopEndpointWire[]=[];
+ let descriptor:ReturnType<DesktopNativeGateway["descriptor"]>,held=false,at=0,seq=0,released=false;const session=randomUUID(),actions:any[]=[],controls:any[]=[],wires:DesktopEndpointWire[]=[];
  const provider=await DesktopEndpointIdentity.create(crypto);
  let releaseReads!:()=>void;const readGate=new Promise<void>(resolve=>{releaseReads=resolve;});
  const web=createServer(async(req,res)=>{
@@ -84,7 +84,7 @@ window.addEventListener('pagehide',()=>{core?.stop();bridge?.stop();files.stop()
   }catch{res.writeHead(404);res.end();}
  });
  await new Promise<void>(resolve=>web.listen(0,"127.0.0.1",resolve));const origin=`http://127.0.0.1:${(web.address()as{port:number}).port}`;
- const files=await DesktopFiles.open(root,()=>true,undefined,()=>true,false,undefined,{origin,runtime:{prepare:async()=>{},capture:async()=>[path]},pointer:id=>id===seq?{seq:id,at,point:{epoch:generation,x:10,y:10,window:42,pid:1},valid:()=>held,release:async()=>{held=false;released=true;return {id:randomUUID(),epoch:generation};}}:undefined});
+ const files=await DesktopFiles.open(root,()=>true,undefined,()=>true,false,undefined,{origin,runtime:{prepare:async()=>{},capture:async()=>[path]},pointer:id=>id===seq?{seq:id,at,point:{x:10,y:10,window:42,pid:1},valid:()=>held,release:async()=>{held=false;released=true;}}:undefined});
  const gateway=await DesktopNativeGateway.listen(origin,{binary:{prepare:async()=>{},executable:"generated-memory-target",close:async()=>{}},nativeFactory:options=>new DesktopNativeHost({...options,spawn:((_exe:string,_args:unknown,options:SpawnOptionsWithoutStdio)=>spawn(process.execPath,["-e",target],options))as unknown as typeof spawn})});descriptor=gateway.descriptor();
  const sockets=new WebSocketServer({server:web}),publicFrames:Buffer[]=[];
  let main:import("ws").WebSocket|undefined;

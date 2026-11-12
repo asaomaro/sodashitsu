@@ -23,7 +23,7 @@ for(const ending of ["source","policy"] as const)test(`signin startup serves rea
  function start(){
   abort=new AbortController();const signal=abort.signal,revision=randomUUID();
   const enrollment=DesktopSigninEnrollment.decode(Buffer.from(JSON.stringify({version:1,purpose:"desktop-signin",revision,ownerSid,origin:appServer.origin,machineId:invite.machineId,token:invite.token,provider:provider.fingerprint,allowSignin:true,allowInput:false,peers:[{fingerprint:peer,label:"Generated browser"}]})),ownerSid);
-  const deps:DesktopSigninRuntimeDependencies={now:()=>performance.now(),unsafeStop:()=>{throw Error("Generated cleanup failure");},
+  const deps:DesktopSigninRuntimeDependencies={unsafeStop:()=>{throw Error("Generated cleanup failure");},
    presence:options=>({ready:async()=>({type:"signin_context",ownerSid,packageRoot:"C:\\generated",stateDir:"C:\\generated-runtime"}),active:()=>!options.signal.aborted&&options.active(),close:()=>{},settled:async()=>{}}),enrollment:async()=>enrollment,
    store:()=>new DesktopEndpointStore({stateDir:directory}),identity:options=>new DesktopSigninIdentity(options),connector:options=>new DesktopSigninConnector(options),
    endpoint:options=>new DesktopSigninEndpoint({...options,worker:worker=>{launches++;let closed=false;queueMicrotask(()=>{if(closed||!worker.active())return;worker.record(Buffer.from(JSON.stringify({type:"ready",title:"Generated signin",width:64,height:64,backend:"windows-gdi",secureDesktop:true,allowInput:false,imeKeys:true,extendedInput:true})),false);worker.record(encodeDesktopFrame(frame.info,Buffer.from(frame.data,"base64")),true);});return {send:()=>{},close:()=>{closed=true;},settled:async()=>{}};}}),
