@@ -260,3 +260,57 @@ signin_admin_stdin_eof_stdout_eof_delayed_clean_exit_passed
 request_natural_exit_negative_and_exact_restore_passed```
 
 Windows/service/task/registry/本番データの操作は実施していない。full TSテストの重複実行はせず、この変更に必要なC#コンパイルと終了境界の検査に限定した。
+
+## Windows実機: EOF fixtureの保持handleと修正
+
+sole Windows operatorがsource-only fixtureを実行したところ、当初のHost検査は`Admin completion did not wait for clean process exit`で失敗した。診断ではRequest直後のstopSent=Trueを確認。childのstdout handleをCloseHandleして無効になった後も、別の同一pipe objectへのhandleがchild内に残り、親のReplyは子の既存5秒gate timeoutまでEOFを受け取れなかった。rawstdin/stdoutへ替えた候補も同じ結果だったため採用していない。保持handleのallocatorをConsole固有と断定しない。
+
+Windowsの限定した診断の生出力（ASCII行）:
+
+```
+request_diag afterRequest stopSent=True
+request_diag beforeReply elapsed=1
+request_diag afterReply elapsed=5210
+child_handles equivalent=684,2536 stdout=2536 stderr=2632 before=True wrote=True bytes=18 writeError=6 closed=True closeError=6 reset=True resetError=6 validAfter=False infoError=6
+```
+
+成功したWin32呼出しのlast-error値は前の値を保持し得る。ここではclosed=Trueと、続くvalidAfter=False/error6が実handleのcloseを示す。診断コードは一時ファイルだけで、本番ソースやcommitへ含めない。
+
+修正はChecksだけ。生成子プロセスが自分のstdoutと同じobjectを指すhandleを限定した範囲で探し、close直前にも一致を再確認してaliasと元handleを閉じる。[Microsoft CompareObjectHandles](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-compareobjecthandles)を使用し、他プロセスや別objectのhandleは操作しない。5秒gate、productionのRequest/TryGraceful/Job終了条件は変えていない。production assets/compileにはChecksを含めない。
+
+candidate Checks SHA-256: `8e56c785a2c64a5f9f1c2cfd8e5135ee0953429d32fd4381123efa3df05ba202`。
+修正後のactual Windows targeted検査（exit0）は、stdout EOF時に子がまだ生きていること、release前に終了待ちが完了しないこと、release後の実exit0とJob active0を確認して成功した:
+
+```
+signin_admin_stdin_eof_stdout_eof_delayed_clean_exit_passed
+```
+
+同じ修正済みfixtureで、production RequestのstopSent=trueだけを除去したpre-da73実装を再コンパイルして実行した。actual negativeは意図したassertionで失敗。生出力（元のCP932をMarkdown用UTF8へ変換）:
+
+```
+"2" 個の引数を指定して "RequestCompletion" を呼び出し中に例外が発生しました: "Admin completion did not wait for clean p
+rocess exit"
+発生場所 C:\git\soda-final-source-validation-7d3902c0-0a4c7391326345c690ed0fbaf4cf6b0f\alias-host\validate-signin-host.
+ps1:25 文字:5
++     [SodaDesktopSigninHostChecks]::RequestCompletion([string]$exe,[st ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : InvalidOperationException
+
+```
+
+外側のnegative結果分類用Containsは`p`と`rocess`の間に入ったPowerShellの表示改行のため、この正しい失敗を誤って拒否した。actual negativeを繰り返さず、この表示上の分類失敗と実assertionを区別して記録する。元のraw stdout SHA-256は`a133ab304d577679c2a4951e824c013deda8c0784980254bcd88d3c0d7f52a4c`。
+
+productionソースをバイト一致で復元し、SHAを独立に確認した後、targeted再実行が成功。続けてwhole Hostの既存検査を1回だけ実行して成功（いずれもexit0）。生出力:
+
+```
+exact_original_request_source_restored
+signin_admin_stdin_eof_stdout_eof_delayed_clean_exit_passed
+signin_admin_pipe_bounded_and_exact_frame_passed
+signin_admin_stdin_eof_stdout_eof_delayed_clean_exit_passed
+signin_host_generated_environment_job_descendants_and_revocation_passed
+signin_native_compiled_no_execution
+signin_native_compiled_staging_only
+```
+
+証跡の原本は`/tmp/soda-final-source-windows-7d3902c0/host-{compare-request-only,alias-close-positive,old-request-stopsent-negative,request-restoration-hash,request-exact-restore,full-corrected-fixture}.{stdout,stderr}`。source-author自身によるWindows実行、installed service/Task/registry/本番データへの書込みはしていない。

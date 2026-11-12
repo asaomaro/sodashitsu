@@ -15,6 +15,7 @@ public static class SodaDesktopSigninHostChecks {
     [DllImport("kernel32.dll",SetLastError=true)]static extern bool SetEvent(IntPtr handle);
     [DllImport("kernel32.dll")]static extern IntPtr GetStdHandle(int handle);
     [DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernelbase.dll",SetLastError=true)]static extern bool CompareObjectHandles(IntPtr first,IntPtr second);
     static long sentinelValue;
     static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);}
     static byte[] Acl(string sddl){var sd=new RawSecurityDescriptor(sddl);var bytes=new byte[sd.BinaryLength];sd.GetBinaryForm(bytes,0);return bytes;}
@@ -118,6 +119,14 @@ public static class SodaDesktopSigninHostChecks {
     }
     // Test exe's explicitly selected entry point; production compilation selects
     // SodaDesktopSigninHost instead. No desktop/account/key APIs are exercised.
+    // This generated managed child retains aliases of its inherited stdout.
+    // Close only its own handles to that pipe so EOF precedes the release gate.
+    static void CloseOutput(){
+        IntPtr output=GetStdHandle(-11);var aliases=new System.Collections.Generic.List<IntPtr>();
+        for(long value=4;value<=65536;value+=4){var candidate=new IntPtr(value);if(candidate!=output&&CompareObjectHandles(output,candidate))aliases.Add(candidate);}
+        foreach(var alias in aliases)Check(CompareObjectHandles(output,alias)&&CloseHandle(alias),"Request fixture stdout alias did not close");
+        Check(CloseHandle(output),"Request fixture stdout did not close");
+    }
     public static void Main(string[] args){
         if((args.Length!=2&&args.Length!=3)||!Path.IsPathRooted(args[1]))Environment.Exit(2);
         if(args[0]=="--generated-dispose-failure"){
@@ -127,7 +136,7 @@ public static class SodaDesktopSigninHostChecks {
         }
         if(args[0]=="--generated-request-delayed-exit"){
             if(Console.In.ReadToEnd()!="generated request")Environment.Exit(9);
-            Console.Out.Write("generated response");Console.Out.Flush();Console.Out.Close();CloseHandle(GetStdHandle(-11));
+            Console.Out.Write("generated response");Console.Out.Flush();Console.Out.Close();CloseOutput();
             Wait(()=>File.Exists(Path.Combine(args[1],"request-release")),"Request fixture was not released");return;
         }
         if(args[0]=="--generated-stop-hang"){Thread.Sleep(30000);return;}
