@@ -19,7 +19,7 @@ const frame=z.object({type:z.literal("frame"),info:DesktopFrameInfo,data:z.strin
 const inputAck=z.object({type:z.literal("input_ack"),seq:z.number().int().positive()}).strict();
 const control=z.object({type:z.literal("control"),enabled:z.boolean()}).strict();
 const optionsSchema=z.object({width:z.number().int().min(320).max(1920),fps:z.number().int().min(1).max(30),quality:z.number().int().min(20).max(90)}).strict();
-const allowed=new Set(["control","release","ack","input","quality","heartbeat","keyframe","stop"]);
+const allowed=new Set(["control","release","ack","input","quality","keyframe","stop"]);
 /** Dedicated service only. No arbitrary command or path is accepted. The native
  * host must hold the installed package and private runtime for this lifetime. */
 export class DesktopSigninWorkerProcess {
@@ -77,7 +77,7 @@ export class DesktopSigninWorkerProcess {
       // The viewer keeps its channel alive while native startup is pending.
       // Focus changes also release keys before native startup has held any.
       // Drop both notifications; this grants no early native commands.
-      if(!this.#ready){if((message.type==="heartbeat"||message.type==="release")&&this.deps.now()<this.#readyUntil)return;throw unavailable();}
+      if(!this.#ready){if(message.type==="release"&&this.deps.now()<this.#readyUntil)return;throw unavailable();}
       if(message.type==="control"&&message.enabled&&!this.options.control)throw unavailable();
       if(message.type==="ack"){if(message.seq!==this.#pending)throw unavailable();this.#pending=0;}
       if(message.type==="input"){if(!this.options.control||message.seq<=this.#input||this.#inputs.size>=32)throw unavailable();this.#input=message.seq;this.#inputs.add(message.seq);}

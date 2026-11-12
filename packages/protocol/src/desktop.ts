@@ -161,7 +161,6 @@ export const RemoteDesktopViewerMessage = z.union([
     })
     .strict(),
   z.object({ type: z.literal("ack"), seq: z.number().int().positive() }).strict(),
-  z.object({ type: z.literal("heartbeat") }).strict(),
   z.object({ type: z.literal("release") }).strict(),
   z.object({ type: z.literal("native_pointer_cancel") }).strict(),
   z.object({ type: z.literal("keyframe"), region:DesktopRegionSpec.nullable().optional(), snapshotIds:z.array(z.string().uuid()).min(1).max(64).optional() }).strict(),
