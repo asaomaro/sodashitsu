@@ -12,7 +12,7 @@
 - [Node vm](https://nodejs.org/docs/latest-v24.x/api/vm.html): vmは未信頼コードの安全な隔離ではない。本製品の同梱アプリはnative側で検証した信頼済みコードであり、Node標準ローダーを使う。
 - DPAPI・既存のidentity・trust・enrollmentは製品の認証データ。ソース削除に伴って消去・再生成・自動再登録しない。
 - SCMとファイルACLは一般ユーザー→SYSTEMの境界。管理者とSYSTEMが同じ鍵を読めることを新たな独自journalで証明する必要はない。署名/マニフェスト照合とprivateなコード配置は通常の配布物の信頼確認へ縮小する。
-- この基準コミットにはBootサービスの実装/登録スクリプトが存在しない。実機に登録済みのBootは外部配置として、後の実機作業で別途確認する。通常サーバーからの一時SYSTEM Task起動と、再起動/サインイン前の起動機能は分ける。
+- この基準コミットにはBoot用登録の実装/登録スクリプトが存在しない。実機の起動用Task等は外部配置として、sole operatorが別途確認する。通常サーバーからの一時SYSTEM Task起動と、再起動/サインイン前の起動機能は分ける。
 
 ## 実装と検証
 
@@ -27,10 +27,22 @@ ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com
 
 ## 残る整理とレビュー境界
 
-- 管理メールボックス（AdminEnvelope/Journal/Deadline/Result/PersistenceとTS対応）は未整理。既存Signin SYSTEMサービスの、管理者だけが接続できる標準named pipe request/replyへ置換する。SYSTEM CurrentUser DPAPIと既存identityは維持。通常のGUI用一時Taskを任意SYSTEM CLI起動へ広げない。新たな永続要求・結果・nonce・世代journalは作らない。
+- 管理メールボックスの実行経路は標準named pipe request/replyへ置換済み。旧AdminEnvelope/Journal/Deadline/Result/PersistenceとTS対応の未使用ファイルは次の削除段階で物理削除する。SYSTEM CurrentUser DPAPIと既存identityは維持。GUI用一時Taskは使わず、新たな永続要求・結果・nonce・世代journalも作らない。
 - ServiceBase・短縮名・旧名からの移行と停止/終了の競合を独立レビューするまで、このソースを実機へ適用しない。起動の見た目や旧記録の存在を正常稼働の証拠にしない。
 - Win32 APIを薄く包むScm/InstallerScm/UpgradeScmにも旧テスト用callback/状態が残る。標準ServiceController/SCM呼び出しへさらに縮める対象で、例外として承認したものではない。
 - 既存のscope/入力鮮度/描画ACK、JS LocalLeaseの独自寿命管理は引き続き点検対象。現在のアダプター判定は「必要最小限が証明済み」という意味ではない。
+
+## 管理IPCの標準実装との対応
+
+| 本製品の処理 | 比較元と理由 |
+| --- | --- |
+| pipe作成時の明示ACL・接続前のサーバー認証 | [RustDesk ipc/windows.rs（固定commit）](https://github.com/rustdesk/rustdesk/blob/1ac53ccb1b28e62b726db3cbd6042110349c9c2a/src/ipc/windows.rs#L42)のlistener_security_attributes / connect / ensure_serverと同じOSの境界。本製品の受け口は管理操作だけなのでBA/SYに限定 |
+| 実サービスのPIDとpipeサーバーPIDの照合 | 同ファイルのGetNamedPipeServerProcessId。こちらは固定SCMサービスと保持したSYSTEM/session0 process handleも照合。独自のnonce・receiptは使わない |
+| 管理者token確認とSYSTEMへ復帰 | [Microsoft named pipe impersonation](https://learn.microsoft.com/en-us/windows/win32/ipc/impersonating-a-named-pipe-client)。RunAsClient内で管理者を確認し、抜けてからSYSTEM DPAPI/保存を行う |
+| privateなpipeとremote拒否 | [Microsoft named pipe ACL](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights)。明示DACLとREJECT_REMOTE_CLIENTS、FIRST_PIPE_INSTANCE。通常ユーザー→SYSTEMへの境界で、管理者自身を隔離する仕組みではない |
+| 許可した6操作を1回処理 | RustDeskのservice-scoped IPC allowlistに対応。Sodashitsu固有のidentity/trust/enrollment操作は既存EndpointStoreと固定helperへ渡す薄いアダプター。任意パス・実行ファイル・コマンドは受け付けない |
+
+旧コードの更新では古い配布物を実行しないため、旧22項目manifest schemaは持たない。固定サービス/実行パス/コードACLと明示指定した旧manifestのバイトSHAを確認してコードを退避し、新しい閉じた配布物だけを検証・実行する。データスロットは変更しない。
 
 ## C# 全件
 

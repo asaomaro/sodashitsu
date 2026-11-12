@@ -28,7 +28,7 @@ public static class SodaDesktopSigninInstaller {
                 }
                 using(var service=SodaDesktopSigninInstallerScm.Open(owner,current)){
                     Require(service.Absent());
-                    foreach(string path in new[]{paths.Slot,Path.Combine(paths.Slot,"runtime"),Path.Combine(paths.Slot,"admin"),paths.Stage})SodaDesktopSigninInstallFiles.CreatePrivateDirectory(path);
+                    foreach(string path in new[]{paths.Slot,Path.Combine(paths.Slot,"runtime"),paths.Stage})SodaDesktopSigninInstallFiles.CreatePrivateDirectory(path);
                     using(var barrier=SodaDesktopSigninPackageNative.CreatePrivateFile(Path.Combine(paths.Slot,"quiescence.lock"))){barrier.WriteByte(83);barrier.Flush(true);}
                     release.Copy(paths.Stage,SodaDesktopSigninInstallFiles.CreatePrivateDirectory,(path,acl)=>SodaDesktopSigninQuiescence.Private(acl),current,SodaDesktopSigninPackageNative.CreatePrivateFile);
                     Require(current());Directory.Move(paths.Stage,paths.Code);

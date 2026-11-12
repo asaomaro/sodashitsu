@@ -20,10 +20,10 @@ public static class SodaDesktopSigninHost {
             };
             var block=new StringBuilder();foreach(var pair in variables){if(pair.Value.IndexOf('\0')>=0)throw Failure();block.Append(pair.Key).Append('=').Append(pair.Value).Append('\0');}EnvironmentBlock=block.Append('\0').ToString();
         }
-        internal static Plan Installed(SodaDesktopSigninPackageNative.Lease package,string runtime){
+        internal static Plan Installed(SodaDesktopSigninPackageNative.Lease package,string runtime,bool admin=false){
             string owner=SodaDesktopSigninPackage.OwnerSid(Owner),bootstrap=package.Bootstrap;
             if(bootstrap.IndexOf('"')>=0)throw Failure();
-            return new Plan(package.Node,"--no-addons \""+bootstrap+"\" --owner "+owner,Environment.GetFolderPath(Environment.SpecialFolder.System),runtime);
+            return new Plan(package.Node,"--no-addons \""+bootstrap+"\" --owner "+owner+(admin?" --admin":""),Environment.GetFolderPath(Environment.SpecialFolder.System),runtime);
         }
     }
     internal static bool PrivateRuntimeAcl(byte[] bytes){
@@ -77,6 +77,27 @@ public static class SodaDesktopSigninHost {
             }
         }
     }
+    internal static void Admin(WaitHandle stop){
+        using(var package=SodaDesktopSigninPackageNative.Verify(Owner))
+        using(var pin=SodaDesktopSigninQuiescence.Open(Owner))using(var exclusive=pin.Exclusive())
+        using(var pipe=SodaDesktopSigninAdminPipe.Listen(Owner)){
+            var cancel=ThreadPool.RegisterWaitForSingleObject(stop,(_,timedOut)=>pipe.Dispose(),null,Timeout.Infinite,true);
+            byte[] request=null,response=null;
+            try{
+                pipe.WaitForConnection();request=SodaDesktopSigninAdminPipe.Read(pipe);SodaDesktopSigninAdminPipe.Authenticate(pipe);
+                Func<bool> current=()=>!stop.WaitOne(0)&&package.Current()&&exclusive.Current();
+                if(!current())throw Failure();
+                string runtime=Path.Combine(SodaDesktopSigninVault.StateDirectory(Owner),"runtime");
+                using(var runtimeHeld=SodaDesktopSigninPackageNative.OpenCore(runtime,true,true,0,SodaDesktopSigninQuiescence.Private,null))
+                using(var child=SodaDesktopSigninProcess.Start(Plan.Installed(package,runtime,true),current,true)){
+                    var reap=ThreadPool.RegisterWaitForSingleObject(stop,(_,timedOut)=>{if(!child.Stop())Environment.FailFast("Signin administration child could not stop");},null,Timeout.Infinite,true);
+                    try{child.Request(request);response=child.Reply();if(!current()||!child.TryGraceful())throw Failure();}
+                    finally{reap.Unregister(null);}
+                }
+                SodaDesktopSigninAdminPipe.Write(pipe,response);
+            }finally{cancel.Unregister(null);if(request!=null)Array.Clear(request,0,request.Length);if(response!=null)Array.Clear(response,0,response.Length);}
+        }
+    }
     // SCM owns service status, dispatch and stop/shutdown handling. OS Jobs own
     // descendant lifetime; no persistent intent, observer ACK or stop receipt.
     internal sealed class Service:System.ServiceProcess.ServiceBase {
@@ -84,8 +105,9 @@ public static class SodaDesktopSigninHost {
         Thread worker;
         internal Service(){ServiceName=SodaDesktopSigninServicePolicy.Name(Owner);CanStop=true;CanShutdown=true;AutoLog=false;}
         protected override void OnStart(string[] args){
-            if(args.Length!=0)throw Failure();
-            worker=new Thread(()=>{try{SodaDesktopSigninHost.Run(stop);}catch{ExitCode=1;}finally{ThreadPool.QueueUserWorkItem(_=>Stop());}});
+            if(args.Length!=0&&(args.Length!=1||args[0]!="--admin"))throw Failure();
+            bool admin=args.Length==1;
+            worker=new Thread(()=>{try{if(admin)SodaDesktopSigninHost.Admin(stop);else SodaDesktopSigninHost.Run(stop);}catch{ExitCode=1;}finally{ThreadPool.QueueUserWorkItem(_=>Stop());}});
             worker.IsBackground=true;worker.Start();
         }
         protected override void OnStop(){

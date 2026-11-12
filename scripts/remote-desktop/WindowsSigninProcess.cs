@@ -1,6 +1,7 @@
 // Private native launcher. Its Plan is never reachable through RPC or CLI.
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -63,8 +64,15 @@ internal static class SodaDesktopSigninProcess {
     static void Close(ref IntPtr value){if(value!=IntPtr.Zero&&value!=new IntPtr(-1))CloseHandle(value);value=IntPtr.Zero;}
     internal static void Layouts(){Require(IntPtr.Size==8&&Marshal.SizeOf(typeof(SI))==104&&Marshal.SizeOf(typeof(SX))==112&&Marshal.SizeOf(typeof(Limits))==144&&Marshal.SizeOf(typeof(Accounting))==48);}
     internal sealed class Child:IDisposable {
-        IntPtr process,job,stopWrite;bool stopped,graceful,stopSent;readonly object gate=new object();
-        internal Child(IntPtr process,IntPtr job,IntPtr stopWrite=default(IntPtr)){this.process=process;this.job=job;this.stopWrite=stopWrite;}
+        IntPtr process,job,stopWrite,outputRead;bool stopped,graceful,stopSent;readonly object gate=new object();
+        internal Child(IntPtr process,IntPtr job,IntPtr stopWrite=default(IntPtr),IntPtr outputRead=default(IntPtr)){this.process=process;this.job=job;this.stopWrite=stopWrite;this.outputRead=outputRead;}
+        internal void Request(byte[] bytes){uint written;Require(bytes!=null&&bytes.Length>0&&bytes.Length<=16384&&stopWrite!=IntPtr.Zero&&WriteFile(stopWrite,bytes,(uint)bytes.Length,out written,IntPtr.Zero)&&written==bytes.Length);Close(ref stopWrite);}
+        internal byte[] Reply(){
+            Require(outputRead!=IntPtr.Zero);
+            using(var input=new FileStream(new Microsoft.Win32.SafeHandles.SafeFileHandle(outputRead,false),FileAccess.Read))using(var output=new MemoryStream()){
+                var buffer=new byte[1024];int count;while((count=input.Read(buffer,0,buffer.Length))>0){Require(output.Length+count<=16384);output.Write(buffer,0,count);}Require(output.Length>0);return output.ToArray();
+            }
+        }
         internal bool Owns(int pid){lock(gate){try{using(var item=Process.GetProcessById(pid)){bool owned;Require(IsProcessInJob(item.Handle,job,out owned));return owned;}}catch{return false;}}}
         internal bool Running(){lock(gate){return !stopped&&WaitForSingleObject(process,0)==258;}}
         internal bool ExitedSuccessfully(){lock(gate){uint code;return process!=IntPtr.Zero&&WaitForSingleObject(process,0)==0&&GetExitCodeProcess(process,out code)&&code==0;}}
@@ -90,11 +98,11 @@ internal static class SodaDesktopSigninProcess {
                 if(data.Active==0&&WaitForSingleObject(process,0)==0){stopped=true;return true;}Thread.Sleep(10);
             }return false;
         }}
-        public void Dispose(){lock(gate){if(!Stop())Environment.FailFast("Signin child could not stop");Close(ref stopWrite);Close(ref process);Close(ref job);}}
+        public void Dispose(){lock(gate){if(!Stop())Environment.FailFast("Signin child could not stop");Close(ref stopWrite);Close(ref outputRead);Close(ref process);Close(ref job);}}
     }
-    internal static Child Start(SodaDesktopSigninHost.Plan plan,Func<bool> current){
+    internal static Child Start(SodaDesktopSigninHost.Plan plan,Func<bool> current,bool reply=false){
         Layouts();Require(plan!=null&&current!=null&&current());
-        IntPtr stopWrite=IntPtr.Zero,job=IntPtr.Zero,list=IntPtr.Zero,handles=IntPtr.Zero,jobValue=IntPtr.Zero,environment=IntPtr.Zero;
+        IntPtr stopWrite=IntPtr.Zero,outputRead=IntPtr.Zero,job=IntPtr.Zero,list=IntPtr.Zero,handles=IntPtr.Zero,jobValue=IntPtr.Zero,environment=IntPtr.Zero;
         var inherited=new IntPtr[3];var process=new PI();bool initialized=false,transferred=false;
         try {
             job=CreateJobObjectW(IntPtr.Zero,null);Require(job!=IntPtr.Zero);
@@ -104,7 +112,8 @@ internal static class SodaDesktopSigninProcess {
             var limits=new Limits();limits.Basic.Flags=0x2000;Require(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(typeof(Limits))));
             var sa=new SA{Size=Marshal.SizeOf(typeof(SA)),Inherit=1};
             Require(CreatePipe(out inherited[0],out stopWrite,ref sa,4096));Require(SetHandleInformation(stopWrite,1,0));
-            for(int i=1;i<3;i++){inherited[i]=CreateFileW("NUL",0x40000000u,3,ref sa,3,0,IntPtr.Zero);Require(inherited[i]!=IntPtr.Zero&&inherited[i]!=new IntPtr(-1));}
+            if(reply){Require(CreatePipe(out outputRead,out inherited[1],ref sa,16384));Require(SetHandleInformation(outputRead,1,0));}
+            for(int i=reply?2:1;i<3;i++){inherited[i]=CreateFileW("NUL",0x40000000u,3,ref sa,3,0,IntPtr.Zero);Require(inherited[i]!=IntPtr.Zero&&inherited[i]!=new IntPtr(-1));}
             IntPtr size=IntPtr.Zero;InitializeProcThreadAttributeList(IntPtr.Zero,2,0,ref size);Require(size.ToInt64()>0&&size.ToInt64()<65536);
             list=Marshal.AllocHGlobal(size);Require(InitializeProcThreadAttributeList(list,2,0,ref size));initialized=true;
             handles=Marshal.AllocHGlobal(3*IntPtr.Size);for(int i=0;i<3;i++)Marshal.WriteIntPtr(handles,i*IntPtr.Size,inherited[i]);
@@ -116,13 +125,13 @@ internal static class SodaDesktopSigninProcess {
             Require(current());
             Require(CreateProcessW(plan.Application,new StringBuilder("\""+plan.Application+"\" "+plan.Arguments),IntPtr.Zero,IntPtr.Zero,true,0x80000|0x08000000|0x400|4,environment,plan.WorkingDirectory,ref startup,out process));
             Require(current());Require(ResumeThread(process.Thread)==1);
-            var result=new Child(process.Process,job,stopWrite);stopWrite=IntPtr.Zero;transferred=true;return result;
+            var result=new Child(process.Process,job,stopWrite,outputRead);stopWrite=IntPtr.Zero;outputRead=IntPtr.Zero;transferred=true;return result;
         }finally{
             if(!transferred&&process.Process!=IntPtr.Zero){
                 // Includes refusal after create while the initial thread is suspended.
                 if(!new Child(process.Process,job).Stop())Environment.FailFast("Signin child cleanup failed");
             }
-            if(!transferred){Close(ref process.Process);Close(ref job);}Close(ref stopWrite);Close(ref process.Thread);
+            if(!transferred){Close(ref process.Process);Close(ref job);}Close(ref stopWrite);Close(ref outputRead);Close(ref process.Thread);
             if(initialized)DeleteProcThreadAttributeList(list);
             foreach(IntPtr value in new[]{list,handles,jobValue,environment})if(value!=IntPtr.Zero)Marshal.FreeHGlobal(value);
             for(int i=0;i<inherited.Length;i++)Close(ref inherited[i]);

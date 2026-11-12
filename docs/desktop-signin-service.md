@@ -53,7 +53,7 @@ powershell.exe -NoProfile -File scripts/remote-desktop/upgrade-signin-service.ps
 
 従来の全64文字を使う長いサービス名がある場合、その正確な実行パス・SYSTEMアカウント・
 停止状態・設定を確認してから、短い名前へ移行します。新サービスを無効状態で登録し、
-旧サービスの登録を削除した後、新サービスを手動起動へ設定します。既存のBootサービスや
+旧サービスの登録を削除した後、新サービスを手動起動へ設定します。既存の起動用登録や
 他のサービス・Taskを一括削除しません。移行後も自動で起動しません。
 
 途中で失敗した場合は、SCMの状態と保存された配布物を、管理者がWindows標準ツールで確認します。
@@ -68,13 +68,37 @@ powershell.exe -NoProfile -File scripts/remote-desktop/upgrade-signin-service.ps
 
 ## 登録情報の管理
 
-既存の`control-signin-admin.ps1`は`prepare`・`result`・`acknowledge`を扱います。
-入力は標準入力のUTF8 JSONで、tokenをコマンド引数に載せません。操作は
-`status`・`initialize`・`trust`・`revoke`・`enroll`・`disable`です。
-prepareで返されたnonceとcipherSha256を、サービス開始の
-`-Mode admin -AdminNonce … -AdminSha256 …`へ渡します。終了後にresultを確認し、
-同じnonce・cipherSha256・resultSha256でacknowledgeします。
-この管理用メールボックスは後続の整理対象で、Windows標準のサービス管理には使いません。
+昇格した管理者が、操作JSONを標準入力のパイプから1回だけ渡します。
+
+```powershell
+powershell.exe -NoProfile -File scripts/remote-desktop/control-signin-admin.ps1 `
+  -OwnerSid '<owner SID>' -ManifestSha256 '<配置済み配布物のSHA-256>'
+```
+
+JSONの入力にはUTF8を使います。上のコマンドを対話入力で待たせず、呼び出し元からパイプで渡して
+EOFを閉じます。tokenをコマンド引数に載せません。`-ValidateOnly`はコンパイルだけです。
+
+操作は`status`・`initialize`・`trust`・`revoke`・`enroll`・`disable`の6種類です。
+`{"kind":"status"}`で現在の公開状態を確認できます。trustには`peer:{fingerprint,label}`、
+revokeには`fingerprint`、enrollには`origin,machineId,token,allowInput,peers`と任意の`caPem`を指定します。
+任意のコマンド・実行ファイル・保存先は指定できません。要求と返答は各16384バイトまでです。
+
+通常のサインインサービスを先に停止してください。管理コマンドはSCMから同じ固定サービスを
+管理目的で開始し、既存の排他ハンドルを保持したSYSTEMホストへ接続します。
+受け口はローカルの管理者とSYSTEMだけに許可したnamed pipeです。サービス側はOSの
+接続者tokenで昇格した管理者であることを確認し、クライアント側はpipeのサーバーPIDと
+SCMの実PID、保持したSYSTEMプロセスを照合してから秘密を含む要求を渡します。
+リモート接続は拒否し、既存のpipeを採用しません。
+
+SYSTEMホストが検証済みの同梱Nodeにstdin/stdoutで1操作だけを渡します。
+既存のidentity/trustの保存形式とSYSTEM CurrentUser DPAPI、enrollmentのLocalMachine DPAPIは維持します。
+操作完了後に子Jobを回収して公開状態を返し、サービスは停止します。通常接続へ自動移行しません。
+既存サービスのIPCだけを使い、GUI用の一時Taskに管理操作を流しません。
+
+`outcome: success`と`incomplete`を区別します。途中の処理が保存済みかもしれないため、
+失敗時の自動再送やrollbackはありません。次の明示操作の前にstatusを確認してください。
+要求・結果・nonce・期限・ackのファイルは作りません。旧admin/runs履歴は消去せず、
+起動や管理操作に読み込まないまま残します。旧prepare/result/acknowledgeの手順は廃止しました。
 
 専用接続の閲覧と許可した入力の範囲は従来どおりです。音声・マイク・ファイル・クリップボード・
 エージェント・Ctrl+Alt+Delを新たに許可する変更ではありません。

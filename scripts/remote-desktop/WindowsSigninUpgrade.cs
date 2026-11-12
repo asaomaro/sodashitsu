@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 public static class SodaDesktopSigninUpgrade {
     static void Require(bool value){if(!value)throw new InvalidOperationException("Signin update requires a stopped, verified installation");}
     public static IDictionary<string,object> Run(string owner,string oldHash,string source,string newHash){
@@ -16,11 +17,15 @@ public static class SodaDesktopSigninUpgrade {
             using(var service=SodaDesktopSigninUpgradeScm.Open(owner,current,legacy)){
                 service.Inspect(false);
                 string archive=paths.Code+".previous-"+Guid.NewGuid().ToString("N");
-                using(var installed=SodaDesktopSigninPackageNative.VerifyController(owner,oldHash)){
-                    Require(current()&&installed.Current());
+                using(var installed=SodaDesktopSigninPackageNative.OpenCore(paths.Code,true,true,0,acl=>SodaDesktopSigninPackage.CodeAcl(acl,true),null))
+                using(var manifest=SodaDesktopSigninPackageNative.OpenCore(Path.Combine(paths.Code,"signin-package.json"),false,true,32768,acl=>SodaDesktopSigninPackage.CodeAcl(acl,true),null)){
+                    // Old code is archived, never executed. Bind the operator's
+                    // reviewed old manifest bytes without retaining its schema.
+                    using(var sha=SHA256.Create())Require(BitConverter.ToString(sha.ComputeHash(manifest.Stream)).Replace("-","").ToLowerInvariant()==oldHash);
+                    Require(current());
                     SodaDesktopSigninInstallFiles.CreatePrivateDirectory(paths.Stage);
-                    release.Copy(paths.Stage,SodaDesktopSigninInstallFiles.CreatePrivateDirectory,(path,acl)=>SodaDesktopSigninQuiescence.Private(acl),()=>current()&&installed.Current(),SodaDesktopSigninPackageNative.CreatePrivateFile);
-                    service.Disable(()=>current()&&installed.Current());
+                    release.Copy(paths.Stage,SodaDesktopSigninInstallFiles.CreatePrivateDirectory,(path,acl)=>SodaDesktopSigninQuiescence.Private(acl),()=>current(),SodaDesktopSigninPackageNative.CreatePrivateFile);
+                    service.Disable(()=>current());
                 }
                 // The protected data slot is deliberately untouched: identity,
                 // trust, enrollment and historical records keep their bytes.

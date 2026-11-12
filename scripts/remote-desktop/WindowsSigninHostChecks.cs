@@ -19,8 +19,24 @@ public static class SodaDesktopSigninHostChecks {
     static void Publish(string path,string text){string stage=path+"."+Process.GetCurrentProcess().Id+".tmp";File.WriteAllText(stage,text);File.Move(stage,path);}
     static string Quote(string value){return "\""+value+"\"";}
     internal static SodaDesktopSigninHost.Plan Fixture(string exe,string directory,string mode){return new SodaDesktopSigninHost.Plan(exe,mode+" "+Quote(directory)+(mode=="--generated-child"?" "+sentinelValue.ToString(System.Globalization.CultureInfo.InvariantCulture):""),Environment.GetFolderPath(Environment.SpecialFolder.System),directory);}
+    public static void AdminPipeFraming(){
+        var bytes=new byte[16384];bytes[0]=17;bytes[bytes.Length-1]=23;
+        using(var stream=new MemoryStream()){
+            SodaDesktopSigninAdminPipe.Write(stream,bytes);stream.Position=0;var read=SodaDesktopSigninAdminPipe.Read(stream);
+            Check(read.Length==16384&&read[0]==17&&read[read.Length-1]==23,"Admin pipe changed request bytes");
+        }
+        foreach(int length in new[]{-1,0,16385,Int32.MaxValue}){
+            bool denied=false;using(var stream=new MemoryStream(BitConverter.GetBytes(length)))try{SodaDesktopSigninAdminPipe.Read(stream);}catch(InvalidOperationException){denied=true;}
+            Check(denied,"Admin pipe accepted an unbounded frame");
+        }
+        foreach(var truncated in new[]{new byte[]{1,0,0},new byte[]{2,0,0,0,1}}){
+            bool denied=false;using(var stream=new MemoryStream(truncated))try{SodaDesktopSigninAdminPipe.Read(stream);}catch(EndOfStreamException){denied=true;}
+            Check(denied,"Admin pipe accepted a partial frame");
+        }
+        Console.WriteLine("signin_admin_pipe_bounded_and_exact_frame_passed");
+    }
     public static void Run(string exe,string directory){
-        Check(!SodaDesktopSigninVault.SystemPrimary(),"Host fixtures require ordinary account");SodaDesktopSigninProcess.Layouts();
+        Check(!SodaDesktopSigninVault.SystemPrimary(),"Host fixtures require ordinary account");SodaDesktopSigninProcess.Layouts();AdminPipeFraming();
         string unwound=Path.Combine(directory,"dispose-unwound");
         using(var failed=Process.Start(new ProcessStartInfo(exe,"--generated-dispose-failure "+Quote(directory)){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true})){
             var stdout=failed.StandardOutput.ReadToEndAsync();var stderr=failed.StandardError.ReadToEndAsync();

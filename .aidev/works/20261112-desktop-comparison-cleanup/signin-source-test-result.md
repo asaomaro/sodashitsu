@@ -67,3 +67,25 @@ AssertionError: Failed child cleanup released outer leases
 restored: exit=-6 outer_unwound=False
 dispose_boundary_negative_control_and_exact_restore_passed
 ```
+
+## 管理IPCへの置換（Windows実機未実行）
+
+管理用service pipe、SCM/保持processの認証、固定Nodeのstdin/stdout、既存EndpointStoreとenrollment DPAPI形式への書き込みを実装。旧メールボックスの実行経路とJS LocalLeaseを通常起動から外した。単体のfull server typecheckはdefault4GBでOOMとなったため、変更したSignin main/admin/startupと関連テストを含む一時tsconfigで、標準tscを8GB設定で実行して成功した。full serverは統合時の1回にまとめる。
+
+```
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+```
+
+変更したC#の7ソースセットがMonoでコンパイル成功。さらにruntime-assetsだけを一時フォルダへコピーし、Checksソースが無いことを確認してpublicソースセットをコンパイルした生出力:
+
+```
+closed asset build-signin-host.ps1 0
+closed asset control-signin-service.ps1 0
+closed asset control-signin-admin.ps1 0
+closed asset install-signin-service.ps1 0
+closed asset upgrade-signin-service.ps1 0
+signin_admin_pipe_bounded_and_exact_frame_passed
+signin_package_generated_staging_manifest_passed
+```
+
+pipeの実OS ACL・接続者token・remote拒否・SCM purposeの実確認はWindowsで未実施。唯一のWindows operatorが独立レビュー後に行う。上のMemoryStream検査を実認証の検査として扱わない。
