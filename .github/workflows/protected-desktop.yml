@@ -17,10 +17,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Generated signin scope and private marker (no capture, input, or service)
+      - name: Generated signin OS scope (no capture, input, or service)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-scope.ps1
-      - name: Dedicated signin worker compilation and generated data (no worker launch)
+      - name: Dedicated signin worker compilation (no worker launch)
         shell: powershell
         run: scripts/remote-desktop/build-signin-host.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001
       - name: Compile and inspect single privileged image with generated negative controls
@@ -38,77 +38,36 @@ jobs:
       - name: Generated ordinary signin host child and descendant checks (no service install)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-host.ps1 -NegativeControls
-      - name: Generated local admin request crypto domains (no real credentials)
-        shell: powershell
-        run: scripts/remote-desktop/validate-signin-admin.ps1 -NegativeControls
-      - name: Generated admin public result and native deadline checks (no privileged entry)
-        shell: powershell
-        run: scripts/remote-desktop/validate-signin-admin-execution.ps1 -NegativeControls
-      - name: Generated fixed admin persistence (ordinary temporary files)
-        shell: powershell
-        run: scripts/remote-desktop/validate-signin-admin-persistence.ps1 -NegativeControls
-      - name: Generated claim-bound enrollment (no installed storage or keys)
-        shell: powershell
-        run: scripts/remote-desktop/validate-signin-admin-enrollment.ps1 -NegativeControls
-      - name: Generated closed run records and admission gate (no service/process authority)
-        shell: powershell
-        run: |
-          scripts/remote-desktop/validate-signin-run-record.ps1 -NegativeControls
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          scripts/remote-desktop/validate-signin-run-admission.ps1 -NegativeControls
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Generated release validation and initial installation (fake SCM only)
+      - name: Generated release source validation (ordinary temporary files)
         shell: powershell
         run: |
           scripts/remote-desktop/validate-signin-install-source.ps1 -NegativeControls
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          scripts/remote-desktop/validate-signin-installer.ps1 -NegativeControls
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Initial-only disabled registration recovery (generated, no SCM changes)
-        shell: powershell
-        run: |
-          scripts/remote-desktop/recover-signin-initial.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001 -ManifestSha256 ('a' * 64)
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          scripts/remote-desktop/validate-signin-initial-recovery.ps1 -NegativeControls
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Local admin preparation and bounded UTF8 input (generated only)
+      - name: Local admin controller compilation only
         shell: powershell
         run: |
           scripts/remote-desktop/control-signin-admin.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001 -ManifestSha256 ('a' * 64)
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          scripts/remote-desktop/validate-signin-admin-controller.ps1 -NegativeControls
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Dedicated controller compilation only and ordinary generated lifecycle
+      - name: Dedicated service controller compilation only
         shell: powershell
         run: |
           scripts/remote-desktop/control-signin-service.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001 -ManifestSha256 ('a' * 64)
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          scripts/remote-desktop/validate-signin-controller.ps1 -NegativeControls
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Generated Host lifecycle and actual admin mode bindings (no service)
-        shell: powershell
-        run: scripts/remote-desktop/validate-signin-run-session.ps1 -NegativeControls
       - name: Generated retained ordinary process evidence (no service control)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-process-evidence.ps1 -NegativeControls
-      - name: Generated run journal lifecycle (ordinary temporary files only)
-        shell: powershell
-        run: scripts/remote-desktop/validate-signin-run-journal.ps1 -NegativeControls
       - name: Generated immutable quiescence barrier (ordinary temporary files only)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-quiescence.ps1 -NegativeControls
       - name: Validate signin SCM policy with generated data only
         shell: powershell
         run: ./scripts/remote-desktop/validate-signin-service-policy.ps1 -NegativeControls
-      - name: Generated local admin journal transitions (ordinary temporary files)
-        shell: powershell
-        run: scripts/remote-desktop/validate-signin-admin-journal.ps1 -NegativeControls
       - name: Generated SYSTEM enrollment crypto and ACL checks (no real vault reads)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-vault.ps1
-      - name: Generated scope boundaries and private read-only WinEvent delivery
+      - name: Generated direct OS scope boundaries
         shell: powershell
-        run: scripts/remote-desktop/validate-protected-scope.ps1 -ReadOnlyObserver
+        run: scripts/remote-desktop/validate-protected-scope.ps1
       - name: Generated protected video publication and negative controls (no capture or encoder)
         shell: powershell
         run: scripts/remote-desktop/validate-protected-video.ps1 -NegativeControls
@@ -118,21 +77,17 @@ jobs:
       - name: Owned virtual display mode guards (generated driver only)
         shell: powershell
         run: scripts/remote-desktop/validate-virtual-modes.ps1 -NegativeControls
-      - name: Generated resource cleanup and input-failure fences (no OS input or devices)
-        shell: powershell
-        run: scripts/remote-desktop/validate-resource-fence.ps1 -NegativeControls
-
       - name: Existing helper entry-point compilation
         shell: powershell
-        # Full legacy validator includes a limited-query denial test requiring
+        # The endpoint query-denial validator requires
         # a non-administrator account; it runs on both user PCs separately.
         run: scripts/remote-desktop/windows-helper.ps1 -ValidateOnly
       - name: Generated protected worker handshake and purpose checks
         shell: powershell
         run: scripts/remote-desktop/validate-protected-worker.ps1
-      - name: Installed image compilation only
+      - name: Prepared helper image compilation only
         shell: powershell
-        run: scripts/remote-desktop/install-unlock-service.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001
+        run: scripts/remote-desktop/prepare-desktop-helper.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001
       - name: Existing generated monitor checks
         shell: powershell
         run: scripts/remote-desktop/validate-monitors.ps1
@@ -160,17 +115,3 @@ jobs:
       - name: Current-schema upgrade compilation only (no SCM/state access)
         shell: powershell
         run: scripts/remote-desktop/upgrade-signin-service.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001 -OldManifestSha256 ('a' * 64) -ManifestSha256 ('b' * 64) -SourceDirectory 'C:\generated-unused'
-      - name: Generated stopped package upgrade, interruption and source controls
-        shell: powershell
-        run: scripts/remote-desktop/validate-signin-upgrade.ps1 -NegativeControls
-  maintenance-recovery:
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Maintenance recovery compilation only (no SCM/state access)
-        shell: powershell
-        run: scripts/remote-desktop/recover-signin-maintenance.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001 -ManifestSha256 ('b' * 64)
-      - name: Generated exact transition recovery and seven source controls
-        shell: powershell
-        run: scripts/remote-desktop/validate-signin-maintenance-recovery.ps1 -NegativeControls

@@ -8,7 +8,6 @@ on:
       - 'packages/server/src/desktop/DesktopSharedCapture*'
       - 'scripts/remote-desktop/windows-helper.ps1'
       - 'scripts/remote-desktop/WindowsDesktop*.cs'
-      - 'scripts/remote-desktop/WindowsResourceFence.cs'
       - 'scripts/remote-desktop/WindowsVirtualDisplay*.cs'
       - 'scripts/remote-desktop/WindowsProtected*.cs'
       - 'scripts/remote-desktop/WindowsCodecProbe.cs'
