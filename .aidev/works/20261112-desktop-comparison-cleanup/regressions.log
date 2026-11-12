@@ -1,0 +1,64 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transient-desktop-broker
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (347 tests | 2 failed) 128182ms
+   × refuses control when B is readonly and closes an unacknowledged share 8181ms
+   × discards main-lane idle notices overtaken by a newer image on its independent socket 1112ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > refuses control when B is readonly and closes an unacknowledged share
+AssertionError: expected 1 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 1
+
+ ❯ src/desktop/DesktopRelay.test.ts:461:63
+    459|   a.send({ type: "input", seq: 1, frameSeq: 1, input: { kind: "text", …
+    460|   a.send({ type: "heartbeat" });
+    461|   await expect.poll(() => a.ws.readyState, { timeout: 8000 }).toBe(Web…
+       |                                                               ^
+    462|   await expect(readFile(f.record, "utf8")).rejects.toThrow();
+    463| }, 12000);
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:461:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > discards main-lane idle notices overtaken by a newer image on its independent socket
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/desktop/DesktopRelay.test.ts:1345:600
+
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:1345:563
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 15 passed (16)
+      Tests  2 failed | 562 passed (564)
+   Start at  08:53:18
+   Duration  132.76s (tests 73%, transform 20%, import 5%, environment 2%)
+
+  Transform  |@sodashitsu/web| transforming modules took 15.03s · 63% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

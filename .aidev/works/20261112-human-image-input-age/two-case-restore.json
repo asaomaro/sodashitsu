@@ -1,0 +1,10 @@
+{
+  "packages/server/src/desktop/DesktopProvider.ts": {
+    "sha256": "2070baa1b61057c33adbcade82528ee00f83aa3f2d6d3e8d61f6f878c4d84fe5",
+    "exactRestored": true
+  },
+  "packages/server/src/desktop/DesktopRelay.ts": {
+    "sha256": "5853f2247df177566a4267053c28e4904d6d3f9c5b3ec567c8f1bc5c8f57ff47",
+    "exactRestored": true
+  }
+}

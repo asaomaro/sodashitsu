@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-human-image-input-age
+
+ ❯ packages/server/src/desktop/DesktopRelay.test.ts (347 tests | 1 failed | 345 skipped) 8515ms
+   × refuses control when B is readonly and closes an unacknowledged share 8194ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/desktop/DesktopRelay.test.ts > refuses control when B is readonly and closes an unacknowledged share
+AssertionError: expected 1 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 1
+
+ ❯ packages/server/src/desktop/DesktopRelay.test.ts:461:63
+    459|   a.send({ type: "input", seq: 1, frameSeq: 1, input: { kind: "text", …
+    460|   a.send({ type: "heartbeat" });
+    461|   await expect.poll(() => a.ws.readyState, { timeout: 8000 }).toBe(Web…
+       |                                                               ^
+    462|   await expect(readFile(f.record, "utf8")).rejects.toThrow();
+    463| }, 12000);
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ packages/server/src/desktop/DesktopRelay.test.ts:461:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 345 skipped (347)
+   Start at  09:01:50
+   Duration  10.59s (tests 82%, transform 15%, import 4%)
+
