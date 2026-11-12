@@ -762,3 +762,5 @@ Ran 1 test in 1.017s
 FAILED (failures=1)
 
 ```
+
+Phase9 fixture alignment: legacy test JSON heartbeat senders use WebSocket protocol ping instead. The known old readonly/unacknowledged-share8s expectation is replaced with actual bounded pending-image/open-socket assertions and explicit stop; an unacknowledged image alone no longer proves transport death. No baseline retry was spent on it.

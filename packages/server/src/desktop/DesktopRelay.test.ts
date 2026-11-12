@@ -220,7 +220,7 @@ it.each([3000, 6200])("delivers human JPEG input after %ims without a new image 
  await expect.poll(()=>v.frames.length).toBe(1);
  v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
  const share=(f.provider as any).active,writes=vi.spyOn(share.process.resourceChannel.stdin,"write");
- const heartbeat=setInterval(()=>v.send({type:"heartbeat"}),500);cleanup.push(async()=>{clearInterval(heartbeat);});
+ const heartbeat=setInterval(()=>v.ws.ping(),500);cleanup.push(async()=>{clearInterval(heartbeat);});
  // Deliberately leave the real first image unacknowledged: bounded pending=1,
  // unchanged source/epoch/seq, and no invented idle proof or timer advance.
  await new Promise(resolve=>setTimeout(resolve,age));
@@ -270,7 +270,7 @@ it.each(["normal","shared","elevated-default","elevated-uac"] as const)("keeps f
 it.each(["normal","elevated-default","elevated-uac"] as const)("still cancels unused %s control explicitly before any input",async mode=>{
  const f=mode==="normal"?await fixture():await protectedFixture({mode,allowed:true}),v=await f.viewer(mode==="normal"?"extended":"protected");v.send(mode==="normal"?start:protectedStart);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
  const state=f.provider as any,share=state.active,writes=vi.spyOn(share.process.stdin,"write");v.send({type:"control",enabled:false});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);expect(state.resources.owns(share,"control")).toBe(false);
- v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});v.send({type:"release"});let observed=false;share.ws.once("message",()=>{observed=true;});v.send({type:"heartbeat"});await expect.poll(()=>observed).toBe(true);
+ v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});v.send({type:"release"});let observed=false;share.ws.once("message",()=>{observed=true;});v.send({type:"release"});await expect.poll(()=>observed).toBe(true);
  expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch"||m.type==="input")).toBe(false);writes.mockRestore();
 });
 it.each(["stop","close","timeout","source_changed"] as const)("releases control ownership after focus-release on %s",async ending=>{
@@ -321,7 +321,7 @@ it.each(["pipe","json","shared"].flatMap(mode=>["release","control","rejected-in
  v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
  await expect.poll(async()=>{try{return (await readFile(f.record,"utf8")).includes('"event":"down"');}catch{return false;}}).toBe(true);
  if(interrupt==="release")v.send({type:"release"});else if(interrupt==="control")v.send({type:"control",enabled:true});else v.send({type:"input",seq:1,input:{kind:"pointer",x:0.5,y:0.5,event:"up",button:0}});
- v.send({type:"heartbeat"});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ v.ws.ping();await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  expect(share.pointerWitness).toBeUndefined();expect(share.inputSeq).toBe(1);expect(v.ws.readyState).toBe(WebSocket.OPEN);
 });
 it("accepts human input after native video stops without requiring a draw receipt", async () => {
@@ -459,7 +459,7 @@ it("automatically connects B to A, isolates viewers and enforces both input perm
   expect(f.closed()).toBe(1);
   other.ws.close();
 });
-it("refuses control when B is readonly and closes an unacknowledged share", async () => {
+it("refuses readonly control while keeping an unacknowledged image bounded", async () => {
   const f = await fixture(false),
     a = await f.viewer();
   a.send(start);
@@ -469,9 +469,11 @@ it("refuses control when B is readonly and closes an unacknowledged share", asyn
     .poll(() => a.messages.some((m) => m.type === "control" && m.enabled === false))
     .toBe(true);
   a.send({ type: "input", seq: 1, input: { kind: "text", text: "DENIED" } });
-  a.send({ type: "heartbeat" });
-  await expect.poll(() => a.ws.readyState, { timeout: 8000 }).toBe(WebSocket.CLOSED);
+  a.ws.ping();
+  expect(a.ws.readyState).toBe(WebSocket.OPEN);
+  expect(a.frames).toHaveLength(1);
   await expect(readFile(f.record, "utf8")).rejects.toThrow();
+  a.send({type:"stop"});
 }, 12000);
 it("rejects unauthenticated viewers, wrong Origins, unused tickets and unexpected ACKs", async () => {
   const f = await fixture();
@@ -986,7 +988,7 @@ it("does not send virtual fields to a regular legacy viewer",async()=>{
 
 it("allows an explicitly negotiated virtual source to become ready after sixteen seconds",async()=>{
  const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:true,command:[...cfg.command,'--virtual-display','--headless','--configure-delay-ms','16000']});
- const v=await f.viewer('virtual');const heartbeat=setInterval(()=>{if(v.ws.readyState===WebSocket.OPEN)v.send({type:'heartbeat'});},1000);
+ const v=await f.viewer('virtual');const heartbeat=setInterval(()=>{if(v.ws.readyState===WebSocket.OPEN)v.ws.ping();},1000);
  try{v.send({...start,options:{...start.options,features:true,virtualDisplay:true}});await expect.poll(()=>v.messages.find(m=>m.type==='ready'),{timeout:21000}).toMatchObject({virtualDisplay:true});expect(v.ws.readyState).toBe(WebSocket.OPEN);v.send({type:'stop'});}finally{clearInterval(heartbeat);}
 },30000);
 
@@ -1341,7 +1343,7 @@ it.each(["wrong-backend","unrequested-backend"])("rejects native backend proof m
 });
 
 it("keeps a generated native OS permission wait alive past the Windows startup deadline",async()=>{
- const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal","--configure-delay-ms","16000"]});const viewer=await f.viewer("native-platform");const heartbeat=setInterval(()=>{if(viewer.ws.readyState===WebSocket.OPEN)viewer.send({type:"heartbeat"});},1000);
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal","--configure-delay-ms","16000"]});const viewer=await f.viewer("native-platform");const heartbeat=setInterval(()=>{if(viewer.ws.readyState===WebSocket.OPEN)viewer.ws.ping();},1000);
  try{viewer.send({...start,options:{...start.options,features:true}});await expect.poll(()=>viewer.messages.find(m=>m.type==="ready")?.backend,{timeout:22000}).toBe("linux-portal");expect(viewer.ws.readyState).toBe(WebSocket.OPEN);viewer.send({type:"stop"});}finally{clearInterval(heartbeat);}
 },25000);
 
@@ -1467,7 +1469,7 @@ it("keeps another viewer's microphone through shared native video and audio rest
  const options={...start.options,width:1280,fps:30,features:true,sharedDesktop:true},video=await f.viewer("shared-audio"),voice=await f.viewer("shared-microphone");video.send({...start,options});await expect.poll(()=>video.messages.some(m=>m.type==="ready")).toBe(true);voice.send({...start,options});await expect.poll(()=>voice.messages.some(m=>m.type==="ready")).toBe(true);
  const ticket=String(voice.messages.find(m=>m.type==="microphone_ticket")?.ticket),pipe=new WebSocket(f.endpoint,DESKTOP_MICROPHONE_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),responses:any[]=[];pipe.on("error",()=>{});pipe.on("message",raw=>responses.push(JSON.parse(raw.toString())));
  let microphoneSeq=0,microphonePulse:ReturnType<typeof setInterval>|undefined;
- const heartbeat=setInterval(()=>{for(const viewer of[video,voice])if(viewer.ws.readyState===WebSocket.OPEN)viewer.send({type:"heartbeat"});},500);
+ const heartbeat=setInterval(()=>{for(const viewer of[video,voice])if(viewer.ws.readyState===WebSocket.OPEN)viewer.ws.ping();},500);
  try{
   await new Promise<void>((resolve,reject)=>{pipe.once("open",resolve);pipe.once("error",reject);});pipe.send(JSON.stringify({type:"video_viewer",ticket}));await expect.poll(()=>voice.messages.some(m=>m.type==="microphone_ready")).toBe(true);const id="44444444-4444-4444-8444-444444444444";pipe.send(JSON.stringify({type:"microphone_start",id}));await expect.poll(()=>responses.some(m=>m.state==="running")).toBe(true);microphonePulse=setInterval(()=>{if(pipe.readyState===WebSocket.OPEN)pipe.send(JSON.stringify({type:"microphone_frame",id,seq:++microphoneSeq,data:Buffer.alloc(1920).toString("base64")}));},100);
   for(let seq=1;seq<=2;seq++){
