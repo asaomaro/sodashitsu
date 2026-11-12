@@ -989,3 +989,7 @@ AssertionError: expected false to be true // Object.is equality
 
 
 ```
+
+## Integration agent E2E fixture correction
+
+Primary agent E2E reached successful requested snapshot and applied agent action, then timed out on human canvas click. Playwright trace and screenshot show the agent-grant button in the intentionally open information/settings overlay intercepting the canvas center. openNativeTab explicitly opens settings; the test omitted the user action to close it before human input and reopen before the next grant. Baselinea291 has the same CSS and spec sequence. Fixture now uses the visible information/settings button and observes aria-expanded before each interaction; no forced click, DOM bypass, production UI change or broad rerun. Integration owner reruns only the failing primary case after its batch.

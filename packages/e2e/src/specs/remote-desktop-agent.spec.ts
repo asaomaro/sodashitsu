@@ -113,12 +113,19 @@ test("viewer grants one agent access; observe/action and human takeover stay iso
     await expect(
       agent.request("desktop.agent.observe", { leaseId: lease.leaseId }),
     ).rejects.toThrow();
+    // The feature fixture opened settings above the canvas; return to the screen
+    // through the visible control before sending ordinary human input.
+    const settings = view.getByRole("button", { name: "情報・設定", exact: true });
+    await settings.click();
+    await expect(settings).toHaveAttribute("aria-expanded", "false");
     // Viewer sequence restarts independently of the agent/provider sequence.
     await canvas.click();
     await page.keyboard.press("b");
     await expect
       .poll(async () => readFile(record, "utf8").catch(() => ""))
       .toContain('"code":"KeyB"');
+    await settings.click();
+    await expect(settings).toHaveAttribute("aria-expanded", "true");
     await view
       .getByRole("button", { name: "エージェントへの画面提供・操作を許可", exact: true })
       .click();
