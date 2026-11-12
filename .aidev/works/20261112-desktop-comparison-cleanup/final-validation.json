@@ -117,5 +117,18 @@
     "protected old Runtime exe+ACL / Task XML+security / old long SCM+SDDL / code+encrypted data backup",
     "rollout with desktop flags off until Windows and WSL protocol sources both current; normal browser refresh before SRPC end-to-end checks",
     "standard SCM Automatic Signin migration and actual runtime/IPC/UAC/reboot checks; remove old Boot/Unlock only after new runtime succeeds"
-  ]
+  ],
+  "sourceFollowUp": {
+    "initialSourceReleaseHead": "ef9d8914ccfe2b25973cc7bd49388bfd443f1bb5",
+    "productionFixCommit": "15008c8b",
+    "scope": "PowerShell File.Replace null string backup argument only",
+    "actualWindowsRegression": "Exact public existing-image branch fixed PASS / old argument FAIL / exact source restore PASS",
+    "evidence": ".aidev/works/20261112-desktop-native-cleanup/runtime-replace-test-result.md",
+    "closedSdkFiles": 89,
+    "changedSdkFiles": [
+      "prepare-desktop-helper.ps1"
+    ],
+    "builtPackageOutputsChanged": false,
+    "historicalRecordNote": "Earlier source-validation/deploymentPending/installedWrites fields describe the initial ef9 source-validation milestone; this follow-up does not claim completion of current operations."
+  }
 }

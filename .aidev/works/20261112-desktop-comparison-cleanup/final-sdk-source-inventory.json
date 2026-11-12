@@ -325,7 +325,7 @@
     },
     {
       "name": "prepare-desktop-helper.ps1",
-      "sha256": "107bef3799018f976987ff830ba2afeb2248d5eb88f8cec479eaa0e49f78add9"
+      "sha256": "7529a2667e359135a584d2ae611fa698f2e2739ddda1e4c522e94615bdbc36de"
     },
     {
       "name": "probe-codecs.ps1",
@@ -359,5 +359,15 @@
       "name": "write-signin-enrollment.ps1",
       "sha256": "10d192894633867a0277323dec2d5e982e14689ea584d2e7ba4c0d20022e1985"
     }
-  ]
+  ],
+  "initialSourceReleaseHead": "ef9d8914ccfe2b25973cc7bd49388bfd443f1bb5",
+  "sourceFixValidation": {
+    "productionFixCommit": "15008c8b",
+    "file": "prepare-desktop-helper.ps1",
+    "previousSha256": "107bef3799018f976987ff830ba2afeb2248d5eb88f8cec479eaa0e49f78add9",
+    "sha256": "7529a2667e359135a584d2ae611fa698f2e2739ddda1e4c522e94615bdbc36de",
+    "validation": "Actual Windows scratch execution of exact public existing-image branch: fixed PASS, old argument FAIL, exact source restore PASS.",
+    "compiledInputsAndBuiltPackageOutputsChanged": false,
+    "historicalValidationHeadNote": "validatedIntegrationHead records the initial source validation snapshot, not this follow-up source head."
+  }
 }
