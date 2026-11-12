@@ -1,8 +1,8 @@
-param([int]$MonitorIndex = 0, [switch]$AllowInput, [switch]$AllowClipboard, [switch]$AllowMonitors, [switch]$AllowVirtualDisplay, [switch]$AllowElevated, [switch]$AllowDisplayResize, [switch]$ValidateOnly, [switch]$AllowUnlock, [switch]$UnlockLease, [switch]$RuntimeBroker, [ValidateSet("auto","gdi")][string]$CaptureBackend = "auto")
+param([int]$MonitorIndex = 0, [switch]$AllowInput, [switch]$AllowClipboard, [switch]$AllowMonitors, [switch]$AllowVirtualDisplay, [switch]$AllowElevated, [switch]$AllowDisplayResize, [switch]$ValidateOnly, [switch]$AllowUnlock, [switch]$UnlockLease, [ValidateSet("auto","gdi")][string]$CaptureBackend = "auto")
 $ErrorActionPreference = 'Stop'
 # Loading and compilation are side-effect free: -ValidateOnly never opens a window,
 # captures the screen, queries the input desktop, or sends input.
-Add-Type -AssemblyName System.Drawing, System.Windows.Forms, System.Web.Extensions, System.ServiceProcess
+Add-Type -AssemblyName System.Drawing, System.Windows.Forms, System.Web.Extensions
 $unlock = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopUnlock.cs') -Raw
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs') -Raw
 # The fixed server launch plan overwrites these four flags; no path/type comes from the viewer.
@@ -17,7 +17,7 @@ $resourceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsReso
 $combined = $pipeSource + "`n" + $resourceSource + "`n" + ($protectedSource -join "`n") + "`n" + ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource + "`n" + $micSource
 $usings = [regex]::Matches($combined,'(?m)^using [^;]+;') | ForEach-Object { $_.Value } | Select-Object -Unique
 $combined = ($usings -join "`n") + "`n" + [regex]::Replace($combined,'(?m)^using [^;]+;','')
-Add-Type -TypeDefinition $combined -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll
+Add-Type -TypeDefinition $combined -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll
 if ($ValidateOnly) {
     $roles = @{}
     foreach ($entry in @(@('audio','SodaDesktopAudio'),@('microphone','SodaDesktopMicrophone'),@('pipe','SodaDesktopPipeOperation'),@('richClipboard','SodaDesktopRichClipboard'),@('codecs','SodaDesktopCodecProbe'),@('virtualDisplay','SodaDesktopVirtualClient'),@('protectedDesktop','SodaDesktopProtectedWorker'))) { $roles[$entry[0]] = $null -ne [SodaDesktopHost].Assembly.GetType($entry[1]) }
@@ -30,9 +30,9 @@ try {
     $virtualRequested = $AllowVirtualDisplay -and $env:SODA_DESKTOP_VIRTUAL_REQUEST -eq '1'
     $elevatedRequested = $AllowElevated -and $env:SODA_DESKTOP_ELEVATED_REQUEST -eq '1'
     if ($virtualRequested -and $elevatedRequested) { throw 'Conflicting desktop requests.' }
-    $brokerExecutable = if ($RuntimeBroker) { [SodaDesktopUnlock]::RuntimeExecutable() } else { [SodaDesktopUnlock]::InstalledExecutable() }
+    $brokerExecutable = [SodaDesktopUnlock]::RuntimeExecutable()
     if ($UnlockLease) {
-        [SodaDesktopUnlock]::RunInstalled($true,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent,$AllowElevated.IsPresent,$RuntimeBroker.IsPresent)
+        [SodaDesktopUnlock]::RunInstalled($true,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent,$AllowElevated.IsPresent)
         exit 0
     }
     if ($elevatedRequested) {
@@ -40,7 +40,7 @@ try {
             [Console]::Out.WriteLine('{"type":"protected_desktop_failure","code":"service_missing"}')
             exit 0
         }
-        [SodaDesktopUnlock]::RunInstalled($false,$false,$false,$true,$RuntimeBroker.IsPresent)
+        [SodaDesktopUnlock]::RunInstalled($false,$false,$false,$true)
         exit 0
     }
     $selected = 'normal'
@@ -48,9 +48,9 @@ try {
     if ($selected -eq 'transition') { [SodaDesktopUnlock]::SourceTransition(); exit 0 }
     if ($selected -eq 'secure') {
         $executable = $brokerExecutable
-        if (-not (Test-Path -LiteralPath $executable)) { throw 'Install the unlock service first.' }
-        [SodaDesktopUnlock]::RunInstalled($UnlockLease.IsPresent,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent,$false,$RuntimeBroker.IsPresent)
+        if (-not (Test-Path -LiteralPath $executable)) { throw 'Prepare the desktop helper first.' }
+        [SodaDesktopUnlock]::RunInstalled($UnlockLease.IsPresent,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent,$false)
         exit 0
     }
-    [SodaDesktopUnlock]::RunNormal($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $AllowMonitors.IsPresent, $AllowVirtualDisplay.IsPresent, $AllowUnlock.IsPresent, $RuntimeBroker.IsPresent) }
+    [SodaDesktopUnlock]::RunNormal($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $AllowMonitors.IsPresent, $AllowVirtualDisplay.IsPresent, $AllowUnlock.IsPresent) }
 catch { [Console]::Error.WriteLine('Desktop sharing stopped or unavailable.'); exit 1 }

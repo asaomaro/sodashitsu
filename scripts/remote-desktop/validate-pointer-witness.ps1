@@ -8,7 +8,7 @@ try {
   $output = Join-Path $fixture 'checks.exe'
   $arguments = @('/nologo', '/noconfig', '/unsafe-', '/warnaserror+', '/target:exe', '/main:SodaPointerWitnessChecks', "/out:$output")
   foreach ($name in @('System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Windows.Forms.dll', 'System.Web.Extensions.dll', 'System.ServiceProcess.dll')) { $arguments += "/reference:$(Join-Path $framework $name)" }
-  foreach ($name in @('WindowsDesktopUnlock.cs', 'WindowsDesktopHost.cs', 'WindowsPointerWitnessChecks.cs')) { $arguments += (Join-Path $PSScriptRoot $name) }
+  foreach ($name in @('WindowsDesktopUnlock.cs', 'WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs', 'WindowsPointerWitnessChecks.cs')) { $arguments += (Join-Path $PSScriptRoot $name) }
   & (Join-Path $framework 'csc.exe') @arguments
   if ($LASTEXITCODE -ne 0) { throw 'Pointer witness generated compilation failed' }
   & $output

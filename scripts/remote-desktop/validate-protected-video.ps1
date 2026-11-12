@@ -1,7 +1,7 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Generated scope facts and memory output only. No capture, encoder, OS input or service.
-$names=@('WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedScopeChecks.cs','WindowsDesktopUnlock.cs','WindowsDesktopHost.cs')
+$names=@('WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedScopeChecks.cs','WindowsDesktopUnlock.cs','WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('soda-protected-video-'+[guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($root)|Out-Null
 $original=@{};foreach($name in $names){$original[$name]=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name));[IO.File]::WriteAllBytes((Join-Path $root $name),$original[$name])}
 $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe';$paths=($names|ForEach-Object {"'"+(Join-Path $root $_).Replace("'","''")+"'"}) -join ','

@@ -1,7 +1,7 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Generated callbacks only. No actual desktop, input, SCM or service operations.
-$names=@('WindowsResourceFence.cs','WindowsDesktopHost.cs','WindowsDesktopUnlock.cs')
+$names=@('WindowsResourceFence.cs','WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs','WindowsDesktopUnlock.cs')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('soda-authentication-input-'+[guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($root)|Out-Null
 $original=@{};foreach($name in $names){$original[$name]=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name));[IO.File]::WriteAllBytes((Join-Path $root $name),$original[$name])}
 $paths=($names|ForEach-Object {"'"+(Join-Path $root $_).Replace("'","''")+"'"}) -join ','

@@ -1,7 +1,7 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Generated input, desktop, monitor, clipboard and microphone callbacks only. No OS input or devices.
-$names=@('WindowsResourceFence.cs','WindowsResourceFenceChecks.cs','WindowsDesktopHost.cs','WindowsDesktopUnlock.cs')
+$names=@('WindowsResourceFence.cs','WindowsResourceFenceChecks.cs','WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs','WindowsDesktopUnlock.cs')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('soda-resource-fence-'+[guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($root)|Out-Null
 $original=@{};foreach($name in $names){$original[$name]=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name));[IO.File]::WriteAllBytes((Join-Path $root $name),$original[$name])}
 $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe';$paths=($names|ForEach-Object {"'"+(Join-Path $root $_).Replace("'","''")+"'"}) -join ','

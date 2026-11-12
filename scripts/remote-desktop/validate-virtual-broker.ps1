@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 # Compilation and pure policy/state checks only. Never starts a service, creates a
 # device, captures a screen, changes modes, sends OS input, or accesses clipboard.
-$names=@('WindowsDesktopUnlock.cs','WindowsDesktopHost.cs','WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs','WindowsVirtualDisplayChecks.cs')
+$names=@('WindowsDesktopUnlock.cs','WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs','WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs','WindowsVirtualDisplayChecks.cs')
 $combined=($names|ForEach-Object{Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw}) -join "`n"
 $usings=[regex]::Matches($combined,'(?m)^using [^;]+;')|ForEach-Object{$_.Value}|Select-Object -Unique
 $combined=($usings -join "`n")+"`n"+[regex]::Replace($combined,'(?m)^using [^;]+;','')

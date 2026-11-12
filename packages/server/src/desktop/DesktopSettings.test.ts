@@ -110,8 +110,8 @@ it("persists opt-in unlock and ties its lease to provider disposal; old permissi
     const settings = await DesktopSettings.open(options);
     expect(start).not.toHaveBeenCalled();
     await settings.set({...off,enabled:true,allowInput:true,allowUnlock:true});
-    expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowUnlock:true,command:["synthetic-helper","-RuntimeBroker","-AllowInput","-AllowUnlock"]});
-    expect(start).toHaveBeenLastCalledWith(["synthetic-helper","-RuntimeBroker","-UnlockLease"]);
+    expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowUnlock:true,command:["synthetic-helper","-AllowInput","-AllowUnlock"]});
+    expect(start).toHaveBeenLastCalledWith(["synthetic-helper","-UnlockLease"]);
     expect(JSON.parse(await readFile(options.file,"utf8"))).toMatchObject({allowUnlock:true});
     const stopped = stop.mock.calls.length;
     options.provider.dispose();
@@ -123,16 +123,16 @@ it("persists opt-in unlock and ties its lease to provider disposal; old permissi
 
 it("persists a locally approved file root and refuses invalid roots before changing permissions",async()=>{const options=await fixture(),settings=await DesktopSettings.open(options),root=dirname(options.file);await settings.set({...off,enabled:true,fileRoot:root});expect(options.provider.capabilities()).toMatchObject({files:true});expect((await DesktopSettings.open(options)).get(true).permissions.fileRoot).toBe(root);await expect(settings.set({...off,enabled:true,fileRoot:"relative-directory"})).rejects.toThrow("絶対パス");expect(settings.get(true).permissions.fileRoot).toBe(root);await settings.set({...off,enabled:true,fileRoot:""});expect(options.provider.capabilities()).toMatchObject({files:false});});
 
-it("requires a separate local monitor permission and adds the bundled helper ceiling",async()=>{const options=await fixture(),settings=await DesktopSettings.open(options),configure=vi.spyOn(options.provider,"configure");await settings.set({...off,enabled:true,allowMonitors:true});expect(options.provider.capabilities()).toMatchObject({monitors:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowMonitors:true,command:["synthetic-helper","-RuntimeBroker","-AllowMonitors"]});await settings.set({...off,enabled:true,allowMonitors:false});expect(options.provider.capabilities()).toMatchObject({monitors:false});});
+it("requires a separate local monitor permission and adds the bundled helper ceiling",async()=>{const options=await fixture(),settings=await DesktopSettings.open(options),configure=vi.spyOn(options.provider,"configure");await settings.set({...off,enabled:true,allowMonitors:true});expect(options.provider.capabilities()).toMatchObject({monitors:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowMonitors:true,command:["synthetic-helper","-AllowMonitors"]});await settings.set({...off,enabled:true,allowMonitors:false});expect(options.provider.capabilities()).toMatchObject({monitors:false});});
 
 it("keeps virtual-display permission separate and starts a virtual-purpose broker lease",async()=>{
  const options=await fixture(),settings=await DesktopSettings.open(options),configure=vi.spyOn(options.provider,"configure");
  await settings.set({...off,enabled:true,allowUnlock:false,allowVirtualDisplay:true});
  expect(options.provider.capabilities()).toMatchObject({virtualDisplay:true,monitors:false});
- expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowVirtualDisplay:true,allowUnlock:false,command:["synthetic-helper","-RuntimeBroker","-AllowVirtualDisplay"],unlockLeaseCommand:["synthetic-helper","-RuntimeBroker","-UnlockLease","-AllowVirtualDisplay"]});
+ expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowVirtualDisplay:true,allowUnlock:false,command:["synthetic-helper","-AllowVirtualDisplay"],unlockLeaseCommand:["synthetic-helper","-UnlockLease","-AllowVirtualDisplay"]});
  expect((await DesktopSettings.open(options)).get(true).permissions.allowVirtualDisplay).toBe(true);
  await settings.set({...off,enabled:true,allowUnlock:true,allowVirtualDisplay:false});
- expect(options.provider.capabilities().virtualDisplay).toBe(false);expect(configure.mock.calls.at(-1)![0]?.unlockLeaseCommand).toEqual(["synthetic-helper","-RuntimeBroker","-UnlockLease"]);
+ expect(options.provider.capabilities().virtualDisplay).toBe(false);expect(configure.mock.calls.at(-1)![0]?.unlockLeaseCommand).toEqual(["synthetic-helper","-UnlockLease"]);
 });
 
 it.each([[false,false],[true,false],[false,true],[true,true]] as const)('maps elevated permission independently of unlock=%s and virtual=%s',async(allowUnlock,allowVirtualDisplay)=>{
@@ -143,7 +143,7 @@ it.each([[false,false],[true,false],[false,true],[true,true]] as const)('maps el
   expect(settings.get(true).permissions).toMatchObject({allowElevated:true,allowInput:false,allowUnlock,allowVirtualDisplay});
   expect(options.provider.capabilities()).toMatchObject({elevatedDesktop:true,allowInput:false,virtualDisplay:allowVirtualDisplay});
   const config=configure.mock.calls.at(-1)![0]!;expect(config.command).toContain('-AllowElevated');
-  expect(config.unlockLeaseCommand).toEqual(['synthetic-helper','-RuntimeBroker','-UnlockLease',...(allowVirtualDisplay?['-AllowVirtualDisplay']:[]),...(allowUnlock?['-AllowUnlock']:[]),'-AllowElevated']);
+  expect(config.unlockLeaseCommand).toEqual(['synthetic-helper','-UnlockLease',...(allowVirtualDisplay?['-AllowVirtualDisplay']:[]),...(allowUnlock?['-AllowUnlock']:[]),'-AllowElevated']);
   expect(start).toHaveBeenLastCalledWith(config.unlockLeaseCommand);expect(JSON.parse(await readFile(options.file,'utf8'))).toMatchObject({allowElevated:true});
   await settings.set({...off,enabled:true,allowElevated:false});expect(options.provider.capabilities().elevatedDesktop).toBe(false);expect(configure.mock.calls.at(-1)![0]!.command).not.toContain('-AllowElevated');
  }finally{options.provider.dispose();start.mockRestore();stop.mockRestore();}
@@ -246,5 +246,5 @@ it.each(['elevated','microphone','endpoint'])('rejects missing protected microph
 
 it("shows the resolved preparation command only to the local configuring client, without starting a lease for normal sharing",async()=>{
  const options=await fixture(),configure=vi.spyOn(options.provider,"configure");const {DesktopUnlockLease}=await import("./DesktopUnlockLease.js");const start=vi.spyOn(DesktopUnlockLease.prototype,"start").mockImplementation(()=>undefined);
- try{const settings=await DesktopSettings.open({...options,command:["powershell.exe","-File","C:\\apps\\Soda Folder\\windows-helper.ps1"]});await settings.set({...off,enabled:true});expect(start).not.toHaveBeenCalled();expect(configure.mock.calls.at(-1)![0]?.command).toContain("-RuntimeBroker");expect(configure.mock.calls.at(-1)![0]).not.toHaveProperty("unlockLeaseCommand");expect(settings.get(true).setupMessage).toContain('powershell.exe -NoProfile -File "C:\\apps\\Soda Folder\\prepare-desktop-helper.ps1"');expect(settings.get(false).setupMessage).not.toContain("C:");expect(settings.get(true).setupMessage).toContain("サーバー停止");}finally{options.provider.dispose();start.mockRestore();}
+ try{const settings=await DesktopSettings.open({...options,command:["powershell.exe","-File","C:\\apps\\Soda Folder\\windows-helper.ps1"]});await settings.set({...off,enabled:true});expect(start).not.toHaveBeenCalled();expect(configure.mock.calls.at(-1)![0]?.command).toEqual(["powershell.exe","-File","C:\\apps\\Soda Folder\\windows-helper.ps1"]);expect(configure.mock.calls.at(-1)![0]).not.toHaveProperty("unlockLeaseCommand");expect(settings.get(true).setupMessage).toContain('powershell.exe -NoProfile -File "C:\\apps\\Soda Folder\\prepare-desktop-helper.ps1"');expect(settings.get(false).setupMessage).not.toContain("C:");expect(settings.get(true).setupMessage).toContain("サーバー停止");}finally{options.provider.dispose();start.mockRestore();}
 });

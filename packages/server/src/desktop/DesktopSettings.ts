@@ -150,7 +150,6 @@ export class DesktopSettings {
       const command = [...this.command];
       // Custom commands retain their launch syntax; saved local permissions supersede env defaults.
       if (!legacy && !this.nativePlatform) {
-        command.push("-RuntimeBroker");
         if(p.allowMonitors)command.push("-AllowMonitors");
         if(p.allowVirtualDisplay)command.push("-AllowVirtualDisplay");
         if(p.allowElevated)command.push("-AllowElevated");
@@ -182,7 +181,7 @@ export class DesktopSettings {
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,
         allowUnlock: p.allowUnlock === true,
-        ...((p.allowUnlock||p.allowVirtualDisplay||p.allowElevated) && !legacy && !this.nativePlatform ? { unlockLeaseCommand: [...this.command, "-RuntimeBroker", "-UnlockLease",...(p.allowVirtualDisplay?["-AllowVirtualDisplay"]:[]),...(p.allowUnlock&&(p.allowVirtualDisplay||p.allowElevated)?["-AllowUnlock"]:[]),...(p.allowElevated?["-AllowElevated"]:[])] } : {}),
+        ...((p.allowUnlock||p.allowVirtualDisplay||p.allowElevated) && !legacy && !this.nativePlatform ? { unlockLeaseCommand: [...this.command, "-UnlockLease",...(p.allowVirtualDisplay?["-AllowVirtualDisplay"]:[]),...(p.allowUnlock&&(p.allowVirtualDisplay||p.allowElevated)?["-AllowUnlock"]:[]),...(p.allowElevated?["-AllowElevated"]:[])] } : {}),
         origins: legacy?.origins ?? this.options.origins,
       };
     }
