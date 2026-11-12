@@ -90,7 +90,7 @@ internal static class SodaDesktopSigninProcess {
                 if(data.Active==0&&WaitForSingleObject(process,0)==0){stopped=true;return true;}Thread.Sleep(10);
             }return false;
         }}
-        public void Dispose(){lock(gate){if(!Stop())throw SodaDesktopSigninHost.Failure();Close(ref stopWrite);Close(ref process);Close(ref job);}}
+        public void Dispose(){lock(gate){if(!Stop())Environment.FailFast("Signin child could not stop");Close(ref stopWrite);Close(ref process);Close(ref job);}}
     }
     internal static Child Start(SodaDesktopSigninHost.Plan plan,Func<bool> current){
         Layouts();Require(plan!=null&&current!=null&&current());

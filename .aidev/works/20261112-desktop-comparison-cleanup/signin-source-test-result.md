@@ -53,3 +53,17 @@ validate-signin-process-evidence.ps1 0
 validate-signin-state-layout.ps1 0
 validate-signin-install-source.ps1 0
 ```
+
+## 独立レビュー指摘: 子Jobの停止失敗時のDispose境界
+
+`Child.Dispose`が例外を投げると、外側のコード/runtime保持が解放され得たため、停止を確認できないときはFailFastで通常のunwindを止める境界へ戻した。検査専用の子プロセスが実際の`Child.Dispose`を無効なJob handleで呼び、外側finallyのファイルが作られないことを確認した。実SCMやWindows APIは呼ばない。Windowsの既存Host検証にも同じ子fixtureの確認を追加。
+
+修正箇所だけ元に戻してEXEをコンパイルし直し、元の実装で同じ検査が失敗することと、ソースのバイト一致での復元を確認した。生の出力:
+
+```
+fixed: exit=-6 outer_unwound=False
+negative_original: exit=1 outer_unwound=True
+AssertionError: Failed child cleanup released outer leases
+restored: exit=-6 outer_unwound=False
+dispose_boundary_negative_control_and_exact_restore_passed
+```

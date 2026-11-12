@@ -21,6 +21,11 @@ public static class SodaDesktopSigninHostChecks {
     internal static SodaDesktopSigninHost.Plan Fixture(string exe,string directory,string mode){return new SodaDesktopSigninHost.Plan(exe,mode+" "+Quote(directory)+(mode=="--generated-child"?" "+sentinelValue.ToString(System.Globalization.CultureInfo.InvariantCulture):""),Environment.GetFolderPath(Environment.SpecialFolder.System),directory);}
     public static void Run(string exe,string directory){
         Check(!SodaDesktopSigninVault.SystemPrimary(),"Host fixtures require ordinary account");SodaDesktopSigninProcess.Layouts();
+        string unwound=Path.Combine(directory,"dispose-unwound");
+        using(var failed=Process.Start(new ProcessStartInfo(exe,"--generated-dispose-failure "+Quote(directory)){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true})){
+            var stdout=failed.StandardOutput.ReadToEndAsync();var stderr=failed.StandardError.ReadToEndAsync();
+            Check(failed.WaitForExit(5000)&&failed.ExitCode!=0&&!File.Exists(unwound),"Failed child cleanup released outer leases");stdout.Wait();stderr.Wait();
+        }
         Check(SodaDesktopSigninHost.PrivateRuntimeAcl(Acl("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)")),"Private runtime rejected");
         Check(!SodaDesktopSigninHost.PrivateRuntimeAcl(Acl("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FR;;;WD)")),"Foreign runtime read accepted");
         Check(!SodaDesktopSigninHost.PrivateRuntimeAcl(Acl("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;0x10000000;;;WD)")),"Foreign runtime write accepted");
@@ -81,6 +86,11 @@ public static class SodaDesktopSigninHostChecks {
     // SodaDesktopSigninHost instead. No desktop/account/key APIs are exercised.
     public static void Main(string[] args){
         if((args.Length!=2&&args.Length!=3)||!Path.IsPathRooted(args[1]))Environment.Exit(2);
+        if(args[0]=="--generated-dispose-failure"){
+            try{new SodaDesktopSigninProcess.Child(IntPtr.Zero,IntPtr.Zero).Dispose();}
+            finally{File.WriteAllText(Path.Combine(args[1],"dispose-unwound"),"outer leases released");}
+            return;
+        }
         if(args[0]=="--generated-stop-hang"){Thread.Sleep(30000);return;}
         if(args[0]=="--generated-stop-success"||args[0]=="--generated-stop-failure"||args[0]=="--generated-stop-descendant"){
             Process descendant=null;
