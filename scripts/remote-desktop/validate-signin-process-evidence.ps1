@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Actual ordinary generated child handles only. Never service, SYSTEM, desktop,
 # installed ProgramData, credentials or trust setup. No external/service process
 # termination; fixture cleanup may stop only its own generated child.
-$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninServicePolicy.cs','WindowsSigninRunRecord.cs','WindowsSigninProcessEvidence.cs','WindowsSigninProcessEvidenceChecks.cs')
+$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninServicePolicy.cs','WindowsSigninProcessEvidence.cs','WindowsSigninProcessEvidenceChecks.cs')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('soda-process-evidence-'+[guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($root)|Out-Null
 $original=@{};foreach($name in $names){$original[$name]=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name));[IO.File]::WriteAllBytes((Join-Path $root $name),$original[$name])}
 $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe';$paths=($names|ForEach-Object {"'"+(Join-Path $root $_).Replace("'","''")+"'"}) -join ','

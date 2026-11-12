@@ -23,7 +23,6 @@ public static class SodaDesktopSigninControllerMutex {
     /** Explicit elevated installer/controller only. Existing namespace objects
      * are inspected and never repaired, adopted, or taken over after abandon. */
     public static Lease Acquire(string owner,int timeoutMilliseconds){return AcquireCore("Global\\SodaDesktopSigninAdmin-"+SodaDesktopSigninPackage.Slot(owner),timeoutMilliseconds);}
-    internal static Lease AcquireJournal(string owner,int timeoutMilliseconds){return AcquireCore("Global\\SodaDesktopSigninJournal-"+SodaDesktopSigninPackage.Slot(owner),timeoutMilliseconds);}
     static Lease AcquireCore(string name,int timeoutMilliseconds){
         if(timeoutMilliseconds<1||timeoutMilliseconds>30000)throw Failure();Mutex mutex=null;bool owned=false,transferred=false;
         try{
