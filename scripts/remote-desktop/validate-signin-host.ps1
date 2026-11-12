@@ -31,6 +31,8 @@ try {
     if($LASTEXITCODE -ne 0 -or -not [IO.File]::Exists((Join-Path $stage 'DesktopSigninNative.exe'))){throw 'Service staging compilation failed'}
     if($NegativeControls) {
         $variants=@(
+            @('request-natural-exit','Close(ref stopWrite);stopSent=true;','Close(ref stopWrite);','Admin completion did not wait for clean process exit'),
+            @('request-eof-not-exit','if(stopped)return graceful;','if(stopSent)return true;if(stopped)return graceful;','Admin completion did not wait for clean process exit'),
             @('graceful-force','if(stopped)return graceful;','if(stopped)return graceful||stopped;','Forced child was misclassified as clean'),
             @('graceful-frame','Encoding.ASCII.GetBytes("signin_stop\n")','Encoding.ASCII.GetBytes("signin_st0p\n")','Cooperative child did not finish cleanly'),
             @('graceful-exit','code!=0||!QueryInformationJobObject(job,1,out data','code==259||!QueryInformationJobObject(job,1,out data','Graceful completion ignored nonzero child exit'),
@@ -43,7 +45,7 @@ try {
             @('post-create-revocation','Require(current());Require(ResumeThread(process.Thread)==1);','Require(ResumeThread(process.Thread)==1);','Post-create revocation accepted'),
             @('handle-inheritance','Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x20002),handles,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero));','Require(true);','Unexpected handle inherited'),
             @('job-membership','return owned;','return false;','Grandchild not owned by job'),
-            @('job-accounting','return data.Active;','return data.Active+1;','Cooperative child did not finish cleanly')
+            @('job-accounting','return data.Active;','return data.Active+1;','Admin completed request was forced or left live descendants')
         )
         $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
         foreach($variant in $variants){

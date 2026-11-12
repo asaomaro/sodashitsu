@@ -229,3 +229,34 @@ Tests       13 passed (13)
 ```
 
 前者はSigninの11 serverテスト、後者はprotocol desktop/desktopSigninの2テスト。scoped標準tsc（全DesktopSignin source/test + main、8GB）はexit0。full serverの重複実行はしていない。独立レビュー未完了、Windows実機操作ゼロの状態でsourceをfreezeする。
+
+## 独立レビュー修正: 管理要求のstdin完了と自然終了
+
+`Child.Request`は要求を書いてstdinを閉じた後もstopSent=falseだったため、stdoutが先に閉じるとTryGracefulが閉じたstdinへ停止命令を書こうとして失敗していた。stdinを正常に閉じた時点でstopSent=trueとし、既存TryGracefulの実process exit code0とJob active0の確認へ進める。stdout EOF自体を成功の条件にはしない。
+
+既存HostChecksへ専用子プロセスを追加。子はstdin EOFまで要求を読み、返答とstdout EOFを出した後、親のreleaseまで実際に生存する。親は終了待ちが先に完了しないことを確認し、release後にのみ成功とJob0を確認する。旧コードとstdout EOFだけで成功を返す変異をvalidatorの負例へ追加。新fixtureが先に実行されるため、既存job-accounting負例の期待assertionも更新した。Checksは従来どおり本番assets/compileに含めない。
+
+production hostとHostChecksの2ソースセットがMonoでコンパイル成功。Windows実API・Jobを実行しないLinuxの一時proofでは、変更していないChild本体と新RequestCompletion検査を抽出して再コンパイルし、実stdin/stdout/processとOS呼び出しのテスト用wrapperで実行した。子は実Python subprocessでstdin EOF→stdout EOF→親release→正常終了を行う。実Windows Job accounting/handle semanticsの確認ではなく、変更した自然終了制御の検査である。Mono子自身のstdout fdを閉じる最初のローカルfixtureはMono runtimeがabortしたため採用せず、専用子だけをPythonにした。Windows用の既存HostChecks子fixtureはコンパイル確認のみで、実行はsole operatorへ残す。
+
+修正箇所だけ旧実装へ戻して再コンパイルした負例、stdout EOFのみを成功とする負例、バイト一致復元後の生出力:
+
+```
+fixed exit=0
+signin_admin_stdin_eof_stdout_eof_delayed_clean_exit_passed
+
+negative_original exit=1
+System.InvalidOperationException: Admin completion did not wait for clean process exit
+  at RequestProof.RequestCompletion (System.String exe, System.String directory) [0x000da] in <1928bc1fddce45b08f0f6feab7e43fc4>:0
+  at RequestProof.Main (System.String[] args) [0x000a9] in <1928bc1fddce45b08f0f6feab7e43fc4>:0
+
+negative_stdout_eof_success exit=1
+System.InvalidOperationException: Admin completion did not wait for clean process exit
+  at RequestProof.RequestCompletion (System.String exe, System.String directory) [0x000da] in <807eb87a86c34ae39cc6926cc2d8f2ef>:0
+  at RequestProof.Main (System.String[] args) [0x000a9] in <807eb87a86c34ae39cc6926cc2d8f2ef>:0
+
+restored exit=0
+signin_admin_stdin_eof_stdout_eof_delayed_clean_exit_passed
+
+request_natural_exit_negative_and_exact_restore_passed```
+
+Windows/service/task/registry/本番データの操作は実施していない。full TSテストの重複実行はせず、この変更に必要なC#コンパイルと終了境界の検査に限定した。

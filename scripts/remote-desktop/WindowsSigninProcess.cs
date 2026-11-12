@@ -66,7 +66,7 @@ internal static class SodaDesktopSigninProcess {
     internal sealed class Child:IDisposable {
         IntPtr process,job,stopWrite,outputRead;bool stopped,graceful,stopSent;readonly object gate=new object();
         internal Child(IntPtr process,IntPtr job,IntPtr stopWrite=default(IntPtr),IntPtr outputRead=default(IntPtr)){this.process=process;this.job=job;this.stopWrite=stopWrite;this.outputRead=outputRead;}
-        internal void Request(byte[] bytes){uint written;Require(bytes!=null&&bytes.Length>0&&bytes.Length<=16384&&stopWrite!=IntPtr.Zero&&WriteFile(stopWrite,bytes,(uint)bytes.Length,out written,IntPtr.Zero)&&written==bytes.Length);Close(ref stopWrite);}
+        internal void Request(byte[] bytes){uint written;Require(bytes!=null&&bytes.Length>0&&bytes.Length<=16384&&stopWrite!=IntPtr.Zero&&WriteFile(stopWrite,bytes,(uint)bytes.Length,out written,IntPtr.Zero)&&written==bytes.Length);Close(ref stopWrite);stopSent=true;}
         internal byte[] Reply(){
             Require(outputRead!=IntPtr.Zero);
             using(var input=new FileStream(new Microsoft.Win32.SafeHandles.SafeFileHandle(outputRead,false),FileAccess.Read))using(var output=new MemoryStream()){

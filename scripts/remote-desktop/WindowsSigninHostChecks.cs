@@ -6,12 +6,15 @@ using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 public static class SodaDesktopSigninHostChecks {
     [DllImport("kernel32.dll",SetLastError=true)]static extern bool IsProcessInJob(IntPtr process,IntPtr job,out bool result);
     [DllImport("kernel32.dll")]static extern IntPtr GetCurrentProcess();
     [DllImport("kernel32.dll",SetLastError=true)]static extern bool SetHandleInformation(IntPtr handle,uint mask,uint flags);
     [DllImport("kernel32.dll",SetLastError=true)]static extern bool SetEvent(IntPtr handle);
+    [DllImport("kernel32.dll")]static extern IntPtr GetStdHandle(int handle);
+    [DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr handle);
     static long sentinelValue;
     static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);}
     static byte[] Acl(string sddl){var sd=new RawSecurityDescriptor(sddl);var bytes=new byte[sd.BinaryLength];sd.GetBinaryForm(bytes,0);return bytes;}
@@ -35,8 +38,23 @@ public static class SodaDesktopSigninHostChecks {
         }
         Console.WriteLine("signin_admin_pipe_bounded_and_exact_frame_passed");
     }
+    public static void RequestCompletion(string exe,string directory){
+        string release=Path.Combine(directory,"request-release");File.Delete(release);
+        using(var child=SodaDesktopSigninProcess.Start(Fixture(exe,directory,"--generated-request-delayed-exit"),()=>true,true)){
+            try{
+                child.Request(Encoding.UTF8.GetBytes("generated request"));
+                Check(Encoding.UTF8.GetString(child.Reply())=="generated response","Admin request/reply bytes changed");
+                Check(child.Running()&&!child.ExitedSuccessfully(),"Request fixture did not close stdout before process exit");
+                var completion=Task.Factory.StartNew(()=>child.TryGraceful(3000));
+                Check(!completion.Wait(100),"Admin completion did not wait for clean process exit");
+                File.WriteAllText(release,"release");
+                Check(completion.Wait(4000)&&completion.Result&&child.ExitedSuccessfully()&&child.Active()==0,"Admin completed request was forced or left live descendants");
+            }finally{File.WriteAllText(release,"release");}
+        }
+        Console.WriteLine("signin_admin_stdin_eof_stdout_eof_delayed_clean_exit_passed");
+    }
     public static void Run(string exe,string directory){
-        Check(!SodaDesktopSigninVault.SystemPrimary(),"Host fixtures require ordinary account");SodaDesktopSigninProcess.Layouts();AdminPipeFraming();
+        Check(!SodaDesktopSigninVault.SystemPrimary(),"Host fixtures require ordinary account");SodaDesktopSigninProcess.Layouts();AdminPipeFraming();RequestCompletion(exe,directory);
         string unwound=Path.Combine(directory,"dispose-unwound");
         using(var failed=Process.Start(new ProcessStartInfo(exe,"--generated-dispose-failure "+Quote(directory)){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true})){
             var stdout=failed.StandardOutput.ReadToEndAsync();var stderr=failed.StandardError.ReadToEndAsync();
@@ -106,6 +124,11 @@ public static class SodaDesktopSigninHostChecks {
             try{new SodaDesktopSigninProcess.Child(IntPtr.Zero,IntPtr.Zero).Dispose();}
             finally{File.WriteAllText(Path.Combine(args[1],"dispose-unwound"),"outer leases released");}
             return;
+        }
+        if(args[0]=="--generated-request-delayed-exit"){
+            if(Console.In.ReadToEnd()!="generated request")Environment.Exit(9);
+            Console.Out.Write("generated response");Console.Out.Flush();Console.Out.Close();CloseHandle(GetStdHandle(-11));
+            Wait(()=>File.Exists(Path.Combine(args[1],"request-release")),"Request fixture was not released");return;
         }
         if(args[0]=="--generated-stop-hang"){Thread.Sleep(30000);return;}
         if(args[0]=="--generated-stop-success"||args[0]=="--generated-stop-failure"||args[0]=="--generated-stop-descendant"){
