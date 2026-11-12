@@ -10,8 +10,7 @@ try{
  $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Generated protected video checks failed'}
  if($NegativeControls){
   $variants=@(
-   @('native-scope',"if(Stopping||!AllowedDesktop()){Stopping=true;return false;}`n            long now=","if(Clock.ElapsedMilliseconds<0){Stopping=true;return false;}`n            long now=",'Protected native frame survived scope transition while queued'),
-   @('native-deadline','long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000)return false;','long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000000000)return false;','Expired protected native frame published'),
+   @('native-scope',"if(Stopping||!AllowedDesktop()){Stopping=true;return false;}`n            committed();","if(Clock.ElapsedMilliseconds<0){Stopping=true;return false;}`n            committed();",'Protected native frame survived scope transition while queued'),
    @('native-permission','config.TryGetValue("allowProtectedVideo",out value)&&value is bool&&(bool)value&&','true&&','Protected native video local flag missing')
   )
   foreach($variant in $variants){$name='WindowsDesktopHost.cs';$before=[Text.Encoding]::UTF8.GetString($original[$name]);if(([regex]::Matches($before,[regex]::Escape($variant[1]))).Count -ne 1){throw 'Negative guard changed'}
@@ -19,7 +18,7 @@ try{
    finally{[IO.File]::WriteAllBytes((Join-Path $root $name),$original[$name]);if([Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root $name))) -cne [Convert]::ToBase64String($original[$name])){throw 'Source bytes not restored'}}
   }
   $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Restored protected video checks failed'}
-  'protected_video_3_source_negative_controls_and_restore_passed'
+  'protected_video_2_source_negative_controls_and_restore_passed'
  }
  foreach($name in $names){if([Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name))) -cne [Convert]::ToBase64String($original[$name])){throw 'Production source bytes changed'}}
 }finally{[IO.Directory]::Delete($root,$true)}

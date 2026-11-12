@@ -9,6 +9,7 @@ public static class SodaDesktopProtectedScopeChecks {
     static void Reject(string wire){bool rejected=false;try{SodaDesktopProtectedScope.Decode(wire);}catch(FormatException){rejected=true;}Need(rejected,"Invalid scope wire accepted");}
     public static void Run(){
         SodaDesktopHost.VerifyStoppedQueuedOutput();
+        SodaDesktopHost.VerifyLiveQueuedVideo();
         var hostScope=Scope();var hostFacts=Facts(hostScope);
         SodaDesktopHost.VerifyProtectedBoundaries(()=>hostScope.Failure(hostFacts)==null,()=>hostFacts.Desktop="Winlogon");
         hostFacts=Facts(hostScope);

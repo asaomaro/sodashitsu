@@ -64,6 +64,22 @@ public static partial class SodaDesktopHost {
         }}finally{Keys.Clear();Buttons.Clear();Control=false;MemoryInput=null;MemoryBatchInput=null;MemoryDesktop=null;MemoryOutput=null;Secure=oldSecure;ProtectedMode=oldMode;SecureLockState=oldLockState;Stopping=oldStopping;LastHeartbeat=oldHeartbeat;}
         Console.WriteLine("authentication_input_generated_batch_transition_cleanup_partial_failure_and_ordinary_semantics_passed");
     }
+    public static void VerifyLiveInputDeadline(){
+        var oldDesktop=MemoryDesktop;var oldInput=MemoryInput;var oldOutput=MemoryOutput;bool oldSecure=Secure,oldStopping=Stopping;long oldBeat=LastHeartbeat;
+        int sent=0;long sequence=0;
+        try{
+            Secure=false;Stopping=false;Control=true;MemoryDesktop=()=>true;MemoryInput=value=>sent++;MemoryOutput=value=>{};LastHeartbeat=Clock.ElapsedMilliseconds-7000;
+            var key=new Dictionary<string,object>{{"kind","key"},{"code","KeyA"},{"down",true}};
+            var message=new Dictionary<string,object>{{"seq",1L},{"input",key}};
+            if(!ApplyInput(message,ref sequence)||sent!=1)throw new Exception("Live human input without a deadline was rejected");
+            key["down"]=false;message["seq"]=2L;message["expiresAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-10;
+            if(ApplyInput(message,ref sequence)||sent!=1)throw new Exception("Explicit expired input was admitted");
+            message["seq"]=3L;message.Remove("expiresAt");
+            if(!ApplyInput(message,ref sequence)||sent!=2||Keys.Count!=0)throw new Exception("Live human release was dropped");
+            Control=false;message["seq"]=4L;if(ApplyInput(message,ref sequence))throw new Exception("Missing permission admitted human input");
+        }finally{Keys.Clear();Buttons.Clear();Control=false;MemoryDesktop=oldDesktop;MemoryInput=oldInput;MemoryOutput=oldOutput;Secure=oldSecure;Stopping=oldStopping;LastHeartbeat=oldBeat;}
+        Console.WriteLine("live_input_optional_deadline_and_single_source_liveness_passed");
+    }
     public static void VerifyControlCompletion(){
         var savedDesktop=MemoryDesktop;var savedInput=MemoryInput;var savedOutput=MemoryOutput;bool savedStopping=Stopping;bool savedSecure=Secure;
         var sent=new List<INPUT>();var replies=new List<Dictionary<string,object>>();
@@ -167,19 +183,17 @@ public static partial class SodaDesktopHost {
             if(ProtectedVideoProof(config))throw new Exception("Protected native video request missing");options["protectedVideo"]=true;
             object payload=new {type="native_frame",id="generated",data="AQID"};Action commit=()=>commits++;
             if(Math.Abs(QpcTimestamp()-(long)(Stopwatch.GetTimestamp()*1000000.0/Stopwatch.Frequency))>100000)throw new Exception("Protected video QPC clock");
-            if(!PublishProtectedNative(payload,Clock.ElapsedMilliseconds,commit)||frames!=1||commits!=1)throw new Exception("Stable protected native frame rejected");
-            if(PublishProtectedNative(payload,Clock.ElapsedMilliseconds-1001,commit)||frames!=1||commits!=1)throw new Exception("Expired protected native frame published");
-            if(PublishProtectedNative(payload,Clock.ElapsedMilliseconds+100,commit)||frames!=1||commits!=1)throw new Exception("Future protected native frame published");
-            MemoryPreparedWait=()=>reached.Set();long started=Clock.ElapsedMilliseconds;
+            if(!PublishProtectedNative(payload,commit)||frames!=1||commits!=1)throw new Exception("Stable protected native frame rejected");
+            MemoryPreparedWait=()=>reached.Set();
             lock(OutputGate) {
-                waiting=System.Threading.Tasks.Task.Run(()=>PublishProtectedNative(payload,started,commit));
+                waiting=System.Threading.Tasks.Task.Run(()=>PublishProtectedNative(payload,commit));
                 if(!reached.Wait(1000))throw new Exception("Protected native frame did not wait for output gate");transition();
             }
             if(!waiting.Wait(1000)||waiting.Result||frames!=1||commits!=1||!Stopping)throw new Exception("Protected native frame survived scope transition while queued");
         } finally {
             if(waiting!=null&&!waiting.IsCompleted)waiting.Wait(2000);MemoryPreparedWait=null;MemoryOutput=null;ClearProtectedGuards();Stopping=oldStopping;
         }
-        Console.WriteLine("protected_native_output_passed: generated native frame scope, local proof, original budget and output commit");
+        Console.WriteLine("protected_native_output_passed: generated native frame source, local proof and output commit");
     }
     public static void VerifyProtectedQueuedOutput(Func<bool> current,Action transition){
         if(Secure||MemoryInput!=null||MemoryOutput!=null||MemoryPreparedWait!=null)throw new InvalidOperationException("Fresh validation process required");
@@ -200,6 +214,20 @@ public static partial class SodaDesktopHost {
         }
         Console.WriteLine("protected_output_gate_passed: generated frame blocked after scope transition while stdout gate was held");
     }
+    public static void VerifyLiveQueuedVideo(){
+        bool oldStopping=Stopping;int frames=0;System.Threading.Tasks.Task<bool> waiting=null;
+        SetProtectedGuards(()=>true,"elevated-default");MemoryOutput=value=>frames++;Stopping=false;
+        using(var queued=new ManualResetEventSlim(false))try{
+            MemoryPreparedWait=()=>queued.Set();
+            lock(OutputGate){
+                waiting=System.Threading.Tasks.Task.Run(()=>PublishProtectedNative(new{type="native_frame"},()=>{}));
+                if(!queued.Wait(1000))throw new Exception("Live video did not queue at output gate");
+                Thread.Sleep(1100);
+            }
+            if(!waiting.Wait(1000)||!waiting.Result||frames!=1||Stopping)throw new Exception("Live video stopped after output congestion");
+        }finally{if(waiting!=null&&!waiting.IsCompleted)waiting.Wait(2000);MemoryPreparedWait=null;MemoryOutput=null;ClearProtectedGuards();Stopping=oldStopping;}
+        Console.WriteLine("live_native_video_survived_output_congestion_passed");
+    }
     public static void VerifyStoppedQueuedOutput(){
         if(Secure||MemoryOutput!=null||MemoryPreparedWait!=null)throw new InvalidOperationException("Fresh validation process required");
         bool oldStopping=Stopping,desktop=true;int frames=0;System.Threading.Tasks.Task<bool> image=null,video=null;
@@ -209,7 +237,7 @@ public static partial class SodaDesktopHost {
             var frame=new PreparedFrame{image=new byte[]{1,2,3},info=new Dictionary<string,object>{{"seq",1}}};
             lock(OutputGate){
                 image=System.Threading.Tasks.Task.Run(()=>PublishPrepared(frame));
-                video=System.Threading.Tasks.Task.Run(()=>PublishProtectedNative(new{type="native_frame"},Clock.ElapsedMilliseconds,()=>{}));
+                video=System.Threading.Tasks.Task.Run(()=>PublishProtectedNative(new{type="native_frame"},()=>{}));
                 if(!queued.Wait(1000))throw new Exception("Stopped publication did not queue at output gate");
                 desktop=false;Stopping=true;desktop=true;
             }

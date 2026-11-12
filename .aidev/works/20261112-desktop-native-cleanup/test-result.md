@@ -116,3 +116,50 @@ Current and restored source copies pass all generated checks; the production fil
 ```
 
 This reuses the existing stop state; it adds no epoch, observer, timer or transition counter. No Windows execution occurred for this correction before review.
+
+## Closed SDK and reviewed native 3 Windows validation
+
+Both `d805e24d` and reviewed `1bca2d42` were projected to exactly the closed runtime-assets list in fresh protected Windows validation folders. Each projection asserted **zero `*Checks.cs` files**. Public normal `windows-helper.ps1 -ValidateOnly` and `prepare-desktop-helper.ps1 -ValidateOnly` passed in both projections. The archives were checked by SHA before extraction. Raw outputs: `/tmp/soda-native-closed-d805e24d/` and `/tmp/soda-native-closed-1bca2d42/`.
+
+Reviewed `1bca2d42` repository-source generated protected/authentication/pointer checks also passed under Windows. The new stopped-queued-image/native-video regression passed. Logs are in `/tmp/soda-native-generated-1bca2d42/`. Authentication stderr again contained only a progress record, with no Error. No installed helper, service, Task, registry, input, capture or production process was changed.
+
+## Optional input deadline and media age gates
+
+Isolated Mono source compilation and generated tests pass. Human input without a deadline remains admitted at seven seconds since the prior helper heartbeat (the source watchdog has not expired); explicit expired input and missing control permission are rejected. Restoring mandatory expiry fails:
+
+```text
+System.Collections.Generic.KeyNotFoundException: The given key 'expiresAt' was not present in the dictionary.
+  at System.Collections.Generic.Dictionary`2[TKey,TValue].get_Item (TKey key) [0x00021] in <12b418a7818c4ca0893feeaaf67f1e7f>:0
+  at SodaDesktopHost.ApplyInput (System.Collections.Generic.Dictionary`2[TKey,TValue] msg, System.Int64& inputSeq, System.Action applied) [0x00011] in <1332f0c369634fe8b0015c62d472f621>:0
+  at SodaDesktopHost.VerifyLiveInputDeadline () [0x00124] in <1332f0c369634fe8b0015c62d472f621>:0
+  at Checks.Main () [0x00000] in <1332f0c369634fe8b0015c62d472f621>:0
+```
+
+Restoring the duplicate six-second admission gate fails:
+
+```text
+System.Exception: Live human input without a deadline was rejected
+  at SodaDesktopHost.VerifyLiveInputDeadline () [0x0013f] in <d93337c465694b418f60d4352d6f34e3>:0
+  at Checks.Main () [0x00000] in <d93337c465694b418f60d4352d6f34e3>:0
+```
+
+A generated live native-video publication waits behind the actual stdout gate for 1.1 seconds while its source stays current. Reintroducing the previous one-second publication budget (same before/after-gate positions) fails:
+
+```text
+live_input_optional_deadline_and_single_source_liveness_passed
+stopped_queued_image_and_native_video_rejected_after_desktop_return_passed
+System.Exception: Live video stopped after output congestion
+  at SodaDesktopHost.VerifyLiveQueuedVideo () [0x0011e] in <c012779d768d496c9c63e665ae2537f8>:0
+  at SodaDesktopProtectedScopeChecks.Run () [0x0000b] in <c012779d768d496c9c63e665ae2537f8>:0
+  at Checks.Main () [0x00005] in <c012779d768d496c9c63e665ae2537f8>:0
+```
+
+Current and restored compilations pass, and production bytes are unchanged after all temporary mutants. Existing frame-credit/order, preparation, rate/profile/held-IDR generated checks also pass:
+
+```text
+desktop_frame_preparation_checks_passed
+frame_preparation_model: duration=5000ms capture_encode=65ms ack=100ms fps_limit=30 serial_frames=31 overlapped_frames=50; deterministic model, not a desktop benchmark
+desktop_video_rate_checks_passed: private cadence/bitrate ceilings, recovery to original maximum, no OS calls
+```
+
+The obsolete profile-expiry assertions and native-age negative control were removed with their deleted production policies. Source/stop queued-output negative controls remain. No full TS build was run; Windows validation of this new snapshot requires independent review.

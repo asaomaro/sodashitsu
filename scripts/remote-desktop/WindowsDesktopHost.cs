@@ -77,11 +77,11 @@ public static partial class SodaDesktopHost {
         else Output(new {type="input_ack",seq});
     }
     static bool ApplyInput(Dictionary<string,object> msg,ref long inputSeq,Action applied=null) {
-        long id=Convert.ToInt64(msg["seq"]),expires=Convert.ToInt64(msg["expiresAt"]);
+        long id=Convert.ToInt64(msg["seq"]);
         Dictionary<string,object> witness;
         lock(Gate){
             long utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            if(!Control || id<=inputSeq || expires<utc || expires>utc+1500)return false;
+            if(!Control || id<=inputSeq || msg.ContainsKey("expiresAt")&&(Convert.ToInt64(msg["expiresAt"])<utc||Convert.ToInt64(msg["expiresAt"])>utc+1500))return false;
             inputSeq=id;if(!Apply(Obj(msg["input"])))return false;witness=LastAppliedPointer;
         }
         if(DeferNativeSnapshots&&msg.ContainsKey("deferNativeSnapshot")&&msg["deferNativeSnapshot"] is bool&&(bool)msg["deferNativeSnapshot"])Interlocked.Exchange(ref LastNativeInput,Clock.ElapsedMilliseconds);
@@ -117,12 +117,11 @@ public static partial class SodaDesktopHost {
             config.TryGetValue("options",out raw)&&(options=raw as Dictionary<string,object>)!=null&&
             options.TryGetValue("features",out value)&&value is bool&&(bool)value&&options.TryGetValue("protectedVideo",out value)&&value is bool&&(bool)value;
     }
-    static bool PublishProtectedNative(object payload,long started,Action committed) {
+    static bool PublishProtectedNative(object payload,Action committed) {
         if(MemoryPreparedWait!=null)MemoryPreparedWait();
         lock(OutputGate) {
             string wire=MemoryOutput==null?OutputJson.Serialize(payload):null;
             if(Stopping||!AllowedDesktop()){Stopping=true;return false;}
-            long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000)return false;
             committed();
             if(MemoryOutput!=null)MemoryOutput(payload);else{Console.Out.WriteLine(wire);Console.Out.Flush();}
             return true;
@@ -214,7 +213,7 @@ public static partial class SodaDesktopHost {
     static bool Apply(Dictionary<string,object> input) {
         lock(Gate) {
             LastAppliedPointer=null;
-            if(!Control || Stopping || Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)>6000 || !AllowedDesktop()) { Release();return false; }
+            if(!Control || Stopping || !AllowedDesktop()) { Release();return false; }
             SodaDesktopMonitorLayout.Item[] currentMonitors=null;
             if(CaptureDevice!=null&&!SourceMatches(CaptureDevice,out currentMonitors)){Stopping=true;Release();return false;}
             string kind=(string)input["kind"];
@@ -533,7 +532,7 @@ public static partial class SodaDesktopHost {
                             try{
                                 if(!richCeiling)throw new InvalidOperationException("Rich clipboard not permitted");
                                 if(richClipboardWorker==null){
-                                    richClipboardWorker=(IDisposable)Activator.CreateInstance(richType,new object[]{(Action<object>)Output,(Func<bool>)(()=>clipboardAllowed&&!Stopping&&AllowedDesktop()&&Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)<6000),(Func<long>)(()=>Interlocked.Read(ref clipboardGeneration)),(Func<long>)(()=>DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),(Func<bool>)(()=>allow&&!Stopping)});
+                                    richClipboardWorker=(IDisposable)Activator.CreateInstance(richType,new object[]{(Action<object>)Output,(Func<bool>)(()=>clipboardAllowed&&!Stopping&&AllowedDesktop()),(Func<long>)(()=>Interlocked.Read(ref clipboardGeneration)),(Func<long>)(()=>DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),(Func<bool>)(()=>allow&&!Stopping)});
                                     richSubmit=richType.GetMethod("Submit",new Type[]{typeof(object)});
                                 }
                                 richSubmit.Invoke(richClipboardWorker,new object[]{msg});
@@ -565,7 +564,7 @@ public static partial class SodaDesktopHost {
                         }
                         else if(type=="native_profile") {
                             if(!nativeAdaptive)throw new InvalidOperationException("Native adaptive not negotiated");
-                            if(video!=null&&(string)msg["id"]==videoId){if(videoProfile!=null)throw new InvalidOperationException("Profile already pending");videoProfile=new SodaDesktopVideoProfile(Num(msg,"generation"),videoGeneration,Num(msg,"width"),Num(msg,"height"),w,h,Num(msg,"fps"),Num(msg,"bitrateKbps"),videoRate,Clock.ElapsedMilliseconds);}
+                            if(video!=null&&(string)msg["id"]==videoId){if(videoProfile!=null)throw new InvalidOperationException("Profile already pending");videoProfile=new SodaDesktopVideoProfile(Num(msg,"generation"),videoGeneration,Num(msg,"width"),Num(msg,"height"),w,h,Num(msg,"fps"),Num(msg,"bitrateKbps"),videoRate);}
                         }
                         else if(type=="native_profile_resume") {
                             if(!nativeAdaptive)throw new InvalidOperationException("Native adaptive not negotiated");
@@ -588,9 +587,9 @@ public static partial class SodaDesktopHost {
                             fps=rate;quality=q;args.Param[0].Dispose();args.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,(long)q);preparation.Invalidate(true);
                         } else if(type=="clipboard_control") {clipboardAllowed=clipboardCeiling && (bool)msg["enabled"];clipboardGeneration=Convert.ToInt64(msg["generation"]);if(!clipboardAllowed){StopAudio(ref richClipboardWorker);richSubmit=null;}Output(new {type="clipboard_control",enabled=clipboardAllowed,generation=clipboardGeneration});}
                         else if(type=="clipboard") {
-                            long id=Convert.ToInt64(msg["id"]),expires=Convert.ToInt64(msg["expiresAt"]),utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                            long id=Convert.ToInt64(msg["id"]),utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                             bool ok=false;string text=null;
-                            if(clipboardAllowed && Convert.ToInt64(msg["generation"])==clipboardGeneration && expires>=utc && expires<=utc+1500 && Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)<6000 && DefaultDesktop()) {
+                            if(clipboardAllowed && Convert.ToInt64(msg["generation"])==clipboardGeneration && (!msg.ContainsKey("expiresAt")||Convert.ToInt64(msg["expiresAt"])>=utc&&Convert.ToInt64(msg["expiresAt"])<=utc+1500) && DefaultDesktop()) {
                                 try {
                                     string op=(string)msg["operation"];
                                     if(op=="read") {text=Clipboard.ContainsText(TextDataFormat.UnicodeText)?Clipboard.GetText(TextDataFormat.UnicodeText):"";ok=text.Length<=8192;if(!ok)text=null;}
@@ -609,7 +608,6 @@ public static partial class SodaDesktopHost {
                     })) {}
                     if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+sourceTitle;
                     long now=Clock.ElapsedMilliseconds;
-                    if(videoProfile!=null&&video!=null&&videoProfile.Expired(now)){commands.EnableFast(false);video.Dispose();video=null;videoProfile=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                     if(videoProfile!=null&&video!=null&&!videoProfile.Configured&&videoWindow.Count==0){
                         try{
                             commands.EnableFast(false);video.Dispose();video=null;
@@ -621,12 +619,8 @@ public static partial class SodaDesktopHost {
                             videoRate.Adopt(videoProfile.Fps,videoProfile.Bitrate);videoFps=videoRate.Fps;videoGeneration=videoProfile.Generation;videoProfile.Configured=true;videoNext=0;commands.EnableFast(true);
                         }catch{if(video!=null)video.Dispose();video=null;videoProfile=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                     }
-                    if(video!=null && videoWindow.Count>0 && now-videoWindow.OldestAt>2500) {
-                        commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
-                    }
                     if(!Stopping && video!=null && videoWindow.CanSend && (videoProfile==null||(videoProfile.Configured&&(!videoProfile.Prepared||videoProfile.Resumed))) && Clock.Elapsed.TotalMilliseconds>=videoNext) {
                         try {
-                            long protectedStarted=protectedVideo?Clock.ElapsedMilliseconds:0;
                             if(protectedVideo&&!AllowedDesktop()){Stopping=true;break;}
                             double videoStarted=Clock.Elapsed.TotalMilliseconds;
                             var captureTimer=Stopwatch.StartNew();double conversionMs=0;
@@ -660,12 +654,12 @@ public static partial class SodaDesktopHost {
                             if(videoWindow.Capacity==3||nativeCadence){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
                             if(packet.codec!=null)encoded["codec"]=packet.codec;
                             if(protectedVideo) {
-                                Action commitVideo=()=>{videoSeq=nextVideoSeq;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;};
-                                if(!PublishProtectedNative(encoded,protectedStarted,commitVideo)) {
+                                Action commitVideo=()=>{videoSeq=nextVideoSeq;videoWindow.Sent(videoSeq);videoNext=videoStarted+1000.0/videoFps;};
+                                if(!PublishProtectedNative(encoded,commitVideo)) {
                                     commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
                                     if(Stopping)break;
                                 }
-                            } else {videoSeq=nextVideoSeq;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;Output(encoded);}
+                            } else {videoSeq=nextVideoSeq;videoWindow.Sent(videoSeq);videoNext=videoStarted+1000.0/videoFps;Output(encoded);}
                             }
                         } catch {
                             bool surfaceFailure=video!=null&&video.GpuInput,unpublished=videoSeq==0&&videoProfile==null,codecFallback=nativeCodecs&&videoCodec!="h264";
@@ -1648,16 +1642,14 @@ public sealed class SodaDesktopH264 : IDisposable {
 
 // A bounded ordered window; encoded H.264 reference frames are never discarded.
 public sealed class SodaDesktopVideoWindow {
-    sealed class Pending {public long seq,at;}
-    readonly Queue<Pending> pending=new Queue<Pending>();
+    readonly Queue<long> pending=new Queue<long>();
     long sent,acknowledged;
     public int Capacity {get;private set;}
     public int Count {get{return pending.Count;}}
-    public long OldestAt {get{return pending.Count==0?0:pending.Peek().at;}}
     public bool CanSend {get{return pending.Count<Capacity;}}
     public SodaDesktopVideoWindow(int capacity){if(capacity!=1&&capacity!=3)throw new ArgumentException("Video window limit");Capacity=capacity;}
-    public void Sent(long sequence,long at){if(!CanSend||sequence!=sent+1)throw new InvalidOperationException("Video window order");pending.Enqueue(new Pending {seq=sequence,at=at});sent=sequence;}
-    public void Ack(long sequence){if(sequence<=acknowledged)return;if(pending.Count==0||pending.Peek().seq!=sequence)throw new InvalidOperationException("Video ACK order");pending.Dequeue();acknowledged=sequence;}
+    public void Sent(long sequence){if(!CanSend||sequence!=sent+1)throw new InvalidOperationException("Video window order");pending.Enqueue(sequence);sent=sequence;}
+    public void Ack(long sequence){if(sequence<=acknowledged)return;if(pending.Count==0||pending.Peek()!=sequence)throw new InvalidOperationException("Video ACK order");pending.Dequeue();acknowledged=sequence;}
 }
 
 // Per-encoder timer: no process/system timer-resolution setting and no spinning.
@@ -1860,15 +1852,14 @@ public sealed class SodaDesktopVideoRate {
 // One bounded reconfiguration transaction; never an OS/display-mode operation.
 public sealed class SodaDesktopVideoProfile {
     public readonly int Generation,Width,Height,Fps,Bitrate;
-    public readonly long At;
     public long BaseSeq {get;private set;}
     public bool Configured {get;set;}
     public bool Prepared {get;private set;}
     public bool Resumed {get;private set;}
     SodaDesktopH264.Packet held;
-    public SodaDesktopVideoProfile(int generation,int current,int width,int height,int maxWidth,int maxHeight,int fps,int bitrate,SodaDesktopVideoRate rate,long at){
+    public SodaDesktopVideoProfile(int generation,int current,int width,int height,int maxWidth,int maxHeight,int fps,int bitrate,SodaDesktopVideoRate rate){
         if(generation!=current+1||generation<2||width<2||height<2||width>maxWidth||height>maxHeight||(width&1)!=0||(height&1)!=0||Math.Abs((double)width/height-(double)maxWidth/maxHeight)>.02)throw new ArgumentException("Video profile limits");
-        rate.Validate(fps,bitrate);Generation=generation;Width=width;Height=height;Fps=fps;Bitrate=bitrate;At=at;
+        rate.Validate(fps,bitrate);Generation=generation;Width=width;Height=height;Fps=fps;Bitrate=bitrate;
     }
     public void Hold(SodaDesktopH264.Packet packet,long baseSeq){
         if(Prepared||packet==null||!packet.key||packet.codec==null||packet.data==null||packet.data.Length<1||packet.data.Length>512*1024-9)throw new InvalidOperationException("Profile requires bounded SPS/IDR");
@@ -1876,7 +1867,6 @@ public sealed class SodaDesktopVideoProfile {
     }
     public void Resume(int generation,long baseSeq){if(!Prepared||Resumed||generation!=Generation||baseSeq!=BaseSeq)throw new InvalidOperationException("Profile resume fence");Resumed=true;}
     public SodaDesktopH264.Packet Take(){if(!Resumed||held==null)throw new InvalidOperationException("Profile not resumed");var packet=held;held=null;return packet;}
-    public bool Expired(long now){return now-At>=3000;}
 }
 // Bounded codec-specific access units. No decoder, GPU, screen or input APIs.
 public sealed class SodaDesktopVideoBitstream {

@@ -21,10 +21,10 @@ namespace SodaDesktopTests {
             Check(SodaDesktopVideoDelay.FrameDelay(35,33,false)==2,"Full video window must wait");
             using(var delay=new SodaDesktopVideoDelay(false)){Check(!delay.HighResolution,"Fallback timer unexpectedly enabled");delay.Pause(1);delay.Dispose();bool disposed=false;try{delay.Pause(1);}catch(ObjectDisposedException){disposed=true;}Check(disposed,"Disposed timer reused");}
             var window=new SodaDesktopVideoWindow(3);
-            window.Sent(1,10);window.Sent(2,20);window.Sent(3,30);Check(!window.CanSend&&window.OldestAt==10,"Video window unbounded");
+            window.Sent(1);window.Sent(2);window.Sent(3);Check(!window.CanSend&&window.Count==3,"Video window unbounded");
             bool outOfOrder=false;try{window.Ack(2);}catch(InvalidOperationException){outOfOrder=true;}Check(outOfOrder&&window.Count==3,"Out-of-order video ACK accepted");
-            window.Ack(1);Check(window.CanSend&&window.OldestAt==20,"Video ACK failed to open slot");window.Sent(4,40);window.Ack(1);Check(window.Count==3,"Duplicate ACK freed a second slot");
-            var legacy=new SodaDesktopVideoWindow(1);legacy.Sent(1,0);Check(!legacy.CanSend,"Legacy video window changed");
+            window.Ack(1);Check(window.CanSend&&window.Count==2,"Video ACK failed to open slot");window.Sent(4);window.Ack(1);Check(window.Count==3,"Duplicate ACK freed a second slot");
+            var single=new SodaDesktopVideoWindow(1);single.Sent(1);Check(!single.CanSend,"Single-frame video window changed");
             var q=new SodaDesktopFramePreparation<string>();Check(q.CanPrepare(0),"Initial preparation denied");
             q.Set("first",0,300,30);Check(!q.CanPrepare(301),"Prepared frame overwritten");
             Check(q.Take(1,301,30)==null,"Sent before prior ACK");
