@@ -24,16 +24,16 @@ it("does not start capture before both channels are ready and sends notices with
  expect(f.send.mock.calls.map(([m])=>m).filter(m=>m instanceof Uint8Array)).toHaveLength(0);
  expect(f.send.mock.calls.filter(([m])=>m.type==="native_frame_notice")).toHaveLength(3);f.video.stop();expect(f.peer.close).toHaveBeenCalledOnce();
 });
-it("ignores parent ACKs and releases dropped credit without renewing draw freshness on either delayed or duplicate ACK",()=>{
- const f=setup();f.peer.hooks.ready();f.video.fromHelper(f.frame());f.video.fromViewer(f.ack(1));expect(f.video.hasFreshDraw()).toBe(false);
- expect(()=>f.peer.hooks.ack(f.ack(2))).toThrow("order");f.peer.hooks.ack(f.ack(1,true));expect(f.video.hasFreshDraw()).toBe(false);
+it("ignores parent ACKs and releases direct dropped credit in order",()=>{
+ const f=setup();f.peer.hooks.ready();f.video.fromHelper(f.frame());f.video.fromViewer(f.ack(1));
+ expect(()=>f.peer.hooks.ack(f.ack(2))).toThrow("order");f.peer.hooks.ack(f.ack(1,true));
  expect(f.send).toHaveBeenCalledWith(expect.objectContaining({type:"native_draw_ack",seq:1,dropped:true}));expect(f.write).toHaveBeenCalledWith({type:"native_video_ack",id:f.id,seq:1});
- f.video.fromHelper(f.frame(2));f.peer.hooks.ack(f.ack(2));expect(f.video.hasFreshDraw()).toBe(true);
- f.time(3001);f.video.fromHelper(f.frame(3));f.peer.hooks.ack(f.ack(3,true));expect(f.video.hasFreshDraw()).toBe(false);f.peer.hooks.ack(f.ack(2));expect(f.video.hasFreshDraw()).toBe(false);f.video.stop();
+ f.video.fromHelper(f.frame(2));f.peer.hooks.ack(f.ack(2));
+ f.time(3001);f.video.fromHelper(f.frame(3));f.peer.hooks.ack(f.ack(3,true));f.peer.hooks.ack(f.ack(2));f.video.stop();
 });
 it.each([false,true])("restarts a fresh WSS stream at most once after peer failure, encoder started=%s",started=>{
  const f=setup();if(started){f.peer.hooks.ready();f.video.fromHelper(f.frame());}f.peer.hooks.fail();
- const statuses=f.send.mock.calls.map(([m])=>m).filter(m=>m.type==="media_status"&&m.state==="negotiating");expect(statuses).toHaveLength(2);expect(statuses[1].id).not.toBe(f.id);expect(statuses[1]).not.toHaveProperty("datagrams");expect(peers).toHaveLength(1);expect(f.video.hasFreshDraw()).toBe(false);
+ const statuses=f.send.mock.calls.map(([m])=>m).filter(m=>m.type==="media_status"&&m.state==="negotiating");expect(statuses).toHaveLength(2);expect(statuses[1].id).not.toBe(f.id);expect(statuses[1]).not.toHaveProperty("datagrams");expect(peers).toHaveLength(1);
  expect(f.send.mock.calls.some(([m])=>m.type==="native_transport_reset")).toBe(started);
  expect(f.write.mock.calls.some(([m])=>m.type==="release")).toBe(started);
  expect(f.video.fromViewer({type:"media_fallback",id:f.id})).toBe(true);expect(f.video.fromViewer({type:"rtc_signal",id:f.id})).toBe(true);expect(statuses).toHaveLength(2);

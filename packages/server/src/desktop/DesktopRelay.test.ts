@@ -323,12 +323,12 @@ it.each(["pipe","json","shared"].flatMap(mode=>["release","control","rejected-in
  v.send({type:"heartbeat"});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
  expect(share.pointerWitness).toBeUndefined();expect(share.inputSeq).toBe(1);expect(v.ws.readyState).toBe(WebSocket.OPEN);
 });
-it("keeps native draw freshness separate from human image age", async () => {
+it("accepts human input after native video stops without requiring a draw receipt", async () => {
   const f=await fixture(), viewer=await f.viewer();viewer.send(start);
   await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
   viewer.send({type:"control",enabled:true});
   await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
-  const share=(f.provider as unknown as {active:{frameAt:number;seq:number;ws:WebSocket;native?:DesktopNativeVideo;deferNativeSnapshots?:boolean;process:{stdin:Writable}}}).active;
+  const share=(f.provider as unknown as {active:{frameAt:number;seq:number;ws:WebSocket;native?:DesktopNativeVideo;video:boolean;deferNativeSnapshots?:boolean;process:{stdin:Writable}}}).active;
   // This test injects the private B-side input handler directly. Keep its ACKs
   // local: A did not allocate these sequences. Browser coverage below uses the
   // real end-to-end ACK path.
@@ -338,27 +338,27 @@ it("keeps native draw freshness separate from human image age", async () => {
   const recorded=()=>readFile(f.record,"utf8").catch((error:NodeJS.ErrnoException)=>{if(error.code==="ENOENT")return "";throw error;});
   try {
   let id="";
-  const native=new DesktopNativeVideo({enabled:true,width:320,sourceWidth:320,sourceHeight:180,fps:10,send:()=>true,write:(m:any)=>{if(m.type==="native_video"&&m.enabled)id=m.id;},policy:()=>{},buffered:()=>0});
+  const native=new DesktopNativeVideo({enabled:true,width:320,sourceWidth:320,sourceHeight:180,fps:10,send:()=>true,write:(m:any)=>{if(m.type==="native_video"&&m.enabled)id=m.id;},policy:enabled=>{share.video=enabled;},buffered:()=>0});
   native.fromViewer({type:"media",enabled:true,settings:{transport:"native"}});
   native.fromHelper({type:"native_frame",id,seq:1,width:320,height:180,timestamp:1,key:true,codec:"avc1.42041f",data:Buffer.from([0,0,0,1,0x65,1]).toString("base64")});
   native.fromViewer({type:"native_video_ack",id,generation:1,seq:1});
   share.native=native;share.frameAt=performance.now()-3000;
-  const inject=(seq:number,text:string,marked=false)=>share.ws.emit("message",Buffer.from(JSON.stringify({type:"input",seq,frameSeq:share.seq,input:{kind:"text",text},...(marked?{nativeDraw:true}:{})})),false);
-  inject(1,"ACCEPT_OLD_IMAGE");inject(2,"ACCEPT_NATIVE",true);
+  const inject=(seq:number,text:string)=>share.ws.emit("message",Buffer.from(JSON.stringify({type:"input",seq,frameSeq:share.seq,input:{kind:"text",text}})),false);
+  inject(1,"ACCEPT_OLD_IMAGE");inject(2,"ACCEPT_NATIVE");
   await expect.poll(async()=>(await recorded()).includes("ACCEPT_NATIVE")).toBe(true);
   expect(await readFile(f.record,"utf8")).toContain("ACCEPT_OLD_IMAGE");
   expect(helperInput(2)).not.toHaveProperty("deferNativeSnapshot");
   share.deferNativeSnapshots=true;
-  inject(3,"ACCEPT_NATIVE_DEFER",true);
+  inject(3,"ACCEPT_NATIVE_DEFER");
   await expect.poll(async()=>(await recorded()).includes("ACCEPT_NATIVE_DEFER")).toBe(true);
   expect(helperInput(3)).toHaveProperty("deferNativeSnapshot",true);
   share.frameAt=performance.now();inject(4,"ACCEPT_IMAGE_WITH_OPTIN");
   await expect.poll(async()=>(await recorded()).includes("ACCEPT_IMAGE_WITH_OPTIN")).toBe(true);
-  expect(helperInput(4)).not.toHaveProperty("deferNativeSnapshot");
+  expect(helperInput(4)).toHaveProperty("deferNativeSnapshot",true);
   native.stop();share.frameAt=performance.now();
-  inject(5,"DENIED_STOPPED",true);inject(6,"ACCEPT_IMAGE");
+  inject(5,"ACCEPT_STOPPED");inject(6,"ACCEPT_IMAGE");
   await expect.poll(async()=>(await readFile(f.record,"utf8")).includes('"text":"ACCEPT_IMAGE"')).toBe(true);
-  expect(await readFile(f.record,"utf8")).not.toContain("DENIED_STOPPED");
+  expect(await readFile(f.record,"utf8")).toContain("ACCEPT_STOPPED");
   await expect.poll(()=>localAcks.mock.calls.some(([data])=>typeof data==="string"&&JSON.parse(data).type==="input_ack"&&JSON.parse(data).seq===6)).toBe(true);
   } finally {helperWrites.mockRestore();localAcks.mockRestore();}
 });
@@ -893,15 +893,15 @@ it.each(["viewer","provider","helper","secure"])("native datagrams require curre
  const v=await f.viewer(missing==="viewer"?"native":"udp");v.send(start);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
  expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeDatagrams");if(missing==="viewer"||missing==="provider")expect(f.startRequests[0]!.options).not.toHaveProperty("nativeDatagrams");v.send({type:"stop"});
 });
-it("dropped/parent ACKs cannot renew native freshness, while validated source draw ACKs can",async()=>{
+it("returns native frame credits only through validated source draw ACKs",async()=>{
  const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,"--native-datagrams"]});
  const v=await f.viewer("udp");v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(v.messages.find(m=>m.type==="ready")?.nativeDatagrams).toBe(true);
  const server=Array.from((f.relay as any).viewers)[0] as any,id="22222222-2222-4222-8222-222222222222";
  const emit=(m:unknown)=>server.provider.emit("message",Buffer.from(JSON.stringify(m)),false);
  emit({type:"media_status",id,state:"native",audio:false,datagrams:true});emit({type:"media_stream",id,generation:1,mime:"video/h264",codec:"avc1.42041f",width:640,height:360,window:3,datagrams:true});
  emit({type:"native_frame_notice",id,generation:1,seq:1,bytes:100});expect(server.media.pending).toEqual([1]);
- emit({type:"native_draw_ack",id,generation:1,seq:1,dropped:true});expect(server.media.pending).toEqual([]);expect(server.media.drawnAt).toBeUndefined();
- emit({type:"native_frame_notice",id,generation:1,seq:2,bytes:100});emit({type:"native_draw_ack",id,generation:1,seq:2});expect(server.media.drawnAt).toBeTypeOf("number");
+ emit({type:"native_draw_ack",id,generation:1,seq:1,dropped:true});expect(server.media.pending).toEqual([]);expect(server.media.lastAck).toBe(1);
+ emit({type:"native_frame_notice",id,generation:1,seq:2,bytes:100});emit({type:"native_draw_ack",id,generation:1,seq:2});expect(server.media.lastAck).toBe(2);
  emit({type:"native_frame_notice",id,generation:1,seq:3,bytes:100});v.send({type:"native_video_ack",id,generation:1,seq:3,dropped:true});await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);
 });
 
@@ -910,7 +910,7 @@ it.each(["native_frame_notice","native_draw_ack","native_transport_reset"])("ign
  const server=Array.from((f.relay as any).viewers)[0] as any,id="22222222-2222-4222-8222-222222222222";
  // A received a native stream, then the parent's stop precedes a delayed
  // packet on the independent bulk socket. These are server-side state checks.
- server.media={id,generation:1,seq:1,native:true,datagrams:true,pending:[1],window:3,sentAt:new Map([[1,performance.now()]])};server.requestedNative=true;
+ server.media={id,generation:1,seq:1,native:true,datagrams:true,pending:[1],window:3,};server.requestedNative=true;
  v.send({type:"media",enabled:false});await expect.poll(()=>server.media).toBeUndefined();expect(server.retiredMedia.has(id)).toBe(true);
  const fail=vi.fn();server.videoActive=true;server.videoLane={fail,close:()=>{},buffered:()=>0,send:()=>true};
  const message=type==="native_frame_notice"?{type,id,generation:1,seq:2,bytes:100}:type==="native_draw_ack"?{type,id,generation:1,seq:1}:{type,id};
@@ -927,7 +927,7 @@ it("forwards explicit native audio but never renews input freshness, and stops i
  const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMedia:true,command:[...cfg.command,"--native-audio"]});
  const v=await f.viewer("audio");v.send({...start,options:{width:640,fps:10,quality:65,features:true}});await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(v.messages.find(m=>m.type==="ready")?.nativeAudio).toBe(true);
  v.send({type:"media",enabled:true,settings:{transport:"native",audio:true}});await expect.poll(()=>v.messages.some(m=>m.type==="native_audio_status"&&m.state==="running")).toBe(true);await expect.poll(()=>v.frames.filter(isDesktopAudio).length).toBeGreaterThan(2);
- const server=Array.from((f.relay as any).viewers)[0] as any;expect(server.media.drawnAt).toBeUndefined();expect(server.control).toBe(false);
+ const server=Array.from((f.relay as any).viewers)[0] as any;expect(server.media.lastAck).toBe(1);expect(server.control).toBe(false);
  v.send({type:"media",enabled:false});await expect.poll(()=>(f.provider as any).active.native.active).toBeUndefined();expect(server.media).toBeUndefined();v.send({type:"stop"});
 });
 

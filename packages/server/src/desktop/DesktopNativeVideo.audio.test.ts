@@ -114,7 +114,7 @@ it("stops the previous audio on replacement, ignores its late status, and stop-o
     f.video.fromViewer({ type: "native_audio_control", id: audio.hooks.id, enabled: false });
     expect(audio.stop).toHaveBeenCalled();
     expect(audio.hooks.active()).toBe(false);
-    expect(f.video.hasFreshDraw()).toBe(false);
+
   } finally {
     f.video.stop();
   }

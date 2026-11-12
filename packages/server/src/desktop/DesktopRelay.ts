@@ -129,8 +129,7 @@ type Viewer = {
   nativeVideo?: boolean;
   retiredMedia: Set<string>;
   requestedNative?: boolean;
-  media?: { id: string; generation: number; seq: number; native?:boolean; datagrams?:boolean; audioRequested?:boolean;audioSeq?:number;audioGeneration?:number;nextNativeAt?:number;barrier?:{generation:number;at:number;baseSeq?:number}; pending?:number[]; window?:1|3;lastAck?:number;sentAt?:Map<number,number>;freshAt?:Map<number,number>;drawnAt?:number };
-  nativeInputFreshness?: boolean;
+  media?: { id: string; generation: number; seq: number; native?:boolean; datagrams?:boolean; audioRequested?:boolean;audioSeq?:number;audioGeneration?:number;barrier?:{generation:number;at:number;baseSeq?:number}; pending?:number[]; window?:1|3;lastAck?:number };
   snapshot?: {
     regionId?:string;
     promise: Promise<void>;
@@ -559,9 +558,7 @@ export class DesktopRelay {
             if(v.media.datagrams||m.dropped)throw Error("Native ACK requires negotiated route");
             if(m.seq<=(v.media.lastAck??0))return;
             if(m.seq!==v.media.pending?.[0])throw new Error("Native ACK order");v.media.pending.shift();v.media.lastAck=m.seq;
-            const drawnAt=v.media.freshAt?.get(m.seq)??v.media.sentAt?.get(m.seq);
-            if(drawnAt===undefined)delete v.media.drawnAt;else v.media.drawnAt=drawnAt;
-            v.media.sentAt?.delete(m.seq);v.media.freshAt?.delete(m.seq);this.send(v.provider,m);
+            this.send(v.provider,m);
           }
         } else if (
           m.type === "media" ||
@@ -624,15 +621,13 @@ export class DesktopRelay {
             m.seq > v.viewerSeq &&
             m.frameSeq <= v.seq &&
             m.frameSeq >= v.seq - 1 &&
-            v.seq > 0 &&
-            (!(v.nativeInputFreshness && v.media?.native) ||
-              v.media.drawnAt !== undefined && now - v.media.drawnAt < 2000)
+            v.seq > 0
           ) {
             v.viewerSeq = m.seq;
             const seq = ++v.inputSeq;
             v.viewerAcks.set(seq, m.seq);
             if (v.viewerAcks.size > 64) v.viewerAcks.delete(v.viewerAcks.keys().next().value!);
-            if (!this.send(v.provider, { ...m, seq, ...(v.nativeInputFreshness && v.media?.native ? {nativeDraw:true} : {}),...(v.sourceIdle.fresh({backend:v.nativePlatform,ready:v.ready,pending:v.pending,seq:v.seq})?{platformIdleInput:true}:{}) })) this.stop(v);
+            if (!this.send(v.provider, { ...m, seq })) this.stop(v);
           } else cancelPointer();
         } else if (m.type === "ack") {
           if (!v.provider || v.pending !== m.seq) {
@@ -726,7 +721,6 @@ export class DesktopRelay {
         microphoneOpus:z.boolean().optional(),
         nativeAudio:z.boolean().optional(),
         nativeVideo: z.boolean().optional(),nativeDatagrams:z.boolean().optional(),
-        nativeInputFreshness: z.boolean().optional(),
         nativeVideoWindow:z.literal(3).optional(),
         nativeCodecs:z.boolean().optional(),
         nativeAdaptive:z.literal(true).optional(),
@@ -820,7 +814,6 @@ export class DesktopRelay {
     v.microphoneOpus=v.microphone&&!v.protectedMicrophone&&v.microphoneOpusRequested===true&&caps.microphoneOpus===true;
     v.nativeAudio=v.nativeVideo&&v.nativeAudioRequested===true&&caps.nativeAudio===true;
     v.nativeDatagrams=v.nativeVideo&&v.nativeDatagramsRequested===true&&caps.nativeDatagrams===true;
-    v.nativeInputFreshness=v.nativeVideo&&caps.nativeInputFreshness===true;
     v.sharedDesktop=options.sharedDesktop===true&&v.sharedRequested===true&&caps.sharedDesktop===true&&caps.features===true;
     v.sharedProtected=v.sharedProtectedAvailable===true&&v.sharedDesktop===true&&v.elevatedDesktop===true;
     if(options.sharedDesktop&&(!v.sharedDesktop||(options.elevatedDesktop&&!v.sharedProtected)||(options.virtualDisplay&&!v.sharedVirtual)||options.display&&!v.sharedVirtual))throw new DesktopSetupRequired("複数viewer共有は両端の対応が必要です。管理者画面との併用には対応する保護サービスも必要です。仮想画面以外のOS解像度変更とは併用できません。");
@@ -832,7 +825,7 @@ export class DesktopRelay {
     v.protectedVideo=v.elevatedDesktop===true&&(!v.sharedDesktop||v.sharedProtectedVideo)&&v.protectedVideoRequested===true&&caps.protectedVideo===true&&v.nativeVideo===true;
     v.protectedAudio=v.protectedVideo&&(!v.sharedDesktop||v.sharedAudio)&&v.protectedAudioRequested===true&&caps.protectedAudio===true&&v.nativeAudio===true;
     if(v.elevatedDesktop||v.sharedDesktop){
-      v.nativeVideo=v.protectedVideo===true;v.nativeAudio=v.protectedAudio===true;v.nativeDatagrams=false;v.nativeCodecs=false;v.nativeAdaptive=false;v.nativeInputFreshness=false;
+      v.nativeVideo=v.protectedVideo===true;v.nativeAudio=v.protectedAudio===true;v.nativeDatagrams=false;v.nativeCodecs=false;v.nativeAdaptive=false;
       if(v.elevatedDesktop&&!v.protectedFiles)v.files=false;v.richClipboard=false;v.monitors=false;v.cursor=false;if(!v.protectedVideo){delete v.nativeVideoWindow;delete v.nativeMaxFps;}
     }
     if(v.sharedMonitors)v.monitors=true;
@@ -841,7 +834,7 @@ export class DesktopRelay {
     v.sharedResolution=!v.protectedVideo&&v.sharedNative===true&&v.sharedResolutionRequested===true&&v.nativeAdaptiveRequested===true&&caps.sharedResolution===true&&caps.nativeAdaptive===true;
     if(v.sharedNative&&!v.protectedVideo){
       v.nativeVideo=true;v.nativeAdaptive=v.sharedResolution===true;v.nativeAudio=v.sharedAudio===true;v.nativeCodecs=v.nativeCodecsRequested===true&&caps.nativeCodecs===true;
-      v.nativeInputFreshness=caps.nativeInputFreshness===true;v.nativeDatagrams=v.sharedDatagrams===true;
+      v.nativeDatagrams=v.sharedDatagrams===true;
       if(v.nativeWindowRequested&&caps.nativeVideoWindow===3)v.nativeVideoWindow=3;
       if(v.nativeRateRequested&&caps.nativeMaxFps===60)v.nativeMaxFps=60;
     }
@@ -1057,7 +1050,7 @@ export class DesktopRelay {
           if (chunk.seq !== v.media.seq + 1) throw new Error();
           if(v.media.native&&(v.media.pending?.length??0)>=(v.media.window??1))throw new Error("Native video backlog");
           v.media.seq = chunk.seq;
-          if(v.media.native){(v.media.pending??=[]).push(chunk.seq);(v.media.sentAt??=new Map()).set(chunk.seq,performance.now());(v.media.freshAt??=new Map()).set(chunk.seq,v.media.nextNativeAt??performance.now());delete v.media.nextNativeAt;}
+          if(v.media.native)(v.media.pending??=[]).push(chunk.seq);
           if ((lane ? v.videoLane!.buffered() : v.ws.bufferedAmount) > 512 * 1024) {
             if (lane) { v.videoLane!.fail(); return; }
             if (v.provider) this.send(v.provider, { type: "media", enabled: false });
@@ -1190,7 +1183,7 @@ export class DesktopRelay {
             if(v.media&&(lane||v.requestedNative)&&status.state!=="images")v.media.native=true;
             if(v.media)v.media.audioRequested=status.nativeAudio===true;
             if(v.media)v.media.datagrams=status.datagrams===true;
-            if(v.media&&status.state==="native"){v.media.native=true;v.media.audioGeneration=1;v.media.window=v.nativeVideoWindow??1;v.media.pending=[];v.media.lastAck=0;v.media.sentAt=new Map();v.media.freshAt=new Map();delete v.media.drawnAt;}
+            if(v.media&&status.state==="native"){v.media.native=true;v.media.audioGeneration=1;v.media.window=v.nativeVideoWindow??1;v.media.pending=[];v.media.lastAck=0;}
             sendMedia(status);
           } else if(msg.type==="native_profile_pending"){
             const pending=DesktopNativeProfilePending.parse(msg),media=v.media;
@@ -1199,7 +1192,7 @@ export class DesktopRelay {
           } else if(msg.type==="native_format_ready"){
             const ack=DesktopNativeFormatReady.parse(msg),media=v.media,b=media?.barrier;
             if(!v.nativeAdaptive||!media||!b||ack.id!==media.id||ack.generation!==b.generation||ack.baseSeq!==b.baseSeq||performance.now()-b.at>=3000)throw Error("Unexpected native format ACK");
-            media.nextNativeAt=b.at;delete media.barrier;
+            delete media.barrier;
           } else if (msg.type === "media_stream" && v.media) {
             const stream = DesktopMediaStream.parse(msg);
             if (stream.id !== v.media.id || stream.generation <= v.media.generation)
@@ -1223,12 +1216,12 @@ export class DesktopRelay {
             const notice=DesktopNativeFrameNotice.parse(msg),media=v.media;
             if(media?.barrier?.baseSeq!==undefined)throw Error("Native notice before format ACK");
             if(!v.nativeDatagrams||!media?.native||!media.datagrams||notice.id!==media.id||notice.generation!==media.generation||notice.seq!==media.seq+1||(media.pending?.length??0)>=(media.window??1))throw Error("Native frame notice order");
-            media.seq=notice.seq;(media.pending??=[]).push(notice.seq);(media.sentAt??=new Map()).set(notice.seq,performance.now());(media.freshAt??=new Map()).set(notice.seq,media.nextNativeAt??performance.now());delete media.nextNativeAt;
+            media.seq=notice.seq;(media.pending??=[]).push(notice.seq);
             if(!sendMedia(notice))throw Error("Native metadata congestion");
           } else if(msg.type==="native_draw_ack"){
             const ack=DesktopNativeDrawAck.parse(msg),media=v.media;
             if(!v.nativeDatagrams||!media?.native||!media.datagrams||ack.id!==media.id||ack.generation!==media.generation||ack.seq!==media.pending?.[0])throw Error("Native direct ACK order");
-            const at=media.freshAt?.get(ack.seq)??media.sentAt?.get(ack.seq);media.pending.shift();media.lastAck=ack.seq;if(!ack.dropped&&at!==undefined)media.drawnAt=at;media.sentAt?.delete(ack.seq);media.freshAt?.delete(ack.seq);
+            media.pending.shift();media.lastAck=ack.seq;
           } else if(msg.type==="native_codec_reset"){
             const reset=z.object({type:z.literal("native_codec_reset"),id:z.string().uuid()}).strict().parse(msg);
             if(!v.nativeCodecs||!v.media?.native||reset.id!==v.media.id)throw Error("Wrong codec reset");

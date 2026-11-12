@@ -49,20 +49,19 @@ export class DesktopNativeVideo {
         peer?:DesktopNativeDatagrams;audio?:DesktopAudioLease;
         started:boolean;quality?:DesktopNativeQuality;resolution?:DesktopNativeResolution;
         requestedCodec:DesktopNativeCodec;codecName?:DesktopNativeCodec;codecFallback?:"encoder"|"decoder"|"unavailable";retried:boolean;
-        generation:number;fps:number;nextFrameAt?:number;
+        generation:number;fps:number;
         barrier?:{generation:number;width:number;height:number;at:number;baseSeq?:number};
         bitrate:number;adaptAt:number;acks:number;losses:number;maxAck:number;
         seq: number;
         pending: {
           seq: number;
-          at: number;freshAt:number;
+          at: number;
           captureMs: number;
           conversionMs: number;
           encodeMs: number;
         }[];
         statsAt: number;
         lastAck: number;
-        drawnAt?: number;
         at: number;
         timestamp: number;
         stream: boolean;
@@ -178,7 +177,7 @@ export class DesktopNativeVideo {
     if(!s||ack.id!==s.id||ack.generation!==s.generation||ack.seq<=s.lastAck)return;
     if(ack.dropped&&!direct)throw Error("Dropped ACK requires native datagrams");
     const pending=s.pending[0];if(ack.seq!==pending?.seq)throw Error("Native video ACK order");
-    s.lastAck=ack.seq;if(!ack.dropped)s.drawnAt=pending.freshAt;s.pending.shift();
+    s.lastAck=ack.seq;s.pending.shift();
     const now=performance.now(),ackMs=Math.min(60000,Math.max(0,now-pending.at));
     if(direct){
       // Same reliable FIFO as frame notices, before releasing source credit.
@@ -212,7 +211,7 @@ export class DesktopNativeVideo {
     const ack=DesktopNativeFormatAck.parse(raw),s=this.active,b=s?.barrier;
     if(!this.hooks.adaptive||!s||!b||ack.id!==s.id||ack.generation!==b.generation||ack.baseSeq!==b.baseSeq||performance.now()-b.at>=3000)return;
     if(!this.hooks.send({...ack,type:"native_format_ready"})){this.stop("congested");return;}
-    s.nextFrameAt=b.at;delete s.barrier;s.at=performance.now();
+    delete s.barrier;s.at=performance.now();
     this.hooks.write({...ack,type:"native_profile_resume"});
   }
   fromHelper(raw: unknown): boolean {
@@ -305,12 +304,11 @@ export class DesktopNativeVideo {
     s.seq = frame.seq;
     s.pending.push({
       seq: frame.seq,
-      at: performance.now(),freshAt:s.nextFrameAt??performance.now(),
+      at: performance.now(),
       captureMs: frame.captureMs ?? 0,
       conversionMs: frame.conversionMs ?? 0,
       encodeMs: frame.encodeMs ?? 0,
     });
-    delete s.nextFrameAt;
     s.timestamp = frame.timestamp;
     s.at = performance.now();
     if(s.peer){
@@ -324,10 +322,6 @@ export class DesktopNativeVideo {
     if(s&&s.started&&now-(s.pending[0]?.at??s.at)>(s.pending.length?2500:5000)){
       if(s.peer)this.fallback(s);else this.stop(s.pending.length?"congested":"unavailable");
     }
-  }
-  hasFreshDraw(now = performance.now()): boolean {
-    const s = this.active;
-    return !!s?.stream && s.drawnAt !== undefined && now - s.drawnAt < 2000;
   }
   stop(reason: "stopped" | "unavailable" | "congested" = "stopped",notify=true) {
     const s = this.active;

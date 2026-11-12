@@ -29,12 +29,12 @@ it('drains frames made before the command was read, obtains actual SPS codec, th
  expect(f.send.mock.calls.filter(([m])=>(m as any).type==='media_status')).toHaveLength(2);
  f.video.stop();
 });
-it('does not renew input freshness from format ACK or the age of a retained IDR',()=>{
+it('continues video after the acknowledged format barrier',()=>{
  const clock=vi.spyOn(performance,'now').mockReturnValue(1000);
  try{
  const f=fixture();f.video.fromHelper(f.frame(1));f.ack(1);f.profile();
  f.applied(1);clock.mockReturnValue(3800);f.video.fromViewer({type:'native_format_ack',id:f.id,generation:2,baseSeq:1});
- expect(f.video.hasFreshDraw()).toBe(false);f.video.fromHelper(f.frame(2,2));clock.mockReturnValue(3900);f.video.tick();expect(f.policy).toHaveBeenLastCalledWith(true);f.ack(2,2);expect(f.video.hasFreshDraw()).toBe(false);f.video.fromHelper(f.frame(3,2));f.ack(3,2);expect(f.video.hasFreshDraw()).toBe(true);f.video.stop();
+ f.video.fromHelper(f.frame(2,2));clock.mockReturnValue(3900);f.video.tick();expect(f.policy).toHaveBeenLastCalledWith(true);f.ack(2,2);f.video.fromHelper(f.frame(3,2));f.ack(3,2);f.video.stop();
  }finally{clock.mockRestore();}
 });
 it('bounds the whole barrier and ignores late ACK after a stopped session',()=>{
@@ -61,8 +61,8 @@ it.each([false,true])('preserves UDP drop credit separately from a shared draw c
  const f=fixture(shared);try{f.video.fromHelper(f.frame(1));(f.video as any).ack({type:'native_video_ack',id:f.id,generation:1,seq:1,dropped:true},true);expect(f.write.mock.calls.filter(([m])=>m.type==='native_video_ack').at(-1)?.[0]).toEqual({type:'native_video_ack',id:f.id,seq:1,...(shared?{dropped:true}:{})});}finally{f.video.stop();}
 });
 
-it('shared profile preparation keeps the held IDR input age and never writes a private source profile directly',()=>{
- const clock=vi.spyOn(performance,'now').mockReturnValue(1000);const f=fixture(true);try{f.video.fromHelper(f.frame(1));f.ack(1);f.profile();expect(f.write).toHaveBeenLastCalledWith({type:'native_resolution',id:f.id,width:960,height:600});expect(f.write.mock.calls.some(([m])=>m.type==='native_profile')).toBe(false);f.video.fromHelper({type:'native_profile_prepare',id:f.id,generation:2,width:960,height:600});f.applied(1);clock.mockReturnValue(2900);f.video.fromViewer({type:'native_format_ack',id:f.id,generation:2,baseSeq:1});f.video.fromHelper(f.frame(2,2));clock.mockReturnValue(3200);f.ack(2,2);expect(f.video.hasFreshDraw()).toBe(false);f.video.fromHelper(f.frame(3,2));f.ack(3,2);expect(f.video.hasFreshDraw()).toBe(true);}finally{f.video.stop();clock.mockRestore();}
+it('shared profile preparation never writes a private source profile directly',()=>{
+ const clock=vi.spyOn(performance,'now').mockReturnValue(1000);const f=fixture(true);try{f.video.fromHelper(f.frame(1));f.ack(1);f.profile();expect(f.write).toHaveBeenLastCalledWith({type:'native_resolution',id:f.id,width:960,height:600});expect(f.write.mock.calls.some(([m])=>m.type==='native_profile')).toBe(false);f.video.fromHelper({type:'native_profile_prepare',id:f.id,generation:2,width:960,height:600});f.applied(1);clock.mockReturnValue(2900);f.video.fromViewer({type:'native_format_ack',id:f.id,generation:2,baseSeq:1});f.video.fromHelper(f.frame(2,2));clock.mockReturnValue(3200);f.ack(2,2);f.video.fromHelper(f.frame(3,2));f.ack(3,2);}finally{f.video.stop();clock.mockRestore();}
 });
 it.each(['unopted','unstarted','generation','dimensions'])('rejects a shared prepare before publishing a barrier: %s',kind=>{
  const f=fixture(kind!=='unopted');try{if(kind!=='unstarted')f.video.fromHelper(f.frame(1));const p={type:'native_profile_prepare',id:f.id,generation:kind==='generation'?3:2,width:kind==='dimensions'?1600:960,height:600};expect(()=>f.video.fromHelper(p)).toThrow('Shared native profile preparation');expect(f.send.mock.calls.some(([m])=>(m as any).type==='native_profile_pending')).toBe(false);}finally{f.video.stop();}

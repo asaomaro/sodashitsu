@@ -494,12 +494,6 @@ export class DesktopProvider {
             if(!s.imageFailed&&s.ready&&s.imageSocket?.readyState===WebSocket.OPEN){s.imageReady=true;const held=s.heldImage;delete s.heldImage;if(held)this.sendImage(s,held);}else this.failImages(s);return;
           }
           if(p.imageTicket&&Object.keys(rawMessage).length===1&&rawMessage.type==="image_closed"){this.failImages(s);return;}
-          // Private A->B marker, negotiated through RPC capabilities. Browser
-          // messages and agent actions retain their existing strict schemas.
-          const nativeDraw = rawMessage.type === "input" && rawMessage.nativeDraw === true;
-          if (nativeDraw) delete rawMessage.nativeDraw;
-          const platformIdleInput=rawMessage.type==="input"&&rawMessage.platformIdleInput===true;
-          if(platformIdleInput)delete rawMessage.platformIdleInput;
           const m = RemoteDesktopViewerMessage.parse(rawMessage);
           if(p.options.sharedDesktop&&(!p.options.sharedRate||!s.sharedRate)&&m.type==="media"&&m.settings)m.settings.adaptive=false;
           if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&p.videoTicket&&!s.videoReady){this.send(s,{type:"media_unavailable"});return;}
@@ -615,13 +609,12 @@ export class DesktopProvider {
               m.frameSeq <= s.seq &&
               m.seq > s.inputSeq &&
               performance.now() - s.lastSeen < 5000 &&
-              s.seq > 0 &&
-              (!nativeDraw || s.native?.hasFreshDraw() === true)
+              s.seq > 0
             ) {
               if(!this.activateControl(s)){this.applyControl(s,false);return;}
               s.inputSeq = m.seq;
               s.inputAcks.submitted(m.seq,m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0);
-              this.write(s, { ...m, expiresAt: Date.now() + 500, ...(nativeDraw && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
+              this.write(s, { ...m, expiresAt: Date.now() + 500, ...(s.video && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
             }
           } else {
             this.stop(s);
