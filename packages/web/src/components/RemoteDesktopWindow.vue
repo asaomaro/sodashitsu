@@ -1132,7 +1132,6 @@ function move(e: PointerEvent) {
 function visibility() {
   if (document.hidden) relinquish();
 }
-const heartbeat = setInterval(() => send({ type: "heartbeat" }), 2000);
 onMounted(() => {
   if (screenElement.value && typeof ResizeObserver !== "undefined") {
     displayObserver = new ResizeObserver(() => {
@@ -1150,7 +1149,6 @@ onBeforeUnmount(() => {
   displayObserver?.disconnect();
   clearInterval(clipboardTimer);
   dead = true;
-  clearInterval(heartbeat);
   stop();
   desktopSockets.dispose();
   window.removeEventListener("blur", relinquish);

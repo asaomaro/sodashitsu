@@ -290,8 +290,8 @@ func nativeMacMonitorLayout(_ facts:[NativeMonitorFact],selected:UInt32) -> [Str
     return ["coordinateSpace":"logical","primaryKnown":true,"pixelSize":["width":current.pixelWidth,"height":current.pixelHeight],"switchingSupported":true,"selected":"mac:\(selected)","allSupported":false,"bounds":["x":Int(bounds.origin.x),"y":Int(bounds.origin.y),"width":Int(bounds.width),"height":Int(bounds.height)],"monitors":monitors]
 }
 struct FrameTicket { let revision: UInt64; let started: Double; let inputSeq: Int64 }
-func canPublish(_ ticket: FrameTicket, revision: UInt64, now: Double, active: Bool) -> Bool {
-    active && ticket.revision == revision && now >= ticket.started && now-ticket.started < 1000
+func canPublish(_ ticket: FrameTicket, revision: UInt64, active: Bool) -> Bool {
+    active && ticket.revision == revision
 }
 func nativeCodecCandidatesAfterQuery(query:()->Bool,validAfterQuery:()->Bool) -> [String]? {
     let hevc=query()
@@ -502,9 +502,8 @@ final class DesktopSource {
     var configuration: SCStreamConfiguration?
     var width=0,height=0,fps=0,quality=0
     var initialFPS=0,initialQuality=0
-    var lastCapture=milliseconds(),lastHeartbeat=milliseconds()
+    var lastHeartbeat=milliseconds()
     var pending: Int64=0,sequence: Int64=0
-    var pendingAt=milliseconds()
     var configured=false
     var configuredAt=milliseconds()
     var inputCeiling=false
@@ -534,7 +533,7 @@ final class DesktopSource {
     }
     func publishable(_ ticket:FrameTicket) -> Bool {
         let granted=sourceActive()
-        return !dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:granted)
+        return !dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,active:granted)
     }
     func start() {
         signal(SIGPIPE,SIG_IGN)
@@ -550,9 +549,7 @@ final class DesktopSource {
                 if let audio=self.systemAudio,!self.audioLive(audio.id) {audio.stop()}
                 if milliseconds()-self.lastHeartbeat>8000 { self.stop("source_changed") }
                 else if self.ready && !self.sourceActive() { self.stop("source_changed") }
-                else if self.ready && milliseconds()-self.lastCapture>1500 { self.stop("source_stalled") }
                 else if self.configured && !self.ready && milliseconds()-self.configuredAt>15000 { self.stop("backend_failure") }
-                else if self.pending != 0 && milliseconds()-self.pendingAt>5000 { self.stop("backend_failure") }
             }
         }
         DispatchQueue.global(qos:.userInitiated).async { [weak self] in self?.readCommands() }
@@ -724,16 +721,15 @@ final class DesktopSource {
                 guard sourceActive() else { throw NativeError("source_changed") }
                 let image=try await SCScreenshotManager.captureImage(contentFilter:filter!,configuration:configuration)
                 guard !dead else { return }
-                lastCapture=milliseconds()
                 guard image.width==width,image.height==height else { throw NativeError("source_changed") }
                 nativeVideo?.offer(image,captured:ticket.started)
-                if pending==0 && milliseconds()-lastJPEG>=1000/Double(fps) && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) {
+                if pending==0 && milliseconds()-lastJPEG>=1000/Double(fps) && canPublish(ticket,revision:input!.revision,active:sourceActive()) {
                     let captureMs=milliseconds()-ticket.started,encodedAt=milliseconds()
                     guard let jpeg=NSBitmapImageRep(cgImage:image).representation(using:.jpeg,properties:[.compressionFactor:Double(quality)/100]),jpeg.count<=2*1024*1024 else { throw NativeError("backend_failure") }
                     let regionProofs=try regions.proofs(image)
                     let encodeMs=milliseconds()-encodedAt
                     try locked {
-                        guard canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) else { return }
+                        guard canPublish(ticket,revision:input!.revision,active:sourceActive()) else { return }
                         if !ready {
                             var hello:[String:Any]=["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]]
                             if monitorRequested,let layout=monitorLayout {hello["monitorLayout"]=layout}
@@ -749,7 +745,7 @@ final class DesktopSource {
                             } })
                         }
                         guard sequence<Int64(safeInteger) else { throw NativeError("backend_failure") }
-                        lastJPEG=milliseconds();sequence+=1;pending=sequence;pendingAt=milliseconds();let seq=sequence
+                        lastJPEG=milliseconds();sequence+=1;pending=sequence;let seq=sequence
                         var info: [String:Any]=["seq":seq,"width":width,"height":height,"format":"image/jpeg","captureMs":captureMs,"encodeMs":encodeMs,"timing":"measured","sourceInputSeq":ticket.inputSeq]
                         if !regionProofs.isEmpty { info["regions"]=regionProofs }
                         pendingSnapshotIDs=snapshots
@@ -935,12 +931,11 @@ func generatedTests() throws -> Int {
     noDeadlineInput.release()
     let revision=guardInput.revision
     let ticket=FrameTicket(revision:revision,started:1000,inputSeq:guardInput.seq)
-    try check(canPublish(ticket,revision:revision,now:1001,active:true),"fresh ticket")
-    try check(!canPublish(ticket,revision:revision,now:2000,active:true),"stale ticket")
-    try check(!canPublish(ticket,revision:revision,now:999,active:true),"clock rollback")
-    try check(!canPublish(ticket,revision:revision,now:1001,active:false),"source revoked")
+    try check(canPublish(ticket,revision:revision,active:true),"fresh ticket")
+    try check(canPublish(ticket,revision:revision,active:true),"healthy delayed ticket")
+    try check(!canPublish(ticket,revision:revision,active:false),"source revoked")
     guardInput.release()
-    try check(!canPublish(ticket,revision:guardInput.revision,now:1001,active:true),"release invalidates queued image")
+    try check(!canPublish(ticket,revision:guardInput.revision,active:true),"release invalidates queued image")
     try check(guardInput.keys.isEmpty && guardInput.buttons.isEmpty && !guardInput.control,"release clears held state")
     try check(sink.events.last?.code==59 && sink.events.last?.down==false,"release sends modifier up")
     guardInput.control=true

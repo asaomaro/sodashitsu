@@ -78,7 +78,7 @@ interface ViewerSocket {
  send(data:string|Uint8Array):void;
  on(event:string,callback:(...args:any[])=>void):unknown;
  once(event:string,callback:(...args:any[])=>void):unknown;
- close(code?:number,reason?:string):void;terminate():void;
+ close(code?:number,reason?:string):void;terminate():void;ping():void;
 }
 type LocalProvider=Pick<DesktopProviderApi,"capabilities"|"endpointScope"|"clientGone"|"epoch">;
 type Viewer = {
@@ -236,9 +236,8 @@ export class DesktopRelay {
       return await new Promise((resolve,reject)=>{
         let settled=false;
         const deadline=setTimeout(()=>{socket.onFailure("デスクトップの準備が時間内に完了しませんでした");},45000);deadline.unref();
-        const heartbeat=setInterval(()=>socket.receive({type:"heartbeat"}),2000);heartbeat.unref();
         let revoke=()=>{};
-        socket.once("close",()=>{clearTimeout(deadline);clearInterval(heartbeat);revoke();if(!settled){settled=true;reject(new RpcError("unauthorized",socket.failureMessage??"デスクトップ接続が終了しました"));}});
+        socket.once("close",()=>{clearTimeout(deadline);revoke();if(!settled){settled=true;reject(new RpcError("unauthorized",socket.failureMessage??"デスクトップ接続が終了しました"));}});
         socket.onFailure=message=>{if(!settled){settled=true;reject(new RpcError("unauthorized",message));}socket.close();};
         socket.onFrame=()=>{
           if(settled)return;
@@ -297,13 +296,15 @@ export class DesktopRelay {
       const now = performance.now();
       this.agents.tick();
       this.videoLanes.tick();this.imageLanes.tick();this.clipboardLanes.tick();this.microphoneLanes.tick();this.fileLanes.tick();
-      for (const v of this.viewers)
+      for (const v of this.viewers) {
         if (
           !(v.headlessActive?v.headlessActive():auth.verifySession(v.sessionId)) ||
           now - v.lastSeen > 12000 ||
           (v.started && !v.ready && now - v.since > (v.nativePlatform?140000:v.virtualDisplay?25000:15000))
         )
           this.stop(v);
+        else if(v.ws.readyState===WebSocket.OPEN)v.ws.ping();
+      }
     }, 1000);
     this.timer.unref();
   }
@@ -501,6 +502,7 @@ export class DesktopRelay {
     };
     this.viewers.add(v);
     ws.on("close", () => this.stop(v));
+    ws.on("pong",()=>{v.lastSeen=performance.now();});
     ws.on("message", (rawBytes, binary) => {
       const bytes = Buffer.isBuffer(rawBytes)
         ? rawBytes
@@ -588,9 +590,6 @@ export class DesktopRelay {
             }
             this.send(v.provider, m);
           }
-        } else if (m.type === "heartbeat") {
-          v.lastSeen = now;
-          if (v.provider) this.send(v.provider, m);
         } else if (m.type === "stop") this.stop(v);
         else if (m.type === "agent_grant") {
           if (m.enabled && v.ready && v.allowInput && !v.secureDesktop) {

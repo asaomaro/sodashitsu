@@ -577,24 +577,23 @@ class PortalHelper:
         while not self.closed:
             try:line,revision,seq,done,failure,publish=self.output_queue.get(timeout=0.1)
             except queue.Empty:continue
-            # Serialize the entire bounded JSON record with ordinary input.
-            # Revisions cannot change between chunks. An OS scope invalidation
-            # still aborts before the terminating newline; it cannot be resumed.
-            def record():
-                offset=0;deadline=time.monotonic()+0.1
-                while offset<len(line):
-                    if time.monotonic()>deadline:os._exit(1)
-                    if not select.select([], [fd], [], 0.01)[1]:continue
-                    try:
-                        if not self.commit(revision,lambda:None,failure) or publish and not publish():
-                            if offset:os._exit(1)
-                            break
-                        offset+=os.write(fd,line[offset:offset+16384])
-                    except BlockingIOError:continue
-                    except OSError:os._exit(1)
-            def admitted():
-                if publish is None or publish():record()
-            if not self.commit(revision,admitted,failure) and seq:self.GLib.idle_add(self.discard_pending,seq)
+            # Admit one complete bounded record under source/input identity,
+            # then let the pipe apply backpressure without blocking ordinary input.
+            admitted=[False]
+            self.commit(revision,lambda:admitted.__setitem__(0,publish is None or publish()),failure)
+            if not admitted[0]:
+                if seq:self.GLib.idle_add(self.discard_pending,seq)
+                if done:done.set()
+                continue
+            offset=0
+            while offset<len(line):
+                if not self.commit(None,lambda:None,failure):
+                    self.GLib.idle_add(self.close);return
+                if not select.select([], [fd], [], 0.01)[1]:continue
+                try:offset+=os.write(fd,line[offset:offset+16384])
+                except BlockingIOError:continue
+                except OSError:
+                    self.GLib.idle_add(self.close);return
             if done:done.set()
     def discard_pending(self,seq):
         if self.pending==seq:self.pending=0
@@ -971,7 +970,7 @@ class PortalHelper:
                     running=sample.get_segment().to_running_time(self.Gst.Format.TIME,pts)
                     if running==self.Gst.CLOCK_TIME_NONE or running<=self.barrier:return True
                     data=buffer.extract_dup(0,buffer.get_size())
-                    self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height),list(self.snapshot_ids))
+                    self.queued=(data,width,height,self.guard.revision,self.regions.take(pts,width,height),list(self.snapshot_ids))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
                         self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal",**({"virtualDisplay":True} if self.config["virtual"] else {}),"allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"monitorLayout":self.monitor_layout(native_size)} if self.monitor_layout(native_size) else {}),**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60,**({"nativeCadence":True} if self.native.cadence else {}),**({"nativeAdaptive":True} if self.native.adaptive else {}),**({"nativeCodecs":True,"nativeCodecCandidates":_native_video.GstH264Encoder.codecs(self.Gst)} if self.native.codecs else {})} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {}),**({"microphone":True} if self.microphone_available else {})})
@@ -980,8 +979,8 @@ class PortalHelper:
                             self.restore_sent=True;session=self.session
                             self.output({"type":"native_monitor_restore","token":self.restore_token,"monitors":[record["id"] for record in self.monitor_records]},publish=lambda:self.monitor_live(session))
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
-                    data,width,height,revision,received,proofs,snapshots=self.queued;self.queued=None
-                    if revision==self.guard.revision and time.monotonic()-received<1:
+                    data,width,height,revision,proofs,snapshots=self.queued;self.queued=None
+                    if revision==self.guard.revision:
                         encoded=base64.b64encode(data).decode();info={"seq":self.seq+1,"width":width,"height":height,"format":"image/jpeg","captureMs":0,"encodeMs":0,"timing":"unavailable","sourceInputSeq":self.guard.seq}
                         if proofs:info["regions"]=proofs
                         if snapshots:info["snapshotIds"]=snapshots

@@ -21,6 +21,7 @@ export class HeadlessViewer extends EventEmitter {
   if(message.type==="error"){this.failureMessage=message.message;queueMicrotask(()=>this.onFailure(message.message));}
   if(message.type==="ready"&&(message.secureDesktop||!message.allowInput))queueMicrotask(()=>this.onFailure("ロック画面または入力が許可されていない画面です"));
  }
+ ping():void{if(this.readyState===1)this.emit("pong");}
  close():void{if(this.readyState!==1)return;this.readyState=3;this.emit("close",1000);}
  terminate():void{this.close();}
 }

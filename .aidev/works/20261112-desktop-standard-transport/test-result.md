@@ -692,3 +692,73 @@ Ran 1 test in 0.001s
 FAILED (failures=1)
 
 ```
+
+## Phase 9
+
+Actual13s browser test sends no JSON heartbeat: physical WebSocket, Provider and privileged source remain live. Existing protocol pong refreshes transport liveness while no image ACK is sent. Half-open test disables protocol auto-pong, proves lastSeen does not refresh, then existing watchdog closes viewer and Provider. Headless ping adapter stays live under actual owner, and owner close invalidates lease.2 tests PASS. Signin Worker27 PASS; Linux Guards19 PASS, including chunked admitted JSON completing while input executes during pipe writes. OLD production Relay/Provider fail healthy no-JSON test; old writer fails input-progress regression. Sources restored/byte-compared. Swift source selftest updated; compiler unavailable.
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (353 tests | 1 failed | 352 skipped) 13142ms
+   × keeps healthy browser and headless sockets alive without JavaScript heartbeat messages 13139ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > keeps healthy browser and headless sockets alive without JavaScript heartbeat messages
+AssertionError: expected 3 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 3
+
+ ❯ src/desktop/DesktopRelay.test.ts:2144:420
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 352 skipped (353)
+   Start at  23:53:05
+   Duration  14.86s (tests 89%, transform 9%, import 2%)
+
+F
+======================================================================
+FAIL: test_chunked_record_finishes_admitted_json_while_input_continues_without_waiting_for_pipe (__main__.Guards.test_chunked_record_finishes_admitted_json_while_input_continues_without_waiting_for_pipe)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-portal-helper.py", line 171, in test_chunked_record_finishes_admitted_json_while_input_continues_without_waiting_for_pipe
+    with patch.object(module,"os",fakeos),patch.object(module.select,"select",lambda *args:([],[1],[])),patch.object(module.sys,"stdout",SimpleNamespace(fileno=lambda:1)):helper.writer()
+                                                                                                                                                                           ^^^^^^^^^^^^^^^
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/linux-portal-helper.py", line 597, in writer
+    if not self.commit(revision,admitted,failure) and seq:self.GLib.idle_add(self.discard_pending,seq)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/linux-portal-helper.py", line 574, in commit
+    action();return True
+    ^^^^^^^^
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/linux-portal-helper.py", line 596, in admitted
+    if publish is None or publish():record()
+                                    ^^^^^^^^
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/linux-portal-helper.py", line 592, in record
+    offset+=os.write(fd,line[offset:offset+16384])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-portal-helper.py", line 167, in write
+    self.assertTrue(input_done.wait(1))
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 1 test in 1.017s
+
+FAILED (failures=1)
+
+```

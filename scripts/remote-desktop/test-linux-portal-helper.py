@@ -154,7 +154,7 @@ class Guards(unittest.TestCase):
    thread=threading.Thread(target=writer);thread.start();self.assertTrue(started.wait(1));g.revision+=1
   self.assertTrue(done.wait(1));thread.join();self.assertEqual(writes,[False])
   helper.dead=True;self.assertFalse(helper.commit(g.revision,lambda:self.fail("Ended scope was published")))
- def test_chunked_record_keeps_ordinary_input_outside_the_complete_json(self):
+ def test_chunked_record_finishes_admitted_json_while_input_continues_without_waiting_for_pipe(self):
   from unittest.mock import patch
   helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None,idle_add=lambda *args:None),None);guard,c,a=self.setup_guard();helper.guard=guard;line=b"x"*40000+b"\n";helper.output_queue.put((line,guard.revision,1,None,False,None));chunks=[];input_done=threading.Event();threads=[]
   def input():
@@ -163,8 +163,8 @@ class Guards(unittest.TestCase):
    chunks.append(data)
    if len(chunks)==1:
     thread=threading.Thread(target=input);threads.append(thread);thread.start()
-    # Writer owns the record gate; input must stay pending until its newline.
-    self.assertFalse(input_done.wait(0.02))
+    # A single writer preserves JSON framing while input proceeds independently.
+    self.assertTrue(input_done.wait(1))
    if data.endswith(b"\n"):helper.closed=True
    return len(data)
   fakeos=SimpleNamespace(set_blocking=lambda *args:None,write=write,_exit=lambda _:self.fail("Normal input terminated a partially written record"))

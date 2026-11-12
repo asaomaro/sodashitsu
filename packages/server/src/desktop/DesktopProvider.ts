@@ -372,6 +372,7 @@ export class DesktopProvider {
           (performance.now() - s.started > (cfg.nativePlatform?130000:p.options.virtualDisplay?25000:15000) && !s.ready)
         )
           this.stop(s);
+        else {if(ws.readyState===WebSocket.OPEN)ws.ping();this.write(s,{type:"heartbeat"});}
       }, 1000),
     };
     s.timer.unref();
@@ -381,6 +382,7 @@ export class DesktopProvider {
     else this.active = s;
     ws.on("error", () => this.stop(s));
     ws.on("close", () => this.stop(s));
+    ws.on("pong",()=>{s.lastSeen=performance.now();});
     return new Promise((resolve, reject) => {
       let settled = false;
       const fail = () => {
@@ -542,9 +544,6 @@ export class DesktopProvider {
                 ...(cfg.nativePlatform?{expiresAt:Date.now()+1000}:{}),
               });
             }
-          } else if (m.type === "heartbeat") {
-            s.lastSeen = performance.now();
-            this.write(s, m);
           } else if (m.type === "stop") this.stop(s);
           else if(m.type==="native_pointer_cancel") {s.inputAcks.invalidatePointers();delete s.pointerWitness;}
           else if (m.type === "release") {
