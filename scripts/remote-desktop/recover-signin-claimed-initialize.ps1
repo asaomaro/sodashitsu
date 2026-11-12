@@ -1,7 +1,0 @@
-param([switch]$ValidateOnly,[ValidateSet('inspect','bind','recover')][string]$Action='inspect',[string]$OwnerSid,[string]$ManifestSha256,[string]$RunFileSha256,[string]$ClaimFileSha256,[string]$ProofNonce,[string]$ProofSha256,[string]$TicketSha256)
-$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
-$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunJournal.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninControllerMutex.cs','WindowsSigninScm.cs','WindowsSigninInstallFiles.cs','WindowsSigninUnclaimedRecovery.cs','WindowsSigninRestartRecovery.cs','WindowsSigninPartialIdentityProof.cs','WindowsSigninClaimedInitializeRecovery.cs')
-Add-Type -Path ($names|ForEach-Object {Join-Path $PSScriptRoot $_}) -ReferencedAssemblies System.dll,System.Core.dll,System.Security.dll,System.Web.Extensions.dll
-if($ValidateOnly){'claimed_initialize_controller_compiled_no_scm_or_storage_operations';exit 0}
-try{$ticket=if($PSBoundParameters.ContainsKey('TicketSha256')){$TicketSha256}else{$null};[SodaDesktopSigninClaimedInitializeRecovery]::Run($Action,$OwnerSid,$ManifestSha256,$RunFileSha256,$ClaimFileSha256,$ProofNonce,$ProofSha256,$ticket)|ConvertTo-Json -Compress}
-catch{[Console]::Error.WriteLine('Claimed initialization recovery refused. Preserve the key, claimed request, run records and transition; do not replay or reset.');exit 1}

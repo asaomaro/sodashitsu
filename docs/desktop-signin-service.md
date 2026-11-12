@@ -123,44 +123,13 @@ marker除去前に失敗すれば、その状態と無効サービスを残し�
 
 `validate-signin-service-dispatch.ps1 -NegativeControls` は通常権限の生成adapterで名前と起動/停止/失敗を検査します。実SCM・鍵・trustは操作しません。既存の `validate-signin-host.ps1` は子プロセス/Jobと配布用EXE生成を含みます。起動失敗で未確認のpending要求が残った場合は、修正版のEXEを上書きして再送することはできません。要求とjournalを保持して明示的な復旧を行います。
 
-## 未受理のまま期限が切れた初期化要求の取消
+## 旧版の実行履歴
 
-`recover-signin-unclaimed.ps1` は、初期化の管理要求がclaim前に期限切れとなった場合だけの明示的なローカル復旧です。`-ValidateOnly` はコンパイルだけを行います。実行時は昇格した管理者で、固定owner/配布物のSHAと、確認した元 `intent.pending`／`admin.pending` の生バイトSHAを `-RunFileSha256`／`-AdminFileSha256` に指定します。
-
-停止中の厳格なサービス構成、同じ配布物と排他barrier、鍵などがまだない初回slot、空runtime、未受理の2ファイルだけを必要とします。暗号化済み要求のowner/nonce/hash/package/barrierと両期限を照合し、操作がinitializeであることを確認します。claim/started/不明なファイル・未期限切れ・別操作があれば拒否します。
-
-`install.transition` を先に保存し、元runs/adminを `runs-unclaimed-<id>`／`admin-unclaimed-<id>` へ非置換で退避します。Windowsのdirectory移動前だけ元file handleを閉じ、移動後は同じfile identityとhashを確認したarchive handleを再保持します。新しい実行世代のinitialと空adminを用意し、永久の `unclaimed-<id>.json` に取消の結び付きを残してから印を除去します。元要求を再生・削除せず、cleanなprocess停止を証明した記録とは扱いません。サービスの起動・停止・設定変更や鍵/trustの生成・消去は行いません。成功後は既存の明示的な更新へ進めます。
-
-途中失敗では印・退避済み/未退避の原本・途中ファイルを保持し、既存の起動・更新・復旧を拒否します。自動で再試行・印の削除・初期化はしません。生成検査は `validate-signin-unclaimed-recovery.ps1 -NegativeControls` です。sr-pcの実配置では、下記のとおり取消と更新を確認済みです。
-
-2026-11-05のsr-pcでは、この未受理取消と次の配布物への更新が成功しました。その後のadmin起動は観測済みのまま異常終了したため、この取消操作の対象にはなりません。native hostとTypeScriptで状態保存先の判定が一致しない不具合を修正しています。
-
-## 観測済みの異常終了から、OS再起動を挟む限定復旧
-
-`recover-signin-restart.ps1` は、未claimの期限切れinitialize、空のruntime、正確なobserved記録3件、以前の未受理取消1件と完了した更新1件の履歴だけを対象にします。既存鍵・登録情報・未知のファイル・他の履歴は拒否します。一般の異常終了を自動復旧するものではありません。
-
-昇格した管理者で `-Action bind -OwnerSid … -ManifestSha256 … -RunFileSha256 … -AdminFileSha256 …` を実行し、返された `ticketSha256` を記録します。固定配布物、SCMの停止状態、元の生バイト、全項目のidentity/hash、排他barrierを照合し、起動を遮断する印を保存します。固定System32の `services.exe` を、SYSTEM・session 0・critical・生存が確認できるnative handleで保持し、PIDと作成時刻を印に固定します。
-
-OS再起動後、同じ指定に `-Action recover -TicketSha256 …` を渡します。検証済みのcritical SCM実体が変わり、その他の証拠が一致する場合だけ、元のruns/adminを退避して新generationと永久receiptを作ります。旧Host/Nodeの正常終了やJob-zeroを証明したことにはしません。同じ実体、証拠の差異、中断状態、再実行は拒否し、原本と印を保持します。復旧操作自体は再起動もサービス起動も行いません。
-
-この境界の考え方は、[Microsoftのcritical system servicesの説明](https://learn.microsoft.com/en-us/windows/win32/rstmgr/critical-system-services)と[IsProcessCritical](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocesscritical)に基づきます。kernelのboot GUIDとは区別します。critical属性の変更やSCMの終了は行いません。
-
-`-ValidateOnly` はコンパイルだけ、`validate-signin-restart-recovery.ps1 -NegativeControls` は通常ユーザーの隔離ファイルで成功・再実行拒否・中断保持と負例を検査します。sr-pcでBindと同じ再起動状態からのRecover拒否は確認済みです。実OS再起動後のRecover以降は[実機記録](../.aidev/works/20261105-signin-restart-recovery/verification.md)で未完了として管理しています。
-
-## claim後の初期化が鍵の保存直後に中断した場合
-
-`recover-signin-claimed-initialize.ps1` は、期限切れのclaim済みinitialize、観測済みの実行記録、既知の取消・再起動復旧履歴、`runtime/desktop-endpoint/identity.json` だけがある状態に限定した管理者用ツールです。未知の履歴やファイル、既存のtrust・登録情報があれば拒否します。初期化要求の再生や鍵の作り直しは行いません。
-
-先に、レビュー済みのソースを管理者だけが書ける場所へ配置し、`create-signin-partial-identity-proof.ps1 -OwnerSid … -ManifestSha256 … -Nonce …` をSYSTEMのprimary tokenで実行します。これは既存鍵の読取専用検査です。SYSTEMのCurrentUser DPAPIで復号し、P-256 PKCS8形式、秘密鍵による署名と保存公開鍵の一致、trustが空であることを確認します。鍵・平文を出力せず、privateな固定先へpackage・SCM実体・runtimeのSHAと公開指紋を含む証拠を作ります。生成したtaskの終了と削除を確認してから次へ進みます。
-
-復旧ツールへ `-OwnerSid`、`-ManifestSha256`、元の `-RunFileSha256`／`-ClaimFileSha256`、新しい `-ProofNonce`／`-ProofSha256` を指定します。省略時の `-Action inspect` は照合だけです。証拠は90秒以内で、実行中のSCM実体・barrier・保存された暗号文と一致する必要があります。
-
-`-Action bind` は全項目を固定した印とticket SHAを保存します。OS再起動後、別nonceで同じSYSTEM検査を行い、`-Action recover -TicketSha256 …` を実行します。新しいcritical SCM実体と、元の暗号文・公開指紋・全履歴が一致する場合だけ、runs/adminをUUID名で退避して新しい初期境界を作ります。runtimeは全バイト維持し、元要求の結果は「不明」のまま保存します。サービスは起動しません。中断後は印と原本を残し、自動再試行しません。
-
-その後は、修正版への明示更新と、別nonceの新しいinitialize要求を使います。既存identityの読み込みに失敗した場合の鍵再生成は認めません。複合初期化の期限は各段階30秒・全体60秒で、要求自体の期限も維持します。タイマー通知が遅れても単調時計の期限を超えた結果を成功扱いしません。個別native保存処理の期限は変えていません。
-
-`validate-signin-claimed-initialize.ps1 -NegativeControls` は、実SCMや実保存先を使わず、生成した鍵・履歴で照合、退避、5箇所の中断、改変したソースの拒否を検査します。実機の進捗は[検証記録](../.aidev/works/20261105-claimed-initialize-recovery/verification.md)に分けて記載します。
-
+未受理・再起動・claim後初期化の専用復旧コマンドは廃止しました。サービスの起動可否を
+独自の履歴やSCMプロセスの世代で管理する仕組みは、標準のSCMによる管理へ置き換える対象です。
+このソース整理は実機のファイル・サービス設定を変更しません。既存のruns/adminの記録、
+DPAPIで保護されたidentity・trust・enrollmentは保存したままです。旧履歴を削除したり、
+初期化要求を再実行する操作として扱わないでください。
 
 ### サービスの起動段階を確認する
 
