@@ -157,7 +157,7 @@ export class BridgeFrameDecoder {
   /** 見出しを読んで本体を待っている枠。 */
   private pendingHeader: { type: number; channel: number; length: number } | undefined;
 
-  constructor(private readonly opts: { role: BridgeRole; maxPreamble?: number }) {
+  constructor(private readonly opts: { role: BridgeRole; maxPreamble?: number; maxMessageBytes?: number; allowBinary?: boolean }) {
     this.markerSeen = opts.role === "endpoint";
     this.maxPreamble = opts.maxPreamble ?? BRIDGE_LIMITS.maxPreambleBytes;
   }
@@ -185,6 +185,11 @@ export class BridgeFrameDecoder {
         const length = view.getUint32(5, false);
         if (!accepted.has(type)) throw new BridgeProtocolError(`unexpected frame type ${type}`);
         checkFrame(type, channel, length, this.opts.role); // 長さは本体を待つ前に見る（巨大な長さで溜め込まない）
+        if (type === BRIDGE_FRAME.BINARY && this.opts.allowBinary === false)
+          throw new BridgeProtocolError("binary frames are unavailable");
+        if ((type === BRIDGE_FRAME.TEXT || type === BRIDGE_FRAME.BINARY) &&
+            this.opts.maxMessageBytes !== undefined && length > this.opts.maxMessageBytes)
+          throw new BridgeProtocolError(`frame too large (type ${type}, ${length} bytes)`);
         this.pendingHeader = { type, channel, length };
       }
       const ph = this.pendingHeader;

@@ -32,11 +32,13 @@ it("completes all revocation cleanup when a helper callback throws",()=>{
  const f=fixture(),lease=f.api.attachRecipient("agent",f.api.grant(f.target,f.recipient).ticket,fingerprint);
  vi.mocked(f.target.releaseInputs).mockImplementation(()=>{throw Error("helper stopped");});vi.mocked(f.target.control).mockImplementation(()=>{throw Error("helper stopped");});f.revokeAndRetrust();f.api.tick();expect(()=>f.api.observe("agent",lease.leaseId)).toThrow();expect(f.target.state).toHaveBeenLastCalledWith(false,0);
 });
-it("provides only a finite private RPC owner and rejects duplicate IDs or general RPC",async()=>{
+it("reuses completed request IDs while retaining the private owner and rejecting general RPC",async()=>{
  const f=fixture(),grant=f.api.grant(f.target,f.recipient),rpc=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(rpc);
  const attached=JSON.parse(await rpc.request(request(1,"desktop.agent.attach",{ticket:grant.ticket})));const leaseId=attached.result.leaseId;
  const observed=JSON.parse(await rpc.request(request(2,"desktop.agent.observe",{leaseId})));expect(observed.result.imageBase64).toBe("AQID");
- await expect(rpc.request(request(2,"desktop.agent.observe",{leaseId}))).rejects.toThrow();expect(()=>f.api.observe("other",leaseId)).toThrow();expect(f.target.releaseInputs).toHaveBeenCalledOnce();
+ expect(JSON.parse(await rpc.request(request(2,"desktop.agent.observe",{leaseId}))).error.code).toBe("server_busy");
+ vi.spyOn(performance,"now").mockReturnValue(performance.now()+201);expect(JSON.parse(await rpc.request(request(1,"desktop.agent.observe",{leaseId}))).result.imageBase64).toBe("AQID");expect(f.target.releaseInputs).not.toHaveBeenCalled();
+ await expect(rpc.request(request(2,"desktop.start",{}))).rejects.toThrow();expect(()=>f.api.observe("other",leaseId)).toThrow();expect(f.target.releaseInputs).toHaveBeenCalledOnce();
  const second=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(second);await expect(second.request(request(1,"desktop.start",{}))).rejects.toThrow();
 });
 it("timeout rejects the pending operation, releases input and rejects its delayed result without retry",async()=>{
@@ -59,14 +61,14 @@ it("stops a multi-input action immediately when the private owner loses its oute
  vi.mocked(f.target.input).mockImplementationOnce(()=>new Promise<void>(resolve=>{done=resolve;}));
  const pending=rpc.request(request(3,"desktop.agent.act",{leaseId,observationId:observation.observationId,inputs:[key,key]})),rejected=expect(pending).rejects.toThrow();active=false;done();await rejected;expect(f.target.input).toHaveBeenCalledTimes(1);expect(f.target.releaseInputs).toHaveBeenCalledOnce();
 });
-it("enforces operation and owner deadlines before timer callbacks get a chance to run",async()=>{
+it("enforces operation and explicit grant deadlines before timer callbacks get a chance to run",async()=>{
  const f=fixture(),start=performance.now(),clock=vi.spyOn(performance,"now").mockReturnValue(start);let done!:()=>void;
  const rpc=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(rpc);
  const {leaseId}=JSON.parse(await rpc.request(request(1,"desktop.agent.attach",{ticket:f.api.grant(f.target,f.recipient).ticket}))).result;
  const observation=JSON.parse(await rpc.request(request(2,"desktop.agent.observe",{leaseId}))).result;
  vi.mocked(f.target.input).mockImplementationOnce(()=>new Promise<void>(resolve=>{done=resolve;}));
  const pending=rpc.request(request(3,"desktop.agent.act",{leaseId,observationId:observation.observationId,inputs:[key,key]})),rejected=expect(pending).rejects.toThrow();clock.mockReturnValue(start+60001);done();await rejected;expect(f.target.input).toHaveBeenCalledTimes(1);
- clock.mockReturnValue(start);const next=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(next);clock.mockReturnValue(start+120001);await expect(next.request(request(1,"desktop.agent.attach",{ticket:"x".repeat(43)}))).rejects.toThrow();
+ clock.mockReturnValue(start);const next=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(next);const fresh=JSON.parse(await next.request(request(1,"desktop.agent.attach",{ticket:f.api.grant(f.target,f.recipient).ticket}))).result;clock.mockReturnValue(start+120001);f.api.tick();await expect(next.request(request(2,"desktop.agent.observe",{leaseId:fresh.leaseId}))).rejects.toThrow();
 });
 it("returns a structured observation wait without consuming the grant or retrying an action",async()=>{
  const f=fixture(),rpc=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(rpc);
@@ -93,4 +95,35 @@ it("private recipient RPC forwards regional observations without weakening the o
  const refresh=vi.spyOn(f.api,"refresh").mockResolvedValue(),region={x:0,y:0,width:1,height:1};
  expect(JSON.parse(await rpc.request(request(2,"desktop.agent.observe",{leaseId,region}))).result.imageBase64).toBe("AQID");
  expect(refresh).toHaveBeenCalledWith(expect.any(String),leaseId,undefined,region);
+});
+
+it("accepts a fresh viewer grant after the private endpoint has existed for two minutes",async()=>{
+ vi.useFakeTimers();const f=fixture(),start=performance.now(),clock=vi.spyOn(performance,"now").mockReturnValue(start),closed=vi.fn();
+ const rpc=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true,{onClose:closed});rpcs.push(rpc);
+ clock.mockReturnValue(start+120001);await vi.advanceTimersByTimeAsync(120001);
+ const {leaseId}=JSON.parse(await rpc.request(request(1,"desktop.agent.attach",{ticket:f.api.grant(f.target,f.recipient).ticket}))).result;
+ expect(JSON.parse(await rpc.request(request(2,"desktop.agent.observe",{leaseId}))).result.imageBase64).toBe("AQID");
+ expect(closed).not.toHaveBeenCalled();
+ clock.mockReturnValue(start+240002);f.api.tick();
+ expect(closed).toHaveBeenCalledOnce();
+ await expect(rpc.request(request(3,"desktop.agent.observe",{leaseId}))).rejects.toThrow();
+});
+it("keeps a valid grant after a thousand completed observation requests",async()=>{
+ const f=fixture(),rpc=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(rpc);
+ const {leaseId}=JSON.parse(await rpc.request(request(1,"desktop.agent.attach",{ticket:f.api.grant(f.target,f.recipient).ticket}))).result;
+ const clock=vi.spyOn(performance,"now").mockReturnValue(performance.now());
+ expect(JSON.parse(await rpc.request(request(2,"desktop.agent.observe",{leaseId}))).result.imageBase64).toBe("AQID");
+ for(let id=3;id<=1002;id++) expect(JSON.parse(await rpc.request(request(id,"desktop.agent.observe",{leaseId}))).error.code).toBe("server_busy");
+ expect(f.target.releaseInputs).not.toHaveBeenCalled();
+ clock.mockReturnValue(performance.now()+201);
+ expect(JSON.parse(await rpc.request(request(1003,"desktop.agent.observe",{leaseId}))).result.imageBase64).toBe("AQID");
+});
+
+it("rejects an overlapping request with the same pending ID and retires both operations",async()=>{
+ const f=fixture(),rpc=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(rpc);let done!:()=>void;
+ const {leaseId}=JSON.parse(await rpc.request(request(1,"desktop.agent.attach",{ticket:f.api.grant(f.target,f.recipient).ticket}))).result;
+ f.target.capture=()=>new Promise<void>(resolve=>{done=resolve;});
+ const pending=rpc.request(request(2,"desktop.agent.observe",{leaseId})),rejected=expect(pending).rejects.toThrow();
+ await expect(rpc.request(request(2,"desktop.agent.observe",{leaseId}))).rejects.toThrow();await rejected;
+ expect(f.target.releaseInputs).toHaveBeenCalledOnce();done();await Promise.resolve();
 });

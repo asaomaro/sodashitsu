@@ -41,7 +41,6 @@ type Profile<T> = Size & {
   waiting: Set<T>;
   applied: boolean;
   baseSeq?: number;
-  timer?: ReturnType<typeof setTimeout>;
 };
 type Source<T> = {
   rate: { fps: number; kbps: number };
@@ -61,9 +60,7 @@ type Source<T> = {
   generation: number;
   profile?: Profile<T>;
   drawing?: Set<T>;
-  drawTimer?: ReturnType<typeof setTimeout>;
   settling?: boolean;
-  settleTimer?: ReturnType<typeof setTimeout>;
 };
 
 /** One encoder with independent decoder credit and format generations. Fixed
@@ -373,22 +370,9 @@ export class DesktopSharedNative<T extends object> {
     if (this.source === source) {
       this.hooks.write({ type: "native_video_ack", id: source.id, seq: frame.seq });
       if (held) {
-        clearTimeout(source.settleTimer);
-        delete source.settleTimer;
         delete source.settling;
         this.rate();
-        if (source.drawing?.size) {
-          source.drawTimer = setTimeout(() => {
-            if (this.source !== source || !source.drawing) return;
-            for (const member of [...source.drawing]) {
-              const consumer = this.consumers.get(member);
-              if (!consumer) continue;
-              this.detach(member);
-              this.hooks.send(member, { type: "native_video_stopped", id: consumer.id });
-            }
-          }, 2000);
-          source.drawTimer.unref();
-        } else this.drawn(source);
+        this.drawn(source);
         if (
           this.source === source &&
           !source.profile &&
@@ -425,21 +409,6 @@ export class DesktopSharedNative<T extends object> {
       applied: false,
     };
     source.profile = p;
-    p.timer = setTimeout(() => {
-      if (this.source !== source || source.profile !== p) return;
-      if (!p.applied) {
-        this.finish(source, true);
-        return;
-      }
-      for (const member of [...p.waiting]) {
-        const consumer = this.consumers.get(member);
-        if (!consumer) continue;
-        this.detach(member);
-        this.hooks.send(member, { type: "native_video_stopped", id: consumer.id });
-      }
-      this.resume(source, p);
-    }, 2000);
-    p.timer.unref();
     for (const [member, consumer] of [...this.consumers]) {
       consumer.needsKey = true;
       if (!consumer.seq) continue;
@@ -493,13 +462,8 @@ export class DesktopSharedNative<T extends object> {
   }
   private resume(source: Source<T>, p: Profile<T>) {
     if (this.source !== source || source.profile !== p || !p.applied || p.waiting.size) return;
-    clearTimeout(p.timer);
     delete source.profile;
     source.settling = true;
-    source.settleTimer = setTimeout(() => {
-      if (this.source === source && source.settling) this.finish(source, true);
-    }, 2000);
-    source.settleTimer.unref();
     for (const consumer of this.consumers.values()) delete consumer.profile;
     this.hooks.write({
       type: "native_profile_resume",
@@ -529,8 +493,6 @@ export class DesktopSharedNative<T extends object> {
   }
   private drawn(source: Source<T>) {
     if (this.source !== source || source.drawing?.size) return;
-    clearTimeout(source.drawTimer);
-    delete source.drawTimer;
     delete source.drawing;
     this.resize();
   }
@@ -572,9 +534,6 @@ export class DesktopSharedNative<T extends object> {
   }
   private finish(source: Source<T>, stop: boolean) {
     if (this.source !== source) return;
-    clearTimeout(source.profile?.timer);
-    clearTimeout(source.settleTimer);
-    clearTimeout(source.drawTimer);
     clearTimeout(source.keyTimer);
     const members = [...this.consumers];
     this.consumers.clear();

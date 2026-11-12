@@ -19,7 +19,7 @@ it("interoperates with existing bridge frames and arbitrary stream boundaries",(
   f.bridge.receive(frame(F.CLOSE,1,encodeJson({code:1000,reason:"generated"})));expect(closed).toEqual([1000]);
   f.bridge.close();expect(f.end).toHaveBeenCalledOnce();
 });
-it.each(["binary","unknown","oversize-text","oversize-close","oversize-ping","nonempty-open","zero-channel","nonzero-ping","invalid-utf8","unknown-channel","reused-id","decreasing-id"])("rejects %s and revokes existing channels",mode=>{
+it.each(["binary","unknown","oversize-text","oversize-close","oversize-ping","nonempty-open","zero-channel","nonzero-ping","invalid-utf8","unknown-channel","duplicate-live-id"])("rejects %s and revokes existing channels",mode=>{
   const closed=vi.fn();const f=fixture(connection=>connection.onClose(closed));f.open();
   let bytes:Uint8Array;
   const header=(kind:number,id:number,size:number)=>{const b=new Uint8Array(9),v=new DataView(b.buffer);v.setUint8(0,kind);v.setUint32(1,id);v.setUint32(5,size);return b;};
@@ -34,16 +34,27 @@ it.each(["binary","unknown","oversize-text","oversize-close","oversize-ping","no
     case "nonzero-ping":bytes=header(F.PING,1,0);break;
     case "invalid-utf8":bytes=frame(F.TEXT,1,new Uint8Array([255]));break;
     case "unknown-channel":bytes=frame(F.TEXT,8,new Uint8Array());break;
-    case "reused-id":f.connections[0]!.close(1008,"generated");bytes=frame(F.OPEN,1);break;
-    case "decreasing-id":f.open(3);bytes=frame(F.OPEN,2);break;
+    case "duplicate-live-id":bytes=frame(F.OPEN,1);break;
     default:throw new Error("fixture");
   }
   f.bridge.receive(bytes);expect(f.end).toHaveBeenCalledOnce();expect(closed).toHaveBeenCalled();
   const count=f.sent.length;f.open(100);expect(f.sent).toHaveLength(count);
 });
-it("bounds simultaneous channels and total channel IDs without retaining closed IDs",()=>{
+it("bounds simultaneous channels without retaining closed IDs",()=>{
   const f=fixture();for(let id=1;id<=16;id++)f.open(id);expect(f.connections).toHaveLength(16);f.open(17);expect(f.end).toHaveBeenCalledOnce();
-  const g=fixture();for(let id=1;id<=1000;id++){g.open(id);g.connections.at(-1)!.close(1000,"");}expect(g.end).not.toHaveBeenCalled();g.open(1001);expect(g.end).toHaveBeenCalledOnce();
+});
+it("serves a new channel after a thousand completed channels on the same live connector",()=>{
+  const messages:string[]=[],closed=vi.fn();
+  const f=fixture(connection=>{connection.onText(value=>{messages.push(value);connection.sendText('{"ok":true}');});connection.onClose(closed);});
+  for(let id=1;id<=1001;id++) {
+    f.open(id);f.bridge.receive(frame(F.TEXT,id,new TextEncoder().encode("generated")));
+    expect(f.connections).toHaveLength(id);
+    f.bridge.receive(frame(F.CLOSE,id,encodeJson({code:1000,reason:"generated"})));
+  }
+  expect(messages).toHaveLength(1001);expect(closed).toHaveBeenCalledTimes(1001);
+  expect(f.end).not.toHaveBeenCalled();
+  f.open(1002);f.connections.at(-1)!.sendText('{"stillLive":true}');
+  expect(f.end).not.toHaveBeenCalled();f.bridge.close();expect(f.end).toHaveBeenCalledOnce();
 });
 it("keeps partial payload bounded and rejects excess chunks before copying",()=>{
   const f=fixture();f.open();const bytes=frame(F.TEXT,1,new Uint8Array(16384));f.bridge.receive(bytes.subarray(0,12));f.bridge.receive(new Uint8Array(32769));expect(f.end).toHaveBeenCalledOnce();
@@ -67,4 +78,11 @@ it("never sends after synchronous abort inside the send-budget callback",()=>{
   const bridge=new DesktopSigninBridge({accept:value=>{connection=value;},send,bufferedAmount:()=>{if(revoke)abort.abort();return 0;},active:()=>true,signal:abort.signal,end:vi.fn()});
   bridge.receive(frame(F.OPEN,1));expect(send).toHaveBeenCalledTimes(2);revoke=true;
   expect(()=>connection.sendText("generated")).toThrow();expect(send).toHaveBeenCalledTimes(2);bridge.close();
+});
+
+it("reuses closed channel IDs without imposing an order on independent live channels",()=>{
+  const f=fixture();f.open(3);f.open(1);expect(f.connections).toHaveLength(2);
+  f.bridge.receive(frame(F.CLOSE,3,encodeJson({code:1000,reason:"generated"})));
+  f.open(3);expect(f.connections).toHaveLength(3);f.connections.at(-1)!.sendText("generated");
+  expect(f.end).not.toHaveBeenCalled();f.bridge.close();expect(f.end).toHaveBeenCalledOnce();
 });

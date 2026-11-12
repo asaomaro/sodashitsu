@@ -182,10 +182,49 @@ it("removes a departing decoder waiter without stopping the other viewer",()=>{
  const f=profileSetup();try{f.start(f.a);f.start(f.b);f.frame(1);f.ack(f.a,1);f.ack(f.b,1);f.request(f.a);f.request(f.b);f.apply(1);f.resume(f.a);f.native.detach(f.b);expect(f.commands.filter(m=>m.type==="native_profile_resume")).toHaveLength(1);f.frame(2,2,1);expect(f.messages.get(f.a)?.at(-1)).toMatchObject({seq:2,generation:2});expect(f.commands.some(m=>m.type==="native_video"&&!m.enabled)).toBe(false);}finally{f.native.dispose();}
 });
 
-it.each(["helper","viewer","settle","draw"])("bounds shared profile wait and preserves responsive ownership: %s",async kind=>{
- vi.useFakeTimers();const f=profileSetup();try{f.start(f.a);f.start(f.b);f.frame(1);f.ack(f.a,1);f.ack(f.b,1);f.request(f.a);f.request(f.b);const audio=f.native.audioSource(f.a,f.ids.get(f.a)!)!;if(kind!=="helper"){f.apply(1);f.resume(f.a);if(kind!=="viewer")f.resume(f.b);if(kind==="draw"){f.frame(2,2,1);f.ack(f.a,2);f.native.command(f.b,{type:"native_video_ack",id:f.ids.get(f.b),seq:2,dropped:true});}}await vi.advanceTimersByTimeAsync(2001);
- if(kind==="helper"||kind==="settle"){expect(audio.active()).toBe(false);expect(f.policies.at(-1)).toBe(false);expect(f.messages.get(f.a)?.at(-1)).toMatchObject({type:"native_video_stopped"});expect(f.commands.filter(m=>m.type==="native_profile_resume")).toHaveLength(kind==="settle"?1:0);}else{expect(audio.active()).toBe(true);expect(f.policies).toEqual([true]);expect(f.messages.get(f.b)?.at(-1)).toMatchObject({type:"native_video_stopped"});expect(f.commands.filter(m=>m.type==="native_profile_resume")).toHaveLength(1);f.frame(kind==="draw"?3:2,2,1);expect(f.messages.get(f.a)?.at(-1)).toMatchObject({seq:kind==="draw"?3:2,generation:2});}
- }finally{f.native.dispose();vi.useRealTimers();}
+function profileWaiting(kind: string) {
+ const f = profileSetup();
+ f.start(f.a);f.start(f.b);f.frame(1);f.ack(f.a,1);f.ack(f.b,1);
+ f.request(f.a);f.request(f.b);
+ if(kind!=="helper") {
+  f.apply(1);f.resume(f.a);
+  if(kind!=="viewer") f.resume(f.b);
+  if(kind==="draw") {
+   f.frame(2,2,1);f.ack(f.a,2);
+   f.native.command(f.b,{type:"native_video_ack",id:f.ids.get(f.b),seq:2,dropped:true});
+  }
+ }
+ return f;
+}
+it.each(["helper","viewer","settle","draw"])("completes a delayed shared profile exchange without retiring healthy owners: %s",async kind=>{
+ vi.useFakeTimers();const f=profileWaiting(kind);
+ try {
+  const audio=f.native.audioSource(f.a,f.ids.get(f.a)!)!;
+  await vi.advanceTimersByTimeAsync(5001);
+  expect(audio.active()).toBe(true);
+  expect(f.policies).toEqual([true]);
+  expect([...f.messages.values()].flat().some(m=>m.type==="native_video_stopped")).toBe(false);
+  expect(f.commands.some(m=>m.type==="native_video"&&!m.enabled)).toBe(false);
+  if(kind==="helper") {f.apply(1);f.resume(f.a);f.resume(f.b);}
+  if(kind==="viewer") f.resume(f.b);
+  const seq=kind==="draw"?3:2;
+  f.frame(seq,2,1);f.ack(f.a,seq);f.ack(f.b,seq);
+  f.frame(seq+1,2,1);
+  for(const member of [f.a,f.b]) expect(f.messages.get(member)?.at(-1)).toMatchObject({type:"native_frame",seq:seq+1,generation:2,width:960,height:600});
+  expect(f.commands.filter(m=>m.type==="native_profile_resume")).toHaveLength(1);
+  expect(audio.active()).toBe(true);
+ } finally {f.native.dispose();vi.useRealTimers();}
+});
+it.each(["helper","viewer","settle","draw"])("retires a pending shared profile on actual source stop: %s",kind=>{
+ const f=profileWaiting(kind);
+ try {
+  const audio=f.native.audioSource(f.a,f.ids.get(f.a)!)!;
+  f.native.receive({type:"native_video_stopped",id:f.source()});
+  expect(audio.active()).toBe(false);
+  expect(f.policies).toEqual([true,false]);
+  for(const member of [f.a,f.b]) expect(f.messages.get(member)?.at(-1)).toMatchObject({type:"native_video_stopped",id:f.ids.get(member)});
+  expect(f.commands.some(m=>m.type==="native_video"&&!m.enabled)).toBe(false);
+ } finally {f.native.dispose();}
 });
 it("coalesces another resolution request until the current format exchange completes",()=>{
  const f=profileSetup();try{f.start(f.a);f.start(f.b);f.frame(1);f.ack(f.a,1);f.ack(f.b,1);f.request(f.a);f.request(f.b);f.request(f.a,1280,800);expect(f.commands.filter(m=>m.type==="native_profile")).toHaveLength(1);f.apply(1);f.resume(f.a);f.resume(f.b);f.request(f.a,1280,800);expect(f.commands.filter(m=>m.type==="native_profile")).toHaveLength(1);f.frame(2,2,1);f.request(f.a,1280,800);expect(f.commands.filter(m=>m.type==="native_profile")).toHaveLength(1);f.ack(f.a,2);expect(f.commands.filter(m=>m.type==="native_profile")).toHaveLength(1);f.ack(f.b,2);expect(f.commands.filter(m=>m.type==="native_profile")).toHaveLength(2);expect(f.commands.findLast(m=>m.type==="native_profile")).toMatchObject({generation:3,width:1280,height:800});}finally{f.native.dispose();}
