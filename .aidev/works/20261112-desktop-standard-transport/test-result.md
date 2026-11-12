@@ -269,3 +269,135 @@ Ran 1 test in 0.001s
 FAILED (failures=1)
 
 ```
+
+## Phase 5 bounded media flow and ordinary transport events
+
+Removed3s format-barrier age tests across Relay/NativeVideo/web receiver;2.5s outstanding-ACK and5s silent-video teardown plus dead NativeVideo.tick/active.at; web2s frozen-frame,12s startup and2s codec-reset age teardown plus dead timestamps. Native media still enforces stream id/generation/baseSeq/order and finite frame credit. No replacement timer, retry loop or fallback was added. Actual transport/channel close, failed ICE and decoder errors remain failure events. RTC startup7s/8s timers were removed; transient disconnected no longer tears native transport down (W3C WebRTC2025, disconnected is recoverable).
+
+Provider now reuses desktopSavedBinding/createDesktopSavedTransferState; duplicated hash, path and checkpoint-registry construction are removed. Durable-transfer metadata maps to RustDesk TransferSerde persisted jobs and resume/digest/offset checks, with Soda file-root/endpoint policy binding. Generic atomicFile lacks equivalent fsync/private-store protections; no new persistence framework was introduced.
+
+Validation:
+
+- MediaReceiver/feedback, NativeVideo/Adaptive and NativeDatagrams:49 PASS.
+- Saved checkpoints/folders/Provider:38 PASS.
+- Negative controls: restored only old mediaReceiver, NativeVideo and NativeDatagrams source;5 tests FAIL for healthy static WSS/UDP, delayed decoder format, delayed exact format ACK and artificial ICE startup timeout. Restored modified sources and byte-compared; same5 PASS. Raw OLD FAIL and final PASS summaries follow.
+- Matching Windows producer age gates are removed by native phase755ada9b. Portable producer age gates are audited and removed in the next phase; existing portable-specific docs still describe them until that matching source change.
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopNativeAdaptive.test.ts (12 tests | 1 failed | 11 skipped) 13ms
+   × accepts an exact delayed format ACK and ignores it after explicit stop 12ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopNativeDatagrams.audio.test.ts (2 tests | 1 failed | 1 skipped) 59ms
+   × waits for ICE state instead of a short startup timeout or transient disconnect 58ms
+ ❯ |@sodashitsu/web| src/desktop/mediaReceiver.test.ts (19 tests | 3 failed | 16 skipped) 16ms
+   × keeps a healthy static video without an age-based fallback for datagrams=false 9ms
+   × keeps a healthy static video without an age-based fallback for datagrams=true 3ms
+   × waits for a correlated decoder format without accepting retired decoder callbacks 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/desktop/mediaReceiver.test.ts > keeps a healthy static video without an age-based fallback for datagrams=false
+ FAIL  |@sodashitsu/web| src/desktop/mediaReceiver.test.ts > keeps a healthy static video without an age-based fallback for datagrams=true
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktop/mediaReceiver.test.ts:49:29
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  |@sodashitsu/web| src/desktop/mediaReceiver.test.ts > waits for a correlated decoder format without accepting retired decoder callbacks
+Error: Unexpected native format
+ ❯ DesktopMediaReceiver.nativeStream src/desktop/mediaReceiver.ts:190:130
+    188|     if(this.stopped||this.codecFallbackAt!==undefined)return;if(datagr…
+    189|     if(!datagrams){this.peer?.close();this.peer=undefined;}
+    190|     if(baseSeq!==undefined&&(!this.barrier||generation!==this.barrier.…
+       |                                                                                                                                  ^
+    191|     this.native?.stop();this.native=undefined;this.releaseSource();thi…
+    192|     this.generation=generation;this.sequence=baseSeq??0;
+ ❯ src/desktop/mediaReceiver.test.ts:116:111
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopNativeAdaptive.test.ts > accepts an exact delayed format ACK and ignores it after explicit stop
+AssertionError: expected last "vi.fn()" call to have been called with [ { …(4) } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "baseSeq": 1,
++     "bitrateKbps": 2500,
++     "fps": 30,
+      "generation": 2,
++     "height": 600,
+      "id": "48e36e22-c30c-4c20-922e-0f3baf3e4057",
+-     "type": "native_profile_resume",
++     "type": "native_profile",
++     "width": 960,
+    },
+  ]
+
+ ❯ src/desktop/DesktopNativeAdaptive.test.ts:43:96
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopNativeDatagrams.audio.test.ts > waits for ICE state instead of a short startup timeout or transient disconnect
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array []
+
+
+Number of calls: 1
+
+ ❯ src/desktop/DesktopNativeDatagrams.audio.test.ts:18:125
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed | 28 skipped (33)
+   Start at  22:56:30
+   Duration  1.16s (transform 71%, import 18%, environment 7%, tests 3%)
+
+
+```
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+
+ Test Files  3 passed (3)
+      Tests  5 passed | 28 skipped (33)
+   Start at  22:58:41
+   Duration  1.19s (transform 73%, import 18%, environment 7%, tests 3%, worker 1%)
+
+
+```

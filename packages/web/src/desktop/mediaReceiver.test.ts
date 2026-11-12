@@ -16,7 +16,7 @@ it("reduces quality under delayed ACKs and restores slowly within requested ceil
   }
 });
 
-it.each([false,true])("expires a frozen video using a fresh WSS fallback for datagrams=%s", async udp => {
+it.each([false,true])("keeps a healthy static video without an age-based fallback for datagrams=%s", async udp => {
   vi.useFakeTimers();
   let tick!: () => void;
   vi.stubGlobal(
@@ -45,10 +45,8 @@ it.each([false,true])("expires a frozen video using a fresh WSS fallback for dat
     await vi.advanceTimersByTimeAsync(10);
     tick();
     expect(receiver.active).toBe(true);
-    await vi.advanceTimersByTimeAsync(2500);
-    expect(receiver.active).toBe(false);
-    if(udp){expect(send).toHaveBeenCalledWith({type:"media_fallback",id:"test"});expect(send).not.toHaveBeenCalledWith({type:"media",enabled:false});expect(state).not.toHaveBeenCalledWith("images");}
-    else{expect(send).toHaveBeenCalledWith({ type: "media", enabled: false });expect(state).toHaveBeenCalledWith("images");}
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(receiver.active).toBe(true);expect(send).not.toHaveBeenCalledWith({type:"media_fallback",id:"test"});expect(send).not.toHaveBeenCalledWith({type:"media",enabled:false});expect(state).not.toHaveBeenCalledWith("images");
   } finally {
     receiver.stop();
     delete (HTMLVideoElement.prototype as any).requestVideoFrameCallback;
@@ -102,7 +100,7 @@ it("isolates malformed audio on WSS from video and ignores audio after stop",()=
  try{(receiver as any).audio=audio;expect(()=>receiver.audioChunk(new Uint8Array([1]))).not.toThrow();expect(audioState).toHaveBeenCalledWith("unavailable");expect(send).toHaveBeenCalledExactlyOnceWith({type:"native_audio_control",id,enabled:false});expect(state).not.toHaveBeenCalled();expect((receiver as any).stopped).toBe(false);receiver.stop();expect(()=>receiver.audioChunk(new Uint8Array())).not.toThrow();}finally{receiver.stop();delete(HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete(HTMLVideoElement.prototype as any).cancelVideoFrameCallback;vi.unstubAllGlobals();}
 });
 
-it('waits up to three seconds for a new decoder format without accepting retired decoder callbacks',async()=>{
+it('waits for a correlated decoder format without accepting retired decoder callbacks',async()=>{
  vi.useFakeTimers();const now=vi.spyOn(performance,'now').mockReturnValue(1000);
  const decoders:VideoDecoderInit[]=[];let resolve!:()=>void;
  vi.stubGlobal('VideoDecoder',class{state='configured';static async isConfigSupported(config:VideoDecoderConfig){if(config.codedWidth===960)await new Promise<void>(r=>resolve=r);return {supported:true};}constructor(init:VideoDecoderInit){decoders.push(init);}configure(){}decode(){}close(){this.state='closed';}});
@@ -115,14 +113,14 @@ it('waits up to three seconds for a new decoder format without accepting retired
   const {encodeDesktopMediaChunk,encodeDesktopH264Packet}=await import('@sodashitsu/protocol');
   receiver.chunk(encodeDesktopMediaChunk(1,1,encodeDesktopH264Packet(1000,true,new Uint8Array([1,2]))));
   decoders[0]!.output({timestamp:1000,displayWidth:1280,displayHeight:800,close(){}} as VideoFrame);
-  receiver.profilePending({type:'native_profile_pending',id,generation:2});receiver.nativeStream(2,'avc1.420420',960,600,3,false,1);
-  now.mockReturnValue(3500);await vi.advanceTimersByTimeAsync(500);expect(state).not.toHaveBeenCalled();expect(send).not.toHaveBeenCalledWith(expect.objectContaining({type:'native_format_ack'}));
+  receiver.profilePending({type:'native_profile_pending',id,generation:2});now.mockReturnValue(7000);receiver.nativeStream(2,'avc1.420420',960,600,3,false,1);
+  now.mockReturnValue(9000);await vi.advanceTimersByTimeAsync(500);expect(state).not.toHaveBeenCalled();expect(send).not.toHaveBeenCalledWith(expect.objectContaining({type:'native_format_ack'}));
   decoders[0]!.error(new DOMException('retired decoder'));expect(state).not.toHaveBeenCalled();
   resolve();await Promise.resolve();await Promise.resolve();expect(send).toHaveBeenCalledWith({type:'native_format_ack',id,generation:2,baseSeq:1});
-  now.mockReturnValue(4100);await vi.advanceTimersByTimeAsync(500);expect(state).toHaveBeenCalledWith('images');
+  now.mockReturnValue(20000);await vi.advanceTimersByTimeAsync(500);expect(state).not.toHaveBeenCalledWith('images');
  }finally{receiver.stop();now.mockRestore();vi.useRealTimers();vi.unstubAllGlobals();delete(HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete(HTMLVideoElement.prototype as any).cancelVideoFrameCallback;}
 });
-it.each(["reset","timeout","rollback"] as const)("keeps the native codec transport until B %s without replaying rejected codec",async mode=>{
+it.each(["reset","delay","rollback"] as const)("keeps the native codec transport until B %s without replaying rejected codec",async mode=>{
  vi.useFakeTimers();let now=100;const clock=vi.spyOn(performance,"now").mockImplementation(()=>now),close=vi.fn();
  vi.stubGlobal("RTCPeerConnection",class{close=close;});vi.stubGlobal("VideoDecoder",class{static async isConfigSupported(config:unknown){return{supported:false,config};}});
  Object.defineProperty(HTMLVideoElement.prototype,"requestVideoFrameCallback",{configurable:true,value:vi.fn(()=>1)});Object.defineProperty(HTMLVideoElement.prototype,"cancelVideoFrameCallback",{configurable:true,value:vi.fn()});
@@ -131,8 +129,8 @@ it.each(["reset","timeout","rollback"] as const)("keeps the native codec transpo
   receiver.chunk(new Uint8Array([0]));receiver.notice({type:"ignored after codec rejection"});expect(send.mock.calls.filter(([value])=>value.type==="native_codec_fallback")).toHaveLength(1);
   now=2099;await vi.advanceTimersByTimeAsync(1500);expect(close).not.toHaveBeenCalled();
   if(mode==="reset"){receiver.stop();now=2200;await vi.advanceTimersByTimeAsync(500);expect(state).not.toHaveBeenCalled();}
-  else{now=mode==="rollback"?99:2100;await vi.advanceTimersByTimeAsync(500);expect(send).toHaveBeenCalledWith({type:"media",enabled:false});expect(state).toHaveBeenCalledWith("images");}
-  expect(close).toHaveBeenCalledOnce();
+  else{now=mode==="rollback"?99:60000;await vi.advanceTimersByTimeAsync(60000);expect(send).not.toHaveBeenCalledWith({type:"media",enabled:false});expect(state).not.toHaveBeenCalledWith("images");}
+  expect(close).toHaveBeenCalledTimes(mode==="reset"?1:0);
  }finally{receiver.stop();clock.mockRestore();vi.unstubAllGlobals();vi.useRealTimers();delete (HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete (HTMLVideoElement.prototype as any).cancelVideoFrameCallback;}
 });
 it("ignores pending codec peer failure and retired decoder output/error while releasing its frame",async()=>{

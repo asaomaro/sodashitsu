@@ -7,9 +7,8 @@ import type {RTCPeerConnection,RTCDataChannel} from "werift";
 export class DesktopNativeDatagrams {
  private peer:RTCPeerConnection|undefined;private video:RTCDataChannel|undefined;private control:RTCDataChannel|undefined;private audio:RTCDataChannel|undefined;
  private dead=false;private connected=false;private answered=false;private candidates=0;private lastKey=-Infinity;
- private timeout:ReturnType<typeof setTimeout>;
  constructor(private hooks:{id:string;codecs?:boolean;audio?:boolean;audioFailed?():void;iceServers:z.infer<typeof DesktopIceServers>;send(value:unknown):boolean;ready():void;ack(value:unknown):void;formatAck?(value:unknown):void;keyframe():void;fail():void}){
-  this.timeout=setTimeout(()=>this.failure(),8000);this.timeout.unref();void this.start().catch(()=>this.failure());
+  void this.start().catch(()=>this.failure());
  }
  private async start(){
   const {RTCPeerConnection}=await import("werift");if(this.dead)return;
@@ -18,7 +17,7 @@ export class DesktopNativeDatagrams {
   const video=this.video=peer.createDataChannel(this.hooks.codecs?DESKTOP_CODEC_VIDEO_CHANNEL:DESKTOP_VIDEO_CHANNEL,{ordered:false,maxRetransmits:0});
   const control=this.control=peer.createDataChannel(DESKTOP_CONTROL_CHANNEL,{ordered:true});
   const audio=this.audio=this.hooks.audio?peer.createDataChannel(DESKTOP_AUDIO_CHANNEL,{ordered:false,maxRetransmits:0}):undefined;
-  const opened=()=>{if(this.dead||this.connected||video.readyState!=="open"||control.readyState!=="open")return;this.connected=true;clearTimeout(this.timeout);this.hooks.ready();};
+  const opened=()=>{if(this.dead||this.connected||video.readyState!=="open"||control.readyState!=="open")return;this.connected=true;this.hooks.ready();};
   video.stateChanged.subscribe(state=>{if(state==="open")opened();else if(state==="closed")this.failure();});
   control.stateChanged.subscribe(state=>{if(state==="open")opened();else if(state==="closed")this.failure();});
   if(audio){audio.stateChanged.subscribe(state=>{if(state==="open")opened();else if(state==="closed"&&!this.dead)this.hooks.audioFailed?.();});audio.onMessage.subscribe(()=>{if(!this.dead)this.hooks.audioFailed?.();});}
@@ -34,7 +33,7 @@ export class DesktopNativeDatagrams {
    }catch{this.failure();}
   });
   peer.onDataChannel.subscribe(()=>this.failure());
-  peer.connectionStateChange.subscribe(state=>{if(state==="failed"||state==="closed"||state==="disconnected")this.failure();});
+  peer.connectionStateChange.subscribe(state=>{if(state==="failed"||state==="closed")this.failure();});
   peer.onIceCandidate.subscribe(candidate=>{if(!this.dead&&candidate)this.hooks.send({type:"rtc_signal",id:this.hooks.id,signal:{kind:"candidate",candidate:candidate.toJSON()}});});
   const offer=await peer.createOffer();if(this.dead)return;await peer.setLocalDescription(offer);if(this.dead)return;
   if(!this.hooks.send({type:"rtc_signal",id:this.hooks.id,signal:{kind:"offer",sdp:peer.localDescription!.sdp}}))this.failure();
@@ -59,5 +58,5 @@ export class DesktopNativeDatagrams {
  sendAudio(bytes:Uint8Array):boolean{const audio=this.audio;if(this.dead||!this.connected||audio?.readyState!=="open"||audio.bufferedAmount>8192)return false;audio.send(Buffer.from(bytes));return true;}
  buffered(){return this.video?.bufferedAmount??0;}
  private failure(){if(this.dead)return;this.close();this.hooks.fail();}
- close(){if(this.dead)return;this.dead=true;clearTimeout(this.timeout);const peer=this.peer;this.peer=undefined;this.video=this.control=this.audio=undefined;void peer?.close().catch(()=>{});}
+ close(){if(this.dead)return;this.dead=true;const peer=this.peer;this.peer=undefined;this.video=this.control=this.audio=undefined;void peer?.close().catch(()=>{});}
 }

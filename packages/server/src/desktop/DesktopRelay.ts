@@ -129,7 +129,7 @@ type Viewer = {
   nativeVideo?: boolean;
   retiredMedia: Set<string>;
   requestedNative?: boolean;
-  media?: { id: string; generation: number; seq: number; native?:boolean; datagrams?:boolean; audioRequested?:boolean;audioSeq?:number;audioGeneration?:number;barrier?:{generation:number;at:number;baseSeq?:number}; pending?:number[]; window?:1|3;lastAck?:number };
+  media?: { id: string; generation: number; seq: number; native?:boolean; datagrams?:boolean; audioRequested?:boolean;audioSeq?:number;audioGeneration?:number;barrier?:{generation:number;baseSeq?:number}; pending?:number[]; window?:1|3;lastAck?:number };
   snapshot?: {
     regionId?:string;
     promise: Promise<void>;
@@ -552,7 +552,7 @@ export class DesktopRelay {
           if(v.nativeCodecs&&v.ready&&v.media?.native&&m.id===v.media.id&&v.provider)this.send(v.provider,m);
         } else if(m.type==="native_format_ack") {
           const b=v.media?.barrier;
-          if(v.nativeAdaptive&&v.provider&&v.media&&!v.media.datagrams&&b&&m.id===v.media.id&&m.generation===b.generation&&m.baseSeq===b.baseSeq&&performance.now()-b.at<3000)this.send(v.provider,m);
+          if(v.nativeAdaptive&&v.provider&&v.media&&!v.media.datagrams&&b&&m.id===v.media.id&&m.generation===b.generation&&m.baseSeq===b.baseSeq)this.send(v.provider,m);
         } else if(m.type==="native_video_ack") {
           if(v.nativeVideo&&v.media?.native&&v.provider&&m.id===v.media.id&&m.generation===v.media.generation) {
             if(v.media.datagrams||m.dropped)throw Error("Native ACK requires negotiated route");
@@ -1185,10 +1185,10 @@ export class DesktopRelay {
           } else if(msg.type==="native_profile_pending"){
             const pending=DesktopNativeProfilePending.parse(msg),media=v.media;
             if(!v.nativeAdaptive||!media?.native||pending.id!==media.id||pending.generation!==media.generation+1||media.barrier)throw Error("Unexpected native profile barrier");
-            media.barrier={generation:pending.generation,at:performance.now()};sendMedia(pending);
+            media.barrier={generation:pending.generation};sendMedia(pending);
           } else if(msg.type==="native_format_ready"){
             const ack=DesktopNativeFormatReady.parse(msg),media=v.media,b=media?.barrier;
-            if(!v.nativeAdaptive||!media||!b||ack.id!==media.id||ack.generation!==b.generation||ack.baseSeq!==b.baseSeq||performance.now()-b.at>=3000)throw Error("Unexpected native format ACK");
+            if(!v.nativeAdaptive||!media||!b||ack.id!==media.id||ack.generation!==b.generation||ack.baseSeq!==b.baseSeq)throw Error("Unexpected native format ACK");
             delete media.barrier;
           } else if (msg.type === "media_stream" && v.media) {
             const stream = DesktopMediaStream.parse(msg);
@@ -1199,7 +1199,7 @@ export class DesktopRelay {
             if(isDesktopNativeStream(stream)&&(stream.window??1)!==(v.media.window??1))throw new Error();
             if(isDesktopNativeStream(stream)&&!!stream.datagrams!==!!v.media.datagrams)throw Error("Native stream route changed");
             if(isDesktopNativeStream(stream)&&stream.baseSeq!==undefined){
-              const b=v.media.barrier;if(!v.nativeAdaptive||!b||b.generation!==stream.generation||stream.baseSeq!==v.media.seq||v.media.pending?.length||performance.now()-b.at>=3000)throw Error("Native stream barrier");b.baseSeq=stream.baseSeq;
+              const b=v.media.barrier;if(!v.nativeAdaptive||!b||b.generation!==stream.generation||stream.baseSeq!==v.media.seq||v.media.pending?.length)throw Error("Native stream barrier");b.baseSeq=stream.baseSeq;
             }else if(v.media.native&&v.media.generation!==0)throw Error("Native reconfigure requires barrier");
             v.media.generation = stream.generation;
             v.media.seq = isDesktopNativeStream(stream)?(stream.baseSeq??0):0;

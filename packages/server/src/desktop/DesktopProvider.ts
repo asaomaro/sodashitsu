@@ -2,20 +2,18 @@ import {DesktopProtectedMicrophone,protectedMicrophoneAvailable} from './Desktop
 import {DesktopNativeAudio} from "./DesktopNativeAudio.js";
 import {DesktopNativeMonitorRestore,DesktopNativeMonitorRestores} from "./DesktopNativeMonitorRestore.js";
 import {DesktopNativeMicrophoneHost} from './DesktopNativeMicrophoneHost.js';
-import type {DesktopSavedTransferState} from './DesktopSavedTransferState.js';
+import {createDesktopSavedTransferState,desktopSavedBinding,type DesktopSavedTransferState} from './DesktopSavedTransferState.js';
 import {desktopHelperRolePlan,desktopHelperRoleEnvironment} from './DesktopHelperRolePlan.js';
 import {DesktopNativePcmPaths} from "./DesktopNativePcmPath.js";
 import {DesktopRegionSpec} from "@sodashitsu/protocol";
 import {DesktopAudioPipes,desktopWslAudioCommand} from "./DesktopAudioPipes.js";
 import {DesktopNativeSelection} from "./DesktopNativeSelection.js";
 import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
-import {dirname,join} from "node:path";
 import {DesktopHelperInputAck,type DesktopPointerWitness} from "./DesktopPointerWitness.js";
-import {createHash} from "node:crypto";
 import {DesktopInteractiveOwner,type DesktopInteractiveResource} from "./DesktopInteractiveOwner.js";
 import {DesktopResourceChannel} from "./DesktopResourceChannel.js";
 import {DesktopFolderCheckpoints} from "./DesktopFolderCheckpoints.js";
-import {DesktopTransferStore} from "./DesktopTransferStore.js";
+import type {DesktopTransferStore} from "./DesktopTransferStore.js";
 import {DesktopFileCheckpoints} from "./DesktopFileCheckpoints.js";
 import {DesktopNativePlatformFailure,desktopNativePlatformFailureMessage,supportsDesktopInput,type DesktopNativePlatform,type DesktopInputCapabilities} from "@sodashitsu/protocol";
 import { DesktopMicrophone } from "./DesktopMicrophone.js";
@@ -136,15 +134,20 @@ export class DesktopProvider {
   private fileCheckpoints=new DesktopFileCheckpoints();
   private transferStore:DesktopTransferStore|undefined;
   private savedSettingsBinding:string|undefined;
-  private savedBinding(binding:string){return createHash("sha256").update(JSON.stringify({settings:binding,endpointOnly:this.endpointOnly})).digest("hex");}
   private transferBarrier:Promise<void>=Promise.resolve();
   private savedPolicyHolds=0;
   private savedPolicyFault=false;
   failSavedTransferPolicy(){this.savedPolicyFault=true;this.savedPolicyHolds=Math.max(0,this.savedPolicyHolds-1);}
   private async stableTransferBarrier(){for(;;){const pending=this.transferBarrier;await pending;if(pending===this.transferBarrier)return;}}
-  enableSavedTransfers(directory:string,binding:string,state?:DesktopSavedTransferState){if(this.transferStore||this.active||this.shared.size)throw Error("転送記録の初期化順が不正です");this.savedSettingsBinding=binding;if(state){if(state.directory!==directory||state.scope!==this.savedBinding(binding))throw Error("転送記録の権限が一致しません");this.transferStore=state.store;this.fileCheckpoints=state.files;this.folderCheckpoints=state.folders;return;}this.transferStore=new DesktopTransferStore({directory,binding:this.savedBinding(binding)});this.fileCheckpoints=new DesktopFileCheckpoints(this.transferStore);this.folderCheckpoints=new DesktopFolderCheckpoints(new DesktopTransferStore({directory:join(dirname(directory),"desktop-folder-transfers"),binding:this.savedBinding(binding),folderRecords:true}));}
+  enableSavedTransfers(directory:string,binding:string,state?:DesktopSavedTransferState){
+    if(this.transferStore||this.active||this.shared.size)throw Error("転送記録の初期化順が不正です");
+    this.savedSettingsBinding=binding;
+    const saved=state??createDesktopSavedTransferState(directory,binding,this.endpointOnly);
+    if(saved.directory!==directory||saved.scope!==desktopSavedBinding(binding,this.endpointOnly))throw Error("転送記録の権限が一致しません");
+    this.transferStore=saved.store;this.fileCheckpoints=saved.files;this.folderCheckpoints=saved.folders;
+  }
   async invalidateSavedTransfers(){this.savedPolicyHolds++;this.freezeSavedTransfers();this.transferBarrier=this.savedTransferWork(registry=>registry.invalidate());this.transferBarrier.catch(()=>{});try{await this.transferBarrier;}catch(error){this.failSavedTransferPolicy();throw error;}}
-  async bindSavedTransfers(binding?:string){if(binding)this.savedSettingsBinding=binding;try{for(;;){const pending=this.transferBarrier;await pending;if(pending!==this.transferBarrier)continue;const scope=this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined;if(scope)await this.savedTransferWork(registry=>registry.bind(scope));if(pending!==this.transferBarrier||scope!==(this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined))continue;break;}this.savedPolicyFault=false;}catch(error){this.savedPolicyFault=true;throw error;}finally{this.savedPolicyHolds=Math.max(0,this.savedPolicyHolds-1);this.resumeSavedTransfers();}}
+  async bindSavedTransfers(binding?:string){if(binding)this.savedSettingsBinding=binding;try{for(;;){const pending=this.transferBarrier;await pending;if(pending!==this.transferBarrier)continue;const scope=this.savedSettingsBinding?desktopSavedBinding(this.savedSettingsBinding,this.endpointOnly):undefined;if(scope)await this.savedTransferWork(registry=>registry.bind(scope));if(pending!==this.transferBarrier||scope!==(this.savedSettingsBinding?desktopSavedBinding(this.savedSettingsBinding,this.endpointOnly):undefined))continue;break;}this.savedPolicyFault=false;}catch(error){this.savedPolicyFault=true;throw error;}finally{this.savedPolicyHolds=Math.max(0,this.savedPolicyHolds-1);this.resumeSavedTransfers();}}
   async settleSavedTransfers(){await this.stableTransferBarrier();await this.savedTransferWork(registry=>registry.settled());}
   async suspendSavedTransfers(){const draining=this.savedTransferWork(registry=>registry.suspend());const results=await Promise.allSettled([this.stableTransferBarrier(),draining,this.nativeMicrophones.suspend()]);for(const result of results)if(result.status==="rejected")throw result.reason;}
   resumeSavedTransfers(){this.nativeMicrophones.resume();if(!this.savedPolicyHolds&&!this.savedPolicyFault)for(const registry of this.savedRegistries())registry.resume();}
@@ -363,7 +366,7 @@ export class DesktopProvider {
       sourceIdle:new DesktopSourceIdle(),
       started: performance.now(),
       timer: setInterval(() => {
-        if(!this.live(s))return;s.native?.tick();
+        if(!this.live(s))return;
         if (
           performance.now() - s.lastSeen > 12000 ||
           (performance.now() - s.started > (cfg.nativePlatform?130000:p.options.virtualDisplay?25000:15000) && !s.ready)

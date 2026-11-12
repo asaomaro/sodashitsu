@@ -34,13 +34,14 @@ it('continues video after the acknowledged format barrier',()=>{
  try{
  const f=fixture();f.video.fromHelper(f.frame(1));f.ack(1);f.profile();
  f.applied(1);clock.mockReturnValue(3800);f.video.fromViewer({type:'native_format_ack',id:f.id,generation:2,baseSeq:1});
- f.video.fromHelper(f.frame(2,2));clock.mockReturnValue(3900);f.video.tick();expect(f.policy).toHaveBeenLastCalledWith(true);f.ack(2,2);f.video.fromHelper(f.frame(3,2));f.ack(3,2);f.video.stop();
+ f.video.fromHelper(f.frame(2,2));clock.mockReturnValue(3900);expect(f.policy).toHaveBeenLastCalledWith(true);f.ack(2,2);f.video.fromHelper(f.frame(3,2));f.ack(3,2);f.video.stop();
  }finally{clock.mockRestore();}
 });
-it('bounds the whole barrier and ignores late ACK after a stopped session',()=>{
+it('accepts an exact delayed format ACK and ignores it after explicit stop',()=>{
  const clock=vi.spyOn(performance,'now').mockReturnValue(1000);
- try{const f=fixture();f.video.fromHelper(f.frame(1));f.ack(1);f.profile();f.video.tick(4000);expect(f.policy).toHaveBeenLastCalledWith(false);const count=f.write.mock.calls.length;
- f.video.fromViewer({type:'native_format_ack',id:f.id,generation:2,baseSeq:1});expect(f.write.mock.calls).toHaveLength(count);
+ try{const f=fixture();f.video.fromHelper(f.frame(1));f.ack(1);f.profile();f.applied(1);clock.mockReturnValue(16000);
+ f.video.fromViewer({type:'native_format_ack',id:f.id,generation:2,baseSeq:1});expect(f.write).toHaveBeenLastCalledWith({type:'native_profile_resume',id:f.id,generation:2,baseSeq:1});expect(f.policy).toHaveBeenLastCalledWith(true);
+ f.video.stop();const count=f.write.mock.calls.length;f.video.fromViewer({type:'native_format_ack',id:f.id,generation:2,baseSeq:1});expect(f.write.mock.calls).toHaveLength(count);
  }finally{clock.mockRestore();}
 });
 it('uses sustained pixel cost and slowly recovers within even original dimensions',()=>{

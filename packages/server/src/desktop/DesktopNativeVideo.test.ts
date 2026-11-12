@@ -90,22 +90,11 @@ it("rejects native audio and locally disabled video without starting a helper", 
   });
   expect(g.write).not.toHaveBeenCalled();
 });
-it("falls back to images on startup failure, missing draw ACK, and congestion", () => {
+it("falls back to images on startup failure and congestion", () => {
   const a = fixture(),
     id = a.start();
   a.video.fromHelper({ type: "native_video_stopped", id });
   expect(a.policy).toHaveBeenLastCalledWith(false);
-  const b = fixture(),
-    bid = b.start();
-  b.video.fromHelper(b.frame(bid));
-  b.video.tick(performance.now() + 3000);
-  expect(b.send).toHaveBeenLastCalledWith({
-    type: "media_status",
-    id: bid,
-    state: "images",
-    audio: false,
-    reason: "congested",
-  });
   const c = fixture(),
     cid = c.start();
   c.backlog();
@@ -161,26 +150,10 @@ it("allows three negotiated frames while enforcing FIFO ACK and returning a slot
   expect(() => f.video.fromHelper(f.frame(id, 5))).toThrow("order");
   f.video.stop();
 });
-it("expires the oldest outstanding frame even when newer frames were sent", async () => {
-  const { performance } = await import("node:perf_hooks");
-  const clock = vi.spyOn(performance, "now").mockReturnValue(1000);
-  try {
-    const f = fixture(true, 3),
-      id = f.start();
-    f.video.fromHelper(f.frame(id));
-    clock.mockReturnValue(3000);
-    f.video.fromHelper(f.frame(id, 2));
-    f.video.tick(3600);
-    expect(f.send).toHaveBeenLastCalledWith({
-      type: "media_status",
-      id,
-      state: "images",
-      audio: false,
-      reason: "congested",
-    });
-  } finally {
-    clock.mockRestore();
-  }
+it("keeps bounded frame credit pending until the exact draw acknowledgement",()=>{
+ const clock=vi.spyOn(performance,"now").mockReturnValue(1000);
+ try{const f=fixture(true,3),id=f.start();for(let seq=1;seq<=3;seq++)f.video.fromHelper(f.frame(id,seq));clock.mockReturnValue(60000);
+ expect((f.video as any).active.pending).toHaveLength(3);f.video.fromViewer({type:"native_video_ack",id,generation:1,seq:1});expect((f.video as any).active.pending).toHaveLength(2);expect(f.policy).toHaveBeenLastCalledWith(true);f.video.fromHelper(f.frame(id,4));expect((f.video as any).active.pending).toHaveLength(3);f.video.stop();}finally{clock.mockRestore();}
 });
 
 it.each([false,true])("uses an independent 60fps ceiling only when helper capability is confirmed (%s)",confirmed=>{

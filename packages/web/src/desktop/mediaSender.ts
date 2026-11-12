@@ -19,7 +19,6 @@ export class DesktopMediaSender {
   private preview = document.createElement("video");
   private frame = 0;
   private timer: ReturnType<typeof setInterval> | undefined;
-  private fallback: ReturnType<typeof setTimeout> | undefined;
   private candidates: RTCIceCandidateInit[] = [];
   private stopped = false;
   private generation = 0;
@@ -162,7 +161,6 @@ export class DesktopMediaSender {
     peer.onconnectionstatechange = () => {
       if (this.peer !== peer) return;
       if (peer.connectionState === "connected") {
-        if (this.fallback) clearTimeout(this.fallback);
         this.send({ type: "media_state", id: this.request.id, state: "rtc" });
         this.report("WebRTC");
       } else if (peer.connectionState === "failed") this.startRelay();
@@ -175,9 +173,6 @@ export class DesktopMediaSender {
       id: this.request.id,
       signal: { kind: "offer", sdp: peer.localDescription!.sdp },
     });
-    this.fallback = setTimeout(() => {
-      if (peer.connectionState !== "connected") this.startRelay();
-    }, 7000);
   }
   async signal(signal: { kind: string; sdp?: string; candidate?: RTCIceCandidateInit }) {
     const p = this.peer;
@@ -196,7 +191,6 @@ export class DesktopMediaSender {
   }
   startRelay() {
     if (this.stopped || !this.stream || this.recorder) return;
-    if (this.fallback) clearTimeout(this.fallback);
     this.peer?.close();
     this.peer = undefined;
     const mime = this.stream.getAudioTracks().length
@@ -302,7 +296,6 @@ export class DesktopMediaSender {
     if (this.stopped) return;
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
-    if (this.fallback) clearTimeout(this.fallback);
     this.peer?.close();
     this.peer = undefined;
     if (this.recorder) {

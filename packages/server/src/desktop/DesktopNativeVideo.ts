@@ -50,7 +50,7 @@ export class DesktopNativeVideo {
         started:boolean;quality?:DesktopNativeQuality;resolution?:DesktopNativeResolution;
         requestedCodec:DesktopNativeCodec;codecName?:DesktopNativeCodec;codecFallback?:"encoder"|"decoder"|"unavailable";retried:boolean;
         generation:number;fps:number;
-        barrier?:{generation:number;width:number;height:number;at:number;baseSeq?:number};
+        barrier?:{generation:number;width:number;height:number;baseSeq?:number};
         bitrate:number;adaptAt:number;acks:number;losses:number;maxAck:number;
         seq: number;
         pending: {
@@ -62,7 +62,6 @@ export class DesktopNativeVideo {
         }[];
         statsAt: number;
         lastAck: number;
-        at: number;
         timestamp: number;
         stream: boolean;
         codec?: string;
@@ -136,7 +135,6 @@ export class DesktopNativeVideo {
       pending: [],
       statsAt: 0,
       lastAck: 0,
-      at: performance.now(),
       timestamp: -1,
       stream: false,
     };
@@ -154,7 +152,7 @@ export class DesktopNativeVideo {
     return true;
   }
   private begin(s:NonNullable<DesktopNativeVideo["active"]>){
-    if(this.active!==s||s.started)return;s.started=true;s.at=performance.now();
+    if(this.active!==s||s.started)return;s.started=true;
     this.hooks.policy(true);
     this.hooks.write({type:"native_video",enabled:true,id:s.id,...(this.hooks.sharedRate?{adaptive:s.settings.adaptive}:{}),...(this.hooks.sharedResolution?{resolution:true}:{}),...(this.hooks.codecs?{codec:s.settings.codec??"h264"}:{}),bitrateKbps:s.settings.maxBitrateKbps,fps:s.settings.fps??this.hooks.fps,...(this.hooks.window===3?{window:3}:{})});
     if(s.settings.audio&&this.hooks.audioEnabled)s.audio=(this.hooks.audioFactory??(hooks=>new DesktopNativeAudio(hooks)))({...(this.hooks.nativePcm?{nativePcm:this.hooks.nativePcm}:{}),...(this.hooks.audioBridge?{bridge:this.hooks.audioBridge}:{}),id:s.id,synthetic:this.hooks.synthetic===true,active:()=>this.active===s&&s.settings.audio,videoTimestamp:()=>s.timestamp,
@@ -203,15 +201,15 @@ export class DesktopNativeVideo {
   private profile(s:NonNullable<DesktopNativeVideo["active"]>,size:{width:number;height:number}){
     if(this.active!==s||s.barrier||!s.stream||s.generation>=0xffffffff)return;
     if(this.hooks.sharedResolution){this.hooks.write({type:"native_resolution",id:s.id,...size});return;}
-    s.barrier={...size,generation:s.generation+1,at:performance.now()};
+    s.barrier={...size,generation:s.generation+1};
     if(!this.hooks.send({type:"native_profile_pending",id:s.id,generation:s.barrier.generation})){this.stop("congested");return;}
     this.hooks.write({type:"native_profile",id:s.id,generation:s.barrier.generation,...size,fps:s.fps,bitrateKbps:s.bitrate});
   }
   private formatAck(raw:unknown){
     const ack=DesktopNativeFormatAck.parse(raw),s=this.active,b=s?.barrier;
-    if(!this.hooks.adaptive||!s||!b||ack.id!==s.id||ack.generation!==b.generation||ack.baseSeq!==b.baseSeq||performance.now()-b.at>=3000)return;
+    if(!this.hooks.adaptive||!s||!b||ack.id!==s.id||ack.generation!==b.generation||ack.baseSeq!==b.baseSeq)return;
     if(!this.hooks.send({...ack,type:"native_format_ready"})){this.stop("congested");return;}
-    delete s.barrier;s.at=performance.now();
+    delete s.barrier;
     this.hooks.write({...ack,type:"native_profile_resume"});
   }
   fromHelper(raw: unknown): boolean {
@@ -220,14 +218,14 @@ export class DesktopNativeVideo {
       const s=this.active;if(!s||m.id!==s.id)return true;
       const p=z.object({type:z.literal("native_profile_prepare"),id:z.string().uuid(),generation:z.number().int(),width:z.number().int().min(2),height:z.number().int().min(2)}).strict().parse(raw);
       if(!this.hooks.sharedResolution||!this.hooks.adaptive||!s.stream||s.barrier||p.generation!==s.generation+1||p.width>this.hooks.width||Math.abs(p.width/p.height-this.hooks.sourceWidth/this.hooks.sourceHeight)>.02)throw Error("Shared native profile preparation");
-      s.barrier={width:p.width,height:p.height,generation:p.generation,at:performance.now()};
+      s.barrier={width:p.width,height:p.height,generation:p.generation};
       if(!this.hooks.send({type:"native_profile_pending",id:s.id,generation:p.generation}))this.stop("congested");return true;
     }
     if(m.type==="native_profile_applied"){
       const s=this.active,b=s?.barrier;if(!s||m.id!==s.id)return true;
       if(!this.hooks.adaptive||!b)throw Error("Unexpected native profile");
       const p=z.object({type:z.literal("native_profile_applied"),id:z.string().uuid(),generation:z.number().int(),baseSeq:z.number().int(),width:z.number().int(),height:z.number().int(),codec:DesktopNativeCodecString}).strict().parse(raw);
-      if(performance.now()-b.at>=3000||p.generation!==b.generation||p.baseSeq!==s.seq||s.pending.length||p.width!==b.width||p.height!==b.height)throw Error("Native profile barrier");
+      if(p.generation!==b.generation||p.baseSeq!==s.seq||s.pending.length||p.width!==b.width||p.height!==b.height)throw Error("Native profile barrier");
       if(!desktopCodecMatches(s.codecName??"h264",p.codec))throw Error("Codec family changed during resize");
       b.baseSeq=p.baseSeq;s.generation=p.generation;s.width=p.width;s.height=p.height;s.codec=p.codec;
       this.hooks.send({type:"media_stream",id:s.id,generation:s.generation,baseSeq:p.baseSeq,mime:desktopCodecMime(s.codecName??"h264"),...(this.hooks.codecs?{codecName:s.codecName??"h264"}:{}),codec:p.codec,width:p.width,height:p.height,...(s.peer?{datagrams:true}:{}),...(this.hooks.window===3?{window:3}:{})});
@@ -310,18 +308,10 @@ export class DesktopNativeVideo {
       encodeMs: frame.encodeMs ?? 0,
     });
     s.timestamp = frame.timestamp;
-    s.at = performance.now();
     if(s.peer){
       if(!this.hooks.send({type:"native_frame_notice",id:s.id,generation:s.generation,seq:frame.seq,bytes:payload.length})||!s.peer.send(frame.seq,payload))this.fallback(s);
     }else if (!this.hooks.send(encodeDesktopMediaChunk(s.generation, frame.seq, payload))) this.stop("congested");
     return true;
-  }
-  tick(now = performance.now()) {
-    const s = this.active;
-    if(s?.barrier){if(now-s.barrier.at>=3000)this.stop("unavailable");return;}
-    if(s&&s.started&&now-(s.pending[0]?.at??s.at)>(s.pending.length?2500:5000)){
-      if(s.peer)this.fallback(s);else this.stop(s.pending.length?"congested":"unavailable");
-    }
   }
   stop(reason: "stopped" | "unavailable" | "congested" = "stopped",notify=true) {
     const s = this.active;
