@@ -42,3 +42,14 @@ signin_native_closed_roles_generated_pass
 ```
 
 `git diff --check`成功。独立レビューとWindowsのコンパイル・実機検証は統合担当で実施する。
+
+## 削除後・初回導入縮小後の追加コンパイル
+
+上の7セットに加えて次の4セットもMonoでコンパイル成功。Windowsエントリポイントは実行していない。
+
+```
+validate-signin-admin-controller.ps1 0
+validate-signin-process-evidence.ps1 0
+validate-signin-state-layout.ps1 0
+validate-signin-install-source.ps1 0
+```
