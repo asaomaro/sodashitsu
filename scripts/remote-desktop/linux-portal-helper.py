@@ -558,7 +558,7 @@ class PortalHelper:
         self.monitor_records=None;self.monitor_selected=None;self.monitor_stable=False;self.restore_token=None;self.restore_sent=False
         self.native_worker=None;self.native_pending=None;self.native_raw=None;self.native_available=False
         self.native=_native_video.NativeVideoFlow(self.native_live,lambda:time.monotonic()*1000,lambda value,valid:self.output(value,publish=valid),maximum_fps=60)
-        self.regions=RegionProofs();self.video=video;self.transfer_size=None
+        self.regions=RegionProofs();self.snapshot_ids=set();self.pending_snapshot_ids=[];self.video=video;self.transfer_size=None
         self.output_gate=threading.RLock();self.Gio=Gio;self.GLib=GLib;self.Gst=Gst;self.loop=GLib.MainLoop();self.scope_factory=scope_factory or (lambda:LoginScope(Gio,GLib,gate=self.output_gate));self.scope=None;self.last_scope_check=0;self.connection=None;self.session=None;self.requests={};self.subscriptions=[]
         self.dead=False;self.closed=False;self.ready=False;self.barrier=-1;self.next_emit=0;self.config=None;self.pipeline=None;self.fd=None;self.guard=None;self.pending=0;self.seq=0;self.last_pts=None;self.last_sample=None;self.last_idle=0;self.idle_counter=0;self.last_heartbeat=time.monotonic();self.configured_at=None;self.commands=queue.Queue(maxsize=64);self.queued=None;self.output_queue=queue.Queue(maxsize=64)
     def output(self,value,revision=None,publish=None):
@@ -894,7 +894,13 @@ class PortalHelper:
         elif kind=="ack":
             if message.get("seq")!=self.pending:raise NativeFailure("backend_failure")
             self.pending=0
+            self.snapshot_ids.difference_update(self.pending_snapshot_ids);self.pending_snapshot_ids=[]
         elif kind=="keyframe":
+            if "snapshotIds" in message:
+                ids=message["snapshotIds"]
+                if not isinstance(ids,list) or not 1<=len(ids)<=64 or any(not RichClipboardProtocol.uuid(v) for v in ids) or len(self.snapshot_ids|set(ids))>64:raise NativeFailure("unsupported")
+                self.snapshot_ids.update(ids);self.queued=None
+                if self.pipeline:self.barrier=self.pipeline.get_clock().get_time()-self.pipeline.get_base_time()
             if "regions" in message:
                 if not self.video or not self.transfer_size:raise NativeFailure("unsupported")
                 self.regions.configure(message["regions"],*self.transfer_size)
@@ -965,7 +971,7 @@ class PortalHelper:
                     running=sample.get_segment().to_running_time(self.Gst.Format.TIME,pts)
                     if running==self.Gst.CLOCK_TIME_NONE or running<=self.barrier:return True
                     data=buffer.extract_dup(0,buffer.get_size())
-                    self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
+                    self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height),list(self.snapshot_ids))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
                         self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal",**({"virtualDisplay":True} if self.config["virtual"] else {}),"allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"monitorLayout":self.monitor_layout(native_size)} if self.monitor_layout(native_size) else {}),**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60,**({"nativeCadence":True} if self.native.cadence else {}),**({"nativeAdaptive":True} if self.native.adaptive else {}),**({"nativeCodecs":True,"nativeCodecCandidates":_native_video.GstH264Encoder.codecs(self.Gst)} if self.native.codecs else {})} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {}),**({"microphone":True} if self.microphone_available else {})})
@@ -974,12 +980,13 @@ class PortalHelper:
                             self.restore_sent=True;session=self.session
                             self.output({"type":"native_monitor_restore","token":self.restore_token,"monitors":[record["id"] for record in self.monitor_records]},publish=lambda:self.monitor_live(session))
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
-                    data,width,height,revision,received,proofs=self.queued;self.queued=None
+                    data,width,height,revision,received,proofs,snapshots=self.queued;self.queued=None
                     if revision==self.guard.revision and time.monotonic()-received<1:
                         encoded=base64.b64encode(data).decode();info={"seq":self.seq+1,"width":width,"height":height,"format":"image/jpeg","captureMs":0,"encodeMs":0,"timing":"unavailable","sourceInputSeq":self.guard.seq}
                         if proofs:info["regions"]=proofs
+                        if snapshots:info["snapshotIds"]=snapshots
                         if not self.dead and revision==self.guard.revision:
-                            self.seq+=1;self.pending=self.seq;self.next_emit=time.monotonic()+1/getattr(self,"image_fps",self.config["fps"]);self.output({"type":"frame","info":info,"data":encoded},revision)
+                            self.seq+=1;self.pending=self.seq;self.pending_snapshot_ids=snapshots;self.next_emit=time.monotonic()+1/getattr(self,"image_fps",self.config["fps"]);self.output({"type":"frame","info":info,"data":encoded},revision)
                 # Quiet is session/pipeline liveness only, never new pixels.
                 if self.ready:
                     if self.last_sample is not None and time.monotonic()-self.last_sample>=0.5:

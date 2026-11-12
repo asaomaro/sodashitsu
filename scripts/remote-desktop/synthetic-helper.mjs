@@ -96,7 +96,7 @@ function run() {
   const platformAt=process.argv.indexOf("--native-platform"),nativePlatform=platformAt>=0?process.argv[platformAt+1]:undefined;if(nativePlatform&&!["linux-portal","macos-sck"].includes(nativePlatform))throw Error("Fixture platform");
   const lifecycleAt=process.argv.indexOf("--lifecycle-ledger"),lifecycle=lifecycleAt>=0?process.argv[lifecycleAt+1]:undefined;
   if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"spawn",pid:process.pid})+"\n");
-  let configureDelayed=false,regions=[];
+  let configureDelayed=false,regions=[];const snapshotIds=new Set();let pendingSnapshotIds=[];
   let protectedAudio=false,protectedVideo=false,options,monitorLayout,topologyStopped=false,
     inputAckPipe = false,
     cursorEnabled=false,cursorSeq=0,cursorShapeId=1,cursorSentShape=0,cursorX=.5,cursorY=.5,cursorVisible=true,cursorRed=false,lastCursor=-1000,
@@ -297,7 +297,7 @@ function run() {
           send({type:"unlock_failure",code:"source_transition"});
         }
       } else if (m.type === "heartbeat") {lastSeen = performance.now();for(const pending of heldPointerAcks.splice(0))acknowledgeInput(pending.seq,pending.pointer);}
-      else if (m.type === "ack" && m.seq === pending) pending = 0;
+      else if (m.type === "ack" && m.seq === pending) {pending=0;for(const id of pendingSnapshotIds)snapshotIds.delete(id);pendingSnapshotIds=[];}
       else if(m.type==="native_microphone"){if(m.enabled)startMicrophone(m);else {if(microphone?.id===m.id)stopMicrophone();send({type:"native_microphone",enabled:false,id:m.id});}}
       else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
       else if(m.type==="native_video") {
@@ -316,7 +316,7 @@ function run() {
       else if(m.type==="native_rate"&&native&&m.id===native.id){if(native.barrier)return;if(!nativeCadence||!process.argv.includes("--native-cadence")||m.fps<1||m.fps>native.maxFps||m.kbps<128||m.kbps>native.maxBitrate)throw Error("Native rate ceiling");native.fps=m.fps;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"native_rate",id:m.id,fps:m.fps,kbps:m.kbps})+"\n");}
       else if(m.type==="native_bitrate"&&native&&m.id===native.id){}
       else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending[0])native.pending.shift();
-      else if (m.type === "keyframe") {if(m.regions!==undefined){if(!process.argv.includes("--agent-regions"))throw Error("Regions unsupported");regions=m.regions;}forceFull = true;next=0;}
+      else if (m.type === "keyframe") {for(const id of m.snapshotIds??[])snapshotIds.add(id);if(m.regions!==undefined){if(!process.argv.includes("--agent-regions"))throw Error("Regions unsupported");regions=m.regions;}forceFull = true;next=0;}
       else if(m.type==="policy" && options){options={...options,fps:m.fps,quality:m.quality};next=0;}
       else if(m.type==="clipboard_rich"){rich(m);}
       else if(m.type==="clipboard_control"){clearRich();clipboardAllowed=m.enabled && process.argv.includes("--allow-clipboard");clipboardGeneration=m.generation;send({type:"clipboard_control",enabled:clipboardAllowed,generation:clipboardGeneration});}
@@ -469,6 +469,7 @@ function run() {
       frame.info.regions=regions.map(r=>({...r,digest:createHash("sha256").update(JSON.stringify([r,options.width,heightOf(options),stable?1:seq,version])).digest("hex")}));
     }
     frame.info.seq = seq;
+    pendingSnapshotIds=[...snapshotIds];if(pendingSnapshotIds.length)frame.info.snapshotIds=pendingSnapshotIds;
     forceFull = false;
     sentVersion = version;
     lastReport = performance.now();

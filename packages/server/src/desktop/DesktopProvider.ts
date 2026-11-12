@@ -565,7 +565,7 @@ export class DesktopProvider {
               const size=s.chain.last;
               if(!s.agentRegions||!size||m.region&&(m.region.x+m.region.width>size.width||m.region.y+m.region.height>size.height))throw new Error("Invalid agent region");
             }
-            this.write(s, s.shared?m:m.region===undefined?m:{type:"keyframe",regions:m.region?[DesktopRegionSpec.parse(m.region)]:[]});
+            this.write(s, s.shared?m:m.region===undefined?m:{...m,type:"keyframe",region:undefined,regions:m.region?[DesktopRegionSpec.parse(m.region)]:[]});
           } else if (m.type === "control") {
             s.inputAcks.invalidatePointers();
             delete s.pointerWitness;

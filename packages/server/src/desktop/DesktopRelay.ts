@@ -1,3 +1,4 @@
+import {randomUUID} from "node:crypto";
 import {DesktopProtectedFilesReady} from "@sodashitsu/protocol";
 import {DesktopRegionSpec} from "@sodashitsu/protocol";
 import {DesktopSharedMonitorsFailure} from "@sodashitsu/protocol";
@@ -131,6 +132,7 @@ type Viewer = {
   requestedNative?: boolean;
   media?: { id: string; generation: number; seq: number; native?:boolean; datagrams?:boolean; audioRequested?:boolean;audioSeq?:number;audioGeneration?:number;barrier?:{generation:number;baseSeq?:number}; pending?:number[]; window?:1|3;lastAck?:number };
   snapshot?: {
+    id:string;
     regionId?:string;
     promise: Promise<void>;
     resolve(): void;
@@ -1072,7 +1074,7 @@ export class DesktopRelay {
           v.chain.accept(info);
           if (!info.update && !v.secureDesktop) {
             v.latest = { info, image: image.slice(), at: now };
-            if (v.snapshot&&(!v.snapshot.regionId||info.regions?.some(r=>r.id===v.snapshot!.regionId))&&(!v.nativePlatform||(info.sourceInputSeq??0)>=(v.nativeInputFloor??0))) {
+            if (v.snapshot&&info.snapshotIds?.includes(v.snapshot.id)&&(!v.snapshot.regionId||info.regions?.some(r=>r.id===v.snapshot!.regionId))&&(!v.nativePlatform||(info.sourceInputSeq??0)>=(v.nativeInputFloor??0))) {
               const pending = v.snapshot;
               delete v.snapshot;
               clearTimeout(pending.timer);
@@ -1294,14 +1296,6 @@ export class DesktopRelay {
   }
   private async capture(v: Viewer, after?: number, regionId?:string): Promise<void> {
     if (v.secureDesktop) throw new RpcError("unauthorized", "Lock screen is human-only");
-    const current = this.agentFrame(v);
-    if (
-      current &&
-      performance.now() - current.at < 2000 &&
-      (after === undefined || current.info.seq > after) &&
-      (regionId===undefined||current.info.regions?.some(r=>r.id===regionId))
-    )
-      return;
     if (!this.viewers.has(v) || !v.provider)
       throw new RpcError("server_busy", "Desktop unavailable");
     let waiting = v.snapshot?.promise;
@@ -1315,10 +1309,9 @@ export class DesktopRelay {
         delete v.snapshot;
         reject(new RpcError("server_busy", "Fresh full frame unavailable"));
       }, 2500);
-      v.snapshot = { promise, resolve, reject, timer,...(regionId?{regionId}:{}) };
+      v.snapshot = { id:randomUUID(),promise, resolve, reject, timer,...(regionId?{regionId}:{}) };
       waiting = promise;
-      // Legacy sources already send full images. Delta sources send a fresh full JPEG on demand.
-      if ((v.chain.last?.contentId||regionId) && !this.send(v.provider, { type: "keyframe" })) this.stop(v);
+      if (!this.send(v.provider, { type: "keyframe",snapshotIds:[v.snapshot.id] })) this.stop(v);
     }
     if(regionId&&v.snapshot)v.snapshot.regionId=regionId;
     await waiting;

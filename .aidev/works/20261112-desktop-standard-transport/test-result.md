@@ -623,3 +623,72 @@ AssertionError: expected 2 to be +0 // Object.is equality
 
 
 ```
+
+## Phase 8
+
+Agent/headless/regional/snapshot targeted suite21 passed before final assertion strengthening. Real Provider/Relay regression holds an already-captured JPEG before requesting capture, delivers it without the requestID, proves promise stays pending, ACKs it through the actual bounded source, then accepts matching new capture. SharedCapture test concurrent members: blocked member cannot lose or leak its ID; real member ACK triggers reissue. Linux Guards19 passed including existing pipeline barrier and old-ID ACK preserving newer request; discard retains pending IDs. OLD production Relay/SharedCapture fail2 regressions, and old Linux producer fails snapshot barrier regression. Files restored and byte-compared. Swift compiler unavailable. Windows/signin producer changes supplied by respective owners.
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (351 tests | 1 failed | 350 skipped) 238ms
+   × requires a capture-correlated full image after an agent snapshot request, ignoring queued old pixels 236ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopSharedCapture.test.ts (91 tests | 1 failed | 90 skipped) 1017ms
+   × routes concurrent fresh snapshot IDs without stealing a blocked member's request 1016ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > requires a capture-correlated full image after an agent snapshot request, ignoring queued old pixels
+TypeError: Cannot read properties of undefined (reading 'id')
+ ❯ src/desktop/DesktopRelay.test.ts:2142:946
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSharedCapture.test.ts > routes concurrent fresh snapshot IDs without stealing a blocked member's request
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktop/DesktopSharedCapture.test.ts:522:526
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 440 skipped (442)
+   Start at  23:46:42
+   Duration  2.57s (transform 57%, tests 30%, import 13%)
+
+  Transform  |@sodashitsu/server| transforming modules took 2.38s · 57% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+F
+======================================================================
+FAIL: test_snapshot_request_uses_existing_pipeline_pts_boundary_and_ack_keeps_newer_request (__main__.Guards.test_snapshot_request_uses_existing_pipeline_pts_boundary_and_ack_keeps_newer_request)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspaces/sodashitsu-transport-zero-custom/scripts/remote-desktop/test-linux-portal-helper.py", line 183, in test_snapshot_request_uses_existing_pipeline_pts_boundary_and_ack_keeps_newer_request
+    self.assertIsNone(helper.queued);self.assertEqual(helper.barrier,1134);self.assertEqual(helper.snapshot_ids,{one})
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: (b'old JPEG',) is not None
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+
+```

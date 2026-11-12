@@ -48,6 +48,7 @@ type Subscription = DesktopHelper & {
   nativeCapturedInput:number;
   nativeInputs:Array<{physical:number;local:number}>;
   region?:{requested:RegionSpec;physical:RegionSpec};
+  snapshotIds:Set<string>;
   cursorShape: number;
   images: DesktopFrameChain;
   configured: boolean;
@@ -155,6 +156,7 @@ export class DesktopSharedCapture {
     }
     const current = g;
     const member = Object.assign(new EventEmitter(), {
+      snapshotIds:new Set<string>(),
       resourceChannel: current.child.resourceChannel,
       nativePcm: current.child.nativePcm,
       nativeCapturedInput:0,
@@ -304,8 +306,10 @@ export class DesktopSharedCapture {
     if (value.type === "ack") {
       if (!s.pending || value.seq !== s.pending) throw Error("Wrong subscriber ACK");
       s.pending = 0;
-      if (g.deltas && s.images.last?.seq !== g.images.last?.seq) this.imageKeyframe(g);
+      if (s.snapshotIds.size || g.deltas && s.images.last?.seq !== g.images.last?.seq) this.imageKeyframe(g);
     } else if (value.type === "keyframe") {
+      for(const id of value.snapshotIds??[])s.snapshotIds.add(id);
+      if(s.snapshotIds.size>8)throw Error("Too many pending snapshots");
       if(value.region!==undefined){
         const size=g.images.last;
         if(g.ready?.agentRegions!==true||g.protectedSource||!size)throw Error("Region verification unavailable");
@@ -491,13 +495,15 @@ export class DesktopSharedCapture {
           recover = true;
           continue;
         }
-        const {regions,...plain}=info;
+        const {regions,snapshotIds,...plain}=info;
+        const snapshots=snapshotIds?.filter(id=>s.snapshotIds.has(id));
         const proof=s.region&&regions?.find(p=>p.id===s.region!.physical.id);
         if(proof&&s.region&&(proof.x!==s.region.physical.x||proof.y!==s.region.physical.y||proof.width!==s.region.physical.width||proof.height!==s.region.physical.height))throw Error("Region proof bounds changed");
-        const delivered={...plain,...(native?{sourceInputSeq:s.nativeCapturedInput}:{}),...(proof&&s.region?{regions:[{...proof,id:s.region.requested.id}]}:{})};
+        const delivered={...plain,...(snapshots?.length?{snapshotIds:snapshots}:{}),...(native?{sourceInputSeq:s.nativeCapturedInput}:{}),...(proof&&s.region?{regions:[{...proof,id:s.region.requested.id}]}:{})};
         s.images.accept(delivered);
         s.pending = info.seq;
         this.emit(s, {...value,info:delivered});
+        for(const id of snapshots??[])s.snapshotIds.delete(id);
       }
       this.write(g, { type: "ack", seq: info.seq });
       if (recover) this.imageKeyframe(g);
@@ -555,12 +561,14 @@ export class DesktopSharedCapture {
   private imageKeyframe(g: NonNullable<DesktopSharedCapture["group"]>): void {
     const now = performance.now();
     if (now - g.keyframeAt < 100) {
-      if(g.regionDirty&&!g.regionTimer){g.regionTimer=setTimeout(()=>{delete g.regionTimer;if(!g.ended)this.imageKeyframe(g);},Math.max(1,Math.ceil(100-(now-g.keyframeAt))));g.regionTimer.unref();}
+      if((g.regionDirty||[...g.members].some(s=>s.snapshotIds.size))&&!g.regionTimer){g.regionTimer=setTimeout(()=>{delete g.regionTimer;if(!g.ended)this.imageKeyframe(g);},Math.max(1,Math.ceil(100-(now-g.keyframeAt))));g.regionTimer.unref();}
       return;
     }
     g.keyframeAt = now;
-    if(g.regionDirty){g.regionDirty=false;clearTimeout(g.regionTimer);delete g.regionTimer;this.write(g,{type:"keyframe",regions:[...g.members].flatMap(member=>member.region?[member.region.physical]:[])});}
-    else this.write(g, { type: "keyframe" });
+    const snapshotIds=[...g.members].flatMap(s=>[...s.snapshotIds]);
+    const snapshots=snapshotIds.length?{snapshotIds}:{};
+    if(g.regionDirty){g.regionDirty=false;clearTimeout(g.regionTimer);delete g.regionTimer;this.write(g,{type:"keyframe",...snapshots,regions:[...g.members].flatMap(member=>member.region?[member.region.physical]:[])});}
+    else this.write(g, { type: "keyframe",...snapshots });
   }
   private emit(s: Subscription, value: unknown): void {
     if (s.closed) return;

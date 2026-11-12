@@ -190,6 +190,7 @@ it("keeps browserless local and remote-style leases until the RPC owner disconne
  const lease=await f.relay.openHeadless("cli",true,()=>active);
  expect(lease.expiresAt).toBe(0);
  await f.relay.agents.refresh("cli",lease.leaseId);
+ expect([...(f.relay as any).viewers][0].latest.info.snapshotIds).toHaveLength(1);
  expect(f.relay.agents.observe("cli",lease.leaseId).width).toBeGreaterThan(0);
  expect(f.closed()).toBe(0);
  active=false;f.relay.clientGone("cli");
@@ -1731,7 +1732,7 @@ it("cancels revoked regional snapshots and ignores an old nonce while a new gran
    const packet=decodeDesktopFrame(new Uint8Array(data));
    if(packet.info.regions?.length){
     if(!replaced){replaced=true;return (wireSend as any)(encodeDesktopFrame({...packet.info,regions:packet.info.regions.map(r=>({...r,id:oldId}))},packet.image),...args);}
-    held={data,args};return;
+    held={data:encodeDesktopFrame({...packet.info,snapshotIds:[(v as any).snapshot.id]},packet.image),args};return;
    }
   }
   return (wireSend as any)(data,...args);
@@ -2139,3 +2140,4 @@ it.each([new RpcError('server_busy','PRIVATE_PATH_OR_ERROR'),new RpcError('unaut
 });
 
 it.each([false,true])("cancels only a timed-out plaintext request and retries without regrant, shared=%s",async shared=>{const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowClipboard:true,command:[...cfg.command,"--static","--allow-clipboard","--rich-clipboard"]});const v=await f.viewer(shared?"shared-clipboard":"rich");v.send({...start,options:{...start.options,features:true,...(shared?{sharedDesktop:true,sharedClipboard:true}:{})}});await vi.waitFor(()=>expect(v.messages.some(m=>m.type==="ready")).toBe(true));v.send({type:"clipboard_grant",enabled:true});await vi.waitFor(()=>expect(v.messages.some(m=>m.type==="clipboard_state"&&m.enabled)).toBe(true));const share=(f.provider as any).active??[...(f.provider as any).shared][0];const original=share.process.stdin.write.bind(share.process.stdin),writer=vi.spyOn(share.process.stdin,"write");writer.mockImplementation((raw:any)=>{const m=JSON.parse(String(raw));if(m.type==="clipboard")return true;return original(raw);});v.send({type:"clipboard",id:1,operation:"read"});await vi.waitFor(()=>expect(share.clipboardPending.has(1)).toBe(true));v.send({type:"clipboard",id:1,operation:"cancel"});await vi.waitFor(()=>expect(share.clipboardPending.size).toBe(0));expect(share.clipboardGranted).toBe(true);writer.mockRestore();v.send({type:"clipboard",id:2,operation:"read"});await vi.waitFor(()=>expect(v.messages.some(m=>m.type==="clipboard_result"&&m.id===2&&m.ok)).toBe(true));expect(v.ws.readyState).toBe(WebSocket.OPEN);v.send({type:"stop"});});
+it("requires a capture-correlated full image after an agent snapshot request, ignoring queued old pixels",async()=>{const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,"--static"]});const viewer=await f.viewer();viewer.send(start);await vi.waitFor(()=>expect(viewer.frames.length).toBe(1));const v=[...(f.relay as any).viewers][0],share=(f.provider as any).active,wire=share.ws.send.bind(share.ws);let held:any,heldArgs:any[]=[];const hook=vi.spyOn(share.ws,"send").mockImplementation((raw:any,...args:any[])=>{if(typeof raw!=="string"&&!held){held=raw;heldArgs=args;return;}return wire(raw,...args);});try{viewer.send({type:"ack",seq:1});await vi.waitFor(()=>expect(held).toBeDefined());const old=decodeDesktopFrame(new Uint8Array(held));expect(old.info.snapshotIds).toBeUndefined();let resolved=false;const pending=v.agent.capture().then(()=>{resolved=true;});const requestId=v.snapshot.id;expect(requestId).toBeDefined();wire(held,...heldArgs);await vi.waitFor(()=>expect(viewer.frames.length).toBe(2));expect(resolved).toBe(false);viewer.send({type:"ack",seq:old.info.seq});await pending;expect(resolved).toBe(true);expect(v.latest.info.snapshotIds).toContain(requestId);}finally{hook.mockRestore();viewer.send({type:"stop"});}});

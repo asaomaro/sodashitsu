@@ -479,6 +479,7 @@ final class DesktopSource {
     private let factsOverride: (() -> Bool)?
     init(facts: (() -> Bool)?=nil) { factsOverride=facts }
     let regions=AgentRegionProofs()
+    var snapshotIDs=Set<String>(),pendingSnapshotIDs=[String]()
     let gate=NSRecursiveLock()
     var dead=false,ready=false,stopping=false
     var input: InputGuard?
@@ -628,8 +629,12 @@ final class DesktopSource {
         guard configured else { throw NativeError("backend_failure") }
         switch kind {
         case "ack":
-            guard pending != 0,integer(value["seq"],1,Int64(safeInteger))==pending else { throw NativeError("backend_failure") };pending=0
+            guard pending != 0,integer(value["seq"],1,Int64(safeInteger))==pending else { throw NativeError("backend_failure") };pending=0; snapshotIDs.subtract(pendingSnapshotIDs);pendingSnapshotIDs=[]
         case "keyframe":
+            if let raw=value["snapshotIds"] {
+                guard let ids=raw as? [String],!ids.isEmpty,ids.count<=64,ids.allSatisfy({UUID(uuidString:$0)?.uuidString.lowercased()==$0}),snapshotIDs.union(ids).count<=64 else {throw NativeError("unsupported")}
+                snapshotIDs.formUnion(ids)
+            }
             if let requested=value["regions"] {
                 guard ready,let input=input else { throw NativeError("unsupported") }
                 try regions.configure(requested,width:width,height:height);input.revision &+= 1
@@ -708,14 +713,14 @@ final class DesktopSource {
             let configuration=SCStreamConfiguration();configuration.width=width;configuration.height=height;configuration.showsCursor=showCursor
             self.configuration=configuration;filter=SCContentFilter(display:selected,excludingApplications:[],exceptingWindows:[])
             input=InputGuard(sink:QuartzSink(bounds:bounds,active:{ [weak self] in self?.sourceActive()==true }),allowed:inputCeiling,active:{ [weak self] in
-                guard let self=self else { return false };return self.ready && milliseconds()-self.lastCapture<1500 && self.sourceActive()
+                guard let self=self else { return false };return self.ready && self.sourceActive()
             },releaseAllowed:{ [weak self] in self?.sourceActive()==true })
             clipboard=TextClipboardGuard(sink:PasteboardTextSink(),ceiling:clipboardCeiling,active:{ [weak self] in
                 guard let self=self else { return false };return self.ready && milliseconds()-self.lastHeartbeat<8000 && self.sourceActive()
             },canWrite:{ [weak self] in self?.inputCeiling==true && self?.sourceActive()==true })
             if richRequested,let clipboard=clipboard { richClipboard=RichClipboardGuard(clipboard:clipboard,factory:{PasteboardRichSink()}) }
             while !dead && !Task.isCancelled {
-                let ticket=locked { FrameTicket(revision:input!.revision,started:milliseconds(),inputSeq:input!.seq) }
+                let (ticket,snapshots)=locked { (FrameTicket(revision:input!.revision,started:milliseconds(),inputSeq:input!.seq),Array(snapshotIDs)) }
                 guard sourceActive() else { throw NativeError("source_changed") }
                 let image=try await SCScreenshotManager.captureImage(contentFilter:filter!,configuration:configuration)
                 guard !dead else { return }
@@ -747,6 +752,8 @@ final class DesktopSource {
                         lastJPEG=milliseconds();sequence+=1;pending=sequence;pendingAt=milliseconds();let seq=sequence
                         var info: [String:Any]=["seq":seq,"width":width,"height":height,"format":"image/jpeg","captureMs":captureMs,"encodeMs":encodeMs,"timing":"measured","sourceInputSeq":ticket.inputSeq]
                         if !regionProofs.isEmpty { info["regions"]=regionProofs }
+                        pendingSnapshotIDs=snapshots
+                        if !snapshots.isEmpty {info["snapshotIds"]=snapshots}
                         try output.send(["type":"frame","info":info,"data":jpeg.base64EncodedString()],valid:{ [weak self] in
                             self?.publishable(ticket)==true
                         },discarded:{ [weak self] in DispatchQueue.main.async { if self?.pending==seq { self?.pending=0 } } })

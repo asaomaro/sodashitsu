@@ -176,6 +176,14 @@ class Guards(unittest.TestCase):
   helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None,idle_add=lambda *args:None),gst);helper.guard,c,a=self.setup_guard();helper.ready=True;helper.session="generated";helper.scope=SimpleNamespace(alive=lambda:a[0]);helper.pipeline=SimpleNamespace(get_state=lambda timeout:(0,4,0));helper.sink=SimpleNamespace(emit=lambda *args:None);helper.last_sample=module.time.monotonic()-2.5;helper.seq=7
   helper.failure_codes=[];helper.failure=lambda code:helper.failure_codes.append(code)
   return helper,a
+ def test_snapshot_request_uses_existing_pipeline_pts_boundary_and_ack_keeps_newer_request(self):
+  helper,a=self.idle_helper();one=str(module.uuid.uuid4());two=str(module.uuid.uuid4())
+  helper.pipeline.get_clock=lambda:SimpleNamespace(get_time=lambda:1234);helper.pipeline.get_base_time=lambda:100
+  helper.queued=(b"old JPEG",);helper.command({"type":"keyframe","snapshotIds":[one]})
+  self.assertIsNone(helper.queued);self.assertEqual(helper.barrier,1134);self.assertEqual(helper.snapshot_ids,{one})
+  helper.pending=8;helper.pending_snapshot_ids=[one];helper.command({"type":"keyframe","snapshotIds":[two]});helper.command({"type":"ack","seq":8})
+  self.assertEqual(helper.snapshot_ids,{two});self.assertEqual(helper.guard.seq,0)
+  helper.pending=9;helper.pending_snapshot_ids=[two];helper.discard_pending(9);self.assertEqual(helper.snapshot_ids,{two})
  def test_damage_only_producer_preserves_image_time_sequence_and_input_floor(self):
   helper,a=self.idle_helper();sample=helper.last_sample;self.assertTrue(helper.pump());self.assertEqual(helper.failure_codes,[]);self.assertEqual(helper.seq,7);self.assertEqual(helper.last_sample,sample);self.assertEqual(helper.guard.seq,0)
   notice=module.json.loads(helper.output_queue.get_nowait()[0]);self.assertEqual(notice,{"type":"platform_idle","backend":"linux-portal","seq":7,"counter":1});self.assertTrue(helper.pump());self.assertTrue(helper.output_queue.empty())
