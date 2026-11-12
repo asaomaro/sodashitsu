@@ -105,3 +105,31 @@ signin_service_standard_start_modes_identity_and_acl_passed
 ```
 
 最初の純粋ACL fixtureはMonoが空DACLのSDDLを読めず失敗したため、空ACLをRawSecurityDescriptor/RawAclで組み立てるportableなfixtureへ変更した。OSのサービス設定やDACLは操作していない。
+
+## 直接OS scope・実所有への縮小（実機未実行）
+
+private WinEvent/marker/Epoch、context role、120秒presence/worker寿命、readonly miniRPC/watchdog、5秒policy leaseと2秒DPAPI/digest pollを削除。通常native/helperのEpoch参照除去はNative担当commitと対になる。健康なsourceが12時間維持される生成検査と、source/session/同意/replay喪失時の拒否を確認。スナップショットIDは実capture開始時に固定し、frame Flush完了後にのみpendingから取り除く。
+
+変更したC#の5セットがMonoでコンパイル成功。pure Scope/Presence/NativeHost/Worker生成検査成功。Windows専用GetCurrentThreadIdを使うDuplex検査は実行せずsole operatorへ残す。その他の20個のvalidator負例と旧120秒制限再挿入の負例は意図したassertionで失敗し、バイト一致復元後に成功。旧寿命制限の生出力:
+
+```
+negative old-120s-lifetime
+signin_scope_direct_process_session_consent_and_replay_passed
+
+Unhandled Exception:
+System.InvalidOperationException: Healthy presence expired by time without ownership loss
+  at SodaDesktopSigninPresence.VerifyGeneratedData () [0x00257] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0 
+  at ScopePresenceProof.Main () [0x00005] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0 
+[ERROR] FATAL UNHANDLED EXCEPTION: System.InvalidOperationException: Healthy presence expired by time without ownership loss
+  at SodaDesktopSigninPresence.VerifyGeneratedData () [0x00257] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0 
+  at ScopePresenceProof.Main () [0x00005] in <d5e0c4d313bb4aafb6e6f34cbfba0054>:0 
+
+restored
+signin_scope_direct_process_session_consent_and_replay_passed
+signin_presence_real_owner_lifetime_and_readonly_commands_passed
+signin_native_closed_roles_generated_pass
+signin_presence_real_owner_lifetime_and_readonly_commands_passed
+signin_worker_generated_data_and_abi_passed
+```
+
+Signin関連11ファイルのVitest・163テストが成功（この時点のEndpoint/Dispatch追加検査を含む）。scoped標準tscを8GBで実行して成功。full server型検査はRootが統合時1回にまとめる。Windows OS token/ACL/session0/Winlogon/UAC/SCM起動、実DPAPIはここでは実行しない。

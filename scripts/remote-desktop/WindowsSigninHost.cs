@@ -62,7 +62,6 @@ public static class SodaDesktopSigninHost {
             }finally{if(!transferred)SodaDesktopSigninPackageNative.Release(held);}
         }
         internal bool Current(){lock(gate){try{if(disposed)return false;foreach(var item in held){bool secret=item.Path==Path||!item.Directory;SodaDesktopSigninPackageNative.CheckCore(item,bytes=>secret?PrivateRuntimeAcl(bytes):SodaDesktopSigninQuiescence.StateAncestor(item.Path,bytes));}return !disposed;}catch{return false;}}}
-        internal string BarrierSha256{get{lock(gate){if(!Current())throw Failure();return held[held.Count-1].Before.Fingerprint();}}}
         public void Dispose(){lock(gate){disposed=true;SodaDesktopSigninPackageNative.Release(held);}}
     }
     internal static void Run(WaitHandle stop){

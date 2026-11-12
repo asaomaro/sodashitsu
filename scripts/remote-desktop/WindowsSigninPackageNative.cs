@@ -97,8 +97,8 @@ public static class SodaDesktopSigninPackageNative {
     /** Retain this lease until the verified child has stopped. Disposing it is
      * not a substitute for stopping a child; this verifier never launches one. */
     public sealed class Lease : IDisposable {
-        readonly string root;readonly List<Held> held;readonly object gate=new object();bool closed;internal readonly string ManifestSha256;readonly bool controller;
-        internal Lease(string root,List<Held> held,string manifestSha256,bool controller){this.root=root;this.held=held;ManifestSha256=manifestSha256;this.controller=controller;}
+        readonly string root;readonly List<Held> held;readonly object gate=new object();bool closed;readonly bool controller;
+        internal Lease(string root,List<Held> held,bool controller){this.root=root;this.held=held;this.controller=controller;}
         public bool Current(){lock(gate){try{return !closed&&Authority(controller)&&!closed;}catch{return false;}}}
         string Get(string relative){if(!Current())throw Failure();return Full(root,relative);}
         public string Node {get{return Get("node.exe");}}
@@ -139,7 +139,7 @@ public static class SodaDesktopSigninPackageNative {
             }
             Inventory(packageDirectories,files);foreach(var file in held)Check(file);
             if(!Authority(controller))throw Failure();
-            var lease=new Lease(root,held,manifestSha256,controller);transferred=true;return lease;
+            var lease=new Lease(root,held,controller);transferred=true;return lease;
         }catch{throw Failure();}finally{if(!transferred)Release(held);}
     }
 }

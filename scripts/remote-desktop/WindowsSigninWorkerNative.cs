@@ -46,7 +46,7 @@ internal static class SodaDesktopSigninWorkerNative {
     internal sealed class HostBinding:IDisposable {
         internal IntPtr Parent,Aggregate;
         SodaDesktopSigninScm service;SodaDesktopSigninProcessEvidence.Pin host;Func<bool> scope;
-        internal static HostBinding Open(string owner,string package,string barrier,Func<bool> current){
+        internal static HostBinding Open(string owner,Func<bool> current){
             var result=new HostBinding();int stage=203;
             try{
                 result.scope=current;

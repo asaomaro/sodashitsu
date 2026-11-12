@@ -1,7 +1,7 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Generated data/clock/topology/input sinks only. No privileged entry point is run.
-$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninProcessEvidence.cs','WindowsSigninScm.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninHost.cs','WindowsSigninAdminPipe.cs','WindowsSigninProcess.cs','WindowsProtectedEpoch.cs','WindowsSigninCandidate.cs','WindowsSigninCandidateNative.cs','WindowsSigninScope.cs','WindowsSigninScopeNative.cs','WindowsSigninWorkerNative.cs','WindowsSigninWorker.cs','WindowsSigninPresence.cs','WindowsSigninTarget.cs','WindowsSigninScopeChecks.cs','WindowsSigninDuplexChecks.cs','WindowsSigninWorkerGeneratedChecks.cs','WindowsSigninPresenceGeneratedChecks.cs','WindowsSigninNativeHost.cs','WindowsSigninNativeHostGeneratedChecks.cs')
+$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninProcessEvidence.cs','WindowsSigninScm.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninHost.cs','WindowsSigninAdminPipe.cs','WindowsSigninProcess.cs','WindowsSigninCandidate.cs','WindowsSigninCandidateNative.cs','WindowsSigninScope.cs','WindowsSigninScopeNative.cs','WindowsSigninWorkerNative.cs','WindowsSigninWorker.cs','WindowsSigninPresence.cs','WindowsSigninTarget.cs','WindowsSigninScopeChecks.cs','WindowsSigninDuplexChecks.cs','WindowsSigninWorkerGeneratedChecks.cs','WindowsSigninPresenceGeneratedChecks.cs','WindowsSigninNativeHost.cs','WindowsSigninNativeHostGeneratedChecks.cs')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('soda-signin-worker-checks-'+[guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($root)|Out-Null
 $original=@{};$bytes=@{}
@@ -19,13 +19,6 @@ try {
             @('presence-target-initial','WindowsSigninWorker.cs','return purpose==Purpose.Presence?null:read();','return read();','Presence enumerated physical target'),
             @('presence-target-read','WindowsSigninWorker.cs','if(purpose==Purpose.Presence)return nativeRead();','','Presence blocked on physical target'),
             @('pump-closed-writer','WindowsSigninWorker.cs','var writer=new StreamWriter(pipe,new UTF8Encoding(false),writeSize,true);action(reader,writer);','using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),writeSize,true)){action(reader,writer);}','Pump reflushed a closed pipe'),
-            @('context-route','WindowsSigninWorker.cs','if(args.Length!=1||args[0]!="--context")return false;','if(args.Length!=1)return false;','Context route accepted other purpose'),
-            @('control-reentry','WindowsSigninScope.cs','CurrentCore(read)||ended||revision!=controlRevision','CurrentCore(read)||ended','Reentrant release was overwritten'),
-            @('frame-serial','WindowsSigninScope.cs','frame.Serial!=serial||','','Replaced frame ticket published'),
-            @('frame-age','WindowsSigninScope.cs','||at-frame.At>=1500','','Stale frame published'),
-            @('drawn-frame','WindowsSigninScope.cs','sequence!=published||','','Acknowledgement before publication accepted'),
-            @('epoch','WindowsSigninScope.cs','||epoch>=0&&epoch!=facts.Epoch','','Changed signin facts published: epoch'),
-            @('input-permit-age','WindowsSigninScope.cs','now-at<1500','now-at<15000','Signin text continued past input freshness'),
             @('pointer-event','WindowsSigninWorker.cs','Require(action=="move"||action=="down"||action=="up");','Require(true);','Invalid pointer event produced input'),
             @('pointer-button','WindowsSigninWorker.cs','Integer(value,"button",0,4)','Integer(value,"button",0,5)','Invalid pointer button produced input'),
             @('target','WindowsSigninTarget.cs','initial.Same(read())','read()!=null','Changed target was accepted'),
@@ -35,12 +28,7 @@ try {
             @('authentication-pair-count','WindowsSigninWorker.cs','Require(sent==2);','Require(sent>0);','Partial authentication pair accepted'),
             @('broker-utf8-output','WindowsSigninWorker.cs','new StreamWriter(stream,new UTF8Encoding(false),65536,true)','new StreamWriter(stream,new ASCIIEncoding(),65536,true)','Broker UTF8 output changed'),
             @('broker-utf8-input','WindowsSigninWorker.cs','new StreamReader(stream,new UTF8Encoding(false,true),false,16384,true)','new StreamReader(stream,new ASCIIEncoding(),false,16384,true)','Broker UTF8 input changed'),
-            @('presence-source-latch','WindowsSigninPresence.cs','if(ended)return false;','ended=false;','Presence source revived'),
-            @('presence-commands','WindowsSigninPresence.cs','if(command!="heartbeat"){ended=true;return false;}','if(command!="heartbeat"){return true;}','Presence accepted non-observer command'),
-            @('presence-callback-age','WindowsSigninPresence.cs','return false;}at=Now();if(ended||at>=deadline||at-lastBeat>=15000)','return false;}at=Now();if(ended)','Presence callback extended deadline'),
-            @('presence-backward','WindowsSigninPresence.cs','if(at<lastNow)','if(at<lastNow-1)','Presence backward clock accepted'),
-            @('presence-reentry','WindowsSigninPresence.cs','if(publish==null||publishing)','if(publish==null||publishing&&sequence<0)','Reentrant presence publication accepted'),
-            @('presence-clock-fault','WindowsSigninPresence.cs','return at;}catch{ended=true;throw;}','return at;}catch{throw;}','Presence clock exception revived'),
+            @('presence-commands','WindowsSigninPresence.cs','if(command=="heartbeat")return true;closed=true;return false;','return true;','Presence accepted a capture/input command'),
             @('presence-capture-route','WindowsSigninWorker.cs','if(purpose==Purpose.Presence)presence();else capture();','if(purpose==Purpose.Presence)capture();else capture();','Presence dispatched capture'),
             @('presence-cleanup-route','WindowsSigninWorker.cs','if(purpose!=Purpose.Presence)release();','release();','Presence dispatched input cleanup'),
             @('presence-command-route','WindowsSigninWorker.cs','Require(presence.Command(type));','presence.Command(type);','Presence route accepted active command'),
@@ -63,7 +51,7 @@ try {
         }
         $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object {Write-Output ([string]$_)}
         if($code -ne 0){throw 'Restored worker checks failed'}
-        'signin_worker_33_source_negative_controls_and_restore_passed'
+        'signin_worker_source_negative_controls_and_restore_passed'
     }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0

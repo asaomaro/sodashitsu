@@ -24,7 +24,6 @@ export const desktopRuntimeAssets = Object.freeze([
   'WindowsNativeDragStreams.cs',
   'WindowsNativeDragWorker.cs',
   'WindowsNativeRoleHost.cs',
-  'WindowsProtectedEpoch.cs',
   'WindowsProtectedHandshake.cs',
   'WindowsProtectedScope.cs',
   'WindowsProtectedScopeNative.cs',

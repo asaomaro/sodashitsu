@@ -4,7 +4,6 @@ public static partial class SodaDesktopSigninNativeHost {
     internal static string Role(string[] args) {
         if(args==null)return null;
         if(args.Length==0)return "service";
-        if(args.Length==1&&args[0]=="--context")return "worker";
         if(args.Length==2&&args[0]=="--broker"&&Purpose(args[1]))return "worker";
         if(args.Length==6&&args[0]=="--worker") {
             Guid nonce;int broker,session;long started;

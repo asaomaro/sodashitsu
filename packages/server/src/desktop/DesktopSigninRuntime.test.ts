@@ -1,107 +1,25 @@
-import {PassThrough} from "node:stream";
-import {desktopSigninStartup} from "./DesktopSigninStartup.js";
-import {desktopSigninEntry} from "./DesktopSigninEntry.js";
-import {afterEach,expect,it,vi} from "vitest";
-import {DesktopSigninEnrollment} from "./DesktopSigninEnrollment.js";
-import {desktopSigninCycle,type DesktopSigninRuntimeDependencies} from "./DesktopSigninRuntime.js";
-const ownerSid="S-1-5-21-1-2-3-1001",provider="a".repeat(64),peer="b".repeat(64);
-const data={version:1,purpose:"desktop-signin",revision:"12345678-1234-4234-8234-123456789012",ownerSid,origin:"https://root.invalid",machineId:"c".repeat(32),token:"t".repeat(43),provider,allowSignin:true,allowInput:false,peers:[{fingerprint:peer,label:"generated"}]};
-const enrollment=()=>DesktopSigninEnrollment.decode(Buffer.from(JSON.stringify(data)),ownerSid);
-const context={type:"signin_context" as const,ownerSid,packageRoot:"C:\\fixed",stateDir:"C:\\fixed-runtime"};
-const controllers:AbortController[]=[];afterEach(()=>{for(const controller of controllers)controller.abort();controllers.length=0;vi.useRealTimers();});
+import {afterEach,expect,it,vi} from 'vitest';
+import {DesktopSigninEnrollment} from './DesktopSigninEnrollment.js';
+import {desktopSigninCycle,type DesktopSigninRuntimeDependencies} from './DesktopSigninRuntime.js';
+const ownerSid='S-1-5-21-1-2-3-1001',provider='a'.repeat(64),peer='b'.repeat(64);
+const data={version:1,purpose:'desktop-signin',revision:'12345678-1234-4234-8234-123456789012',ownerSid,origin:'https://root.invalid',machineId:'c'.repeat(32),token:'t'.repeat(43),provider,allowSignin:true,allowInput:false,peers:[{fingerprint:peer,label:'generated'}]};
+const enrollment=()=>DesktopSigninEnrollment.decode(Buffer.from(JSON.stringify(data)),ownerSid),context={type:'signin_context' as const,ownerSid,packageRoot:'C:\\fixed',stateDir:'C:\\fixed-runtime'};
+afterEach(()=>vi.useRealTimers());
 async function flush(){for(let n=0;n<20;n++)await Promise.resolve();}
 function fixture(){
- let now=0,live=false,presenceOptions:Parameters<DesktopSigninRuntimeDependencies["presence"]>[0]|undefined,connectorOptions:Parameters<DesktopSigninRuntimeDependencies["connector"]>[0]|undefined;
- let reveal!:(value:typeof context|null)=>void,stopProof!:()=>void;const ready=new Promise<typeof context|null>(resolve=>{reveal=resolve;}),proof=new Promise<void>(resolve=>{stopProof=resolve;});
- const abort=new AbortController();controllers.push(abort);
- const presence={active:()=>live,ready:()=>ready,close:vi.fn(()=>{live=false;presenceOptions?.closed();}),settled:vi.fn(()=>proof)};
- const state={initialized:true as const,required:true,fingerprint:provider,peers:[{fingerprint:peer,label:"generated",role:"viewer" as const}]};
+ let live=false,presenceOptions:Parameters<DesktopSigninRuntimeDependencies['presence']>[0]|undefined,connectorOptions:Parameters<DesktopSigninRuntimeDependencies['connector']>[0]|undefined;
+ let reveal!:(value:typeof context|null)=>void,exited!:()=>void;const ready=new Promise<typeof context|null>(resolve=>{reveal=resolve;}),exit=new Promise<void>(resolve=>{exited=resolve;}),abort=new AbortController();
+ const presence={active:()=>live,ready:()=>ready,close:vi.fn(()=>{live=false;}),settled:vi.fn(()=>exit)};
+ const state={initialized:true as const,required:true,fingerprint:provider,peers:[{fingerprint:peer,label:'generated',role:'viewer' as const}]};
  const store={status:vi.fn(async()=>state),verifiedEndpoint:vi.fn(),close:vi.fn(),settled:vi.fn(async()=>{})};
- const identity={endpoint:vi.fn(),close:vi.fn(()=>store.close()),settled:vi.fn(async()=>{})};
- const endpoint={start:vi.fn(async()=>({started:true as const})),clientGone:vi.fn(),close:vi.fn(async()=>{})},connector={close:vi.fn()};
- const deps:DesktopSigninRuntimeDependencies={now:()=>now,unsafeStop:vi.fn(),presence:vi.fn(options=>{presenceOptions=options;return presence;}),enrollment:vi.fn(async()=>enrollment()),store:vi.fn(()=>store),identity:vi.fn(()=>identity),endpoint:vi.fn(()=>endpoint),connector:vi.fn(options=>{connectorOptions=options;return connector;})};
- const start=()=>{const run=desktopSigninCycle(ownerSid,abort.signal,deps);void run.catch(()=>{});return run;};
- return {abort,deps,presence,store,identity,endpoint,connector,start,reveal:(value:typeof context|null=context)=>{live=!!value;reveal(value);},stopProof,lose:()=>{live=false;presenceOptions!.closed();},clock:(value:number)=>{now=value;},connectorOptions:()=>connectorOptions};
+ const identity={endpoint:vi.fn(),close:vi.fn(()=>store.close()),settled:vi.fn(async()=>{})},endpoint={start:vi.fn(async()=>({started:true as const})),clientGone:vi.fn(),close:vi.fn(async()=>{})},connector={close:vi.fn()};
+ const deps:DesktopSigninRuntimeDependencies={unsafeStop:vi.fn(),presence:vi.fn(options=>{presenceOptions=options;return presence;}),enrollment:vi.fn(async()=>enrollment()),store:vi.fn(()=>store),identity:vi.fn(()=>identity),endpoint:vi.fn(()=>endpoint),connector:vi.fn(options=>{connectorOptions=options;return connector;})};
+ return {abort,presence,store,identity,endpoint,connector,deps,start:()=>desktopSigninCycle(ownerSid,abort.signal,deps),reveal:(value:typeof context|null=context)=>{live=!!value;reveal(value);},exited,lose:()=>{live=false;presenceOptions!.closed();},connectorOptions:()=>connectorOptions};
 }
-it("never opens keys or delegation before native signed-out proof",async()=>{const f=fixture(),run=f.start();await flush();expect(f.deps.store).not.toHaveBeenCalled();expect(f.deps.enrollment).not.toHaveBeenCalled();expect(f.deps.connector).not.toHaveBeenCalled();f.reveal(null);f.stopProof();expect(await run).toBe("inactive");expect(f.deps.store).not.toHaveBeenCalled();});
-it("builds only readonly identity, finite endpoint/handlers and delegation after proof",async()=>{const f=fixture(),run=f.start();f.reveal();await flush();expect(f.deps.connector).toHaveBeenCalledOnce();expect(Object.keys(f.connectorOptions()!.handlers).sort()).toEqual(["capabilities","clientGone","hello","start","status"]);expect(f.connectorOptions()!.active()).toBe(true);expect(await f.connectorOptions()!.handlers.capabilities({} as never)).toEqual({available:true,endpointRequired:true,allowInput:false,imeKeys:true,extendedInput:true});f.lose();f.stopProof();expect(await run).toBe("ended");expect(f.connector.close).toHaveBeenCalled();expect(f.endpoint.close).toHaveBeenCalled();expect(f.identity.close).toHaveBeenCalled();expect(f.identity.settled).toHaveBeenCalled();});
-it("reserves all ownership through native stop proof before completing an epoch",async()=>{const f=fixture(),run=f.start();let done=false;void run.then(()=>{done=true;});f.reveal();await flush();f.lose();await flush();expect(f.connector.close).toHaveBeenCalled();expect(done).toBe(false);f.stopProof();expect(await run).toBe("ended");});
-it("reaps a native probe returned after synchronous factory cancellation",async()=>{const f=fixture();vi.mocked(f.deps.presence).mockImplementationOnce(options=>{options.closed();return f.presence;});const run=f.start();await flush();expect(f.presence.close).toHaveBeenCalled();expect(f.deps.store).not.toHaveBeenCalled();f.stopProof();await expect(run).rejects.toThrow();});
-it.each(["not-initialized","not-required","provider","untrusted"])("rejects %s before constructing network or endpoint",async mode=>{const f=fixture();if(mode==="not-initialized")f.store.status.mockResolvedValue({initialized:false} as never);else if(mode==="not-required")f.store.status.mockResolvedValue({...await f.store.status(),required:false});else if(mode==="provider")f.store.status.mockResolvedValue({...await f.store.status(),fingerprint:"e".repeat(64)});else f.store.status.mockResolvedValue({...await f.store.status(),peers:[]});const run=f.start();f.reveal();await flush();f.stopProof();await expect(run).rejects.toThrow();expect(f.deps.connector).not.toHaveBeenCalled();expect(f.store.close).toHaveBeenCalled();});
-it.each(["revision","token","allowInput","peers"])("ends all authority if protected enrollment changes: %s",async key=>{vi.useFakeTimers();const f=fixture(),run=f.start();f.reveal();await flush();const next={...data,[key]:key==="revision"?"22345678-1234-4234-8234-123456789012":key==="token"?"u".repeat(43):key==="allowInput"?true:[{fingerprint:"e".repeat(64),label:"changed"}]};vi.mocked(f.deps.enrollment).mockResolvedValue(DesktopSigninEnrollment.decode(Buffer.from(JSON.stringify(next)),ownerSid));f.clock(2000);await vi.advanceTimersByTimeAsync(2000);f.stopProof();await expect(run).rejects.toThrow();expect(f.connector.close).toHaveBeenCalled();expect(f.endpoint.close).toHaveBeenCalled();expect(f.connectorOptions()!.active()).toBe(false);});
-it("does not revive a policy lease with a delayed check and awaits its read",async()=>{vi.useFakeTimers();const f=fixture(),run=f.start();f.reveal();await flush();let resolve!:(value:ReturnType<typeof enrollment>)=>void;vi.mocked(f.deps.enrollment).mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));f.clock(2000);await vi.advanceTimersByTimeAsync(2000);f.clock(6000);await vi.advanceTimersByTimeAsync(4000);expect(f.connectorOptions()!.active()).toBe(false);resolve(enrollment());f.stopProof();await run.catch(()=>{});expect(f.connectorOptions()!.active()).toBe(false);});
-it("terminates its dedicated owner if teardown cannot be confirmed",async()=>{vi.useFakeTimers();const f=fixture(),run=f.start();void run.catch(()=>{});f.reveal();await flush();f.lose();await flush();await vi.advanceTimersByTimeAsync(8000);await expect(run).rejects.toThrow();expect(f.deps.unsafeStop).toHaveBeenCalledOnce();f.stopProof();});
-
-it("anchors the policy lease before the oldest read, not after a delayed status",async()=>{vi.useFakeTimers();const f=fixture(),run=f.start();f.reveal();await flush();let resolve!:(value:Awaited<ReturnType<typeof f.store.status>>)=>void;const state=await f.store.status();f.store.status.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));f.clock(2000);await vi.advanceTimersByTimeAsync(2000);f.clock(4900);resolve(state);await flush();expect(f.connectorOptions()!.active()).toBe(true);f.clock(7000);expect(f.connectorOptions()!.active()).toBe(false);f.stopProof();await run.catch(()=>{});});
-it.each(["store","identity","endpoint","connector"] as const)("reaps a %s returned after synchronous factory cancellation",async name=>{const f=fixture();const resource=f[name];vi.mocked(f.deps[name] as (...args:any[])=>any).mockImplementationOnce(()=>{f.abort.abort();return resource;});const run=f.start();f.reveal();await flush();f.stopProof();await expect(run).resolves.toBe("ended");expect(resource.close).toHaveBeenCalled();if(name!=="connector")expect(f.deps.connector).not.toHaveBeenCalled();});
-it("does not create delegation from a stale initial enrollment snapshot",async()=>{const f=fixture(),state=await f.store.status();let resolve!:(value:typeof state)=>void;f.store.status.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));const run=f.start();f.reveal();await flush();f.clock(5000);resolve(state);await flush();f.stopProof();expect(f.deps.connector).not.toHaveBeenCalled();await expect(run).rejects.toThrow();});
-
-it("completes a normal readonly startup stop during enrollment read after every owner settles",async()=>{const f=fixture(),input=new PassThrough();f.deps.enrollment=vi.fn<DesktopSigninRuntimeDependencies["enrollment"]>(async(_owner,scope)=>new Promise<DesktopSigninEnrollment>((_resolve,reject)=>{scope.signal.addEventListener("abort",()=>reject(Error("generated readonly cancellation")),{once:true});}));const local={context,current:()=>!f.abort.signal.aborted,close:vi.fn(),settled:vi.fn(async()=>{})},unsafeStop=vi.fn(),run=desktopSigninEntry(ownerSid,input,f.abort,(_owner,signal)=>desktopSigninStartup(ownerSid,signal,{lease:async()=>local,mailbox:async()=>({kind:"normal"}),administer:vi.fn(async()=>{}),cycle:(owner,signal)=>desktopSigninCycle(owner,signal,f.deps),pause:async()=>{},unsafeStop}));f.reveal();await vi.waitFor(()=>expect(f.deps.enrollment).toHaveBeenCalledOnce());input.write("signin_stop\n");f.stopProof();await expect(run).resolves.toBe("normal");expect(local.settled).toHaveBeenCalledOnce();expect(unsafeStop).not.toHaveBeenCalled();expect(f.deps.unsafeStop).not.toHaveBeenCalled();expect(f.deps.connector).not.toHaveBeenCalled();});
-it("cannot report a clean cancellation if normal teardown is not confirmed",async()=>{vi.useFakeTimers();const f=fixture(),run=f.start();f.reveal();await flush();f.abort.abort();await vi.advanceTimersByTimeAsync(8000);await expect(run).rejects.toThrow();expect(f.deps.unsafeStop).toHaveBeenCalledOnce();f.stopProof();});
-
-it("does not classify an old readonly timer as failure after parent stop while the read settles within teardown",async()=>{vi.useFakeTimers();const f=fixture();let resolve!:(value:DesktopSigninEnrollment)=>void;vi.mocked(f.deps.enrollment).mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));const run=f.start();let ended=false;void run.then(()=>{ended=true;},()=>{ended=true;});f.reveal();await flush();f.clock(4000);await vi.advanceTimersByTimeAsync(4000);f.abort.abort();f.stopProof();f.clock(5000);await vi.advanceTimersByTimeAsync(1000);expect(ended).toBe(false);f.clock(6000);resolve(enrollment());await vi.advanceTimersByTimeAsync(1000);await expect(run).resolves.toBe("ended");expect(f.deps.unsafeStop).not.toHaveBeenCalled();});
-
-
-it("keeps readonly Windows checks fresh when each bounded read takes two seconds",async()=>{
- vi.useFakeTimers({now:0});const f=fixture(),state=await f.store.status();f.deps.now=()=>Date.now();
- const delay=async<T>(value:T)=>{await new Promise(resolve=>setTimeout(resolve,2000));return value;};
- vi.mocked(f.deps.enrollment).mockImplementation(()=>delay(enrollment()));f.store.status.mockImplementation(()=>delay(state));
- const run=f.start();f.reveal();await vi.advanceTimersByTimeAsync(2001);
- expect(f.deps.connector).toHaveBeenCalledOnce();expect(f.connectorOptions()!.active()).toBe(true);
- await vi.advanceTimersByTimeAsync(12000);expect(f.connectorOptions()!.active()).toBe(true);
- expect(f.store.status.mock.calls.length).toBeGreaterThan(5);expect(f.connector.close).not.toHaveBeenCalled();
- f.abort.abort();f.stopProof();await vi.advanceTimersByTimeAsync(2000);await expect(run).resolves.toBe("ended");
-});
-it("does not extend the five second policy window for slow parallel checks",async()=>{
- vi.useFakeTimers({now:0});const f=fixture(),state=await f.store.status();f.deps.now=()=>Date.now();
- const delay=async<T>(value:T)=>{await new Promise(resolve=>setTimeout(resolve,3000));return value;};
- vi.mocked(f.deps.enrollment).mockImplementation(()=>delay(enrollment()));f.store.status.mockImplementation(()=>delay(state));
- const run=f.start();f.reveal();await vi.advanceTimersByTimeAsync(3001);expect(f.deps.connector).toHaveBeenCalledOnce();
- await vi.advanceTimersByTimeAsync(2000);expect(f.connectorOptions()!.active()).toBe(false);
- expect(f.connector.close).toHaveBeenCalled();f.stopProof();await vi.advanceTimersByTimeAsync(1000);await expect(run).resolves.toBe("ended");
-});
-it("starts the next policy check from the previous start rather than its completion",async()=>{
- vi.useFakeTimers({now:0});const f=fixture(),state=await f.store.status();f.deps.now=()=>Date.now();
- f.store.status.mockImplementation(async()=>{await new Promise(resolve=>setTimeout(resolve,2000));return state;});
- const run=f.start();f.reveal();await vi.advanceTimersByTimeAsync(2001);expect(f.deps.connector).toHaveBeenCalledOnce();
- await vi.advanceTimersByTimeAsync(12000);expect(f.connectorOptions()!.active()).toBe(true);expect(f.connector.close).not.toHaveBeenCalled();
- f.abort.abort();f.stopProof();await vi.advanceTimersByTimeAsync(2000);await expect(run).resolves.toBe("ended");
-});
-
-it("prepares one readonly source before starting the five-second policy lease",async()=>{
- const f=fixture();let ready!:()=>void;const preparing=new Promise<void>(resolve=>{ready=resolve;});
- const source={store:f.store,ready:vi.fn(()=>preparing),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(),settled:vi.fn(async()=>{})};
- f.deps.source=vi.fn(()=>source as never);const run=f.start();f.reveal();await flush();expect(source.enrollment).not.toHaveBeenCalled();expect(f.deps.connector).not.toHaveBeenCalled();
- f.clock(7000);ready();await flush();expect(f.deps.enrollment).not.toHaveBeenCalled();expect(f.deps.store).not.toHaveBeenCalled();expect(source.enrollment).toHaveBeenCalledOnce();expect(f.deps.connector).toHaveBeenCalledOnce();expect(f.connectorOptions()!.active()).toBe(true);
- f.lose();f.stopProof();await expect(run).resolves.toBe("ended");expect(source.close).toHaveBeenCalled();expect(source.settled).toHaveBeenCalledOnce();
-});
-it("reads enrollment from the shared source on every policy poll",async()=>{
- vi.useFakeTimers();const f=fixture(),source={store:f.store,ready:vi.fn(async()=>{}),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(),settled:vi.fn(async()=>{})};f.deps.source=()=>source as never;
- const run=f.start();f.reveal();await flush();expect(source.enrollment).toHaveBeenCalledOnce();f.clock(2000);await vi.advanceTimersByTimeAsync(2000);expect(source.enrollment).toHaveBeenCalledTimes(2);expect(f.deps.enrollment).not.toHaveBeenCalled();
- f.lose();f.stopProof();await expect(run).resolves.toBe("ended");
-});
-it("retains teardown ownership for an unconfirmed shared source",async()=>{
- vi.useFakeTimers();const f=fixture(),source={store:f.store,ready:vi.fn(async()=>{}),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(),settled:vi.fn(async()=>{throw Error("unconfirmed child");})};f.deps.source=()=>source as never;
- const run=f.start();f.reveal();await flush();f.lose();f.stopProof();await expect(run).rejects.toThrow();expect(f.deps.unsafeStop).toHaveBeenCalledOnce();
-});
-
-it("ends a proven native epoch lost during readonly source preparation only after teardown",async()=>{
- const f=fixture();let reject!:(error:Error)=>void;const ready=new Promise<void>((_resolve,no)=>{reject=no;});
- const source={store:f.store,ready:vi.fn(()=>ready),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(()=>reject(Error("generated cancellation"))),settled:vi.fn(async()=>{})};
- f.deps.source=()=>source as never;const run=f.start();f.reveal();await flush();expect(source.ready).toHaveBeenCalledOnce();f.lose();f.stopProof();
- await expect(run).resolves.toBe("ended");expect(source.settled).toHaveBeenCalledOnce();expect(f.deps.connector).not.toHaveBeenCalled();expect(f.deps.unsafeStop).not.toHaveBeenCalled();
-});
-it("ends a native epoch lost during the initial readonly request without terminating startup",async()=>{
- const f=fixture();f.deps.enrollment=vi.fn<DesktopSigninRuntimeDependencies["enrollment"]>(async(_owner,scope)=>new Promise<DesktopSigninEnrollment>((_resolve,reject)=>{scope.signal.addEventListener("abort",()=>reject(Error("generated cancellation")),{once:true});}));
- const run=f.start();f.reveal();await vi.waitFor(()=>expect(f.deps.enrollment).toHaveBeenCalledOnce());f.lose();f.stopProof();
- await expect(run).resolves.toBe("ended");expect(f.store.close).toHaveBeenCalledOnce();expect(f.deps.connector).not.toHaveBeenCalled();expect(f.deps.unsafeStop).not.toHaveBeenCalled();
-});
-it("still rejects a source failure without native epoch loss",async()=>{
- const f=fixture(),source={store:f.store,ready:vi.fn(async()=>{throw Error("generated malformed source");}),enrollment:vi.fn(async()=>enrollment()),close:vi.fn(),settled:vi.fn(async()=>{})};
- f.deps.source=()=>source as never;const run=f.start();f.reveal();await flush();f.stopProof();await expect(run).rejects.toThrow();expect(f.deps.connector).not.toHaveBeenCalled();
-});
-it("never treats native loss as completed teardown when stop proof is rejected",async()=>{
- const f=fixture();f.deps.enrollment=vi.fn<DesktopSigninRuntimeDependencies["enrollment"]>(async(_owner,scope)=>new Promise<DesktopSigninEnrollment>((_resolve,reject)=>{scope.signal.addEventListener("abort",()=>reject(Error("generated cancellation")),{once:true});}));
- f.presence.settled.mockImplementation(async()=>{throw Error("generated missing proof");});const run=f.start();f.reveal();await vi.waitFor(()=>expect(f.deps.enrollment).toHaveBeenCalledOnce());f.lose();
- await expect(run).rejects.toThrow();expect(f.deps.unsafeStop).toHaveBeenCalledOnce();
-});
+it('does not load keys or delegation before native signout readiness',async()=>{const f=fixture(),run=f.start();await flush();expect(f.deps.store).not.toHaveBeenCalled();f.reveal(null);f.exited();expect(await run).toBe('inactive');expect(f.deps.enrollment).not.toHaveBeenCalled();});
+it('creates only the readonly signin handlers after native ownership and trust checks',async()=>{const f=fixture(),run=f.start();f.reveal();await flush();expect(Object.keys(f.connectorOptions()!.handlers).sort()).toEqual(['capabilities','clientGone','hello','start','status']);f.lose();f.exited();expect(await run).toBe('ended');expect(f.connector.close).toHaveBeenCalled();expect(f.endpoint.close).toHaveBeenCalled();expect(f.identity.settled).toHaveBeenCalled();});
+it('keeps a healthy connection across hours without policy-proof TTLs or repeated DPAPI reads',async()=>{vi.useFakeTimers();const f=fixture(),run=f.start();f.reveal();await flush();await vi.advanceTimersByTimeAsync(12*60*60*1000);expect(f.connectorOptions()!.active()).toBe(true);expect(f.store.status).toHaveBeenCalledOnce();expect(f.deps.enrollment).toHaveBeenCalledOnce();f.abort.abort();f.exited();await run;});
+it.each(['not-initialized','not-required','provider','untrusted'])('rejects %s before constructing network or endpoint',async mode=>{const f=fixture();if(mode==='not-initialized')f.store.status.mockResolvedValue({initialized:false} as never);else if(mode==='not-required')f.store.status.mockResolvedValue({...await f.store.status(),required:false});else if(mode==='provider')f.store.status.mockResolvedValue({...await f.store.status(),fingerprint:'e'.repeat(64)});else f.store.status.mockResolvedValue({...await f.store.status(),peers:[]});const run=f.start();f.reveal();f.exited();await expect(run).rejects.toThrow();expect(f.deps.connector).not.toHaveBeenCalled();expect(f.store.close).toHaveBeenCalled();});
+it('keeps ownership reserved until the native child actually exits',async()=>{const f=fixture(),run=f.start();let done=false;void run.then(()=>{done=true;});f.reveal();await flush();f.lose();await flush();expect(done).toBe(false);f.exited();await run;expect(done).toBe(true);});
+it.each(['store','identity','endpoint','connector'] as const)('reaps %s returned during synchronous cancellation',async name=>{const f=fixture(),resource=f[name];vi.mocked(f.deps[name] as (...args:any[])=>any).mockImplementationOnce(()=>{f.abort.abort();return resource;});const run=f.start();f.reveal();f.exited();await expect(run).resolves.toBe('ended');expect(resource.close).toHaveBeenCalled();});
+it('does not hide an unconfirmed teardown after native ownership loss',async()=>{const f=fixture(),run=f.start();f.reveal();await flush();f.presence.settled.mockRejectedValue(Error('generated child failure'));f.lose();await expect(run).rejects.toThrow();expect(f.deps.unsafeStop).toHaveBeenCalledOnce();});
