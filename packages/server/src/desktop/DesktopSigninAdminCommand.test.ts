@@ -47,7 +47,7 @@ it("uses an embedded-helper process policy for the fixed enrollment writer",asyn
  expect(await desktopSigninAdminCommand(owner,"/generated-unused-state",{kind:"disable"})).toMatchObject({outcome:"success"});
  const [executable,args,options]=vi.mocked(childProcess.execFile).mock.calls[0]!;
  expect(executable).toBe("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
- expect(args.slice(0,6)).toEqual(["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File"]);
- expect(args[6]).toMatch(/write-signin-enrollment\.ps1$/);expect(args).not.toContain("-Command");
+ expect(args!.slice(0,6)).toEqual(["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File"]);
+ expect(args![6]).toMatch(/write-signin-enrollment\.ps1$/);expect(args).not.toContain("-Command");
  expect(options).toMatchObject({windowsHide:true,cwd:"C:\\Windows\\System32\\WindowsPowerShell\\v1.0",env:{PSModulePath:"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules"}});
 });

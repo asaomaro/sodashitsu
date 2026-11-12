@@ -209,3 +209,40 @@ Tests       28 passed (28)
 ```
 
 変更対象のtypecheck/buildと明示Signin bundleは独立レビュー後に行う。全体unit/typecheck/ビルドを重複実行しない。このsource commit時点では新bundleを実機へ導入しておらず、admin statusのactual成功までを主張しない。public upgrade/実機確認はRootとsole Windows operatorが行う。
+
+## 独立レビュー後の統合・対象build
+
+独立レビューはd73fe6e9を指摘なしで承認。7125c583（public prepare NullString修正済み）へ3ccde963としてcherry-pickし、競合なし。productionの4箇所はレビュー済みと同じ。prepare SDKの7529 pinは維持する。
+
+変更対象だけを含む一時tsconfigでclient/serverの標準tscを実行し、両方exit0。最初の/tmp配置configはNode typeRoots解決を欠いていたためprojectの既存@types/nodeへ明示した。server側は新testのmock呼出しargsがnullableという2件だけ検出し、実行時に消える非null assertionを付けて再実行成功。productionの型/処理変更はない。32単体テストはcherry-pick前の同一コードで成功しており、競合も実行時変更もないため重複実行しない。
+
+Rootの承認後に実行したbuild（すべてexit0）:
+
+```
+pnpm --filter @sodashitsu/client-core build
+NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter @sodashitsu/server build
+assistant_internal_resources_built_no_execution
+node scripts/remote-desktop/build-signin-bundle.mjs
+signin_bundle_built_no_execution
+node --check packages/server/dist/signin/main.bundle.cjs
+```
+
+通常の既知warningはRolldownのinlineDynamicImports deprecationのみ。Web/全7package/full unit/E2Eは再実行していない。
+
+新しいSignin CJSは628603 bytes、SHA-256 `2f9ded67acb76ed345cf71752e928c6fc8f3a218759e7e560a7c04af16dae7f7`。旧mailbox/backend/request/result/task/administration/locallease/sourceの8 module markerは全てabsent。builderは既存のまま（SHA-256 `a3975253cfef9b778f804175761359e29c56afe9a9a4aad2fa6214bac87ddc7f`）。C# native13ac、Node exe、同梱PowerShell bytesは変更しない。
+
+現行配布済みA8の3330ファイルmap（SHA-256 `3c3281b5ce4cb64950b22f72dcb016ff15673709149f379e8c2a335ddd16f55e`）と7つのowned distを照合し、ファイル集合は同じ3330、変化は9ファイルだけ。A291を差分基準に使わず、新たな削除・追加は0。9件は4 helperのJS/mapとSignin CJS:
+
+```
+packages/client-core/dist/desktop/DesktopEndpointProtector.node.js
+packages/client-core/dist/desktop/DesktopEndpointProtector.node.js.map
+packages/client-core/dist/desktop/DesktopWindowsMetadata.node.js
+packages/client-core/dist/desktop/DesktopWindowsMetadata.node.js.map
+packages/server/dist/desktop/DesktopSigninAdminCommand.js
+packages/server/dist/desktop/DesktopSigninAdminCommand.js.map
+packages/server/dist/desktop/DesktopSigninVault.node.js
+packages/server/dist/desktop/DesktopSigninVault.node.js.map
+packages/server/dist/signin/main.bundle.cjs
+```
+
+source/artifactのincremental prerequisiteは7125c583。新しいall-map/payload/source bundle pinはprivate `/tmp/soda-signin-process-policy-proof/artifact-plan/`で最終HEADへ固定し、Root/hash reviewer承認後にsole Opsへ渡す。Windowsの短い既存Signinサービスをpublic upgraderで更新し、Automaticと83個の既存dataを保持する実操作はsource-authorが実行しない。
