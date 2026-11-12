@@ -5,7 +5,7 @@ import {randomBytes} from "node:crypto";
 import {DesktopPointerWitness,type DesktopPointerWitness as Point} from "./DesktopPointerWitness.js";
 import {DesktopNativeRoleBinary} from "@sodashitsu/client-core/desktop/DesktopNativeRoleBinary.node";
 import {z} from "zod";
-const result=z.object({nonce:z.string().regex(/^[a-f0-9]{64}$/),epoch:z.uuid(),window:z.number().int().safe(),pid:z.number().int().positive(),paths:z.array(z.string().max(4096)).min(1).max(1000)}).strict();
+const result=z.object({nonce:z.string().regex(/^[a-f0-9]{64}$/),window:z.number().int().safe(),pid:z.number().int().positive(),paths:z.array(z.string().max(4096)).min(1).max(1000)}).strict();
 export interface NativeSelectionRuntime {prepare():Promise<void>;capture(point:Point,remainingMs:number,signal:AbortSignal):Promise<readonly string[]>;}
 /** Server-launch environment selects Windows or the fixed WSL interoperability paths.
  * No RPC/project configuration can select an executable, script, or source path. */
@@ -37,9 +37,9 @@ export class DesktopNativeSelection implements NativeSelectionRuntime {
   this.busy=true;const started=performance.now(),controller=new AbortController();this.controller=controller;let drain!:()=>void;this.drained=new Promise(resolve=>{drain=resolve;});const combined=AbortSignal.any([signal,controller.signal]);
   const nonce=randomBytes(32).toString("hex");
   try{
-   const output=await nativeSelectionProcess(this.owner.executable,[...this.owner.arguments],JSON.stringify({Nonce:nonce,Epoch:point.epoch,X:point.x,Y:point.y,Window:point.window,Process:point.pid})+"\n",{timeout:remainingMs,limit:4194305,signal:combined});
+   const output=await nativeSelectionProcess(this.owner.executable,[...this.owner.arguments],JSON.stringify({Nonce:nonce,X:point.x,Y:point.y,Window:point.window,Process:point.pid})+"\n",{timeout:remainingMs,limit:4194305,signal:combined});
    const selection=result.parse(JSON.parse(output));
-   if(combined.aborted||performance.now()-started>=remainingMs||selection.nonce!==nonce||selection.epoch!==point.epoch||selection.window!==point.window||selection.pid!==point.pid)throw Error("入力位置と選択対象が一致しません");
+   if(combined.aborted||performance.now()-started>=remainingMs||selection.nonce!==nonce||selection.window!==point.window||selection.pid!==point.pid)throw Error("入力位置と選択対象が一致しません");
    return selection.paths;
   }finally{this.busy=false;this.controller=undefined;drain();}
  }

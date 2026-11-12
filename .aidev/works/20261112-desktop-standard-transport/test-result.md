@@ -142,3 +142,94 @@ AssertionError: expected [ { id: '1', …(2) }, …(2) ] to have a length of 2 b
 
 
 ```
+
+## Phase 3 ordinary helper command completion
+
+Coordinated with native source commits f77b3874, 272c6574 and b64f2235. These native commits were cherry-picked only into this isolated worktree to supply matching synthetic-helper protocol fixtures; integration should use the original native SHAs separately.
+
+Removed resource_epoch/resource_fence/terminal cleanup wire messages, ownership epochs, cleanup receipts, global fault, five-second timer, clock latches, wrapper stdin/stdout buffering and duplicate source JSON parsing. The remaining adapter uses the real child streams and the existing Provider/SharedCapture JSON parser. Native control commands/replies carry an ordinary source-local seq; clipboard uses existing generation; microphone uses its existing stream id. Existing same-viewer pending-control intent remains a boolean and is rechecked after completion. Source close retires only its own ownership.
+
+Native drag pointer fields now only x/y/HWND/PID, bound in TS to actual source and input seq. Native selection keeps its existing nonce. File source generation reuses gesture UUID. Activation waits ordinary control completion, without a receipt epoch.
+
+Validation:
+
+- Targeted protocol/client-core compilation passed. No server/global build or Windows operation was run here.
+- Nine related unit files: 146 PASS (owner/source channel, pointer ACKs, native files, selection, virtual schema, shared capture and physical-close reconnect).
+- Related Relay control/pointer/clipboard/microphone/virtual-drag tests: 69 PASS. One existing `refuses control when B is readonly and closes an unacknowledged share` fails at its old eight-second closure expectation; this was already documented at baseline. No repeated baseline investigation.
+- After deleting the duplicate stream parser: 12 focused tests PASS, covering stale/unsolicited control replies, clipboard/mic operation identity, same-source FIFO, different-helper handoff, physical-close boundary and queued same-viewer reacquisition.
+- E2E takeover fixture changed from the removed fence marker to an ordinary control release marker. It still observes browser control status and sent/received frames; E2E execution is reserved for integrated build.
+
+Dependency correction: initial worktree node_modules symlinks resolved parent protocol dist, giving false virtual-drag schema failures. Replaced only this worktree package links to its own protocol/client-core outputs and reran targeted compilation/tests. Parent build outputs were not changed.
+
+Raw final related Relay output (known baseline failure included):
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (348 tests | 1 failed | 278 skipped) 24008ms
+   × refuses control when B is readonly and closes an unacknowledged share 8121ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > refuses control when B is readonly and closes an unacknowledged share
+AssertionError: expected 1 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 1
+
+ ❯ src/desktop/DesktopRelay.test.ts:473:63
+    471|   a.send({ type: "input", seq: 1, frameSeq: 1, input: { kind: "text", …
+    472|   a.send({ type: "heartbeat" });
+    473|   await expect.poll(() => a.ws.readyState, { timeout: 8000 }).toBe(Web…
+       |                                                               ^
+    474|   await expect(readFile(f.record, "utf8")).rejects.toThrow();
+    475| }, 12000);
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:473:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 69 passed | 278 skipped (348)
+   Start at  22:27:54
+   Duration  25.81s (tests 93%, transform 5%, import 1%)
+
+
+```
+
+Raw focused post-parser-removal validation:
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+
+ Test Files  4 passed (4)
+      Tests  12 passed | 347 skipped (359)
+   Start at  22:31:27
+   Duration  2.54s (transform 64%, tests 23%, import 12%)
+
+  Transform  |@sodashitsu/server| transforming modules took 3.42s · 64% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+```

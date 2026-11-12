@@ -39,18 +39,17 @@ export class DesktopInputAcks {
         if (!this.discard && this.enabled) {
           if (this.pointerEnabled) {
             const proof =
-              /^SODA_DESKTOP_POINTER_ACK ([1-9][0-9]{0,15}) ([a-f0-9-]{36}) (-?[0-9]{1,10}) (-?[0-9]{1,10}) (-?[0-9]{1,16}) ([1-9][0-9]{0,9})\r?$/.exec(
+              /^SODA_DESKTOP_POINTER_ACK ([1-9][0-9]{0,15}) (-?[0-9]{1,10}) (-?[0-9]{1,10}) (-?[0-9]{1,16}) ([1-9][0-9]{0,9})\r?$/.exec(
                 this.line,
               );
             if (proof) {
               const seq = Number(proof[1]);
               if (Number.isSafeInteger(seq))
                 this.ack(seq, {
-                  epoch: proof[2],
-                  x: Number(proof[3]),
-                  y: Number(proof[4]),
-                  window: Number(proof[5]),
-                  pid: Number(proof[6]),
+                  x: Number(proof[2]),
+                  y: Number(proof[3]),
+                  window: Number(proof[4]),
+                  pid: Number(proof[5]),
                 });
             }
           }

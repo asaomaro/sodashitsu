@@ -342,6 +342,7 @@ export class DesktopSharedCapture {
   }
 
   private receive(g: NonNullable<DesktopSharedCapture["group"]>, value: any): void {
+    if(g.child.resourceChannel?.accept(value)||["control","clipboard_control","native_microphone"].includes(value.type))return;
     if (g.clipboard?.receive(value)) return;
     if (g.native?.receive(value)) return;
     if (value.type === "ready" && !g.ready) {
@@ -352,7 +353,7 @@ export class DesktopSharedCapture {
         (ready.backend==="windows-gdi"||ready.backend==="windows-dxgi");
       const virtualSource=g.virtualSource===true && ready.virtualDisplay===true && !ready.secureDesktop  && !ready.protectedDesktop && !ready.sharedProtected &&
         (ready.backend==="windows-gdi"||ready.backend==="windows-dxgi"||ready.backend==="synthetic");
-      const virtualDrag=virtualSource&&configuration.options.virtualNativeDrag===true&&configuration.nativePointerProof===true&&virtualNativeDragProof===true&&nativePointerProof===true&&ready.resourceFences===true&&!ready.virtualMonitors;
+      const virtualDrag=virtualSource&&configuration.options.virtualNativeDrag===true&&configuration.nativePointerProof===true&&virtualNativeDragProof===true&&nativePointerProof===true&&!ready.virtualMonitors;
       if(configuration.options.virtualNativeDrag&&!virtualDrag)throw Error("Shared virtual drag proof missing");
       if(virtualNativeDragProof===true&&!virtualDrag)throw Error("Unrequested shared virtual drag proof");
       if(g.virtualSource&&!virtualSource){for(const member of [...g.members])this.emit(member,{type:"virtual_display_failure",code:"helper_incompatible"});this.end(g);return;}
@@ -408,7 +409,7 @@ export class DesktopSharedCapture {
         ...(protectedAudio?{protectedAudioClock:"windows-qpc-v1"}:{}),
         inputAckPipe: false,
         ...(virtualDrag?{virtualNativeDragProof:true}:{}),
-        ...(nativePointerProof===true&&configuration.nativePointerProof===true&&!g.protectedSource&&ready.resourceFences===true?{nativePointerProof:true}:{}),
+        ...(nativePointerProof===true&&configuration.nativePointerProof===true&&!g.protectedSource?{nativePointerProof:true}:{}),
         ...(value.deferNativeSnapshots === true ? { deferNativeSnapshots: true } : {}),
       };
       if (ready.nativeVideo)
@@ -577,7 +578,8 @@ export class DesktopSharedCapture {
       this.end(g);
       return;
     }
-    g.child.stdin.write(JSON.stringify(value) + "\n");
+    if(g.child.resourceChannel)g.child.resourceChannel.write(value);
+    else g.child.stdin.write(JSON.stringify(value) + "\n");
   }
   private detach(g: NonNullable<DesktopSharedCapture["group"]>, s: Subscription): void {
     if (s.closed) return;
@@ -615,7 +617,7 @@ export class DesktopSharedCapture {
     g.inputs.clear();
     g.child.stdin.end();
     if (g.child.exitCode === null && g.child.signalCode === null) {
-      const timer = setTimeout(() => g.child.kill(), g.child.resourceChannel?.fencing?6000:1500);
+      const timer = setTimeout(() => g.child.kill(), 1500);
       timer.unref();
       g.child.once("close", () => clearTimeout(timer));
     }

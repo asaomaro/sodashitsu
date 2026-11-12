@@ -199,6 +199,9 @@ function run() {
   };
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   const heldPointerAcks=[];
+  const controlReleaseAt=process.argv.indexOf("--control-release-marker"),controlReleaseMarker=controlReleaseAt>=0?process.argv[controlReleaseAt+1]:undefined;
+  let heldControlRelease;
+  const applyControl=m=>{held.clear();control=m.enabled&&allowInput;send({type:"control",seq:m.seq,enabled:control});};
   function acknowledgeInput(seq,pointer){
     if(inputAckPipe){if(pointer)process.stderr.write(`SODA_DESKTOP_POINTER_ACK ${seq} ${pointer.epoch} ${pointer.x} ${pointer.y} ${pointer.window} ${pointer.pid}\n`);process.stderr.write("SODA_DESKTOP_INPUT_ACK "+seq+"\n");}
     else send({type:"input_ack",seq,...(pointer?{pointer}:{})});
@@ -327,7 +330,9 @@ function run() {
         for(const value of queuedOutput)send(value);queuedOutput=[];
       }
       else if (m.type === "control") {
-        control = m.enabled && allowInput;send({type:"control",seq:m.seq,enabled:control});
+        if(!m.enabled&&controlReleaseMarker&&!existsSync(controlReleaseMarker)){
+          heldControlRelease=m;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"control_release_wait"})+"\n");
+        }else applyControl(m);
       } else if (m.type === "sas" && secure && !protectedMode && control) {
         if (unlockMarker) writeFileSync(unlockMarker,"unlocked");
         send({type:"session_unlocked"});
@@ -356,6 +361,10 @@ function run() {
   });
   let idleCounter=0,nextIdle=0;
   setInterval(() => {
+    if(heldControlRelease&&existsSync(controlReleaseMarker)){
+      const command=heldControlRelease;heldControlRelease=undefined;applyControl(command);
+      if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"control_release_done"})+"\n");
+    }
     if(protectedMode&&protectedEndMarker&&existsSync(protectedEndMarker)&&!protectedEnded){protectedEnded=true;control=false;held.clear();note("scope-ended");send({type:"protected_desktop_failure",code:"source_changed"});setTimeout(()=>process.exit(0),20);return;}
     if(protectedEnded)return;
     const topologyAt=process.argv.indexOf("--topology-marker");if(!topologyStopped&&monitorLayout&&topologyAt>=0&&existsSync(process.argv[topologyAt+1])){topologyStopped=true;send({type:"monitor_topology_changed"});setTimeout(()=>process.exit(0),50);}

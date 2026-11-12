@@ -122,7 +122,7 @@ type Share = {
   inputSeq: number;
   frameAt: number;
   sourceIdle:DesktopSourceIdle;
-  pendingControl?:{source:DesktopResourceChannel;id:string;epoch:string};
+  pendingControl?:boolean;
   started: number;
   timer: ReturnType<typeof setInterval>;
 };
@@ -179,36 +179,16 @@ export class DesktopProvider {
   private readonly unlockLease = new DesktopUnlockLease();
   private active: Share | undefined;
   private readonly physicalHelpers=new Set<DesktopHelper>();
-  private resourceReset=false;
-  private resources=this.createResources();
-  private createResources(){return new DesktopInteractiveOwner<Share,DesktopResourceChannel>({begin:(source,epoch,resource)=>source.begin(epoch,resource),clean:(source,epoch)=>source.clean(epoch),send:(source,id,resource)=>source.fence(id,resource),idle:source=>this.resumeControls(source),fault:()=>{this.resourceReset=true;if(this.active)this.stop(this.active);for(const s of [...this.shared])this.stop(s);this.resetResourcesIfDrained();}});}
+  private resources=new DesktopInteractiveOwner<Share,DesktopResourceChannel>((source,resource)=>source.completed(resource));
   private applyControl(s:Share,enabled:boolean){
     s.control=s.process?.requestControl?s.process.requestControl(enabled):enabled;
-    if(!s.control||!s.resourcesManaged||this.resources.identity(s,"control"))this.write(s,{type:"control",enabled:s.control});
-    if(!s.control&&s.resourcesManaged)this.resources.release(s,"control");
+    this.write(s,{type:"control",enabled:s.control});
+    if(!s.control&&s.resourcesManaged)void this.resources.release(s,"control");
     this.send(s,{type:"control",enabled:s.control});
   }
-  private resumeControls(source:DesktopResourceChannel){
-    for(const s of [this.active,...this.shared]){
-      const intent=s?.pendingControl;if(!s||!intent||intent.source!==source)continue;
-      if(!this.live(s)){delete s.pendingControl;continue;}
-      if(!s.ready||!s.allowInput||s.process?.resourceChannel!==source){delete s.pendingControl;this.send(s,{type:"control",enabled:false});continue;}
-      const pending=this.resources.releasing(s,"control");
-      if(pending?.id===intent.id&&pending.epoch===intent.epoch)continue;
-      delete s.pendingControl;
-      this.applyControl(s,!pending&&this.reserveControl(s));
-    }
-  }
-  private resetResourcesIfDrained(){if(this.resourceReset&&!this.physicalHelpers.size){this.resources.dispose();this.resources=this.createResources();this.resourceReset=false;}}
-  private claimResource(s:Share,kind:DesktopInteractiveResource):boolean{if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;return !!source?.supported&&this.resources.acquire(s,source,kind);}
-  private reserveControl(s:Share):boolean{if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;return !!source?.supported&&this.resources.reserveControl(s,source);}
-  private activateControl(s:Share):boolean{
-    if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;if(!source?.supported)return false;
-    const identity=this.resources.identity(s,"control");if(identity)return identity.source===source;
-    if(!this.resources.activate(s,source,"control"))return false;
-    // begin queued resource_epoch on this same physical channel. Only now may
-    // the native Control flag become true, before the first action in its FIFO.
-    this.write(s,{type:"control",enabled:true});return this.live(s)&&s.control&&this.resources.identity(s,"control")?.source===source;
+  private claimResource(s:Share,kind:DesktopInteractiveResource):boolean {
+    if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;
+    return !!source&&this.resources.acquire(s,source,kind);
   }
   private ownsResource(s:Share,kind:DesktopInteractiveResource):boolean{return !s.resourcesManaged||this.resources.owns(s,kind);}
   private readonly sharedCapture = new DesktopSharedCapture();
@@ -221,7 +201,7 @@ export class DesktopProvider {
   private virtualPairCompatible(cfg:DesktopProviderConfig,virtual:boolean,independent:boolean,monitor?:string){
     if(cfg.nativePlatform||!cfg.allowVirtualDisplay||!cfg.allowMonitors||this.active||(!virtual&&!independent))return false;
     const peers=[...this.shared].filter(s=>!s.dead);
-    return peers.length>0&&peers.every(s=>s.ready&&s.process?.resourceChannel?.supported===true&&(s.independent?s.selectedMonitor!=="all":s.virtualGroup===true&&(!independent||!!monitor&&s.virtualPhysicalIds?.includes(monitor)===true)))&&(!independent||monitor!=="all");
+    return peers.length>0&&peers.every(s=>s.ready&&!!s.process?.resourceChannel&&(s.independent?s.selectedMonitor!=="all":s.virtualGroup===true&&(!independent||!!monitor&&s.virtualPhysicalIds?.includes(monitor)===true)))&&(!independent||monitor!=="all");
   }
   private stopMonitorGeneration(){for(const s of [...this.shared])if(s.independent){this.send(s,{type:"monitor_topology_changed"});this.stop(s);}}
 
@@ -248,8 +228,7 @@ export class DesktopProvider {
   capabilities() {return desktopProviderCapabilities(this.config,this.endpointOnly,!!this.transferStore);}
 
   async start(owner: string, raw: z.infer<typeof DesktopStartParams>,scope?:EndpointScope): Promise<{ started: true }> {
-    this.resetResourcesIfDrained();
-    if(this.resources.faulted||this.resourceReset&&this.physicalHelpers.size)throw new RpcError("server_busy","前の補助プログラムの終了を待っています。");
+
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     const epoch=this.sourceEpoch;
@@ -357,7 +336,7 @@ export class DesktopProvider {
       shared: p.options.sharedDesktop === true,
       inputAcks: new DesktopInputAcks(seq => { if (!s.dead) this.send(s,{type:"input_ack",seq}); },(seq,point)=>{
         const source=s.process?.resourceChannel,owner=this.resources.identity(s,"control");
-        if(!s.dead&&s.control&&seq===s.inputSeq&&source&&owner?.source===source&&owner.epoch===point.epoch)s.pointerWitness={seq,point,source,at:performance.now()};
+        if(!s.dead&&s.control&&seq===s.inputSeq&&source&&owner?.source===source)s.pointerWitness={seq,point,source,at:performance.now()};
       }),
       imageExpected:!!p.imageTicket,
       chain: new DesktopFrameChain(),
@@ -442,17 +421,16 @@ export class DesktopProvider {
                 runtime:this.nativeSelection,paths:(paths,signal)=>this.nativeSelection.paths(paths,signal),
                 pointer:seq=>{
                   const proof=s.pointerWitness,owner=this.resources.identity(s,"control");
-                  if(!proof||proof.seq!==seq||!owner||owner.source!==proof.source||owner.epoch!==proof.point.epoch)return;
-                  const valid=()=>this.live(s)&&s.control&&s.pointerWitness===proof&&this.resources.identity(s,"control")?.source===proof.source&&this.resources.identity(s,"control")?.epoch===proof.point.epoch&&performance.now()-proof.at<750;
+                  if(!proof||proof.seq!==seq||!owner||owner.source!==proof.source)return;
+                  const valid=()=>this.live(s)&&s.control&&s.pointerWitness===proof&&this.resources.identity(s,"control")?.source===proof.source&&performance.now()-proof.at<750;
                   if(!valid())return;
                   return {seq,point:proof.point,at:proof.at,valid,release:async()=>{
                     if(!valid())throw Error("元のドラッグ操作が終了しました");
                     s.inputAcks.invalidatePointers();delete s.pointerWitness;s.control=false;
                     s.process?.requestControl?.(false);
                     this.write(s,{type:"control",enabled:false});
-                    const receipt=await this.resources.releaseConfirmed(s,"control");
+                    await this.resources.release(s,"control");
                     if(!this.live(s)||s.process?.resourceChannel!==proof.source)throw Error("共有元が変更されました");
-                    return receipt;
                   }};
                 },
               }:undefined).then(async worker=>{if(!this.live(s)){await worker.close();return undefined;}return worker;}).catch(()=>undefined);
@@ -588,15 +566,18 @@ export class DesktopProvider {
           } else if (m.type === "control") {
             s.inputAcks.invalidatePointers();
             delete s.pointerWitness;
-            if(s.pendingControl){delete s.pendingControl;this.send(s,{type:"control",enabled:false});if(!this.live(s))return;}
-            const enabled = m.enabled && s.allowInput && s.ready && this.reserveControl(s);
-            if(m.enabled&&!enabled&&s.allowInput&&s.ready&&s.resourcesManaged){
-              const pending=this.resources.releasing(s,"control");
-              if(pending&&s.process?.resourceChannel===pending.source){s.pendingControl=pending;s.control=false;return;}
+            const enabled = m.enabled && s.allowInput && s.ready && this.claimResource(s,"control");
+            s.pendingControl=m.enabled;
+            const releasing=s.resourcesManaged?this.resources.releasing(s,"control"):undefined;
+            if(m.enabled&&!enabled&&releasing){
+              const source=s.process?.resourceChannel;
+              void releasing.then(()=>{if(s.pendingControl&&this.live(s)&&s.ready&&s.allowInput&&s.process?.resourceChannel===source){delete s.pendingControl;this.applyControl(s,this.claimResource(s,"control"));}},()=>{});
+              s.control=false;return;
             }
+            delete s.pendingControl;
             this.applyControl(s,enabled);
           } else if (m.type === "sas") {
-            if (s.secureDesktop && !s.protectedDesktop && s.control && this.ownsResource(s,"control") && s.ready && performance.now() - s.lastSeen < 5000 && this.activateControl(s))
+            if (s.secureDesktop && !s.protectedDesktop && s.control && this.ownsResource(s,"control") && s.ready && performance.now() - s.lastSeen < 5000 )
               this.write(s, m);
           } else if (m.type === "input") {
             s.inputAcks.invalidatePointers();delete s.pointerWitness;
@@ -611,7 +592,6 @@ export class DesktopProvider {
               performance.now() - s.lastSeen < 5000 &&
               s.seq > 0
             ) {
-              if(!this.activateControl(s)){this.applyControl(s,false);return;}
               s.inputSeq = m.seq;
               s.inputAcks.submitted(m.seq,m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0);
               this.write(s, { ...m, expiresAt: Date.now() + 500, ...(s.video && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
@@ -645,12 +625,12 @@ export class DesktopProvider {
       env:{...process.env,...desktopHelperRoleEnvironment(rolePlan),SODA_DESKTOP_ELEVATED_REQUEST:options.elevatedDesktop===true&&cfg.allowElevated===true?"1":"0",SODA_DESKTOP_VIRTUAL_REQUEST:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true?"1":"0"},
       stdio: ["pipe", "pipe", "pipe"],
     });
-      const child:DesktopHelper=cfg.nativePlatform?raw:new DesktopResourceChannel(raw,{ack:(source,id)=>{this.resources.acknowledge(source,id);},close:source=>{this.resources.sourceGone(source);}});
+      const child:DesktopHelper=cfg.nativePlatform?raw:new DesktopResourceChannel(raw,source=>{this.resources.sourceGone(source);});
       if(cfg.nativePlatform){
         let exited=false;const closed=new Promise<void>(resolve=>raw.once("close",()=>{exited=true;resolve();}));
         child.nativePcm={paths:this.nativePcmPaths,owner:{closed,exited:()=>exited||raw.exitCode!==null||raw.signalCode!==null}};
       }
-      this.physicalHelpers.add(child);child.once("close",()=>{this.physicalHelpers.delete(child);this.resetResourcesIfDrained();queueMicrotask(()=>this.pruneSources());});return child;
+      this.physicalHelpers.add(child);child.once("close",()=>{this.physicalHelpers.delete(child);queueMicrotask(()=>this.pruneSources());});return child;
     };
     const child = options.sharedDesktop ? (s.capturePool??this.sharedCapture).attach(s.captureKey!, spawnHelper) : spawnHelper();
     s.process = child;
@@ -679,6 +659,8 @@ export class DesktopProvider {
         if (!line) continue;
         try {
           const raw = JSON.parse(line);
+          if(s.process?.resourceChannel?.accept(raw))continue;
+          if(!s.resourcesManaged&&["control","clipboard_control","native_microphone"].includes(raw.type))continue;
           if(raw.type==="platform_failure"&&cfg.nativePlatform==="linux-portal")this.nativeMonitorRestores.forget(s.nativeMonitorOrigin);
           if(options.elevatedDesktop&&["unlock_failure","session_locked","session_unlocked","lock_screen_changed"].includes(raw.type)){this.send(s,{type:"protected_desktop_failure",code:raw.type==="unlock_failure"?"worker_unavailable":"source_changed"});this.stop(s);return;}
           if(raw.type==="protected_desktop_failure"&&options.elevatedDesktop&&cfg.allowElevated){this.send(s,DesktopProtectedFailure.parse(raw));this.stop(s);return;}
@@ -693,7 +675,7 @@ export class DesktopProvider {
             const {protectedAudioClock,deferNativeSnapshots, inputAckPipe,nativePointerProof,virtualNativeDragProof, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
             if(ready.lockScreenCover){this.send(s,{type:"error",message:"接続先のデスクトップ補助プログラムを更新してから接続し直してください。"});this.stop(s);return;}
-            if(options.virtualMonitors&&(ready.resourceFences!==true||ready.virtualMonitors!==true||!ready.virtualDisplay||!ready.monitorLayout||ready.monitorLayout.selected==="all"||ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Owned virtual monitor metadata missing");
+            if(options.virtualMonitors&&(ready.virtualMonitors!==true||!ready.virtualDisplay||!ready.monitorLayout||ready.monitorLayout.selected==="all"||ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Owned virtual monitor metadata missing");
             s.agentRegions=ready.agentRegions===true&&!ready.secureDesktop;
             if(cfg.nativePlatform?(ready.backend!==cfg.nativePlatform||!ready.inputCapabilities):ready.backend==="linux-portal"||ready.backend==="macos-sck")throw Error("Unexpected native backend proof");
             if(!cfg.nativePlatform&&ready.inputCapabilities)throw Error("Unrequested input capabilities");
@@ -706,7 +688,7 @@ export class DesktopProvider {
             s.protectedFilesActive=options.protectedFiles===true&&cfg.allowProtectedFiles===true&&!!ready.protectedDesktop&&ready.secureDesktop===true;
             if(ready.protectedDesktop)s.protectedDesktop=ready.protectedDesktop;else delete s.protectedDesktop;
             if(options.independentMonitors){
-              if(!ready.resourceFences||!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice||ready.secureDesktop||ready.virtualDisplay)throw Error("Independent monitor helper proof missing");
+              if(!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice||ready.secureDesktop||ready.virtualDisplay)throw Error("Independent monitor helper proof missing");
               const topology=JSON.stringify([...ready.monitorLayout.monitors].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0));
               if(this.monitorTopology&&this.monitorTopology!==topology){this.stopMonitorGeneration();throw Error("Monitor generation changed");}this.monitorTopology=topology;
             }
@@ -714,7 +696,7 @@ export class DesktopProvider {
             s.inputAcks.enabled = !s.secureDesktop && inputAckPipe === true;
             const virtualDrag=options.virtualNativeDrag===true&&virtualNativeDragProof===true&&ready.virtualDisplay===true&&!ready.virtualMonitors&&!ready.secureDesktop;
             if(options.virtualNativeDrag&&!virtualDrag)throw Error("Owned virtual drag helper proof missing");
-            s.inputAcks.pointerEnabled=!s.secureDesktop&&(!ready.virtualDisplay||virtualDrag)&&!cfg.nativePlatform&&!!cfg.fileRoot&&nativePointerProof===true&&s.process?.resourceChannel?.supported===true;
+            s.inputAcks.pointerEnabled=!s.secureDesktop&&(!ready.virtualDisplay||virtualDrag)&&!cfg.nativePlatform&&!!cfg.fileRoot&&nativePointerProof===true&&!!s.process?.resourceChannel;
             if(s.inputAcks.pointerEnabled&&options.files===true)void this.nativeSelection.prepare().catch(()=>{});
             s.deferNativeSnapshots=options.nativeVideo===true&&cfg.allowNativeVideo===true&&!s.secureDesktop&&deferNativeSnapshots===true;
             s.imeKeys = options.imeKeys === true && ready.imeKeys === true;
@@ -752,13 +734,13 @@ export class DesktopProvider {
               if([...this.shared].some(peer=>peer!==s&&!peer.dead&&peer.independent&&(!peer.ready||!peer.selectedMonitor||!s.virtualPhysicalIds!.includes(peer.selectedMonitor))))throw Error("Virtual group conflicts with a nonphysical source");
             }
             s.ready = true;
-            s.allowClipboard = !s.secureDesktop && cfg.allowClipboard === true && ready.allowClipboard === true && (!s.resourcesManaged||s.process?.resourceChannel?.supported===true);
+            s.allowClipboard = !s.secureDesktop && cfg.allowClipboard === true && ready.allowClipboard === true && (!s.resourcesManaged||!!s.process?.resourceChannel);
             s.dynamicQuality = ready.dynamicQuality === true;
-            s.allowInput = ready.allowInput && cfg.allowInput && (!s.resourcesManaged||s.process?.resourceChannel?.supported===true);
+            s.allowInput = ready.allowInput && cfg.allowInput && (!s.resourcesManaged||!!s.process?.resourceChannel);
             const {
               imeKeys,
               extendedInput,
-              virtualMonitors:_virtualMonitors,resourceFences:_resourceFences,protectedVideo:_protectedVideo,sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,durableFileCheckpoints:_helperDurable,durableFolderCheckpoints:_helperDurableFolders,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
+              virtualMonitors:_virtualMonitors,protectedVideo:_protectedVideo,sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,durableFileCheckpoints:_helperDurable,durableFolderCheckpoints:_helperDurableFolders,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -770,13 +752,13 @@ export class DesktopProvider {
               ...legacyReady
             } = ready;
             if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&this.ownsResource(s,"clipboard")&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
-            if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(cfg.nativePlatform&&ready.backend!=="synthetic"?{nativeOutput:(name:string,active:()=>boolean)=>this.nativeMicrophones.open(cfg.nativePlatform!,cfg.microphoneEndpoint!,name,active)}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!protectedMicrophoneAvailable()||!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true,cfg.nativePlatform&&ready.backend!=="synthetic"?false:true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
+            if((!s.resourcesManaged||!!s.process?.resourceChannel)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(cfg.nativePlatform&&ready.backend!=="synthetic"?{nativeOutput:(name:string,active:()=>boolean)=>this.nativeMicrophones.open(cfg.nativePlatform!,cfg.microphoneEndpoint!,name,active)}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!protectedMicrophoneAvailable()||!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true,cfg.nativePlatform&&ready.backend!=="synthetic"?false:true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone",Promise.resolve());return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const protectedMicrophone=options.protectedMicrophone===true&&options.elevatedDesktop===true&&!!s.protectedDesktop&&s.secureDesktop&&cfg.allowElevated===true&&cfg.allowProtectedMicrophone===true&&cfg.allowMicrophone===true&&!!cfg.microphoneEndpoint&&!options.sharedDesktop;
-            if(protectedMicrophone&&s.process?.resourceChannel?.supported===true&&s.microphoneSocket&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes))s.microphone=new DesktopProtectedMicrophone({
+            if(protectedMicrophone&&!!s.process?.resourceChannel&&s.microphoneSocket&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes))s.microphone=new DesktopProtectedMicrophone({
               endpoint:cfg.microphoneEndpoint!,mode:s.protectedDesktop!,
               ...(s.audioPipes?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),
               claim:()=>{if(!this.claimResource(s,"microphone"))return false;s.microphoneOwned=true;return true;},
-              release:()=>{s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},
+              release:()=>{s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone",Promise.resolve());},
               allowed:()=>this.live(s)&&s.ready&&this.config===cfg&&cfg.allowProtectedMicrophone===true&&!!s.protectedDesktop&&s.secureDesktop===true&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,
               send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;},
             });
@@ -804,7 +786,7 @@ export class DesktopProvider {
               ...(cfg.nativePlatform&&inputCapabilities?{inputCapabilities}:{}),
               ...(options.virtualDisplay&&virtualDisplay&&!s.secureDesktop?{virtualDisplay:true}:{}),
               ...((!options.virtualDisplay&&options.monitors===true||options.virtualMonitors===true)&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout,...(options.virtualMonitors?{virtualMonitors:true}:{})}:{}),
-              ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(virtualDrag&&s.inputAcks.pointerEnabled?{virtualNativeDrag:true,resourceFences:true}:{}),...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true,...(this.transferStore?{durableFolderCheckpoints:true}:{})}:{})}:{}),
+              ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(virtualDrag&&s.inputAcks.pointerEnabled?{virtualNativeDrag:true}:{}),...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true,...(this.transferStore?{durableFolderCheckpoints:true}:{})}:{})}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
               ...(nativeEnabled?{nativeVideo:true,...(s.protectedVideoActive?{protectedVideo:true,...(options.sharedProtectedVideo?{sharedProtectedVideo:true}:{}),...(s.protectedAudioActive?{protectedAudio:true,nativeAudio:true}:{})}:{})}:{}),
               ...(nativeEnabled&&options.nativeCodecs&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),
@@ -929,7 +911,7 @@ export class DesktopProvider {
       options:options.sharedDesktop ? sharedHelperOptions(options) : {...helperOptions,...(options.virtualMonitors?{monitors:true}:{})},
       captureBackends: ["dxgi"],
       inputAckPipe: !options.sharedDesktop,
-      ...(!cfg.nativePlatform?{resourceFences:true,nativePointerProof:!!cfg.fileRoot&&!options.elevatedDesktop&&(!options.virtualDisplay||options.virtualNativeDrag===true)}:{}),
+      ...(!cfg.nativePlatform?{nativePointerProof:!!cfg.fileRoot&&!options.elevatedDesktop&&(!options.virtualDisplay||options.virtualNativeDrag===true)}:{}),
       allowMonitors:(options.monitors===true||options.virtualMonitors===true)&&cfg.allowMonitors===true,
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
@@ -990,6 +972,7 @@ export class DesktopProvider {
       this.stop(s);
       return;
     }
+    if(!s.shared&&s.process.resourceChannel){s.process.resourceChannel.write(value);return;}
     s.process.stdin.write(JSON.stringify(value) + "\n", (err) => {
       if (err) this.stop(s);
     });
@@ -1004,7 +987,6 @@ export class DesktopProvider {
     delete s.pendingControl;
     s.inputAcks.invalidatePointers();
     delete s.pointerWitness;
-    if(s.resourcesManaged)this.resources.releaseAll(s);
     if (s.shared) this.shared.delete(s);
     delete s.heldImage; s.imageSocket?.terminate();
     s.videoSocket?.terminate();
@@ -1022,10 +1004,13 @@ export class DesktopProvider {
     if (s.process && s.process.exitCode === null && s.process.signalCode === null)
       s.process.once("close", clearActive);
     else clearActive();
+    s.process?.requestControl?.(false);
+    s.process?.requestClipboard?.(false,++s.clipboardGeneration);
     s.process?.stdin.end();
+    if(s.resourcesManaged)this.resources.releaseAll(s);
     const child = s.process;
     if (child) {
-      const t = setTimeout(() => child.kill(), child.resourceChannel?.fencing?6000:1500);
+      const t = setTimeout(() => child.kill(), 1500);
       t.unref();
       child.once("close", () => clearTimeout(t));
     }
@@ -1053,7 +1038,7 @@ export class DesktopProvider {
     if (this.active) this.stop(this.active);
     for (const s of [...this.shared]) this.stop(s);
     this.sharedCapture.dispose();for(const source of this.monitorSources.values())source.pool.dispose();
-    this.resourceReset=true;this.resetResourcesIfDrained();
+
   }
 }
 function sharedHelperOptions(options: z.infer<typeof DesktopStartParams>["options"]) {

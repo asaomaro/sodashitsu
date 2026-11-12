@@ -1,138 +1,37 @@
-import { EventEmitter } from "node:events";
-import { PassThrough, Writable } from "node:stream";
-import { randomUUID } from "node:crypto";
-import { expect, it, vi } from "vitest";
-import { DesktopResourceChannel } from "./DesktopResourceChannel.js";
-import type { DesktopHelper } from "./DesktopSharedCapture.js";
+import {EventEmitter} from "node:events";
+import {PassThrough,Writable} from "node:stream";
+import {expect,it,vi} from "vitest";
+import {DesktopResourceChannel} from "./DesktopResourceChannel.js";
+import {DesktopInteractiveOwner} from "./DesktopInteractiveOwner.js";
+import type {DesktopHelper} from "./DesktopSharedCapture.js";
 class Helper extends EventEmitter implements DesktopHelper {
-  stdout = new PassThrough();
-  stderr = new PassThrough();
-  exitCode: number | null = null;
-  signalCode = null;
-  commands: any[] = [];
-  ended = false;
-  blocked: (() => void) | undefined;
-  stdin = new Writable({
-    write: (chunk, _encoding, done) => {
-      const value = JSON.parse(chunk.toString());
-      this.commands.push(value);
-      if (value.type === "blocked") this.blocked = done;
-      else done();
-    },
-    final: (done) => {
-      this.ended = true;
-      done();
-    },
-  });
-  kill = vi.fn(() => {
-    this.exitCode = 1;
-    this.emit("close", 1, null);
-    return true;
-  });
-  send(value: unknown) {
-    this.stdout.write(JSON.stringify(value) + "\n");
-  }
+ stdout=new PassThrough();stderr=new PassThrough();exitCode:number|null=null;signalCode=null;commands:any[]=[];
+ stdin=new Writable({write:(chunk,_encoding,done)=>{this.commands.push(JSON.parse(String(chunk)));done();}});
+ kill=vi.fn(()=>{this.exitCode=1;this.emit("close",1,null);return true;});
+ send(value:unknown){this.stdout.write(JSON.stringify(value)+"\n");}
 }
-it("keeps fences behind queued commands and waits for exact ACK before physical stdin end", async () => {
-  const child = new Helper(),
-    ack = vi.fn(),
-    closed = vi.fn(),
-    channel = new DesktopResourceChannel(child, { ack, close: closed });
-  const output: string[] = [];
-  channel.stdout.on("data", (value) => output.push(String(value)));
-  child.send({ type: "ready", resourceFences: true });
-  expect(channel.begin(randomUUID())).toBe(true);
-  channel.stdin.write('{"type":"blocked"}\n');
-  channel.stdin.write('{"type":"old-control"}\n');
-  const id = randomUUID();
-  expect(channel.fence(id)).toBe(true);
-  channel.stdin.end();
-  await vi.waitFor(() =>
-    expect(child.commands.map((m) => m.type)).toEqual(["resource_epoch", "blocked"]),
-  );
-  expect(child.ended).toBe(false);
-  child.blocked!();
-  await vi.waitFor(() =>
-    expect(child.commands.map((m) => m.type)).toEqual([
-      "resource_epoch",
-      "blocked",
-      "old-control",
-      "resource_fence",
-    ]),
-  );
-  expect(child.ended).toBe(false);
-  child.send({ type: "resource_fence_ack", id: randomUUID() });
-  expect(child.ended).toBe(false);
-  child.send({ type: "resource_fence_ack", id });
-  await vi.waitFor(() => expect(child.ended).toBe(true));
-  expect(ack).toHaveBeenCalledWith(channel, id);
-  expect(output.join("")).not.toContain("resource_fence_ack");
-  child.send({ type: "resource_fence_ack", id });
-  expect(ack).toHaveBeenCalledOnce();
-  channel.kill();
-  expect(closed).toHaveBeenCalledWith(channel);
+function setup(){const child=new Helper(),close=vi.fn(),channel=new DesktopResourceChannel(child,close);channel.stdout.on("data",raw=>{for(const line of String(raw).trim().split("\n"))channel.accept(JSON.parse(line));});return {child,channel,close,write:(value:unknown)=>channel.write(value)};}
+it("does not confuse stale or unsolicited control replies with a later release",async()=>{
+ const f=setup();f.child.send({type:"control",enabled:false});f.write({type:"control",enabled:false});const first=f.child.commands.at(-1);const old=f.channel.completed("control");f.child.send({...first});await old;
+ f.write({type:"control",enabled:true});f.write({type:"control",enabled:false});const latest=f.child.commands.at(-1);let completed=false;const release=f.channel.completed("control").then(()=>{completed=true;});
+ f.child.send(first);f.child.send({type:"control",enabled:false});await Promise.resolve();expect(completed).toBe(false);expect(latest.seq).toBeGreaterThan(first.seq);
+ f.child.send(latest);await release;expect(completed).toBe(true);f.channel.kill();
 });
-it("requires current helper proof and rejects malformed private ACKs", () => {
-  const child = new Helper(),
-    ack = vi.fn(),
-    channel = new DesktopResourceChannel(child, { ack, close: () => {} });
-  expect(channel.fence(randomUUID())).toBe(false);
-  child.send({ type: "ready", resourceFences: true });
-  channel.begin(randomUUID());
-  expect(channel.fence(randomUUID())).toBe(true);
-  child.send({ type: "resource_fence_ack", id: "bad", extra: true });
-  expect(child.kill).toHaveBeenCalledOnce();
-  expect(ack).not.toHaveBeenCalled();
+it.each(["reply","physical-close"] as const)("blocks a different helper until old key cleanup finishes by %s",async mode=>{
+ const a=setup(),b=setup(),owner=new DesktopInteractiveOwner<object,DesktopResourceChannel>((source,kind)=>source.completed(kind)),old={},next={};
+ expect(owner.acquire(old,a.channel,"control")).toBe(true);a.write({type:"control",enabled:true});a.write({type:"control",enabled:false});const release=owner.release(old,"control");
+ expect(owner.acquire(next,b.channel,"control")).toBe(false);expect(b.child.commands).toEqual([]);
+ if(mode==="reply"){a.child.send(a.child.commands.at(-1));await release;}
+ else{a.channel.kill();owner.sourceGone(a.channel);await release.catch(()=>{});}
+ expect(owner.acquire(next,b.channel,"control")).toBe(true);b.write({type:"control",enabled:true});expect(a.child.commands.map(m=>m.type)).toEqual(["control","control"]);expect(b.child.commands).toEqual([{type:"control",enabled:true,seq:1}]);owner.dispose();a.channel.kill();b.channel.kill();
 });
-it("preserves native diagnostics and enforces one pending fence", () => {
-  const child = new Helper(),
-    channel = new DesktopResourceChannel(child, { ack: () => {}, close: () => {} });
-  expect(channel.stderr).toBe(child.stderr);
-  child.send({ type: "ready", resourceFences: true });
-  channel.begin(randomUUID());
-  const id = randomUUID();
-  expect(channel.fence(id)).toBe(true);
-  expect(channel.fence(id)).toBe(true);
-  expect(channel.fence(randomUUID())).toBe(false);
-  channel.kill();
+it.each(["clipboard","microphone"] as const)("matches the existing %s operation identity before handoff",async kind=>{
+ const f=setup(),type=kind==="clipboard"?"clipboard_control":"native_microphone",field=kind==="clipboard"?"generation":"id",old=kind==="clipboard"?1:crypto.randomUUID(),next=kind==="clipboard"?2:crypto.randomUUID();
+ f.write({type,enabled:false,[field]:old});const previous=f.channel.completed(kind);f.child.send({type,enabled:false,[field]:old});await previous;
+ f.write({type,enabled:true,[field]:next});f.write({type,enabled:false,[field]:next});let done=false;const pending=f.channel.completed(kind).then(()=>{done=true;});
+ f.child.send({type,enabled:false,[field]:old});await Promise.resolve();expect(done).toBe(false);f.child.send({type,enabled:false,[field]:next});await pending;expect(done).toBe(true);f.channel.kill();
 });
-
-it("accepts terminal cleanup only for the current ownership epoch and blocks later commands", () => {
-  const child = new Helper(),
-    ack = vi.fn(),
-    channel = new DesktopResourceChannel(child, { ack, close: () => {} });
-  child.send({ type: "ready", resourceFences: true });
-  const epoch = randomUUID();
-  channel.begin(epoch);
-  child.send({ type: "resource_fence_ack", id: randomUUID(), terminal: true });
-  expect(channel.clean(epoch)).toBe(false);
-  child.send({ type: "resource_fence_ack", id: epoch, terminal: true });
-  expect(channel.clean(epoch)).toBe(true);
-  expect(channel.begin(randomUUID())).toBe(false);
-  const id = randomUUID();
-  expect(channel.fence(id)).toBe(true);
-  expect(ack).toHaveBeenCalledWith(channel, id);
-  channel.kill();
-});
-
-it("drops queued revoked writes without killing terminal ACK drain for other resources", async () => {
-  const child = new Helper(), ack = vi.fn(), channel = new DesktopResourceChannel(child, { ack, close: () => {} });
-  child.send({ type: "ready", resourceFences: true });
-  const control = randomUUID(), clipboard = randomUUID();
-  channel.begin(control);channel.begin(clipboard, "clipboard");
-  channel.stdin.write('{"type":"blocked"}\n');
-  channel.stdin.write('{"type":"old-input"}\n');
-  const first=randomUUID(),second=randomUUID();
-  expect(channel.fence(first)).toBe(true);expect(channel.fence(second,"clipboard")).toBe(true);
-  channel.stdin.end();
-  await vi.waitFor(()=>expect(child.blocked).toBeTypeOf("function"));
-  child.send({type:"resource_fence_ack",id:control,terminal:true});
-  child.blocked!();
-  await new Promise(resolve=>setImmediate(resolve));
-  expect(child.commands.some(v=>v.type==="old-input"||v.type==="resource_fence")).toBe(false);
-  expect(child.kill).not.toHaveBeenCalled();expect(child.ended).toBe(false);
-  child.send({type:"resource_fence_ack",id:clipboard,terminal:true});
-  await vi.waitFor(()=>expect(child.ended).toBe(true));
-  expect(ack.mock.calls.map(v=>v[1])).toEqual([first,second]);
-  channel.kill();
+it("keeps control/input commands in the same helper FIFO and coalesces repeated stop requests",async()=>{
+ const f=setup();f.write({type:"control",enabled:true});f.write({type:"input",seq:1});f.write({type:"control",enabled:false});f.write({type:"control",enabled:false});
+ expect(f.child.commands.map(m=>m.type)).toEqual(["control","input","control"]);const complete=f.channel.completed("control");f.child.send(f.child.commands.at(-1));await complete;f.channel.kill();
 });

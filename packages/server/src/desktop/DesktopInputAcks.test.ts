@@ -43,7 +43,6 @@ it("keeps at most 64 outstanding inputs even when the helper never acknowledges"
   expect(ack.mock.calls).toEqual(Array.from({ length: 64 }, (_, i) => [i + 37]));
 });
 const witness = {
-  epoch: "11111111-1111-4111-8111-111111111111",
   x: -400,
   y: 50,
   window: 42,
@@ -51,7 +50,7 @@ const witness = {
 };
 const pointerLine = (seq: number, change: Partial<typeof witness> = {}) => {
   const p = { ...witness, ...change };
-  return `SODA_DESKTOP_POINTER_ACK ${seq} ${p.epoch} ${p.x} ${p.y} ${p.window} ${p.pid}\n`;
+  return `SODA_DESKTOP_POINTER_ACK ${seq} ${p.x} ${p.y} ${p.window} ${p.pid}\n`;
 };
 it.each(["pipe", "json"])(
   "invalidates pending pointer metadata while preserving its %s input ACK",
@@ -101,7 +100,6 @@ it("does not consume a pending input for malformed, unrequested or unnegotiated 
   expect(ack).not.toHaveBeenCalled();
   pipe.pointerEnabled = true;
   for (const change of [
-    { epoch: "-".repeat(36) },
     { x: 2147483648 },
     { pid: 0 },
     { window: 9007199254740992 },

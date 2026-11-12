@@ -253,30 +253,30 @@ it.each(["normal","shared","elevated-default","elevated-uac"] as const)("keeps f
  v.send(mode==="shared"?{...start,options:{...start.options,features:true,sharedDesktop:true}}:mode==="normal"?start:protectedStart);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
  v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
  const state=f.provider as any,share=mode==="shared"?[...state.shared][0]:state.active,writes=vi.spyOn(share.process.resourceChannel.stdin,"write");
- expect(state.resources.identity(share,"control")).toBeUndefined();
+ expect(state.resources.identity(share,"control")?.source).toBe(share.process.resourceChannel);
  let released=false;const listener=(raw:unknown)=>{try{if(JSON.parse(String(raw)).type==="release")released=true;}catch{}};share.ws.on("message",listener);
  // Mirrors the browser's toolbar/window→canvas focus transfer after control ACK.
  v.send({type:"release"});await expect.poll(()=>released).toBe(true);share.ws.off("message",listener);
- expect(share.control).toBe(true);expect(state.resources.faulted).toBe(false);expect(state.resources.identity(share,"control")).toBeUndefined();
+ expect(share.control).toBe(true);expect(state.resources.identity(share,"control")?.source).toBe(share.process.resourceChannel);
  expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch")).toBe(false);
  v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
- const commands=writes.mock.calls.map(([value])=>JSON.parse(String(value))).filter(m=>["resource_epoch","control","input"].includes(m.type));expect(commands.slice(0,3).map(m=>m.type)).toEqual(["resource_epoch","control","input"]);
- expect(commands[0]).toMatchObject({resource:"control"});expect(commands[1]).toMatchObject({enabled:true});expect(state.resources.identity(share,"control").epoch).toBe(commands[0].id);
- if(ordinary)expect(share.pointerWitness).toMatchObject({seq:1,source:share.process.resourceChannel,point:{epoch:commands[0].id}});else expect(share.pointerWitness).toBeUndefined();
+ const commands=writes.mock.calls.map(([value])=>JSON.parse(String(value))).filter(m=>["resource_epoch","control","input"].includes(m.type));expect(commands.map(m=>m.type)).toEqual(["input"]);
+ expect(state.resources.identity(share,"control").source).toBe(share.process.resourceChannel);
+ if(ordinary)expect(share.pointerWitness).toMatchObject({seq:1,source:share.process.resourceChannel,point:{x:-400,y:50,window:42,pid:7}});else expect(share.pointerWitness).toBeUndefined();
  v.send({type:"input",seq:2,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"up",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);writes.mockRestore();
 });
-it.each(["normal","elevated-default","elevated-uac"] as const)("still cancels unused %s control explicitly without native activation",async mode=>{
+it.each(["normal","elevated-default","elevated-uac"] as const)("still cancels unused %s control explicitly before any input",async mode=>{
  const f=mode==="normal"?await fixture():await protectedFixture({mode,allowed:true}),v=await f.viewer(mode==="normal"?"extended":"protected");v.send(mode==="normal"?start:protectedStart);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
  const state=f.provider as any,share=state.active,writes=vi.spyOn(share.process.stdin,"write");v.send({type:"control",enabled:false});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);expect(state.resources.owns(share,"control")).toBe(false);
  v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});v.send({type:"release"});let observed=false;share.ws.once("message",()=>{observed=true;});v.send({type:"heartbeat"});await expect.poll(()=>observed).toBe(true);
- expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch"||m.type==="input")).toBe(false);expect(state.resources.faulted).toBe(false);writes.mockRestore();
+ expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch"||m.type==="input")).toBe(false);writes.mockRestore();
 });
-it.each(["stop","close","timeout","source_changed"] as const)("releases unused control reservation after focus-release on %s",async ending=>{
+it.each(["stop","close","timeout","source_changed"] as const)("releases control ownership after focus-release on %s",async ending=>{
  const f=await protectedFixture({mode:"elevated-uac",allowed:true}),v=await f.viewer("protected");v.send(protectedStart);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
  const state=f.provider as any,share=state.active,writes=vi.spyOn(share.process.stdin,"write");let released=false;share.ws.on("message",(data:unknown)=>{try{if(JSON.parse(String(data)).type==="release")released=true;}catch{}});v.send({type:"release"});await expect.poll(()=>released).toBe(true);expect(state.resources.owns(share,"control")).toBe(true);
  if(ending==="stop")v.send({type:"stop"});else if(ending==="close")v.ws.close();else if(ending==="timeout"){share.lastSeen=performance.now()-13000;share.timer._onTimeout();}else await writeFile(f.endedMarker,"generated ended scope");
- await expect.poll(()=>state.resources.owns(share,"control")).toBe(false);expect(state.resources.faulted).toBe(false);expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch"||m.type==="input")).toBe(false);writes.mockRestore();
+ await expect.poll(()=>state.resources.owns(share,"control")).toBe(false);expect(writes.mock.calls.map(([value])=>JSON.parse(String(value))).some(m=>m.type==="resource_epoch"||m.type==="input")).toBe(false);writes.mockRestore();
 });
 it("shares and controls the local desktop without opening a machine channel, and releases its helper",async()=>{
  const f=await fixture(),v=await f.viewer("extended");
@@ -305,7 +305,7 @@ it.each(["pipe","json","shared"])("keeps %s physical input witnesses on B and in
  const state=f.provider as any,share=mode==="shared"?[...state.shared][0]:state.active;
  v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
  await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
- expect(share.pointerWitness).toMatchObject({seq:1,point:{x:-400,y:50,window:42,pid:7,epoch:state.resources.identity(share,"control").epoch}});
+ expect(share.pointerWitness).toMatchObject({seq:1,point:{x:-400,y:50,window:42,pid:7}});
  expect(share.pointerWitness.source).toBe(share.process.resourceChannel);
  expect(v.messages.find(m=>m.type==="input_ack"&&m.seq===1)).toEqual({type:"input_ack",seq:1});expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativePointerProof");
  v.send({type:"input",seq:2,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.51,y:0.5,event:"move",button:0}});
@@ -1348,7 +1348,7 @@ it("keeps a generated native OS permission wait alive past the Windows startup d
 },25000);
 
 it("queues only the original viewer's reacquisition behind its exact shared cleanup",async()=>{
- const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,"--resource-fence-release-marker",f.endedMarker]});const first=await f.viewer("shared"),second=await f.viewer("shared"),options={...start,options:{...start.options,features:true,sharedDesktop:true}};first.send(options);second.send(options);await expect.poll(()=>first.messages.some(m=>m.type==="ready")&&second.messages.some(m=>m.type==="ready")).toBe(true);first.send({type:"control",enabled:true});await expect.poll(()=>first.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);await expect.poll(()=>first.frames.length).toBeGreaterThan(0);first.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(first.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"move",button:0}});await expect.poll(()=>first.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);first.send({type:"control",enabled:false});await expect.poll(()=>first.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,"--control-release-marker",f.endedMarker]});const first=await f.viewer("shared"),second=await f.viewer("shared"),options={...start,options:{...start.options,features:true,sharedDesktop:true}};first.send(options);second.send(options);await expect.poll(()=>first.messages.some(m=>m.type==="ready")&&second.messages.some(m=>m.type==="ready")).toBe(true);first.send({type:"control",enabled:true});await expect.poll(()=>first.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);await expect.poll(()=>first.frames.length).toBeGreaterThan(0);first.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(first.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"move",button:0}});await expect.poll(()=>first.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);first.send({type:"control",enabled:false});await expect.poll(()=>first.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(false);
  first.send({type:"control",enabled:true});await expect.poll(()=>[...(f.provider as any).shared].filter((s:any)=>s.pendingControl).length).toBe(1);second.send({type:"control",enabled:true});await expect.poll(()=>second.messages.some(m=>m.type==="control"&&!m.enabled)).toBe(true);expect([...(f.provider as any).shared].filter((s:any)=>s.pendingControl)).toHaveLength(1);
  await writeFile(f.endedMarker,"generated cleanup");await expect.poll(()=>first.messages.filter(m=>m.type==="control"&&m.enabled).length).toBe(2);expect(second.messages.some(m=>m.type==="control"&&m.enabled)).toBe(false);first.send({type:"stop"});second.send({type:"stop"});
 });
@@ -1689,10 +1689,10 @@ it.each(["pipe","json","shared","folder","virtual","virtual-shared"])("copies a 
  const run=async(request:unknown)=>{const id=crypto.randomUUID();socket.send(JSON.stringify({type:"desktop_file",id,request}));await expect.poll(()=>responses.some(m=>m.id===id)).toBe(true);return responses.find(m=>m.id===id);};
  expect((await run({action:"grant",enabled:true})).ok).toBe(true);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
  v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
- const state=f.provider as any,share=shared?[...state.shared][0]:state.active,epoch=state.resources.identity(share,"control").epoch,gesture=crypto.randomUUID();
- const prepared=await run({action:"native_prepare",gesture,origin:f.origin,seq:1});expect(prepared.ok).toBe(true);expect(capture).toHaveBeenCalledWith(expect.objectContaining({epoch,x:-400,y:50,window:42,pid:7}),expect.any(Number),expect.any(AbortSignal));
- const offer=prepared.result.native;expect(offer.entries[0].name).toBe(mode==="folder"?"selected-folder":"selected-generated.txt");if(mode==="folder")expect(offer.entries).toEqual(expect.arrayContaining([expect.objectContaining({name:"selected-folder\\empty",directory:true,bytes:0})]));expect(offer.generation).toBe(epoch);expect(JSON.stringify(offer)).not.toContain(root);
- const activated=await run({action:"native_activate",gesture,lease:offer.lease});expect(activated.ok).toBe(true);expect(state.resources.identity(share,"control")).toBeUndefined();expect(share.control).toBe(false);expect(share.pointerWitness).toBeUndefined();
+ const state=f.provider as any,share=shared?[...state.shared][0]:state.active,gesture=crypto.randomUUID();
+ const prepared=await run({action:"native_prepare",gesture,origin:f.origin,seq:1});expect(prepared.ok).toBe(true);expect(capture).toHaveBeenCalledWith(expect.objectContaining({x:-400,y:50,window:42,pid:7}),expect.any(Number),expect.any(AbortSignal));
+ const offer=prepared.result.native;expect(offer.entries[0].name).toBe(mode==="folder"?"selected-folder":"selected-generated.txt");if(mode==="folder")expect(offer.entries).toEqual(expect.arrayContaining([expect.objectContaining({name:"selected-folder\\empty",directory:true,bytes:0})]));expect(offer.generation).toBe(gesture);expect(JSON.stringify(offer)).not.toContain(root);
+ const activated=await run({action:"native_activate",gesture,lease:offer.lease});expect(activated.ok).toBe(true);expect(state.resources.identity(share,"control")?.source).toBe(share.process.resourceChannel);expect(share.control).toBe(false);expect(share.pointerWitness).toBeUndefined();
  const read=await run({action:"native_read",gesture,lease:offer.lease,request:crypto.randomUUID(),index:mode==="folder"?offer.entries.findIndex((entry:any)=>entry.name.endsWith("data.txt")):0,offset:0,length:23});expect(read.ok).toBe(true);expect(Buffer.from(read.result.data,"base64").toString()).toBe("generated native source");
  if(shared){
   const other=await f.viewer(protocols);other.send({...start,options});await expect.poll(()=>other.frames.length).toBeGreaterThan(0);other.send({type:"control",enabled:true});await expect.poll(()=>other.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
@@ -2060,7 +2060,7 @@ it('refuses missing helper virtual-monitor proof before exposing a roster',async
 it('enforces virtual monitor permission on direct B requests before any helper starts',async()=>{const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:true,allowMonitors:false});await expect(f.provider.start('generated',{url:f.endpoint,ticket:'x'.repeat(43),options:DesktopOptions.parse({...start.options,features:true,virtualDisplay:true,virtualMonitors:true})})).rejects.toMatchObject({code:'unauthorized'});expect((f.provider as any).active).toBeUndefined();});
 
 it('does not expose a single virtual roster through the legacy ordinary monitor hint',async()=>{const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:true,allowMonitors:true,command:[...cfg.command,'--virtual-display','--monitors']});const v=await f.viewer([DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL]);v.send({...start,options:{...start.options,features:true,virtualDisplay:true}});await expect.poll(()=>v.messages.some(m=>m.type==='ready')).toBe(true);const ready=v.messages.find(m=>m.type==='ready');expect(ready).toMatchObject({virtualDisplay:true});expect(ready).not.toHaveProperty('monitorLayout');expect(ready).not.toHaveProperty('virtualMonitors');expect(f.startRequests[0]!.options).not.toHaveProperty('monitors');});
-it('pairs a fenced owned virtual group with independent physical sources but never a regular combined source',async()=>{
+it('pairs an owned virtual group with independent physical sources but never a regular combined source',async()=>{
  const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:true,allowMonitors:true,command:[...cfg.command,'--virtual-display','--monitors']});
  const virtualRequest={...start,options:{...start.options,features:true,sharedDesktop:true,sharedVirtual:true,virtualDisplay:true}},physicalRequest={...start,options:{...start.options,features:true,sharedDesktop:true,sharedMonitors:true,independentMonitors:true,monitorDevice:'left'}};
  const ack=(v:any)=>{v.ws.on('message',(raw:Buffer,binary:boolean)=>{if(!binary)return;try{v.send({type:'ack',seq:decodeDesktopFrame(new Uint8Array(raw)).info.seq});}catch{}});if(v.frames.length)v.send({type:'ack',seq:decodeDesktopFrame(v.frames.at(-1)!).info.seq});};
@@ -2070,7 +2070,7 @@ it('pairs a fenced owned virtual group with independent physical sources but nev
  virtual.send({type:'stop'});secondVirtual.send({type:'stop'});await expect.poll(()=>virtual.ws.readyState===WebSocket.CLOSED&&secondVirtual.ws.readyState===WebSocket.CLOSED).toBe(true);
  const normal=await f.viewer('shared');normal.send({...start,options:{...start.options,features:true,sharedDesktop:true}});await expect.poll(()=>normal.ws.readyState).toBe(WebSocket.CLOSED);expect(normal.messages.some(m=>m.type==='ready')).toBe(false);const before=physical.frames.length;await expect.poll(()=>physical.frames.length).toBeGreaterThan(before);
 });
-it('rejects virtual monitor metadata without actual resource fencing support',async()=>{const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:true,allowMonitors:true,command:[...cfg.command,'--virtual-display','--monitors','--no-resource-fences']});const v=await f.viewer(virtualMonitorProtocols);v.send({...start,options:{...start.options,features:true,sharedDesktop:true,sharedVirtual:true,virtualDisplay:true}});await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(v.messages.some(m=>m.type==='ready')).toBe(false);});
+it('uses ordinary control completion for owned virtual monitors without resource fence negotiation',async()=>{const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:true,allowMonitors:true,command:[...cfg.command,'--virtual-display','--monitors']});const v=await f.viewer(virtualMonitorProtocols);v.send({...start,options:{...start.options,features:true,sharedDesktop:true,sharedVirtual:true,virtualDisplay:true}});await expect.poll(()=>v.messages.some(m=>m.type==='ready')).toBe(true);expect(f.startRequests[0]?.options).not.toHaveProperty('resourceFences');v.send({type:'stop'});});
 it('keeps retiring physical helpers within the global quota before starting a normal source',async()=>{const f=await fixture(),state=f.provider as any;for(let i=0;i<8;i++)state.physicalHelpers.add({exitCode:null,signalCode:null});try{await expect(f.provider.start('generated',{url:f.endpoint,ticket:'x'.repeat(43),options:DesktopOptions.parse(start.options)})).rejects.toMatchObject({code:'server_busy'});expect(state.active).toBeUndefined();}finally{state.physicalHelpers.clear();}});
 
 it.each(['all','owned-virtual'] as const)('refuses nonphysical %s coexistence in both join orders',async monitorDevice=>{
@@ -2119,7 +2119,7 @@ it.each(['single','shared','old-host','no-optin','old-viewer'])('requires negoti
  const state=f.provider as any,share=mode==='shared'?[...state.shared][0]:state.active;
  v.send({type:'input',seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:'pointer',x:0.5,y:0.5,event:'down',button:0}});
  await expect.poll(()=>v.messages.some(m=>m.type==='input_ack'&&m.seq===1)).toBe(true);
- if(mode==='no-optin')expect(share.pointerWitness).toBeUndefined();else expect(share.pointerWitness).toMatchObject({seq:1,source:share.process.resourceChannel,point:{epoch:state.resources.identity(share,'control').epoch}});
+ if(mode==='no-optin')expect(share.pointerWitness).toBeUndefined();else expect(share.pointerWitness).toMatchObject({seq:1,source:share.process.resourceChannel,point:{x:-400,y:50,window:42,pid:7}});
  v.send({type:'input',seq:2,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:'pointer',x:0.51,y:0.5,event:'move',button:0}});
  await expect.poll(()=>v.messages.some(m=>m.type==='input_ack'&&m.seq===2)).toBe(true);expect(share.pointerWitness).toBeUndefined();
 });

@@ -10,9 +10,9 @@ it('only forwards bounded virtual failure codes and uses fixed public descriptio
  expect(DesktopVirtualFailure.safeParse({type:'virtual_display_failure',code:'C:\\private\\window'}).success).toBe(false);expect(DesktopVirtualFailure.safeParse({type:'virtual_display_failure',code:'failed',message:'private native exception'}).success).toBe(false);
 });
 it('requires virtual drag proof to name a fenced normal virtual source with files',()=>{
- const proof={type:'ready',title:'generated',allowInput:true,width:320,height:200,backend:'synthetic',resourceFences:true,virtualDisplay:true,files:true,virtualNativeDrag:true};
+ const proof={type:'ready',title:'generated',allowInput:true,width:320,height:200,backend:'synthetic',virtualDisplay:true,files:true,virtualNativeDrag:true};
  expect(DesktopReady.safeParse(proof).success).toBe(true);
- for(const missing of ['resourceFences','virtualDisplay','files']){const bad={...proof} as Record<string,unknown>;delete bad[missing];expect(DesktopReady.safeParse(bad).success).toBe(false);}
+ for(const missing of ['virtualDisplay','files']){const bad={...proof} as Record<string,unknown>;delete bad[missing];expect(DesktopReady.safeParse(bad).success).toBe(false);}
  for(const extra of [{secureDesktop:true},{lockScreenCover:true},{virtualMonitors:true},{virtualNativeDrag:false},{virtualNativeDragProof:true}])expect(DesktopReady.safeParse({...proof,...extra}).success).toBe(false);
  expect(DesktopReady.parse({...proof,virtualNativeDrag:undefined})).not.toHaveProperty('virtualNativeDragProof');
  expect(DesktopOptions.parse({virtualDisplay:true,files:true,virtualNativeDrag:true})).toMatchObject({virtualNativeDrag:true});

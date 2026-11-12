@@ -11,16 +11,16 @@ async function setup(){
  const path=join(root,"選択.txt");await writeFile(path,"immutable selected bytes");
  let now=0,valid=true,granted=true;const generation=randomUUID(),gesture=randomUUID();
  const runtime={prepare:vi.fn(async()=>{}),capture:vi.fn(async()=>[path])};
- const release=vi.fn(async()=>{valid=false;return {id:randomUUID(),epoch:generation};});
- const hooks:NativeFileHooks={origin:"https://a.example",runtime,pointer:seq=>seq===7?{seq,point:{epoch:generation,x:-400,y:50,window:42,pid:123},at:0,valid:()=>valid,release}:undefined};
+ const release=vi.fn(async()=>{valid=false;});
+ const hooks:NativeFileHooks={origin:"https://a.example",runtime,pointer:seq=>seq===7?{seq,point:{x:-400,y:50,window:42,pid:123},at:0,valid:()=>valid,release}:undefined};
  const files=new DesktopNativeFiles(root,randomUUID(),hooks,()=>now);clean.push(()=>files.close());
  const fence=()=>{if(!granted)throw Error("revoked grant");};
  const run=(request:unknown)=>files.run(request,fence),prepare=()=>run({action:"native_prepare",gesture,origin:"https://a.example",seq:7});
  return {root,path,files,runtime,release,hooks,generation,gesture,run,prepare,clock:(v:number)=>{now=v;},invalidate:()=>{valid=false;},revoke:()=>{granted=false;},fence};
 }
-it("publishes an immutable manifest and reads only after exact control epoch release",async()=>{
+it("publishes an immutable manifest and reads only after ordinary control release",async()=>{
  const f=await setup(),offer=(await f.prepare() as any).native;
- expect(offer).toEqual({lease:expect.any(String),generation:f.generation,entries:[{name:"選択.txt",directory:false,bytes:24,sha256:createHash("sha256").update("immutable selected bytes").digest("hex")}]});
+ expect(offer).toEqual({lease:expect.any(String),generation:f.gesture,entries:[{name:"選択.txt",directory:false,bytes:24,sha256:createHash("sha256").update("immutable selected bytes").digest("hex")}]});
  const read={action:"native_read",gesture:f.gesture,lease:offer.lease,request:randomUUID(),index:0,offset:0,length:24};
  await expect(f.run(read)).rejects.toThrow("まだ開始");expect(f.release).not.toHaveBeenCalled();
 });
@@ -31,9 +31,9 @@ it("keeps file authority after intentional input release and returns exact copie
  expect(result).toEqual({data:Buffer.from("immutable selected bytes").toString("base64"),offset:0});
  await expect(f.run({action:"native_heartbeat",gesture:f.gesture,lease:offer.lease})).resolves.toEqual({});
 });
-for(const mode of ["epoch","release-failure","release-expired","grant-during-release","abort-during-release"]){it(`refuses activation after ${mode}`,async()=>{
+for(const mode of ["release-failure","release-expired","grant-during-release","abort-during-release"]){it(`refuses activation after ${mode}`,async()=>{
  const f=await setup(),offer=(await f.prepare() as any).native;
- f.release.mockImplementation(async()=>{if(mode==="release-failure")throw Error("cleanup failed");if(mode==="release-expired")f.clock(750);if(mode==="grant-during-release")f.revoke();if(mode==="abort-during-release")f.files.cancel();return {id:randomUUID(),epoch:mode==="epoch"?randomUUID():f.generation};});
+ f.release.mockImplementation(async()=>{if(mode==="release-failure")throw Error("cleanup failed");if(mode==="release-expired")f.clock(750);if(mode==="grant-during-release")f.revoke();if(mode==="abort-during-release")f.files.cancel();});
  await expect(f.run({action:"native_activate",gesture:f.gesture,lease:offer.lease})).rejects.toThrow();
  await expect(f.run({action:"native_read",gesture:f.gesture,lease:offer.lease,request:randomUUID(),index:0,offset:0,length:1})).rejects.toThrow();
 });}
@@ -58,13 +58,13 @@ it("confines trusted adapter paths to the explicitly approved folder",async()=>{
  const f=await setup(),other=await mkdtemp(join(tmpdir(),"soda-native-outside-"));clean.push(()=>rm(other,{recursive:true,force:true}));await writeFile(join(other,"outside.txt"),"private");f.runtime.capture.mockResolvedValue([join(other,"outside.txt")]);await expect(f.prepare()).rejects.toThrow();expect(f.release).not.toHaveBeenCalled();
 });
 it("requires the existing explicit file grant and revokes native bytes immediately",async()=>{
- const f=await setup();f.hooks.pointer=seq=>({seq,point:{epoch:f.generation,x:-400,y:50,window:42,pid:123},at:performance.now(),valid:()=>true,release:f.release});
+ const f=await setup();f.hooks.pointer=seq=>({seq,point:{x:-400,y:50,window:42,pid:123},at:performance.now(),valid:()=>true,release:f.release});
  const files=await DesktopFiles.open(f.root,()=>true,undefined,()=>true,false,undefined,f.hooks);clean.push(()=>files.close());
  const run=(request:unknown)=>files.run({type:"desktop_file",id:randomUUID(),request});
  const prepare={action:"native_prepare",gesture:f.gesture,origin:"https://a.example",seq:7};
  expect((await run(prepare)).ok).toBe(false);expect(f.runtime.capture).not.toHaveBeenCalled();
  expect((await run({action:"grant",enabled:true})).ok).toBe(true);
- const offer=(await run(prepare)).result!.native!;expect(offer.generation).toBe(f.generation);
+ const offer=(await run(prepare)).result!.native!;expect(offer.generation).toBe(f.gesture);
  expect((await run({action:"native_activate",gesture:f.gesture,lease:offer.lease})).ok).toBe(true);
  const revoked=run({action:"grant",enabled:false});
  expect((await run({action:"native_read",gesture:f.gesture,lease:offer.lease,request:randomUUID(),index:0,offset:0,length:1})).ok).toBe(false);await revoked;
@@ -74,7 +74,7 @@ it("remembers cancellation before selection preparation and refuses delayed repl
  const f=await setup();f.files.cancel(f.gesture);await expect(f.prepare()).rejects.toThrow();expect(f.runtime.capture).not.toHaveBeenCalled();await expect(f.prepare()).rejects.toThrow();
 });
 it("cancels a queued DesktopFiles preparation before its root guard completes",async()=>{
- const f=await setup();f.hooks.pointer=seq=>({seq,point:{epoch:f.generation,x:-400,y:50,window:42,pid:123},at:performance.now(),valid:()=>true,release:f.release});const files=await DesktopFiles.open(f.root,()=>true,undefined,()=>true,false,undefined,f.hooks);clean.push(()=>files.close());const run=(request:unknown)=>files.run({type:"desktop_file",id:randomUUID(),request});await run({action:"grant",enabled:true});
+ const f=await setup();f.hooks.pointer=seq=>({seq,point:{x:-400,y:50,window:42,pid:123},at:performance.now(),valid:()=>true,release:f.release});const files=await DesktopFiles.open(f.root,()=>true,undefined,()=>true,false,undefined,f.hooks);clean.push(()=>files.close());const run=(request:unknown)=>files.run({type:"desktop_file",id:randomUUID(),request});await run({action:"grant",enabled:true});
  let entered!:()=>void,unblock!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{unblock=resolve;});
  const target=files as unknown as {check():Promise<void>},original=target.check.bind(target);vi.spyOn(target,"check").mockImplementationOnce(async()=>{entered();await gate;await original();});
  const request={action:"native_prepare",gesture:f.gesture,origin:"https://a.example",seq:7};const preparing=run(request);await started;const aborted=run({action:"native_abort",gesture:f.gesture});unblock();expect((await preparing).ok).toBe(false);await aborted;expect(f.runtime.capture).not.toHaveBeenCalled();expect((await run(request)).ok).toBe(false);expect(f.runtime.capture).not.toHaveBeenCalled();

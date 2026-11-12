@@ -2,7 +2,6 @@ import { z } from "zod";
 /** Private physical-helper metadata. Never accepted from a viewer or relay ACK. */
 export const DesktopPointerWitness = z
   .object({
-    epoch: z.uuid(),
     x: z.number().int().min(-2147483648).max(2147483647),
     y: z.number().int().min(-2147483648).max(2147483647),
     window: z

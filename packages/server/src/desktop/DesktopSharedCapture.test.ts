@@ -44,12 +44,12 @@ function fixture() {
 it("routes a physical pointer witness only to its submitting viewer and rewrites the helper sequence",async()=>{
  const f=fixture(),configuration={type:"configure",options:{width:320},nativePointerProof:true},a=f.join("source",configuration),b=f.join("source",configuration);
  try {
-  f.child.send({...ready,resourceFences:true,nativePointerProof:true});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({nativePointerProof:true}));
+  f.child.send({...ready,nativePointerProof:true});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({nativePointerProof:true}));
   expect(a.session.requestControl!(true)).toBe(true);a.send({type:"control",enabled:true});a.send({type:"input",seq:7,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
-  const first={epoch:crypto.randomUUID(),x:-400,y:50,window:42,pid:7};f.child.send({type:"input_ack",seq:1,pointer:first});await vi.waitFor(()=>expect(a.messages.at(-1)).toEqual({type:"input_ack",seq:7,pointer:first}));expect(b.messages.filter(m=>m.type==="input_ack")).toEqual([]);
+  const first={x:-400,y:50,window:42,pid:7};f.child.send({type:"input_ack",seq:1,pointer:first});await vi.waitFor(()=>expect(a.messages.at(-1)).toEqual({type:"input_ack",seq:7,pointer:first}));expect(b.messages.filter(m=>m.type==="input_ack")).toEqual([]);
   a.session.requestControl!(false);expect(b.session.requestControl!(true)).toBe(true);b.send({type:"control",enabled:true});b.send({type:"input",seq:7,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
   f.child.send({type:"input_ack",seq:1,pointer:first});expect(b.messages.filter(m=>m.type==="input_ack")).toEqual([]);
-  const second={...first,epoch:crypto.randomUUID(),window:43};f.child.send({type:"input_ack",seq:2,pointer:second});await vi.waitFor(()=>expect(b.messages.at(-1)).toEqual({type:"input_ack",seq:7,pointer:second}));expect(a.messages.filter(m=>m.type==="input_ack")).toHaveLength(1);
+  const second={...first,window:43};f.child.send({type:"input_ack",seq:2,pointer:second});await vi.waitFor(()=>expect(b.messages.at(-1)).toEqual({type:"input_ack",seq:7,pointer:second}));expect(a.messages.filter(m=>m.type==="input_ack")).toHaveLength(1);
  } finally {f.pool.dispose();}
 });
 
@@ -421,7 +421,7 @@ it.skipIf(process.platform==="win32")("keeps the physical PCM owner and nonempty
 });
 
 const unlockConfiguration={type:"configure",allowSharedUnlock:true,allowInput:true,options:{width:320}};
-const lockedReady={...ready,backend:"windows-gdi",secureDesktop:true,resourceFences:true};
+const lockedReady={...ready,backend:"windows-gdi",secureDesktop:true};
 it("shares locked capture pixels with one input owner and no privileged side features",async()=>{
  const f=fixture(),a=f.join("locked",unlockConfiguration),b=f.join("locked",unlockConfiguration);
  try{
@@ -507,10 +507,10 @@ it("accepts only the owned virtual monitor layout and propagates lease loss to e
  const f=fixture(),a=f.join("virtual",virtualConfiguration),b=f.join("virtual",virtualConfiguration),layout={selected:"virtual-owned",bounds:{x:2000,y:0,width:320,height:200},allSupported:false,monitors:[{id:"virtual-owned",x:2000,y:0,width:320,height:200,primary:false}]};
  try{f.child.send({...ready,virtualDisplay:true,monitorLayout:layout});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({virtualDisplay:true}));f.child.send({type:"virtual_display_failure",code:"lease_lost"});f.child.send(frame(1));await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));for(const member of[a,b])expect(member.messages.map(m=>m.type)).toEqual(["ready","virtual_display_failure"]);}finally{f.pool.dispose();}
 });
-it.each(['proved','old-host','not-requested','no-fence','multi-source'])('only forwards fresh owned virtual drag proof: %s',async kind=>{
+it.each(['proved','old-host','not-requested','multi-source'])('only forwards fresh owned virtual drag proof: %s',async kind=>{
  const f=fixture(),configuration={...virtualConfiguration,nativePointerProof:true,options:{...virtualConfiguration.options,...(kind!=='not-requested'?{virtualNativeDrag:true}:{})}},a=f.join('virtual',configuration),b=f.join('virtual',configuration);
  try{
-  f.child.send({...ready,virtualDisplay:true,...(kind!=='no-fence'?{resourceFences:true}:{}),nativePointerProof:true,...(kind!=='old-host'?{virtualNativeDragProof:true}:{}),...(kind==='multi-source'?{virtualMonitors:true,monitorLayout:{selected:'owned',bounds:{x:0,y:0,width:320,height:200},allSupported:false,monitors:[{id:'owned',x:0,y:0,width:320,height:200,primary:false}]}}:{})});
+  f.child.send({...ready,virtualDisplay:true,nativePointerProof:true,...(kind!=='old-host'?{virtualNativeDragProof:true}:{}),...(kind==='multi-source'?{virtualMonitors:true,monitorLayout:{selected:'owned',bounds:{x:0,y:0,width:320,height:200},allSupported:false,monitors:[{id:'owned',x:0,y:0,width:320,height:200,primary:false}]}}:{})});
   if(kind==='proved'){
    await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({virtualNativeDragProof:true,nativePointerProof:true}));
    expect(a.session.requestControl!(true)).toBe(true);expect(b.session.requestControl!(true)).toBe(false);

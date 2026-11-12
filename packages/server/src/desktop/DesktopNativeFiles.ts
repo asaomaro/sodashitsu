@@ -2,7 +2,7 @@ import {DesktopNativeFileRequest,DesktopNativeFileOffer} from "@sodashitsu/proto
 import {DesktopNativeSources,type NativeSourceScope} from "./DesktopNativeSources.js";
 import type {DesktopPointerWitness} from "./DesktopPointerWitness.js";
 import type {NativeSelectionRuntime} from "./DesktopNativeSelection.js";
-export interface NativeFilePointer {seq:number;point:DesktopPointerWitness;at:number;valid():boolean;release():Promise<{id:string;epoch:string}>;}
+export interface NativeFilePointer {seq:number;point:DesktopPointerWitness;at:number;valid():boolean;release():Promise<void>;}
 export interface NativeFileHooks {origin:string;pointer(seq:number):NativeFilePointer|undefined;runtime:NativeSelectionRuntime;paths?(paths:readonly string[],signal:AbortSignal):Promise<readonly string[]>;}
 type State={gesture:string;controller:AbortController;pointer:NativeFilePointer;fence():void;scope:NativeSourceScope;lease?:DesktopNativeSources;phase:"preparing"|"offered"|"releasing"|"active";preparation:Promise<void>;prepared():void;born:number;observed:number;timer?:ReturnType<typeof setTimeout>};
 export class DesktopNativeFileBudget {
@@ -41,7 +41,7 @@ export class DesktopNativeFiles {
    if(this.dead||this.state||this.seen.has(request.gesture)||this.seen.size>=4096)throw Error("ドラッグは取り消されました");
    this.seen.add(request.gesture);
    let prepared!:()=>void;const preparation=new Promise<void>(resolve=>{prepared=resolve;});
-   const state:State={gesture:request.gesture,controller:new AbortController(),pointer,fence,scope:{owner:this.owner,origin:this.hooks.origin,gesture:request.gesture,generation:pointer.point.epoch},phase:"preparing",preparation,prepared,born:0,observed:0};if(!this.budget.acquire(state))throw Error("別のドラッグが接続先で処理中です");this.state=state;
+   const state:State={gesture:request.gesture,controller:new AbortController(),pointer,fence,scope:{owner:this.owner,origin:this.hooks.origin,gesture:request.gesture,generation:request.gesture},phase:"preparing",preparation,prepared,born:0,observed:0};if(!this.budget.acquire(state))throw Error("別のドラッグが接続先で処理中です");this.state=state;
    try{
     state.born=state.observed=this.clock();this.arm(state);this.check(state);const paths=await this.hooks.runtime.capture(pointer.point,750-(this.clock()-pointer.at),state.controller.signal);this.check(state);
     const localPaths=this.hooks.paths?await this.hooks.paths(paths,state.controller.signal):paths;this.check(state);
@@ -57,10 +57,10 @@ export class DesktopNativeFiles {
    this.check(state);
    if(request.action==="native_activate"){
     if(state.phase!=="offered")throw Error("ドラッグは開始済みです");
-    state.phase="releasing";const receipt=await state.pointer.release();
+    state.phase="releasing";await state.pointer.release();
     // Releasing control intentionally invalidates the old pointer. All other grant,
     // session, abort and monotonic/gesture deadlines remain mandatory.
-    this.check(state,false);if(receipt.epoch!==state.scope.generation||this.clock()-state.pointer.at>=750)throw Error("元の操作の解除を確認できません");
+    this.check(state,false);if(this.clock()-state.pointer.at>=750)throw Error("元の操作の解除を確認できません");
     state.phase="active";state.lease.activate(state.scope);this.arm(state);return {id:state.lease.id};
    }
    if(state.phase!=="active")throw Error("ドラッグはまだ開始されていません");

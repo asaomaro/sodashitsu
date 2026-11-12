@@ -173,7 +173,6 @@ export const DesktopReady = z
   .object({
     type: z.literal("ready"),
     title: z.string().max(256),
-    resourceFences: z.literal(true).optional(),
     agentRegions:z.literal(true).optional(),
     allowInput: z.boolean(),
     width: z.number().int().positive().max(32768),
@@ -232,7 +231,7 @@ export const DesktopReady = z
   .refine(v=>!v.protectedAudio||(v.protectedVideo===true&&v.nativeAudio===true))
   .refine(v=>!v.protectedMicrophone||(!!v.protectedDesktop&&v.secureDesktop===true&&v.microphone===true&&!v.sharedProtected&&!v.microphoneOpus))
   .refine(v=>!v.sharedProtectedVideo||(v.sharedProtected===true&&v.protectedVideo===true))
-  .refine(v=>!v.virtualNativeDrag||(v.virtualDisplay===true&&v.resourceFences===true&&!v.secureDesktop&&!v.lockScreenCover&&!v.virtualMonitors&&v.files===true))
+  .refine(v=>!v.virtualNativeDrag||(v.virtualDisplay===true&&!v.secureDesktop&&!v.lockScreenCover&&!v.virtualMonitors&&v.files===true))
   .refine(v=>!v.virtualMonitors||(v.virtualDisplay===true&&!v.secureDesktop&&!!v.monitorLayout&&v.monitorLayout.selected!=="all"));
 export const DesktopFrameInfo = z
   .object({

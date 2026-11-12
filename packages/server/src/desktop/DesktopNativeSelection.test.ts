@@ -30,7 +30,7 @@ it("aborts its owned process and refuses output after cancellation",async()=>{
  await expect(nativeSelectionProcess(process.execPath,["-e",'process.stdout.write("ready");setInterval(()=>{},1000)'],"",{timeout:5000,limit:128,spawn:launch,signal:controller.signal})).rejects.toThrow("中止");expect(closed).toBe(true);
 });
 it("requires a prebuilt runtime before any Explorer capture and refuses unsupported hosts",async()=>{
- const runtime=new DesktopNativeSelection("linux",{}),point={epoch:crypto.randomUUID(),x:0,y:0,window:42,pid:1};
+ const runtime=new DesktopNativeSelection("linux",{}),point={x:0,y:0,window:42,pid:1};
  await expect(runtime.capture(point,750,new AbortController().signal)).rejects.toThrow("開始");await expect(runtime.prepare()).rejects.toThrow("Windows");
 });
 
