@@ -92,3 +92,16 @@ pipeの実OS ACL・接続者token・remote拒否・SCM purposeの実確認はWin
 
 
 管理IPCの変更を含む5つのVitestファイル・19テストが成功。続く削除段階で、JS管理mailbox/LocalLeaseの14ファイルと、C#管理envelope/journal/deadline/result/persistence・専用helper/検査の20ファイルを物理削除した。残された実機の履歴・DPAPI暗号文の消去や再生成は行っていない。
+
+
+## Windows標準のAutomatic/ManualとSCM adapter縮小
+
+登録/更新の旧callback controller・状態フラグ・復旧関数を削除し、標準SCM API呼び出しだけに縮小。設定検査は固定binary/名前/SYSTEM own-process/DACLの権限境界に限定し、管理者が設定する標準の回復・依存・trigger等を独自に禁止しない。起動種別はAutomatic/Manualを許可し、更新で指定しなければ既存種別を保持する。実機のTask/サービス設定は変更していない。
+
+変更した8ソースセットがMonoでコンパイル成功。生成データによる起動種別、サービスidentity/ACLとquery buffer範囲の検査:
+
+```
+signin_service_standard_start_modes_identity_and_acl_passed
+```
+
+最初の純粋ACL fixtureはMonoが空DACLのSDDLを読めず失敗したため、空ACLをRawSecurityDescriptor/RawAclで組み立てるportableなfixtureへ変更した。OSのサービス設定やDACLは操作していない。

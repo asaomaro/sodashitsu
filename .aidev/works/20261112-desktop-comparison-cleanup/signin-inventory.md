@@ -29,7 +29,7 @@ ServiceBaseへの置換根拠は[Microsoft公式API](https://learn.microsoft.com
 
 - 管理メールボックスの実行経路は標準named pipe request/replyへ置換済み。旧AdminEnvelope/Journal/Deadline/Result/PersistenceとTS対応の未使用ファイルは物理削除済み。SYSTEM CurrentUser DPAPIと既存identityは維持。GUI用一時Taskは使わず、新たな永続要求・結果・nonce・世代journalも作らない。
 - ServiceBase・短縮名・旧名からの移行と停止/終了の競合を独立レビューするまで、このソースを実機へ適用しない。起動の見た目や旧記録の存在を正常稼働の証拠にしない。
-- Win32 APIを薄く包むScm/InstallerScm/UpgradeScmにも旧テスト用callback/状態が残る。標準ServiceController/SCM呼び出しへさらに縮める対象で、例外として承認したものではない。
+- Scmは標準ServiceControllerへ、InstallerScm/UpgradeScmは登録/設定/削除だけのWin32 SCM呼び出しへ縮小済み。旧Calls/busy/checking/created状態や復旧用関数は削除。Automatic/ManualはWindows標準の設定として許可し、更新では省略時に既存値を維持する。旧BootStart Taskの読み取り結果に基づく実設定変換はsole operatorが行う。
 - 既存のscope/入力鮮度/描画ACK、JS LocalLeaseは削除済み。scope/入力の独自寿命管理は引き続き点検対象。現在のアダプター判定は「必要最小限が証明済み」という意味ではない。
 
 ## 管理IPCの標準実装との対応

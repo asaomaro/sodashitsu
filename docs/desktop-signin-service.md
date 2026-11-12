@@ -35,7 +35,7 @@ powershell.exe -NoProfile -File scripts/remote-desktop/install-signin-service.ps
 
 `-ValidateOnly`は配布元を検証します。配置先やSCMを変更せず、配布物を実行しません。
 導入は昇格した管理者が同じ引数から`-ValidateOnly`を外して行います。
-既存のコード・データ・サービスを上書きしません。サービスは手動起動で、停止したままです。
+既存のコード・データ・サービスを上書きしません。既定は手動起動です。`-StartupType Automatic`を指定するとWindows標準の自動起動に設定します。導入直後はどちらも停止したままです。
 
 ## 更新と旧サービス名からの移行
 
@@ -53,8 +53,8 @@ powershell.exe -NoProfile -File scripts/remote-desktop/upgrade-signin-service.ps
 
 従来の全64文字を使う長いサービス名がある場合、その正確な実行パス・SYSTEMアカウント・
 停止状態・設定を確認してから、短い名前へ移行します。新サービスを無効状態で登録し、
-旧サービスの登録を削除した後、新サービスを手動起動へ設定します。既存の起動用登録や
-他のサービス・Taskを一括削除しません。移行後も自動で起動しません。
+旧サービスの登録を削除した後、新サービスへ選択した起動設定を反映します。`-StartupType`を省略した更新は、既存サービスのAutomatic/Manualを維持します。`-StartupType Automatic`または`Manual`を明示して変更できます。既存の起動用登録や
+他のサービス・Taskを一括削除しません。更新の直後には開始しません。起動だけを行う旧Taskがある場合のSCM Automaticへの集約は、実機のsole operatorがその内容を確認して個別に行います。
 
 途中で失敗した場合は、SCMの状態と保存された配布物を、管理者がWindows標準ツールで確認します。
 独自の復旧ticket、boot証明、履歴の再生成、自動rollbackはありません。

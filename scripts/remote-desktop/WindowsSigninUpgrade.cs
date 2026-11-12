@@ -6,7 +6,8 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 public static class SodaDesktopSigninUpgrade {
     static void Require(bool value){if(!value)throw new InvalidOperationException("Signin update requires a stopped, verified installation");}
-    public static IDictionary<string,object> Run(string owner,string oldHash,string source,string newHash){
+    public static IDictionary<string,object> Run(string owner,string oldHash,string source,string newHash,uint startupType=0){
+        Require(startupType==0||startupType==2||startupType==3);
         Require(Environment.Is64BitProcess&&SodaDesktopSigninPackageNative.Authority(true)&&SodaDesktopSigninVault.UserAccount(owner));
         using(var mutex=SodaDesktopSigninControllerMutex.Acquire(owner,10000))
         using(var release=SodaDesktopSigninInstallSource.Open(source,owner,newHash))
@@ -15,7 +16,7 @@ public static class SodaDesktopSigninUpgrade {
             var paths=SodaDesktopSigninInstallFiles.Paths.Installed(owner,Guid.NewGuid().ToString("N"));
             bool legacy=SodaDesktopSigninUpgradeScm.LegacyExists(owner);
             using(var service=SodaDesktopSigninUpgradeScm.Open(owner,current,legacy)){
-                service.Inspect(false);
+                service.Inspect(false);uint start=startupType==0?service.StartupType:startupType;
                 string archive=paths.Code+".previous-"+Guid.NewGuid().ToString("N");
                 using(var installed=SodaDesktopSigninPackageNative.OpenCore(paths.Code,true,true,0,acl=>SodaDesktopSigninPackage.CodeAcl(acl,true),null))
                 using(var manifest=SodaDesktopSigninPackageNative.OpenCore(Path.Combine(paths.Code,"signin-package.json"),false,true,32768,acl=>SodaDesktopSigninPackage.CodeAcl(acl,true),null)){
@@ -37,11 +38,11 @@ public static class SodaDesktopSigninUpgrade {
                         using(var replacement=SodaDesktopSigninInstallerScm.Open(owner,verified)){
                             replacement.CreateDisabled(verified);
                             service.DeleteLegacy();
-                            replacement.EnableManual(verified);
+                            replacement.Enable(start,verified);
                         }
-                    }else service.Manual(verified);
+                    }else service.Enable(start,verified);
                     Require(verified());
-                    return new Dictionary<string,object>{{"state","upgraded"},{"started",false},{"service",SodaDesktopSigninServicePolicy.Name(owner)},{"packageSha256",newHash},{"oldPackageSha256",oldHash},{"codeArchive",archive},{"legacyServiceMigrated",legacy}};
+                    return new Dictionary<string,object>{{"state","upgraded"},{"started",false},{"service",SodaDesktopSigninServicePolicy.Name(owner)},{"packageSha256",newHash},{"oldPackageSha256",oldHash},{"codeArchive",archive},{"legacyServiceMigrated",legacy},{"startupType",start==2?"Automatic":"Manual"}};
                 }
             }
         }

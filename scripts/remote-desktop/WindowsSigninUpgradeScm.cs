@@ -1,37 +1,24 @@
-// Existing fixed service only. No service start/stop/register/delete operations.
+// Standard stopped-service configuration and explicit old-name deletion only.
 using System;
 using System.Runtime.InteropServices;
 internal sealed class SodaDesktopSigninUpgradeScm:IDisposable {
- internal interface Calls:IDisposable{void InspectManual();void InspectDisabled();bool Stopped();void Disable();void Manual();}
- readonly Calls calls;readonly Func<bool> scope;bool disabled,ended,busy;
- static Exception Failure(){return new InvalidOperationException("Signin upgrade requires verified stopped service policy");}
- internal SodaDesktopSigninUpgradeScm(Calls calls,Func<bool> scope){this.calls=calls;this.scope=scope;}
- void Current(){if(ended||!scope()||ended){ended=true;throw Failure();}}
- internal void Inspect(bool off){Current();if(busy){ended=true;throw Failure();}busy=true;try{if(off)calls.InspectDisabled();else calls.InspectManual();if(!calls.Stopped())throw Failure();Current();}catch{ended=true;throw;}finally{busy=false;}}
- internal void Disable(Func<bool> evidence){Inspect(false);Current();if(busy||disabled)throw Failure();busy=true;try{if(!evidence())throw Failure();Current();calls.Disable();disabled=true;Current();}catch{ended=true;throw;}finally{busy=false;}Inspect(true);}
- internal void Manual(Func<bool> evidence){Inspect(true);Current();if(busy||!disabled)throw Failure();busy=true;try{if(!evidence())throw Failure();Current();calls.Manual();Current();}catch{ended=true;throw;}finally{busy=false;}Inspect(false);}
- internal void RestoreManual(Func<bool> evidence){Inspect(true);if(evidence==null||!evidence())throw Failure();disabled=true;Manual(evidence);}
- public void Dispose(){ended=true;calls.Dispose();}
- internal static SodaDesktopSigninUpgradeScm Open(string owner,Func<bool> scope,bool legacy=false){if(!SodaDesktopSigninPackageNative.Authority(true))throw Failure();return new SodaDesktopSigninUpgradeScm(new Native(owner,legacy),scope);}
- internal static bool LegacyExists(string owner){return Native.Exists(owner);}
- internal void DeleteLegacy(){Current();((Native)calls).DeleteLegacy();}
- [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",SetLastError=true)]static extern bool DeleteService(IntPtr service);
- [StructLayout(LayoutKind.Sequential)]struct Status{internal uint Type,State,Accepted,Exit,Specific,Checkpoint,Hint,Pid,Flags;}
- [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern IntPtr OpenSCManagerW(string machine,string database,uint access);
- [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern IntPtr OpenServiceW(IntPtr manager,string name,uint access);
- [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",SetLastError=true)]static extern bool CloseServiceHandle(IntPtr service);
- [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",SetLastError=true)]static extern bool QueryServiceStatusEx(IntPtr service,uint level,out Status status,uint bytes,out uint needed);
- [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern bool ChangeServiceConfigW(IntPtr service,uint type,uint start,uint error,string binary,string group,IntPtr tag,string dependencies,string account,string password,string display);
- sealed class Native:Calls {
-  readonly string owner;readonly bool legacy;IntPtr manager,service;
-  internal Native(string owner,bool legacy){this.legacy=legacy;this.owner=SodaDesktopSigninPackage.OwnerSid(owner);try{manager=OpenSCManagerW(null,null,1);if(manager==IntPtr.Zero)throw Failure();service=OpenServiceW(manager,legacy?SodaDesktopSigninServicePolicy.LegacyName(owner):SodaDesktopSigninServicePolicy.Name(owner),0x30007);if(service==IntPtr.Zero)throw Failure();}catch{Dispose();throw;}}
-  internal static bool Exists(string owner){IntPtr manager=IntPtr.Zero,service=IntPtr.Zero;try{manager=OpenSCManagerW(null,null,1);if(manager==IntPtr.Zero)throw Failure();service=OpenServiceW(manager,SodaDesktopSigninServicePolicy.LegacyName(owner),4);if(service!=IntPtr.Zero)return true;if(Marshal.GetLastWin32Error()!=1060)throw Failure();return false;}finally{if(service!=IntPtr.Zero)CloseServiceHandle(service);if(manager!=IntPtr.Zero)CloseServiceHandle(manager);}}
-  internal void DeleteLegacy(){if(!legacy||!Stopped()||!DeleteService(service))throw Failure();}
-  public void InspectManual(){if(legacy)SodaDesktopSigninServicePolicy.InspectLegacy(owner,false);else SodaDesktopSigninServicePolicy.Inspect(owner);}
-  public void InspectDisabled(){if(legacy)SodaDesktopSigninServicePolicy.InspectLegacy(owner,true);else SodaDesktopSigninServicePolicy.InspectDisabled(owner);}
-  public bool Stopped(){Status status;uint needed;if(!QueryServiceStatusEx(service,0,out status,36,out needed)||needed>36)return false;return status.Type==0x10&&status.State==1&&status.Flags==0;}
-  void Set(uint start){if(!ChangeServiceConfigW(service,UInt32.MaxValue,start,UInt32.MaxValue,null,null,IntPtr.Zero,null,null,null,null))throw Failure();}
-  public void Disable(){Set(4);}public void Manual(){Set(3);}
-  public void Dispose(){if(service!=IntPtr.Zero){CloseServiceHandle(service);service=IntPtr.Zero;}if(manager!=IntPtr.Zero){CloseServiceHandle(manager);manager=IntPtr.Zero;}}
- }
+    readonly string owner;readonly bool legacy;readonly Func<bool> current;IntPtr manager,service;
+    static void Require(bool value){if(!value)throw new InvalidOperationException("Signin update requires a stopped verified service");}
+    SodaDesktopSigninUpgradeScm(string owner,Func<bool> current,bool legacy){this.owner=SodaDesktopSigninPackage.OwnerSid(owner);this.current=current;this.legacy=legacy;try{manager=OpenSCManagerW(null,null,1);Require(manager!=IntPtr.Zero);service=OpenServiceW(manager,legacy?SodaDesktopSigninServicePolicy.LegacyName(owner):SodaDesktopSigninServicePolicy.Name(owner),0x30007);Require(service!=IntPtr.Zero);}catch{Dispose();throw;}}
+    internal static SodaDesktopSigninUpgradeScm Open(string owner,Func<bool> current,bool legacy=false){Require(SodaDesktopSigninPackageNative.Authority(true)&&current!=null&&current());return new SodaDesktopSigninUpgradeScm(owner,current,legacy);}
+    internal uint StartupType{get{return SodaDesktopSigninServicePolicy.StartupType(owner,legacy);}}
+    internal void Inspect(bool disabled){Require(current());if(legacy)SodaDesktopSigninServicePolicy.InspectLegacy(owner,disabled);else if(disabled)SodaDesktopSigninServicePolicy.InspectDisabled(owner);else SodaDesktopSigninServicePolicy.Inspect(owner);Status status;uint needed;Require(QueryServiceStatusEx(service,0,out status,36,out needed)&&needed<=36&&status.Type==0x10&&status.State==1&&status.Flags==0);}
+    void Set(uint start){Require(current()&&ChangeServiceConfigW(service,UInt32.MaxValue,start,UInt32.MaxValue,null,null,IntPtr.Zero,null,null,null,null));}
+    internal void Disable(Func<bool> ready){Inspect(false);Require(ready());Set(4);Inspect(true);}
+    internal void Enable(uint startupType,Func<bool> ready){Require(startupType==2||startupType==3);Inspect(true);Require(ready());Set(startupType);Inspect(false);Require(StartupType==startupType);}
+    internal void DeleteLegacy(){Require(legacy);Inspect(true);Require(DeleteService(service));}
+    public void Dispose(){if(service!=IntPtr.Zero){CloseServiceHandle(service);service=IntPtr.Zero;}if(manager!=IntPtr.Zero){CloseServiceHandle(manager);manager=IntPtr.Zero;}}
+    internal static bool LegacyExists(string owner){IntPtr manager=IntPtr.Zero,service=IntPtr.Zero;try{manager=OpenSCManagerW(null,null,1);Require(manager!=IntPtr.Zero);service=OpenServiceW(manager,SodaDesktopSigninServicePolicy.LegacyName(owner),4);if(service!=IntPtr.Zero)return true;Require(Marshal.GetLastWin32Error()==1060);return false;}finally{if(service!=IntPtr.Zero)CloseServiceHandle(service);if(manager!=IntPtr.Zero)CloseServiceHandle(manager);}}
+    [StructLayout(LayoutKind.Sequential)]struct Status{internal uint Type,State,Accepted,Exit,Specific,Checkpoint,Hint,Pid,Flags;}
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern IntPtr OpenSCManagerW(string machine,string database,uint access);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern IntPtr OpenServiceW(IntPtr manager,string name,uint access);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",SetLastError=true)]static extern bool CloseServiceHandle(IntPtr service);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",SetLastError=true)]static extern bool QueryServiceStatusEx(IntPtr service,uint level,out Status status,uint bytes,out uint needed);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern bool ChangeServiceConfigW(IntPtr service,uint type,uint start,uint error,string binary,string group,IntPtr tag,string dependencies,string account,string password,string display);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",SetLastError=true)]static extern bool DeleteService(IntPtr service);
 }
