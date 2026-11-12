@@ -1,17 +1,20 @@
 import * as endpointAcl from "@sodashitsu/client-core/desktop/DesktopEndpointAcl.node";
 import * as endpointProtector from "@sodashitsu/client-core/desktop/DesktopEndpointProtector.node";
+import * as fs from "node:fs";
 import * as childProcess from "node:child_process";
 import * as atomic from "../persist/atomicFile.js";
-import { mkdtemp,mkdir,readFile,rm,writeFile,realpath } from "node:fs/promises";
+import { mkdtemp,mkdir,readFile,rm,writeFile,realpath,copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { DesktopSettings, bundledDesktopCommand } from "./DesktopSettings.js";
 import { DesktopProvider } from "./DesktopProvider.js";
+vi.mock('node:fs',async importOriginal=>{const actual=await importOriginal<typeof import('node:fs')>();return{...actual,existsSync:vi.fn(actual.existsSync)};});
 vi.mock('node:child_process',async importOriginal=>{const actual=await importOriginal<typeof import('node:child_process')>();return{...actual,spawnSync:vi.fn(actual.spawnSync)};});
 const dirs: string[] = [];
 afterEach(async () => {
-  vi.restoreAllMocks();vi.mocked(childProcess.spawnSync).mockRestore();
+  vi.restoreAllMocks();vi.mocked(childProcess.spawnSync).mockRestore();vi.mocked(fs.existsSync).mockRestore();
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 const off = { enabled: false, allowInput: false, allowClipboard: false, allowDisplayResize: false };
@@ -247,4 +250,20 @@ it.each(['elevated','microphone','endpoint'])('rejects missing protected microph
 it("shows the resolved preparation command only to the local configuring client, without starting a lease for normal sharing",async()=>{
  const options=await fixture(),configure=vi.spyOn(options.provider,"configure");const {DesktopUnlockLease}=await import("./DesktopUnlockLease.js");const start=vi.spyOn(DesktopUnlockLease.prototype,"start").mockImplementation(()=>undefined);
  try{const settings=await DesktopSettings.open({...options,command:["powershell.exe","-File","C:\\apps\\Soda Folder\\windows-helper.ps1"]});await settings.set({...off,enabled:true});expect(start).not.toHaveBeenCalled();expect(configure.mock.calls.at(-1)![0]?.command).toEqual(["powershell.exe","-File","C:\\apps\\Soda Folder\\windows-helper.ps1"]);expect(configure.mock.calls.at(-1)![0]).not.toHaveProperty("unlockLeaseCommand");expect(settings.get(true).setupMessage).toContain('powershell.exe -NoProfile -File "C:\\apps\\Soda Folder\\prepare-desktop-helper.ps1"');expect(settings.get(false).setupMessage).not.toContain("C:");expect(settings.get(true).setupMessage).toContain("サーバー停止");}finally{options.provider.dispose();start.mockRestore();}
+});
+
+
+it("discovers default Windows and WSL helpers from the closed runtime SDK without repository-only assets",async()=>{
+ const source=new URL("../../../../scripts/remote-desktop/",import.meta.url),moduleUrl=new URL("runtime-assets.mjs",source).href;
+ const {desktopRuntimeAssets}=await import(/* @vite-ignore */moduleUrl) as {desktopRuntimeAssets:readonly string[]};
+ const sdk=await mkdtemp(join(tmpdir(),"desktop-closed-sdk-"));dirs.push(sdk);
+ for(const name of desktopRuntimeAssets)await copyFile(fileURLToPath(new URL(name,source)),join(sdk,name));
+ const {existsSync:realExists}=await vi.importActual<typeof import("node:fs")>("node:fs");
+ vi.mocked(fs.existsSync).mockImplementation(path=>realExists(join(sdk,basename(String(path)))));
+ try{
+  expect(bundledDesktopCommand("win32",{},false)?.slice(0,2)).toEqual(["powershell.exe","-NoProfile"]);
+  expect(bundledDesktopCommand("linux",{WSL_DISTRO_NAME:"Generated"},false)?.[0]).toBe("powershell.exe");
+  await rm(join(sdk,"WindowsProtectedWorker.cs"));
+  expect(bundledDesktopCommand("win32",{},false)).toBeUndefined();
+ }finally{vi.mocked(fs.existsSync).mockRestore();}
 });

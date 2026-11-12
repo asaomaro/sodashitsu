@@ -30,7 +30,7 @@ export function bundledDesktopCommand(
   );
   const required = ["windows-helper.ps1","WindowsDesktopHost.cs","WindowsDesktopUnlock.cs",
     "WindowsVirtualDisplay.cs","WindowsVirtualDisplayNative.cs","WindowsVirtualDisplayChannel.cs",
-    "WindowsProtectedEpoch.cs","WindowsProtectedScope.cs","WindowsProtectedScopeNative.cs","WindowsProtectedHandshake.cs","WindowsProtectedWorker.cs","prepare-desktop-helper.ps1"];
+    "WindowsProtectedScope.cs","WindowsProtectedScopeNative.cs","WindowsProtectedHandshake.cs","WindowsProtectedWorker.cs","prepare-desktop-helper.ps1"];
   if (!required.every(name=>existsSync(fileURLToPath(new URL(`../../../../scripts/remote-desktop/${name}`,import.meta.url))))) return;
   if(os!=="win32"&&!env.WSL_DISTRO_NAME)return;
   let path = script;

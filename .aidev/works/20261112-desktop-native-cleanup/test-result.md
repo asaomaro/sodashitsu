@@ -215,3 +215,19 @@ System.Exception: generated assertion: idle live pump expired solely to age
   at NativeDragPumpChecks.Deadlines () [0x0007e] in <71075d271cac4526b25765c8cd39e626>:0
   at NativeDragPumpChecks.Main () [0x0000a] in <71075d271cac4526b25765c8cd39e626>:0
 ```
+
+
+## Integration helper discovery regression
+
+The independent migration readiness review found a real stale TS dependency: `bundledDesktopCommand` still required deleted WindowsProtectedEpoch.cs. Removing that entry restores default Windows and WSL discovery from the actual closed runtime asset list. A new test copies all 89 declared runtime assets into a private SDK projection, checks Windows and WSL default selection without process execution, and removes an actually required worker source to confirm discovery then fails. No production path override was introduced.
+
+The initial seven-package build exited 0. After it finished (so no compiler raced the temporary source change), restoring just the obsolete required filename makes the new regression fail. Exact source bytes were restored, then all 40 DesktopSettings tests passed. Logs `/tmp/soda-final-integration-20261113/settings-sdk-{old,restored}.{stdout,stderr}`. Raw negative output:
+
+```text
+AssertionError: expected undefined to deeply equal [ 'powershell.exe', '-NoProfile' ]
++ Received:
+undefined
+ ❯ src/desktop/DesktopSettings.test.ts:264:63
+```
+
+Native/Signin closed Windows source compilation and explicit native generated/COM checks passed in the reviewed protected validation folder. Actual Signin host clean-exit fixture remains under separate owner investigation and is not a pass. No installed mutation has occurred.
