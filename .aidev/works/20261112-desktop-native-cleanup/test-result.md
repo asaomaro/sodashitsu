@@ -48,11 +48,11 @@ Raw output from two source negative controls follows. Removing actual release be
 ```text
 authentication_input_generated_batch_transition_cleanup_partial_failure_and_ordinary_semantics_passed
 System.Exception: Control completion preceded held input release
-  at SodaDesktopHost+<VerifyControlCompletion>c__AnonStoreyA.<>m__0 (System.Object value) [0x0001e] in <7f20968205b44525a61f6ea1f4f7306f>:0 
-  at SodaDesktopHost.Output (System.Object value) [0x0001a] in <7f20968205b44525a61f6ea1f4f7306f>:0 
-  at SodaDesktopHost.SetControl (System.Boolean enabled, System.Boolean allow, System.Int64 sequence) [0x00051] in <7f20968205b44525a61f6ea1f4f7306f>:0 
-  at SodaDesktopHost.VerifyControlCompletion () [0x000ac] in <7f20968205b44525a61f6ea1f4f7306f>:0 
-  at Checks.Main () [0x00005] in <7f20968205b44525a61f6ea1f4f7306f>:0 
+  at SodaDesktopHost+<VerifyControlCompletion>c__AnonStoreyA.<>m__0 (System.Object value) [0x0001e] in <7f20968205b44525a61f6ea1f4f7306f>:0
+  at SodaDesktopHost.Output (System.Object value) [0x0001a] in <7f20968205b44525a61f6ea1f4f7306f>:0
+  at SodaDesktopHost.SetControl (System.Boolean enabled, System.Boolean allow, System.Int64 sequence) [0x00051] in <7f20968205b44525a61f6ea1f4f7306f>:0
+  at SodaDesktopHost.VerifyControlCompletion () [0x000ac] in <7f20968205b44525a61f6ea1f4f7306f>:0
+  at Checks.Main () [0x00005] in <7f20968205b44525a61f6ea1f4f7306f>:0
 ```
 
 Restoring the old normal-input exemption from the desktop check fails:
@@ -60,8 +60,8 @@ Restoring the old normal-input exemption from the desktop check fails:
 ```text
 authentication_input_generated_batch_transition_cleanup_partial_failure_and_ordinary_semantics_passed
 System.Exception: Normal source cleanup crossed the input desktop boundary
-  at SodaDesktopHost.VerifyControlCompletion () [0x0027e] in <d4d1e76bba62411486b180bced199d6a>:0 
-  at Checks.Main () [0x00005] in <d4d1e76bba62411486b180bced199d6a>:0 
+  at SodaDesktopHost.VerifyControlCompletion () [0x0027e] in <d4d1e76bba62411486b180bced199d6a>:0
+  at Checks.Main () [0x00005] in <d4d1e76bba62411486b180bced199d6a>:0
 ```
 
 The mutant sources were temporary copies, recompiled for each run. Current and restored generated checks passed, and production bytes were unchanged:
