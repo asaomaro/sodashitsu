@@ -913,3 +913,79 @@ AssertionError: expected '{"kind":"text","text":"EXPIRED_AGENT"…' not to conta
 
 
 ```
+
+## Phase 13
+
+Folder/FolderCheckpoints/DesktopFiles/NativeFiles52 tests PASS. Both prequeued and allocated-but-tokenless resume starts cancel synchronously, duplicate queued callbacks stay cancelled, and a settled request can be replaced by a fresh explicitly authorized start.4100 unknown folder cancellation IDs do not revoke permission or disable future jobs. Independent OLD production DesktopFiles and OLD DesktopFolders each fail the same normal fresh-folder start after4100 cancellations; sources restored/byte-compared. No new timer, tombstone ledger or grant revocation is used. Raw OLD FAIL evidence:
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopFolders.test.ts (13 tests | 1 failed | 12 skipped) 47ms
+   × keeps folder permission after more than4096 unknown cancellation IDs 46ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopFolders.test.ts > keeps folder permission after more than4096 unknown cancellation IDs
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktop/DesktopFolders.test.ts:315:353
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 skipped (13)
+   Start at  00:30:03
+   Duration  924ms (transform 73%, import 21%, tests 6%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopFolders.test.ts (13 tests | 1 failed | 12 skipped) 53ms
+   × keeps folder permission after more than4096 unknown cancellation IDs 51ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopFolders.test.ts > keeps folder permission after more than4096 unknown cancellation IDs
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktop/DesktopFolders.test.ts:315:353
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 skipped (13)
+   Start at  00:30:05
+   Duration  918ms (transform 73%, import 20%, tests 6%)
+
+
+```

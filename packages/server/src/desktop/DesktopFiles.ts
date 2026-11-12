@@ -20,7 +20,7 @@ export class DesktopFiles {
   private readonly owner = crypto.randomUUID();
   private activeIds = new Set<string>();
   private cancelledIds = new Set<string>();
-  private folderCancelledIds=new Set<string>();
+  private folderRequests=new Map<string,Set<AbortController>>();
   private expirations = new Map<string, ReturnType<typeof setTimeout>>();
   private forget(id: string) {
     clearTimeout(this.expirations.get(id));
@@ -79,9 +79,10 @@ export class DesktopFiles {
     const nativeAdmission=m.request.action==="native_prepare"?this.native?.admit(m.request.gesture):undefined;
     if(m.request.action==="native_abort")this.native?.cancel(m.request.gesture);
     const operationId = "id" in m.request ? m.request.id : ((m.request.action==="folder_resume_start"||m.request.action==="folder_resume_run")?m.request.request.id:undefined);
+    const folderAdmission=operationId&&m.request.action.startsWith("folder_")&&m.request.action!=="folder_abort"?new AbortController():undefined;
+    if(folderAdmission&&operationId){const contexts=this.folderRequests.get(operationId)??new Set<AbortController>();contexts.add(folderAdmission);this.folderRequests.set(operationId,contexts);}
     if(m.request.action==="folder_abort"){
-      if(this.folderCancelledIds.size>=4096){this.granted=false;this.epoch++;this.folderCheckpoints?.revoke(this.owner);this.folders?.cancelAll();}
-      else this.folderCancelledIds.add(m.request.id);
+      for(const context of this.folderRequests.get(m.request.id)??[])context.abort();
       this.folderCheckpoints?.cancelStart(this.root,this.owner,m.request.id);
     }
     const folderResumeCancelled=m.request.action==="folder_resume_abort"&&this.folderCheckpoints?.cancel(this.root,this.owner,m.request.checkpoint)===true;
@@ -95,6 +96,7 @@ export class DesktopFiles {
     if (m.request.action === "grant" && !m.request.enabled) {
       this.granted = false;
       this.native?.cancel();
+      for(const contexts of this.folderRequests.values())for(const context of contexts)context.abort();
       this.epoch++;
       this.checkpoints?.revoke(this.owner);
       this.folderCheckpoints?.revoke(this.owner);
@@ -137,12 +139,13 @@ export class DesktopFiles {
           if (
             this.dead ||
             nativeAdmission?.signal.aborted ||
+            folderAdmission?.signal.aborted ||
             version !== this.epoch ||
             !this.granted ||
             !this.allowed() ||
             (m.request.action !== "abort" &&
               operationId !== undefined &&
-              (this.cancelledIds.has(operationId)||this.folderCancelledIds.has(operationId)))
+              this.cancelledIds.has(operationId))
           )
             throw Error("ファイル転送の許可が終了しました");
         };
@@ -255,11 +258,15 @@ export class DesktopFiles {
       }
     });
     this.queue = result.catch(() => {});
-    return result.finally(()=>{if(nativeAdmission&&m.request.action==="native_prepare")this.native?.settled(m.request.gesture,nativeAdmission);});
+    return result.finally(()=>{
+      if(nativeAdmission&&m.request.action==="native_prepare")this.native?.settled(m.request.gesture,nativeAdmission);
+      if(folderAdmission&&operationId){const contexts=this.folderRequests.get(operationId);contexts?.delete(folderAdmission);if(!contexts?.size)this.folderRequests.delete(operationId);}
+    });
   }
   async close() {
     this.dead = true;
     this.native?.cancel();
+    for(const contexts of this.folderRequests.values())for(const context of contexts)context.abort();
     this.folders?.cancelAll();
     this.checkpoints?.detach(this.owner);
     this.folderCheckpoints?.detach(this.owner);

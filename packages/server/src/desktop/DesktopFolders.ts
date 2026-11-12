@@ -75,8 +75,6 @@ type Job = {
 /** A group owns its streams and empty directories, never completed/user files. */
 export class DesktopFolders {
   private jobs = new Map<string, Job>();
-  private seen = new Set<string>();
-  private cancelled = new Set<string>();
   private dead = false;
   private queue: Promise<unknown> = Promise.resolve();
   constructor(
@@ -145,13 +143,6 @@ export class DesktopFolders {
     j.offset = offset;
   }
   cancel(id: string): boolean {
-    if (this.cancelled.size >= 4096) {
-      this.dead = true;
-      for (const job of this.jobs.values()) job.cancelled = true;
-      this.scheduleCleanup([...this.jobs.values()]);
-      return true;
-    }
-    this.cancelled.add(id);
     const j = this.jobs.get(id);
     if (!j) return true;
     j.cancelled = true;
@@ -498,10 +489,8 @@ export class DesktopFolders {
     let j: Job | undefined;
     if (start) {
       if (this.jobs.size >= 2) throw Error("同時に準備できるフォルダは2件までです");
-      if (this.seen.size >= 4096 || this.seen.has(p.id) || this.cancelled.has(p.id))
-        throw Error("フォルダ転送のIDが失効しました。再接続してください");
+      if(this.jobs.has(p.id))throw Error("フォルダ転送のIDは処理中です");
       const id = p.id;
-      this.seen.add(id);
       j = {
         id,
         upload: p.action === "folder_upload_start",

@@ -328,8 +328,11 @@ it.each(["prequeued", "preparing"])(
     expect((await start).ok).toBe(false);
     expect((await cancelled).ok).toBe(true);
     expect((await duplicate).ok).toBe(false);
-    expect((await a.run({action:"folder_resume_start",request:{action:"folder_upload_start",id,parent:"",name:"late-revived",entries:[]}})).ok).toBe(false);
+    expect((a.files as any).folderRequests.size).toBe(0);
     expect((f.registry as any).jobs.size).toBe(0);
     await expect.poll(() => readdir(f.root)).toEqual([]);
+    const fresh=await a.run({action:"folder_resume_start",request:{action:"folder_upload_start",id,parent:"",name:"fresh",entries:[]}});
+    expect(fresh.ok).toBe(true);
+    await a.run({action:"folder_resume_abort",checkpoint:fresh.result!.checkpoint});
   },
 );

@@ -142,7 +142,7 @@ it.each(["cancel", "permission", "disconnect"])(
     expect(await readFile(join(f.root, "folder/keep-added"), "utf8")).toBe("user-added");
   },
 );
-it("cancels a pending start before directories exist, and never reuses group ids", async () => {
+it("cancels an inflight start before directories exist and retires its request scope", async () => {
   const f = await setup(),
     id = randomUUID();
   await f.run({ action: "grant", enabled: true });
@@ -169,10 +169,9 @@ it("cancels a pending start before directories exist, and never reuses group ids
   release();
   expect((await starting).ok).toBe(false);
   expect((await cancel).ok).toBe(true);
-  expect(
-    (await f.run({ action: "folder_upload_start", id, parent: "", name: "late", entries: [] })).ok,
-  ).toBe(false);
   expect(await readdir(f.root)).toEqual([]);
+  expect((f.files as any).folderRequests.size).toBe(0);
+  expect((await f.run({action:"folder_upload_start",id,parent:"",name:"fresh",entries:[]})).ok).toBe(true);
 });
 it("takes a late cancellation before atomic file publication", async () => {
   const f = await setup(),
@@ -312,3 +311,5 @@ it("does not replace a file created concurrently in the new destination", async 
   expect(await readFile(join(f.root, "folder/file"), "utf8")).toBe("user-created");
   expect(await readdir(join(f.root, "folder"))).toEqual(["file"]);
 });
+
+it("keeps folder permission after more than4096 unknown cancellation IDs",async()=>{const f=await setup();await f.run({action:"grant",enabled:true});for(let i=0;i<4100;i++)await f.run({action:"folder_abort",id:randomUUID()});const result=await f.run({action:"folder_upload_start",id:randomUUID(),parent:"",name:"healthy",entries:[]});expect(result.ok).toBe(true);expect((f.files as any).folderRequests.size).toBe(0);});
