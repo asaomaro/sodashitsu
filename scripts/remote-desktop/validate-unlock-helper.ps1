@@ -1,10 +1,10 @@
 $ErrorActionPreference = 'Stop'
 # Compile the exact entry point too: it merges C# using directives, unlike -Path.
-& (Join-Path $PSHOME 'powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'windows-helper.ps1') -ValidateOnly
+& (Join-Path $PSHOME 'powershell.exe') -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'windows-helper.ps1') -ValidateOnly
 if ($LASTEXITCODE -ne 0) { throw 'Desktop helper entry-point compilation failed' }
 
 # No SCM, elevation, screen capture, desktop switching, or OS input.
-Add-Type -Path @((Join-Path $PSScriptRoot 'WindowsDesktopUnlock.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopHostChecks.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopUnlockChecks.cs'),(Join-Path $PSScriptRoot 'WindowsDisplayLeaseChecks.cs'),(Join-Path $PSScriptRoot 'WindowsUnlockProcessChecks.cs'),(Join-Path $PSScriptRoot 'WindowsLockCoverChecks.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopInputChecks.cs'),(Join-Path $PSScriptRoot 'WindowsFramePreparationChecks.cs'),(Join-Path $PSScriptRoot 'WindowsInputPriorityChecks.cs')) -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll
+$testCompiler=[CodeDom.Compiler.CompilerParameters]::new([string[]]@('System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Web.Extensions.dll','System.ServiceProcess.dll'));$testCompiler.CompilerOptions='/define:SODA_DESKTOP_TEST';Add-Type -Path @((Join-Path $PSScriptRoot 'WindowsDesktopUnlock.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopHostChecks.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopUnlockChecks.cs'),(Join-Path $PSScriptRoot 'WindowsDisplayLeaseChecks.cs'),(Join-Path $PSScriptRoot 'WindowsUnlockProcessChecks.cs'),(Join-Path $PSScriptRoot 'WindowsLockCoverChecks.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopInputChecks.cs'),(Join-Path $PSScriptRoot 'WindowsFramePreparationChecks.cs'),(Join-Path $PSScriptRoot 'WindowsInputPriorityChecks.cs')) -CompilerParameters $testCompiler
 [SodaDesktopUnlock]::CheckPipeCancellation()
 [SodaDesktopUnlock]::CheckPipeText()
 [SodaDesktopUnlock]::CheckPipeDuplex()

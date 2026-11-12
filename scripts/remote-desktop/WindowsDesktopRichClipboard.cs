@@ -20,7 +20,7 @@ public sealed class SodaDesktopRichClipboard : IDisposable {
     readonly Thread thread;volatile bool stopping;
     sealed class Cancellation {public readonly string Id;public volatile bool Cancelled;public Cancellation(string id,bool cancelled){Id=id;Cancelled=cancelled;}}
     readonly object cancellationGate=new object();readonly HashSet<string> cancelledIds=new HashSet<string>();readonly Queue<string> cancellationOrder=new Queue<string>();volatile Cancellation cancellation;
-    byte[] bytes;int offset;string id;long ownGeneration,started,last,sequence;bool reading;
+    byte[] bytes;int offset;string id;long ownGeneration,sequence;bool reading;
     static readonly Encoding Utf8=new UTF8Encoding(false,true);
     static JavaScriptSerializer Serializer(){return new JavaScriptSerializer{MaxJsonLength=BundleBytes,RecursionLimit=16};}
     public SodaDesktopRichClipboard(Action<object> output,Func<bool> allowed,Func<long> generation,Func<long> clock,Func<bool> canWrite):this(output,allowed,generation,clock,canWrite,()=>new WindowsBoard()){}
@@ -29,13 +29,13 @@ public sealed class SodaDesktopRichClipboard : IDisposable {
         this.output=output;this.allowed=allowed;this.generation=generation;this.clock=clock;this.canWrite=canWrite;this.factory=factory;
         thread=new Thread(Loop){IsBackground=true};thread.SetApartmentState(ApartmentState.STA);thread.Start();
     }
-    public void Submit(object raw){var m=raw as Dictionary<string,object>;if(m==null)throw new ArgumentException("Clipboard command");if(!stopping&&m.ContainsKey("type")&&m["type"]as string=="clipboard_rich"&&m.ContainsKey("operation")&&m["operation"]as string=="cancel"&&m.ContainsKey("id")&&m["id"]is string&&m.ContainsKey("generation")&&m.ContainsKey("expiresAt")&&Convert.ToInt64(m["generation"])==generation()&&Convert.ToInt64(m["expiresAt"])>=clock()&&Convert.ToInt64(m["expiresAt"])<=clock()+1500){lock(cancellationGate){string cancelled=(string)m["id"];if(cancelledIds.Add(cancelled)){cancellationOrder.Enqueue(cancelled);if(cancellationOrder.Count>32)cancelledIds.Remove(cancellationOrder.Dequeue());}var active=cancellation;if(active!=null&&active.Id==cancelled)active.Cancelled=true;}}
+    public void Submit(object raw){var m=raw as Dictionary<string,object>;if(m==null)throw new ArgumentException("Clipboard command");if(!stopping&&m.ContainsKey("type")&&m["type"]as string=="clipboard_rich"&&m.ContainsKey("operation")&&m["operation"]as string=="cancel"&&m.ContainsKey("id")&&m["id"]is string&&m.ContainsKey("generation")&&m.ContainsKey("expiresAt")&&Convert.ToInt64(m["generation"])==generation()&&Convert.ToInt64(m["expiresAt"])>=clock()&&Convert.ToInt64(m["expiresAt"])<=clock()+3000){lock(cancellationGate){string cancelled=(string)m["id"];if(cancelledIds.Add(cancelled)){cancellationOrder.Enqueue(cancelled);if(cancellationOrder.Count>32)cancelledIds.Remove(cancellationOrder.Dequeue());}var active=cancellation;if(active!=null&&active.Id==cancelled)active.Cancelled=true;}}
         if(stopping||!queue.TryAdd(m))throw new InvalidOperationException("Clipboard queue limit");}
     public bool Stop(int milliseconds){stopping=true;try{queue.CompleteAdding();}catch(ObjectDisposedException){}return thread.Join(milliseconds);}
     public void Dispose(){if(!Stop(1000))throw new System.TimeoutException("Clipboard worker did not stop");}
     void Reply(object value){if(stopping)return;try{output(value);}catch{stopping=true;}}
     void Clear(){if(bytes!=null)Array.Clear(bytes,0,bytes.Length);bytes=null;offset=0;id=null;cancellation=null;}
-    void Loop(){IBoard board=null;try{while(!stopping){Dictionary<string,object> m;if(!queue.TryTake(out m,50)){if(id!=null&&(!Live()||clock()-last>5000||clock()-started>60000))Clear();continue;}try{Handle(m,ref board);}catch{string failed=m.ContainsKey("id")?m["id"] as string:null;if(failed==id)Clear();Guid parsed;if(failed!=null&&Guid.TryParse(failed,out parsed))Reply(new{type="clipboard_rich_result",id=failed,ok=false,stage="done"});}}}finally{Clear();if(board!=null)board.Dispose();queue.Dispose();}}
+    void Loop(){IBoard board=null;try{while(!stopping){Dictionary<string,object> m;if(!queue.TryTake(out m,50)){if(id!=null&&!Live())Clear();continue;}try{Handle(m,ref board);}catch{string failed=m.ContainsKey("id")?m["id"] as string:null;if(failed==id)Clear();Guid parsed;if(failed!=null&&Guid.TryParse(failed,out parsed))Reply(new{type="clipboard_rich_result",id=failed,ok=false,stage="done"});}}}finally{Clear();if(board!=null)board.Dispose();queue.Dispose();}}
     bool Live(){return !stopping&&allowed()&&generation()==ownGeneration&&cancellation!=null&&!cancellation.Cancelled&&(reading||canWrite());}
     static int Integer(Dictionary<string,object> m,string name){return Convert.ToInt32(m[name]);}
     static void Exact(Dictionary<string,object> m,params string[] expected){var keys=new HashSet<string>(expected);foreach(var key in m.Keys)if(!keys.Remove(key))throw new InvalidDataException("Clipboard keys");if(keys.Count!=0)throw new InvalidDataException("Clipboard keys");}
@@ -43,11 +43,11 @@ public sealed class SodaDesktopRichClipboard : IDisposable {
         if((string)m["type"]!="clipboard_rich")throw new InvalidDataException("Clipboard type");
         string op=(string)m["operation"],request=(string)m["id"];Guid parsed;if(!Guid.TryParseExact(request,"D",out parsed))throw new InvalidDataException("Clipboard id");
         long now=clock(),expires=Convert.ToInt64(m["expiresAt"]),gen=Convert.ToInt64(m["generation"]);
-        if(stopping||!allowed()||generation()!=gen||expires<now||expires>now+1500)throw new InvalidOperationException("Clipboard permission expired");
+        if(stopping||!allowed()||generation()!=gen||expires<now||expires>now+3000)throw new InvalidOperationException("Clipboard permission expired");
         if(op=="read"||op=="begin"){
             if(id!=null)throw new InvalidOperationException("Clipboard transaction already active");
             if(op=="read")Exact(m,"type","id","operation","generation","expiresAt");else Exact(m,"type","id","operation","generation","expiresAt","size");
-            ownGeneration=gen;id=request;lock(cancellationGate)cancellation=new Cancellation(request,cancelledIds.Contains(request));started=last=now;reading=op=="read";
+            ownGeneration=gen;id=request;lock(cancellationGate)cancellation=new Cancellation(request,cancelledIds.Contains(request));reading=op=="read";
             if(!Live())throw new InvalidOperationException("Clipboard retired");
             if(board==null)board=factory();sequence=board.Sequence;
             if(reading){var value=board.Read(()=>Live()&&clock()<=expires);Validate(value);bytes=Utf8.GetBytes(Serializer().Serialize(value));if(bytes.Length<1||bytes.Length>BundleBytes)throw new InvalidDataException("Clipboard bundle limit");}
@@ -55,7 +55,7 @@ public sealed class SodaDesktopRichClipboard : IDisposable {
             if(!Live())throw new InvalidOperationException("Clipboard retired");Reply(new{type="clipboard_rich_result",id,ok=true,stage="begin",size=bytes.Length});return;
         }
         if(op=="cancel"){Exact(m,"type","id","operation","generation","expiresAt");if(id==request)Clear();Reply(new{type="clipboard_rich_result",id=request,ok=true,stage="cancelled"});return;}
-        if(id!=request||!Live()||now-last>5000||now-started>60000)throw new InvalidOperationException("Clipboard transaction expired");last=now;
+        if(id!=request||!Live())throw new InvalidOperationException("Clipboard transaction expired");
         if(op=="pull"){
             Exact(m,"type","id","operation","generation","expiresAt","offset");if(!reading||Integer(m,"offset")!=offset||offset>=bytes.Length)throw new InvalidDataException("Clipboard offset");
             int count=Math.Min(ChunkBytes,bytes.Length-offset);string data=Convert.ToBase64String(bytes,offset,count);offset+=count;Reply(new{type="clipboard_rich_result",id,ok=true,stage="chunk",offset,data});if(offset==bytes.Length)Clear();return;
@@ -67,7 +67,6 @@ public sealed class SodaDesktopRichClipboard : IDisposable {
             Exact(m,"type","id","operation","generation","expiresAt");if(reading||offset!=bytes.Length)throw new InvalidDataException("Clipboard incomplete");var value=Serializer().DeserializeObject(Utf8.GetString(bytes))as Dictionary<string,object>;Validate(value);
             if(!Live()||clock()>expires)throw new InvalidOperationException("Clipboard retired");board.Write(value,sequence,()=>Live()&&clock()<=expires);Clear();Reply(new{type="clipboard_rich_result",id=request,ok=true,stage="done"});return;
         }
-        if(op=="cancel"){Exact(m,"type","id","operation","generation","expiresAt");Clear();Reply(new{type="clipboard_rich_result",id=request,ok=true,stage="cancelled"});return;}
         throw new InvalidDataException("Clipboard operation");
     }
     public static void Validate(Dictionary<string,object> value){

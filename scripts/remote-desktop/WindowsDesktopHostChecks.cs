@@ -1,3 +1,6 @@
+#if !SODA_DESKTOP_TEST
+#error Host checks require the explicit SODA_DESKTOP_TEST compilation symbol.
+#endif
 // Test compilation only; excluded from the closed runtime asset inventory.
 using System;
 using System.Collections.Generic;
@@ -14,6 +17,11 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 public static partial class SodaDesktopHost {
+    static Func<Point,Tuple<long,int>> MemoryPointerTarget;
+    static Func<bool> MemoryDesktop;static Action<INPUT> MemoryInput;static Action<object> MemoryOutput;
+    static Func<INPUT[],uint> MemoryBatchInput;
+    static Action MemoryPreparedWait;
+
     public static void VerifySharedProtectedProof() {
         var config=new Dictionary<string,object>();
         foreach(string mode in new string[]{null,"elevated-default","elevated-uac"}) {

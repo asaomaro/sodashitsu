@@ -163,3 +163,13 @@ desktop_video_rate_checks_passed: private cadence/bitrate ceilings, recovery to 
 ```
 
 The obsolete profile-expiry assertions and native-age negative control were removed with their deleted production policies. Source/stop queued-output negative controls remain. No full TS build was run; Windows validation of this new snapshot requires independent review.
+
+
+## Final slot/test-seam phase local proof
+
+- Exact fourteen-source normal production assembly compiled with default symbols. Reflection reports `production_assembly_no_memory_injection_fields_or_generated_validators_passed`; no Host Memory fields/Verify methods or virtual generated VerifyLayouts survive. The public compiler has no test symbol or Checks dependency.
+- Explicit test-symbol assembly compiled and existing generated auth, deadline, ordinary completion, pointer, queued-stop/native-output, protected scope, virtual lease, frame preparation/rate and routing suites passed. Logs: `/tmp/soda-native-final-proof/generated.log`, `metadata.log` and compile logs.
+- Seven-source native-copy production assembly compiled. Twelve existing copy cases use a real acquired Mutex: release occurs on its acquiring thread, after data-object cancellation and OLE Finish. Marker: `native_copy_real_mutex_same_thread_after_data_cancel_and_ole_finish_12_cases_passed`. The fake backend never performs Windows input/capture/OLE.
+- Full fake rich-clipboard suite passes with caller deadline now+3000 and a current transaction continuing after 65001 ms. Two source negative controls: old 1500-ms acceptance rejects read begin; old idle/transaction expiry rejects the later chunk. Restored production passes. Logs: `old-rich-short-deadline.log`, `old-rich-transaction-age.log`, `rich-restored.log`. Production source was not mutated by these temporary-copy controls.
+- No full TS build, live Windows input/capture, service/task/installed-file/registry/key changes. Frozen-phase independent review and eventual combined source-only Windows compilation remain required. Prior reviewed closed SDK projections already passed public normal/prepared ValidateOnly with zero Checks files; this new source phase must join the final frozen projection.
+- Fresh snapshot request-ID producer and newly flagged drag whole-job liveness cleanup are separate pending phases, not covered by these results.

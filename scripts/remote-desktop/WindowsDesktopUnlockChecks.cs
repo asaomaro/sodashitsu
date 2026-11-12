@@ -34,14 +34,14 @@ public static partial class SodaDesktopUnlock {
         Require(LeaseArgument(false,false,false)=="--lease"&&LeaseArgument(false,true,false)=="--lease");
         Require(LeaseArgument(false,false,true)=="--lease-elevated"&&LeaseArgument(false,true,true)=="--lease-unlock-elevated"&&LeaseArgument(true,false,true)=="--lease-virtual-elevated"&&LeaseArgument(true,true,true)=="--lease-all");
         bool invalid=false;try{ParseBrokerPurpose(new[]{"pid","ticks","share"});}catch{invalid=true;}Require(invalid);
-        Console.WriteLine("protected_broker_purpose_checks_passed: all fixed purpose bits/routes and legacy lease compatibility; no service/token/worker/input operations");
+        Console.WriteLine("protected_broker_purpose_checks_passed: all fixed purpose bits/routes and unlock-only lease default; no service/token/worker/input operations");
     }
     sealed class CleanupProcess:Process {public int DisposeCalls;protected override void Dispose(bool disposing){DisposeCalls++;base.Dispose(disposing);}}
     public static void VerifyWorkerCleanup(){
         Require(Job==IntPtr.Zero&&Worker==null&&WorkerPipe==null);long previous=Generation;var process=new CleanupProcess();
         try{
             var order=new List<string>();WorkerNonce=Guid.Empty;ReapCurrentWorker(()=>order.Add("pipe"),()=>order.Add("wait"),()=>order.Add("job"));
-            if(String.Join(",",order)!="job,pipe")throw new InvalidOperationException("Legacy teardown must remain job-first without grace");
+            if(String.Join(",",order)!="job,pipe")throw new InvalidOperationException("Secure teardown must remain job-first without grace");
             order.Clear();WorkerNonce=Guid.NewGuid();ReapCurrentWorker(()=>order.Add("pipe"),()=>order.Add("wait"),()=>order.Add("job"));
             if(String.Join(",",order)!="pipe,wait,job")throw new InvalidOperationException("V2 teardown did not allow scoped release before job close");
             order.Clear();ReapCurrentWorker(()=>order.Add("pipe"),()=>{order.Add("wait");throw new Exception("generated wait failure");},()=>order.Add("job"));
@@ -50,7 +50,7 @@ public static partial class SodaDesktopUnlock {
             EndWorker(17);if(process.DisposeCalls!=1||Worker!=null||WorkerPipe!=null||WorkerNonce!=Guid.Empty)throw new InvalidOperationException("Current worker handle or scope was not released");
             EndWorker(17);if(process.DisposeCalls!=1)throw new InvalidOperationException("Worker handle disposed repeatedly");
         }finally{Worker=null;WorkerNonce=Guid.Empty;Generation=previous;if(process.DisposeCalls==0)process.Dispose();}
-        Console.WriteLine("protected_worker_cleanup_passed: legacy job-first / v2 pipe-wait-job; stale generation cannot close current handles; matching teardown disposes once and clears scope; fake Process only");
+        Console.WriteLine("protected_worker_cleanup_passed: secure job-first / elevated pipe-wait-job; stale generation cannot close current handles; matching teardown disposes once and clears scope; fake Process only");
     }
     public static void CheckPipeCancellation() {
         var clock=Stopwatch.StartNew();bool cancelled=false;

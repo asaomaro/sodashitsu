@@ -4,7 +4,7 @@ using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
-public sealed class SodaDesktopVirtualDisplayNative : SodaDesktopVirtualDisplay.IBackend {
+public sealed partial class SodaDesktopVirtualDisplayNative : SodaDesktopVirtualDisplay.IBackend {
     const string Enumerator="SodaVirtualDisplay", Hardware="Sodashitsu\\VirtualDisplayV1";
     [UnmanagedFunctionPointer(CallingConvention.Winapi,CharSet=CharSet.Unicode)]
     delegate void Created(IntPtr handle,int result,IntPtr context,[MarshalAs(UnmanagedType.LPWStr)]string instance);
@@ -114,5 +114,5 @@ public sealed class SodaDesktopVirtualDisplayNative : SodaDesktopVirtualDisplay.
     }
     public static bool MatchesTarget(string instance,Guid container,string device,string monitor){var target=FindTarget(instance,container);return target!=null&&String.Equals(target.DeviceName,device,StringComparison.OrdinalIgnoreCase)&&String.Equals(target.MonitorPath,monitor,StringComparison.OrdinalIgnoreCase);}
     static bool StartedState(uint result,uint status,uint problem){if(result!=0)return false;if(problem!=0)throw new SodaDesktopVirtualFailure("driver_unavailable");return (status&8)!=0;}
-    public static void VerifyLayouts(){if(!StartedState(0,8,0)||StartedState(1,8,0)||StartedState(0,0,0))throw new InvalidOperationException("Virtual driver status flags");bool rejected=false;try{StartedState(0,0,22);}catch(SodaDesktopVirtualFailure e){rejected=e.Code=="driver_unavailable";}if(!rejected)throw new InvalidOperationException("Disabled virtual driver accepted");if(IntPtr.Size!=8||Marshal.SizeOf(typeof(CreateInfo))!=72||Marshal.SizeOf(typeof(PropertyKey))!=20)throw new InvalidOperationException("Virtual display native ABI");}
+
 }

@@ -1,0 +1,445 @@
+{
+  "scope": "Closed SDK asset bytes at native slot/test-seam review boundary; sign-in sources independently owned; not deployment approval",
+  "assets": [
+    {
+      "name": "EndpointAclPolicy.ps1",
+      "sha256": "fb41d1fa3fcc557e482c89a4b04e4b3b5d22fb15cd428a9e1dbea8920d553767"
+    },
+    {
+      "name": "SigninAclPolicy.ps1",
+      "sha256": "89fe6576e6332c49bf63054735d6618f1099ab481593982c8631c172d2506828"
+    },
+    {
+      "name": "SigninAdminStorage.ps1",
+      "sha256": "854c4594210ad7282df8c3a121250074be110a5df99ee6d5f63dadd4905b5daf"
+    },
+    {
+      "name": "WindowsAudioPipeBridge.cs",
+      "sha256": "2551a7c732d89c31dc799e71f11fcf0be9e60666a6e9908bc9c3828042fc168f"
+    },
+    {
+      "name": "WindowsUserAudioRole.cs",
+      "sha256": "65e993c3f18c0477a6fa53790f2a4b8ce050c3157c86c2c8fe4f54dcb8be367f"
+    },
+    {
+      "name": "WindowsUserMicrophoneRole.cs",
+      "sha256": "5e637d7bc472f3d6117678e60ca2aed8a23cd49d42713cd7c56e3e50407bab0d"
+    },
+    {
+      "name": "WindowsUserMicrophonePolicy.cs",
+      "sha256": "7c60091efbfbef8d6e191c305c9fbef8029f234b715fbd917b55deb5b49c414e"
+    },
+    {
+      "name": "WindowsCodecProbe.cs",
+      "sha256": "7eade1624fd9f78eed5e8cc16147e46de7e4a4a45e943f3dcc5033924599b138"
+    },
+    {
+      "name": "WindowsDesktopAudio.cs",
+      "sha256": "ade4f6718efcca6a4664e43316a3fb08f918d7d358436bc175c1762d2a509b87"
+    },
+    {
+      "name": "WindowsDesktopHost.cs",
+      "sha256": "4e125f7080a24eedaf80019221ffb8cda28f3c8f67c6accc8b816f5bf840489f"
+    },
+    {
+      "name": "WindowsDesktopMicrophone.cs",
+      "sha256": "3b838cb7eb72c0b68a2a8441a0471ee1e485d14d8a318fadc5a9dce17c568581"
+    },
+    {
+      "name": "WindowsDesktopPipeKernel.cs",
+      "sha256": "e8bcb08ccbec7aa124c9859ae2d66d7b61112f67d9cd9322f6ad3cef2dbaaaeb"
+    },
+    {
+      "name": "WindowsDesktopRichClipboard.cs",
+      "sha256": "c3b11be364f687724914094a4a5f59eff96d914eced55d992a42c5a57834cc5a"
+    },
+    {
+      "name": "WindowsDesktopUnlock.cs",
+      "sha256": "2e152270c83586fc38d1bff8b403e0cd18f260d1b8d40aaee115f594b7661baa"
+    },
+    {
+      "name": "WindowsExplorerSelection.cs",
+      "sha256": "d6fe4da611d19848e280d8fa27b73814b859b12c01ea7f99221cfa7054895e99"
+    },
+    {
+      "name": "WindowsExplorerSelectionWorker.cs",
+      "sha256": "a0953991358505c6e2510fe34cbac6695e4056612dd30ab7ecc5cda23d42fd4e"
+    },
+    {
+      "name": "WindowsNativeDragDataObject.cs",
+      "sha256": "dad1951e9e7489c521b038873a9274a2c138f9bca6e5339dec3dd9f59d24056c"
+    },
+    {
+      "name": "WindowsNativeDragLease.cs",
+      "sha256": "af362e3ecc216528f8fef04c1072a7498394ac734ada16e4b788b573504e8f50"
+    },
+    {
+      "name": "WindowsNativeDragPackets.cs",
+      "sha256": "28409584e0e91c99767a37bed5d7114f144f86b3bc16402629771103f24bb8fa"
+    },
+    {
+      "name": "WindowsNativeDragPump.cs",
+      "sha256": "f3dc2f5c2ac6dc7a95789b3797cb18a955a95506788b1c0ec2cb965f7eeef45e"
+    },
+    {
+      "name": "WindowsNativeDragSlot.cs",
+      "sha256": "c1c8a4c9501cf9a0021641ccb8527b17a3dee2679ba934e1dc0a4d4fabe9e76e"
+    },
+    {
+      "name": "WindowsNativeDragStreams.cs",
+      "sha256": "7a697b1861f903c7379ca5cfb01f80da70fa45d7d79d4fb6a52c455366e07a45"
+    },
+    {
+      "name": "WindowsNativeDragWorker.cs",
+      "sha256": "f1ac212ef62d4247ba1cf3d5897c8846f06b6cf87e6c53eff2b5d6fe8cefb67a"
+    },
+    {
+      "name": "WindowsNativeRoleHost.cs",
+      "sha256": "a56bca78835f691e1db0f22642b0b0776497492caf1711cdeeaa0abbe2d64ca2"
+    },
+    {
+      "name": "WindowsProtectedEpoch.cs",
+      "sha256": "cd12541a5b01d36c56926fb1322ecb61094a2b6bf84d3379dcf88b874abd93a4"
+    },
+    {
+      "name": "WindowsProtectedHandshake.cs",
+      "sha256": "64d02032891bfe375b32b87fc2125aad1a579a7203b6fac64c2d073067873ae4"
+    },
+    {
+      "name": "WindowsProtectedScope.cs",
+      "sha256": "05d3e2e32f552621f44032275ef315061c448ba86a31254d54a71ff78a9c224a"
+    },
+    {
+      "name": "WindowsProtectedScopeNative.cs",
+      "sha256": "a5282e7b90f73467adf20fe842d6821cb0f492d0a6b2348e17b3524cc5e7cc22"
+    },
+    {
+      "name": "WindowsProtectedWorker.cs",
+      "sha256": "45d7c3892a51d7a8105624d5d7445544f74361fd8bcd3c6c928b5179fc98ad51"
+    },
+    {
+      "name": "WindowsSigninAdminController.cs",
+      "sha256": "d5899b57950953dc90f3b67242edb71c2c35ebe24ef2e48b417a56528bf9e369"
+    },
+    {
+      "name": "WindowsSigninAdminDeadline.cs",
+      "sha256": "cb625efc56fdb3da088a376394a3aa3295359b31ddea30248a7dd9703e6e4fc8"
+    },
+    {
+      "name": "WindowsSigninAdminEnrollment.cs",
+      "sha256": "0e863ee4704e83e140f5033af91017e2ab580b830b545e5da13e38231c96c3d4"
+    },
+    {
+      "name": "WindowsSigninAdminEnvelope.cs",
+      "sha256": "10e9d806ad405d35f213a9e0160649c0197a9b82d6314a469c5af9b067ab722c"
+    },
+    {
+      "name": "WindowsSigninAdminInput.cs",
+      "sha256": "549fd043d553cbab556465d78011003c71627609ab3c481259d245bff0779991"
+    },
+    {
+      "name": "WindowsSigninAdminJournal.cs",
+      "sha256": "be9fa2050dae4e3778375585afab60b703c4ba8eb6e179757a435a7b2b8def24"
+    },
+    {
+      "name": "WindowsSigninAdminPersistence.cs",
+      "sha256": "258d2d831487370e88847eaf510369d6277f35bfe7d3c4f1b4731b259e668109"
+    },
+    {
+      "name": "WindowsSigninAdminResult.cs",
+      "sha256": "f6c94ef125695c19324effc15a66999ea2ab8aa58a92472b299a53d0a8bfe54d"
+    },
+    {
+      "name": "WindowsSigninCandidate.cs",
+      "sha256": "c68f51ab1be78d7e0a69149ced53be369419cd671744996e1217dff6b5dd493c"
+    },
+    {
+      "name": "WindowsSigninCandidateNative.cs",
+      "sha256": "ff5ee9a0646d7721105cfccde0115877f1bad91fc24b95f55c856baf4348e516"
+    },
+    {
+      "name": "WindowsSigninController.cs",
+      "sha256": "3ee7539ce7961f2491cd3ac8089a204c5a38f0acbbb553ee10cad481c6dcb058"
+    },
+    {
+      "name": "WindowsSigninControllerMutex.cs",
+      "sha256": "848be9f4ebf0b741022c4d1b47608c51739549c0305b81694a01bd273c145048"
+    },
+    {
+      "name": "WindowsSigninHost.cs",
+      "sha256": "e4f0629a206bd886602e52877e7c26de037ecdd635e90cc083999104f6436988"
+    },
+    {
+      "name": "WindowsSigninNativeHost.cs",
+      "sha256": "27f5da91496a7e83c97298e50671ceb988ea2408c660266bdbf44fa4d2c790eb"
+    },
+    {
+      "name": "WindowsSigninInitialRecovery.cs",
+      "sha256": "19bccefc5f879669db072c4393b044d324d368188b26a662abccfde9c2400428"
+    },
+    {
+      "name": "WindowsSigninInstallFiles.cs",
+      "sha256": "950f7da3eadea89269c4b17a46147d71440c4ca13f8c9980bace4951a55258ae"
+    },
+    {
+      "name": "WindowsSigninInstallSource.cs",
+      "sha256": "715135bd98f36ea03e76e88aed97b6e8e925ade7f2954416f02ecd7ac8e3b6ea"
+    },
+    {
+      "name": "WindowsSigninInstaller.cs",
+      "sha256": "e2890947803afe0fd1b9592eb733cc31f2e86053e75bceaa30d4e51dcf91cd90"
+    },
+    {
+      "name": "WindowsSigninInstallerScm.cs",
+      "sha256": "e7d6ff0da4d14f4d47557d122b38e13fff366d3ece9464061b431ec01973f4a9"
+    },
+    {
+      "name": "WindowsSigninMaintenanceRecovery.cs",
+      "sha256": "6f3d8a606e128b7009bcb442d5a208977a53826b90bf20ce9cbedabe3dc999e0"
+    },
+    {
+      "name": "WindowsSigninMaintenanceState.cs",
+      "sha256": "a5d6514f6d16e07da5366cf729a6485520c91571e0b57ba377d2993222b57379"
+    },
+    {
+      "name": "WindowsSigninPackage.cs",
+      "sha256": "77f9f65e06217e50bc49c1583b3c6813d9cfad4383ffe6cf5e3609e34bc9e8cf"
+    },
+    {
+      "name": "WindowsSigninPackageNative.cs",
+      "sha256": "acd1c764d141c18a66b074d07f6523c56d1559a54de55ed4e9027353eb2f6164"
+    },
+    {
+      "name": "WindowsSigninPresence.cs",
+      "sha256": "564563cdf7336dfbd202dbd79ecb90ff28d37060713e529441783a777ed66d18"
+    },
+    {
+      "name": "WindowsSigninProcess.cs",
+      "sha256": "ec5bffafefcd3eaa715bc152ec4f597908d74121b659804bd074470350d0b3dd"
+    },
+    {
+      "name": "WindowsSigninProcessEvidence.cs",
+      "sha256": "ecb4c18ca3f4a8dea17b49b12f2ed0a4d5fb37fbbe3ae136cc1899fca9b8315d"
+    },
+    {
+      "name": "WindowsSigninQuiescence.cs",
+      "sha256": "1d2755003aea4a64aac6b142f08e5fa24ef44c1d5d1bbc2f2fcdb2b8f29679cf"
+    },
+    {
+      "name": "WindowsSigninRunAdmission.cs",
+      "sha256": "e45eb0f9d9a532fecfc5709bcd2e6c74ec1a6a3f3a3b5b84c2861d56fa16fe1c"
+    },
+    {
+      "name": "WindowsSigninRunJournal.cs",
+      "sha256": "e14153dc26d7057c5bcf26b21b4e1f4e6f4be15ecb2962b8f5a11de83b806be9"
+    },
+    {
+      "name": "WindowsSigninRunRecord.cs",
+      "sha256": "2c2109554b37c37820dcc0f009daa5006a3879cdcb796a519ee42c582ca9c160"
+    },
+    {
+      "name": "WindowsSigninRunSession.cs",
+      "sha256": "e97a3c99d5b1d3f7abb72e603cc1168299dd6d98ed9b10709fdacb12de1e82ea"
+    },
+    {
+      "name": "WindowsSigninRunStorage.cs",
+      "sha256": "2e82d6402f3774caefb297ca22d5e9d7c15c18288b7a6815cffafbdf9f5ad246"
+    },
+    {
+      "name": "WindowsSigninScm.cs",
+      "sha256": "eb8a7cb2acdab665f1a7659e664e034c4c495a4f54d3ad1ee969aeef93d67b02"
+    },
+    {
+      "name": "WindowsSigninScope.cs",
+      "sha256": "a4321e143da6a4e02fe262a9006d90b4be0378af14f40cf10ffbeaba312f62a4"
+    },
+    {
+      "name": "WindowsSigninScopeNative.cs",
+      "sha256": "73f04a46e9d69338c188b686d41a9bb6667d0a1171c69a6bc8e3b71e7a5e12ac"
+    },
+    {
+      "name": "WindowsSigninServicePolicy.cs",
+      "sha256": "47561a2c9929794b584c221bbeff67055ce145b0373754709bf73366db722ceb"
+    },
+    {
+      "name": "WindowsSigninTarget.cs",
+      "sha256": "39ed748ed90d41056853effa09b335565f9efc2b60dfcbd67d2939dbfce0e297"
+    },
+    {
+      "name": "WindowsSigninUpgrade.cs",
+      "sha256": "8bf5ac417fc7af04793fbef8ec99934ac4ed61d329c60f59648fe6465e025f26"
+    },
+    {
+      "name": "WindowsSigninUpgradeFiles.cs",
+      "sha256": "55e02edfc2e8932aa227309771b20570bcb1c9772598d7152ae34999aa973c2d"
+    },
+    {
+      "name": "WindowsSigninUpgradeRecord.cs",
+      "sha256": "b3f8421014efe6362ffe27a4eb4eaf96370ff6402a6fe8daf46e315d1c6b84a6"
+    },
+    {
+      "name": "WindowsSigninUpgradeScm.cs",
+      "sha256": "d813efd5f4c5dc04345101def7d7957769178ed71c9cf23199248de99bd720e9"
+    },
+    {
+      "name": "WindowsSigninVault.cs",
+      "sha256": "3a9ff7f65deac70c681fa649b32a0c17c86ab8f95275c404df4958d468fcf54b"
+    },
+    {
+      "name": "WindowsSigninWorker.cs",
+      "sha256": "e27606bf929a3c706d8f408dd242c575dc38742b30cbde710fae53c52ec372ab"
+    },
+    {
+      "name": "WindowsSigninWorkerNative.cs",
+      "sha256": "4eb83391fc9f7b5375967b9d2747bed13ab5d19897b04da8d7ad78c79130edf5"
+    },
+    {
+      "name": "WindowsVirtualDisplay.cs",
+      "sha256": "a321985f7dab701ca9f851b2edb9c1d808befce2f2a8368119cad8cede2c2318"
+    },
+    {
+      "name": "WindowsVirtualDisplayChannel.cs",
+      "sha256": "3e8feed486968e716be2946ffda94cad878ded26e71b32416bfada5397d86c98"
+    },
+    {
+      "name": "WindowsVirtualDisplayNative.cs",
+      "sha256": "3cc4ee955f23346bbf3cd3ec95fdc18c6a9e5f00396c4e949a8a2866b164fd42"
+    },
+    {
+      "name": "build-macos-desktop.sh",
+      "sha256": "8c520fa30fdb639a2fb8c4479c74426072228404a98e460333cdee41a224b351"
+    },
+    {
+      "name": "build-native-role.ps1",
+      "sha256": "7a5aadc1f0c1c52746de4ef2a26cdee9464e0ffcdffcacd53a8859b4639dde1c"
+    },
+    {
+      "name": "build-signin-bundle.mjs",
+      "sha256": "8d04dfd9dbc87d1569d7acb0fb19993c56883ccc362d743ccae8fb2ab6729384"
+    },
+    {
+      "name": "build-signin-host.ps1",
+      "sha256": "a5fa724f43e9f45898992e35f7dc54e1deae40ebdbff77ae07597d91491d4346"
+    },
+    {
+      "name": "build-signin-package.mjs",
+      "sha256": "21dada8712e542c1f1b0230283c326775ffb8b2965c1a8b285c93edaa8b8ee38"
+    },
+    {
+      "name": "check-endpoint-acl.ps1",
+      "sha256": "b7cbd134553cd4ef9fa6105818d8f76c74bce1111f6d7c021223ca02a6dfd15b"
+    },
+    {
+      "name": "commit-endpoint-vault.ps1",
+      "sha256": "1bd063510ea61635997ed45f6c469556b522ca1093d2bd5da6edacf58090a1f4"
+    },
+    {
+      "name": "commit-signin-vault.ps1",
+      "sha256": "8034373296dec8df1452bb4ef30f1d6da4a3464e420ce6e404af038319fef30d"
+    },
+    {
+      "name": "control-signin-admin.ps1",
+      "sha256": "4a759fab4267edfafe05c30057fe44afd2c53690a685ca42f8d48b8a15f3233b"
+    },
+    {
+      "name": "control-signin-service.ps1",
+      "sha256": "40ab616f965213564a2a5fe5f27751a45e102b6a4bd700fc264cd4e8bded1d23"
+    },
+    {
+      "name": "install-signin-service.ps1",
+      "sha256": "cdcc12900ca41c2281d5d17a1526f05fa73a289a4e94553508cf903229a63a68"
+    },
+    {
+      "name": "install-virtual-display-driver.ps1",
+      "sha256": "d6610486b2b46368846a0ab7c6c08d1114ae6e7a70a33fc33067c980d26ee24c"
+    },
+    {
+      "name": "linux-native-audio.py",
+      "sha256": "6d783728a363e75283b933584da38baaf4010b891e989b9976fe06ebfd76b7b6"
+    },
+    {
+      "name": "linux-native-microphone.py",
+      "sha256": "09f7bad7c8e2ba4ecfd352871c24664f2061cefcb6c2c02fe8cae17598072772"
+    },
+    {
+      "name": "linux-native-video.py",
+      "sha256": "64c8698f04219bdb3ac288368d74366e89e17665e38d26a341c21122f58d6fec"
+    },
+    {
+      "name": "linux-portal-helper.py",
+      "sha256": "e370d75bbe5e80e1dfb31b464da2e96b5c7cd12bc27596707a352194b0716693"
+    },
+    {
+      "name": "list-audio-endpoints.ps1",
+      "sha256": "8c6107b4c71faf3a309717e09365d58697e60fc670efebf838d3e48c3042001f"
+    },
+    {
+      "name": "macos-desktop-helper.swift",
+      "sha256": "a6fb5de1fdcfaf1cfc02a063d93796b492237f8da9b228fbbca6c88dce9e5cfb"
+    },
+    {
+      "name": "macos-native-audio.swift",
+      "sha256": "0ad7b936944eda512c9911414c7692a4d239d450889e3320dc4dfe2a05f99647"
+    },
+    {
+      "name": "macos-native-microphone.swift",
+      "sha256": "033dec03da1c36b71df90710657c77d97b60bbf5675d44c1e340c12641bdb722"
+    },
+    {
+      "name": "macos-native-video.swift",
+      "sha256": "6aeb2506c1a1e31b05fc8b985670019060d8acade69aa0e310e6176e54968cc1"
+    },
+    {
+      "name": "macos-rich-clipboard.swift",
+      "sha256": "add58aee4f555f0b683268e59458f287e8477788143fc55515ce6155c6fc560e"
+    },
+    {
+      "name": "macos-system-audio.swift",
+      "sha256": "01b9f776ba37539344b54d10f42d5ea27717f0bab417773cdd79d546f0941914"
+    },
+    {
+      "name": "prepare-desktop-helper.ps1",
+      "sha256": "107bef3799018f976987ff830ba2afeb2248d5eb88f8cec479eaa0e49f78add9"
+    },
+    {
+      "name": "probe-codecs.ps1",
+      "sha256": "057acfe774bf709e6920891be1c8711b74e94657445b319b0017ff46d9aeb958"
+    },
+    {
+      "name": "probe-monitors.ps1",
+      "sha256": "925a67c001b3bc9fd0f88b22478e39ebcd628071b9c4d5cc22838b9466d5b576"
+    },
+    {
+      "name": "protect-endpoint-key.ps1",
+      "sha256": "49b04d71b8df9a1b978610d84f2bf77f19eb7756d0b6d5d1483afc3436aae700"
+    },
+    {
+      "name": "read-signin-admin.ps1",
+      "sha256": "5c1c640c4ef5d812d1522d770ab5b524abaaa55bc9949f2e082282f990e69ca5"
+    },
+    {
+      "name": "read-signin-enrollment.ps1",
+      "sha256": "2b9cd8107bbf89058213b1b1ade6edc074e7dd5e41ee5c449742d83fe7671a79"
+    },
+    {
+      "name": "signin-bootstrap.mjs",
+      "sha256": "876a0f423f7e78418778dcb6c55eb7df495deb7fcd53b66fe98fb6bb729c1a20"
+    },
+    {
+      "name": "upgrade-signin-service.ps1",
+      "sha256": "d600d84bbb1d1c7803efe6f70fad2d2d116e7112d8ab3c05113deaf40d1a6683"
+    },
+    {
+      "name": "windows-helper.ps1",
+      "sha256": "96faf1b5ea944fb6c6f6005a39763d224148a80611965e9476b6d2f3bbeb3af1"
+    },
+    {
+      "name": "write-signin-admin-result.ps1",
+      "sha256": "7ccac1effa15dd67c91121c5f0ed7cc232c7f5d05ee47f5c3b38374533a5c748"
+    },
+    {
+      "name": "write-signin-enrollment.ps1",
+      "sha256": "75248293b4b20341320136da8bebf3c42c4a3ae279439dc0bc952967444eda34"
+    }
+  ]
+}

@@ -56,17 +56,20 @@ public static partial class SodaDesktopHost {
     static bool InputAckPipe=false;
     static bool NativePointerProof=false;
     static Dictionary<string,object> LastAppliedPointer;
-    static Func<Point,Tuple<long,int>> MemoryPointerTarget=null;
     static bool DeferNativeSnapshots=false;
     static long LastNativeInput=-1000;
     static long LastHeartbeat=0;
     static Rectangle Bounds;static SodaDesktopMonitorLayout ActiveMonitors;static int MonitorNotice;static string CaptureDevice;
     static SodaDesktopMonitorLayout.IDriver MonitorDriver=new SodaDesktopMonitorLayout.NativeDriver();
-    static Func<bool> MemoryDesktop=null;static Action<INPUT> MemoryInput=null;static Action<object> MemoryOutput=null;
     static bool SourceMatches(string device){SodaDesktopMonitorLayout.Item[] ignored;return SourceMatches(device,out ignored);}
     static bool SourceMatches(string device,out SodaDesktopMonitorLayout.Item[] current){current=null;if(ActiveMonitors==null)return SodaDesktopDisplay.Matches(device,Bounds);bool same=false;try{current=MonitorDriver.Read();same=ActiveMonitors.MatchesItems(current);}catch{}if(!same&&Interlocked.CompareExchange(ref MonitorNotice,1,0)==0)Output(new{type="monitor_topology_changed"});return same;}
 
-    static void Output(object value) { lock(OutputGate){if(MemoryOutput!=null){MemoryOutput(value);return;}Console.Out.WriteLine(OutputJson.Serialize(value)); Console.Out.Flush();} }
+    static void Output(object value) { lock(OutputGate){
+#if SODA_DESKTOP_TEST
+        if(MemoryOutput!=null){MemoryOutput(value);return;}
+#endif
+        Console.Out.WriteLine(OutputJson.Serialize(value));Console.Out.Flush();
+    }}
     static void InputAck(long seq,Dictionary<string,object> pointer=null) {
         if(InputAckPipe){
             var culture=System.Globalization.CultureInfo.InvariantCulture;
@@ -97,8 +100,11 @@ public static partial class SodaDesktopHost {
         Point pixel=new Point(Bounds.Left+(int)Math.Round(x*(Bounds.Width-1)),Bounds.Top+(int)Math.Round(y*(Bounds.Height-1)));
         if(VirtualLease!=null&&!Bounds.Contains(pixel))return null;
         Tuple<long,int> target;
+#if SODA_DESKTOP_TEST
         if(MemoryPointerTarget!=null)target=MemoryPointerTarget(pixel);
-        else {IntPtr window=GetAncestor(WindowFromPoint(pixel),2);uint pid;GetWindowThreadProcessId(window,out pid);target=window!=IntPtr.Zero&&pid>0&&pid<=Int32.MaxValue?Tuple.Create(window.ToInt64(),(int)pid):null;}
+        else
+#endif
+        {IntPtr window=GetAncestor(WindowFromPoint(pixel),2);uint pid;GetWindowThreadProcessId(window,out pid);target=window!=IntPtr.Zero&&pid>0&&pid<=Int32.MaxValue?Tuple.Create(window.ToInt64(),(int)pid):null;}
         if(target==null||target.Item1==0||target.Item2<=0)return null;
         return new Dictionary<string,object>{{"x",pixel.X},{"y",pixel.Y},{"window",target.Item1},{"pid",target.Item2}};
     }
@@ -118,12 +124,21 @@ public static partial class SodaDesktopHost {
             options.TryGetValue("features",out value)&&value is bool&&(bool)value&&options.TryGetValue("protectedVideo",out value)&&value is bool&&(bool)value;
     }
     static bool PublishProtectedNative(object payload,Action committed) {
+#if SODA_DESKTOP_TEST
         if(MemoryPreparedWait!=null)MemoryPreparedWait();
+#endif
         lock(OutputGate) {
+#if SODA_DESKTOP_TEST
             string wire=MemoryOutput==null?OutputJson.Serialize(payload):null;
+#else
+            string wire=OutputJson.Serialize(payload);
+#endif
             if(Stopping||!AllowedDesktop()){Stopping=true;return false;}
             committed();
-            if(MemoryOutput!=null)MemoryOutput(payload);else{Console.Out.WriteLine(wire);Console.Out.Flush();}
+#if SODA_DESKTOP_TEST
+            if(MemoryOutput!=null){MemoryOutput(payload);return true;}
+#endif
+            Console.Out.WriteLine(wire);Console.Out.Flush();
             return true;
         }
     }
@@ -142,7 +157,13 @@ public static partial class SodaDesktopHost {
         try{Run(0,true,false,false,null);}
         finally{ClearProtectedGuards();}
     }
-    static bool AllowedDesktop() { if(VirtualAlive!=null&&!VirtualAlive())return false;if(MemoryDesktop!=null)return MemoryDesktop();return Secure ? SecureGuard!=null && SecureGuard() : DefaultDesktop(); }
+    static bool AllowedDesktop() {
+        if(VirtualAlive!=null&&!VirtualAlive())return false;
+#if SODA_DESKTOP_TEST
+        if(MemoryDesktop!=null)return MemoryDesktop();
+#endif
+        return Secure ? SecureGuard!=null && SecureGuard() : DefaultDesktop();
+    }
     public static void RunSecure(Func<int> lockState,Func<bool> secureGuard) {
         if(!System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem || !secureGuard())throw new InvalidOperationException("Secure desktop unavailable");
         SecureLockState=lockState;SecureGuard=secureGuard;Secure=true;
@@ -155,13 +176,15 @@ public static partial class SodaDesktopHost {
         try { uint needed; var name=new StringBuilder(256); return GetUserObjectInformation(h,2,name,512,out needed) && name.ToString()=="Default"; }
         finally { CloseDesktop(h); }
     }
-    static Func<INPUT[],uint> MemoryBatchInput=null;
     static void Emit(INPUT value) { EmitInputs(new[]{value}); }
     static void EmitInputs(INPUT[] values) {
         try { if(!AllowedDesktop())throw new InvalidOperationException("Input desktop ended");uint sent;
+#if SODA_DESKTOP_TEST
             if(MemoryBatchInput!=null)sent=MemoryBatchInput(values);
             else if(MemoryInput!=null){foreach(var value in values)MemoryInput(value);sent=(uint)values.Length;}
-            else sent=SendInput((uint)values.Length,values,Marshal.SizeOf(typeof(INPUT)));
+            else
+#endif
+            sent=SendInput((uint)values.Length,values,Marshal.SizeOf(typeof(INPUT)));
             if(sent!=values.Length)throw new InvalidOperationException("Input denied"); }
         catch { Stopping=true;throw; }
     }
@@ -320,16 +343,23 @@ public static partial class SodaDesktopHost {
     static bool AdmitPrepared(){
         if(Stopping||!AllowedDesktop()){Stopping=true;return false;}return true;
     }
-    static Action MemoryPreparedWait=null;
     static bool PublishPrepared(PreparedFrame frame){
         var payload=new {type="frame",info=frame.info,data=Convert.ToBase64String(frame.image)};
+#if SODA_DESKTOP_TEST
         if(MemoryPreparedWait!=null)MemoryPreparedWait();
+#endif
         lock(OutputGate){
+#if SODA_DESKTOP_TEST
             string wire=MemoryOutput==null?OutputJson.Serialize(payload):null;
+#else
+            string wire=OutputJson.Serialize(payload);
+#endif
             // Check after waiting for stdout and after JSON/base64 preparation.
             if(!AdmitPrepared())return false;
-            if(MemoryOutput!=null)MemoryOutput(payload);
-            else{Console.Out.WriteLine(wire);Console.Out.Flush();}
+#if SODA_DESKTOP_TEST
+            if(MemoryOutput!=null){MemoryOutput(payload);return true;}
+#endif
+            Console.Out.WriteLine(wire);Console.Out.Flush();
             return true;
         }
     }
@@ -456,7 +486,7 @@ public static partial class SodaDesktopHost {
         int nativeRateCeiling=nativeCeiling&&config.ContainsKey("nativeMaxFps")&&Num(config,"nativeMaxFps")==60?60:maxFps;
         DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
         bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
-        // Only new providers opt in. Old providers/helpers keep their existing wire contract.
+        // The current configuration opts in to the requested capture backend.
         if(!Secure && Environment.GetEnvironmentVariable("SODA_DESKTOP_CAPTURE")!="gdi" && config.ContainsKey("captureBackends")) {
             var backends=config["captureBackends"] as object[];
             if((ActiveMonitors==null||ActiveMonitors.Selected!="all"||ActiveMonitors.Items.Length==1)&&backends!=null && Array.IndexOf(backends,"dxgi")>=0)dxgi=SodaDesktopDxgi.TryCreate(sourceDevice,Bounds,w,h);

@@ -133,6 +133,8 @@ namespace Sodashitsu.NativeDrag
                         Thread.Sleep(10);
                     }
                 }){IsBackground=true,Name="soda-native-drag-deadline"};watchdog.Start();
+                // Acquisition and final disposal stay on this synchronous STA;
+                // reader/writer/watchdog threads never receive the slot.
                 bool initialized=false;IDisposable slot=null;Thread reader=null,writer=null;
                 try
                 {

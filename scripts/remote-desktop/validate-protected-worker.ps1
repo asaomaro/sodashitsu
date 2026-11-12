@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 # Compile the installed image's sources. Invoke generated/pure checks only.
 $files=@('WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedHandshake.cs','WindowsProtectedWorker.cs','WindowsDesktopUnlock.cs','WindowsDesktopHost.cs','WindowsDesktopHostChecks.cs','WindowsDesktopUnlockChecks.cs','WindowsProtectedScopeChecks.cs','WindowsProtectedHandshakeChecks.cs')
-Add-Type -Path @($files | ForEach-Object { Join-Path $PSScriptRoot $_ }) -ReferencedAssemblies System.dll,System.Core.dll,System.Web.Extensions.dll,System.Drawing.dll,System.Windows.Forms.dll,System.ServiceProcess.dll
+$testCompiler=[CodeDom.Compiler.CompilerParameters]::new([string[]]@('System.dll','System.Core.dll','System.Web.Extensions.dll','System.Drawing.dll','System.Windows.Forms.dll','System.ServiceProcess.dll'));$testCompiler.CompilerOptions='/define:SODA_DESKTOP_TEST';Add-Type -Path @($files | ForEach-Object { Join-Path $PSScriptRoot $_ }) -CompilerParameters $testCompiler
 [SodaDesktopUnlock]::VerifyLeasePurposes()
 [SodaDesktopUnlock]::VerifyProtectedPurposes()
 [SodaDesktopUnlock]::VerifyWorkerCleanup()

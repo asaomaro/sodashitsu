@@ -12,7 +12,12 @@ using Sodashitsu.NativeDrag;
 internal static class NativeDragWorkerChecks
 {
     private static void Assert(bool value,string reason){if(!value)throw new Exception("generated assertion: "+reason);}
-    private sealed class EmptySlot:IDisposable {public void Dispose(){}}
+    private sealed class EmptySlot:IDisposable {
+        readonly Mutex mutex=new Mutex(true);readonly int thread=Thread.CurrentThread.ManagedThreadId;readonly Backend backend;
+        internal bool Disposed;
+        internal EmptySlot(Backend backend){this.backend=backend;}
+        public void Dispose(){Assert(thread==Thread.CurrentThread.ManagedThreadId&&backend.Finished,"slot released before OLE finish or on another thread");mutex.ReleaseMutex();mutex.Dispose();Disposed=true;}
+    }
     private sealed class Pipe:Stream
     {
         private readonly BlockingCollection<byte> bytes=new BlockingCollection<byte>();
@@ -50,7 +55,7 @@ internal static class NativeDragWorkerChecks
         public bool Allowed(){allowedCalls++;if(allowedCalls==3&&Mode=="host-expire")Thread.Sleep(200);if(allowedCalls==3&&Mode=="late-release")held=false;if(allowedCalls==3&&Mode=="late-expire"||allowedCalls==5&&Mode=="phase2-expire"||allowedCalls==6&&Mode=="backend-expire")Thread.Sleep(800);return Mode!="denied";}
         public bool LeftHeld(){return Mode!="released"&&held;}
         public void Initialize(){Initialized=true;}
-        public void Finish(){Finished=true;}
+        public void Finish(){bool active;if(data!=null)Assert(data.InOperation(out active)<0&&!active,"OLE finished before data object cancellation");Finished=true;}
         private void Read()
         {
             IntPtr pointer=Marshal.AllocHGlobal(70000);try{Assert(lease.Copy(0,0,70000,pointer)==70000,"worker verified stream failed");byte[] bytes=new byte[70000];Marshal.Copy(pointer,bytes,0,bytes.Length);for(int i=0;i<bytes.Length;i++)Assert(bytes[i]==(byte)(i%251),"worker payload mismatch");Array.Clear(bytes,0,bytes.Length);}finally{Marshal.FreeHGlobal(pointer);}
@@ -81,15 +86,16 @@ internal static class NativeDragWorkerChecks
     }
     private static int Case(string mode,bool child)
     {
-        Pipe input=new Pipe();Output output=new Output(input){Corrupt=mode=="bad-sha",Block=mode=="blocked-output"};if(mode!="blocked-input")Initial(input,mode=="host-expire"?100:750);Backend backend=new Backend(mode);bool forced=false;
+        Pipe input=new Pipe();Output output=new Output(input){Corrupt=mode=="bad-sha",Block=mode=="blocked-output"};if(mode!="blocked-input")Initial(input,mode=="host-expire"?100:750);Backend backend=new Backend(mode);bool forced=false;EmptySlot slot=null;
         try
         {
-            int result=NativeDragWorker.Run(input,output,backend,delegate{return new EmptySlot();},child?(Action<int>)Environment.Exit:delegate(int code){forced=true;});
+            int result=NativeDragWorker.Run(input,output,backend,delegate{return slot=new EmptySlot(backend);},child?(Action<int>)Environment.Exit:delegate(int code){forced=true;});
             bool success=mode=="sync"||mode=="async";
             Assert(result==(success?0:3),"worker result "+mode);Assert(!forced,"unexpected generated force exit");
             Assert(output.Types.Contains("finished")==success,"failed/cancelled worker emitted completion");
             if(mode=="released"||mode=="denied"||mode=="late-release"||mode=="late-expire"||mode=="phase2-expire"||mode=="backend-expire"||mode=="host-expire")Assert(backend.Drops==0,"worker started without live gesture/desktop");
             if(mode!="denied")Assert(backend.Initialized&&backend.Finished,"worker COM backend not finalized");
+            Assert(mode=="denied"?slot==null:slot!=null&&slot.Disposed,"slot lifetime did not span complete worker cleanup");
             return child?result:0;
         }
         finally{input.End();}
