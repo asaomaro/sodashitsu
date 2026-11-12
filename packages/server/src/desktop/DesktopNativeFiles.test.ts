@@ -37,14 +37,14 @@ for(const mode of ["release-failure","release-expired","grant-during-release","a
  await expect(f.run({action:"native_activate",gesture:f.gesture,lease:offer.lease})).rejects.toThrow();
  await expect(f.run({action:"native_read",gesture:f.gesture,lease:offer.lease,request:randomUUID(),index:0,offset:0,length:1})).rejects.toThrow();
 });}
-for(const mode of ["seq","expired","invalid-pointer","revoked","backwards"]){it(`does not inspect B selection after ${mode}`,async()=>{
- const f=await setup();if(mode==="expired")f.clock(750);if(mode==="backwards")f.clock(-1);if(mode==="invalid-pointer")f.invalidate();if(mode==="revoked")f.revoke();
+for(const mode of ["seq","expired","invalid-pointer","revoked"]){it(`does not inspect B selection after ${mode}`,async()=>{
+ const f=await setup();if(mode==="expired")f.clock(750);if(mode==="invalid-pointer")f.invalidate();if(mode==="revoked")f.revoke();
  await expect(f.run({action:"native_prepare",gesture:f.gesture,origin:"https://a.example",seq:mode==="seq"?8:7})).rejects.toThrow();expect(f.runtime.capture).not.toHaveBeenCalled();
 });}
 it("does not revive an asynchronously cancelled selection result",async()=>{
  const f=await setup();let complete!:(paths:string[])=>void;f.runtime.capture.mockImplementation(()=>new Promise(resolve=>{complete=resolve;}));
  const pending=f.prepare();await Promise.resolve();f.files.cancel(f.gesture);complete([f.path]);await expect(pending).rejects.toThrow();
- await expect(f.prepare()).rejects.toThrow();
+ expect((f.files as any).admissions.size).toBe(0);f.runtime.capture.mockResolvedValue([f.path]);expect((await f.prepare()).native).toBeDefined();
 });
 it("rejects changed physical pointer after the trusted adapter returns",async()=>{
  const f=await setup();f.runtime.capture.mockImplementation(async()=>{f.invalidate();return [f.path];});await expect(f.prepare()).rejects.toThrow();
@@ -70,14 +70,13 @@ it("requires the existing explicit file grant and revokes native bytes immediate
  expect((await run({action:"native_read",gesture:f.gesture,lease:offer.lease,request:randomUUID(),index:0,offset:0,length:1})).ok).toBe(false);await revoked;
 });
 
-it("remembers cancellation before selection preparation and refuses delayed replay",async()=>{
- const f=await setup();f.files.cancel(f.gesture);await expect(f.prepare()).rejects.toThrow();expect(f.runtime.capture).not.toHaveBeenCalled();await expect(f.prepare()).rejects.toThrow();
-});
+it("retires cancellation with the inflight request instead of remembering gesture IDs forever",async()=>{const f=await setup(),context=f.files.admit(f.gesture);f.files.cancel(f.gesture);await expect(f.files.run({action:"native_prepare",gesture:f.gesture,origin:"https://a.example",seq:7},f.fence,context)).rejects.toThrow();expect(f.runtime.capture).not.toHaveBeenCalled();expect((f.files as any).admissions.size).toBe(0);expect((await f.prepare()).native).toBeDefined();});
+
 it("cancels a queued DesktopFiles preparation before its root guard completes",async()=>{
  const f=await setup();f.hooks.pointer=seq=>({seq,point:{x:-400,y:50,window:42,pid:123},at:performance.now(),valid:()=>true,release:f.release});const files=await DesktopFiles.open(f.root,()=>true,undefined,()=>true,false,undefined,f.hooks);clean.push(()=>files.close());const run=(request:unknown)=>files.run({type:"desktop_file",id:randomUUID(),request});await run({action:"grant",enabled:true});
  let entered!:()=>void,unblock!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{unblock=resolve;});
  const target=files as unknown as {check():Promise<void>},original=target.check.bind(target);vi.spyOn(target,"check").mockImplementationOnce(async()=>{entered();await gate;await original();});
- const request={action:"native_prepare",gesture:f.gesture,origin:"https://a.example",seq:7};const preparing=run(request);await started;const aborted=run({action:"native_abort",gesture:f.gesture});unblock();expect((await preparing).ok).toBe(false);await aborted;expect(f.runtime.capture).not.toHaveBeenCalled();expect((await run(request)).ok).toBe(false);expect(f.runtime.capture).not.toHaveBeenCalled();
+ const request={action:"native_prepare",gesture:f.gesture,origin:"https://a.example",seq:7};const preparing=run(request);await started;const aborted=run({action:"native_abort",gesture:f.gesture});unblock();expect((await preparing).ok).toBe(false);await aborted;expect(f.runtime.capture).not.toHaveBeenCalled();expect((files as any).native.admissions.size).toBe(0);
 });
 it("publishes canonical directory and empty-directory metadata within the file result schema",async()=>{
  const f=await setup(),folder=join(f.root,"folder");await mkdir(folder);await mkdir(join(folder,"empty"));await writeFile(join(folder,"data.txt"),"bytes");f.runtime.capture.mockResolvedValue([folder]);const offer=(await f.prepare() as any).native;const {DesktopFileResult}=await import("@sodashitsu/protocol");
@@ -93,3 +92,5 @@ it("holds the process-wide snapshot slot until an aborted preparation has draine
  const preparing=a.prepare();await started;a.files.cancel();await expect(b.prepare()).rejects.toThrow("別のドラッグ");expect(b.runtime.capture).not.toHaveBeenCalled();complete([a.path]);await expect(preparing).rejects.toThrow();await a.files.close();
  const result=await b.run({action:"native_prepare",gesture:randomUUID(),origin:"https://a.example",seq:7});expect(result).toHaveProperty("native");
 });
+it("keeps a renewed native source grant beyond the removed absolute drag lifetime",async()=>{const f=await setup();const offer=(await f.prepare()).native!;await f.run({action:"native_activate",gesture:f.gesture,lease:offer.lease});for(let now=4000;now<1000000;now+=4000){f.clock(now);await f.run({action:"native_heartbeat",gesture:f.gesture,lease:offer.lease});}const value=await f.run({action:"native_read",gesture:f.gesture,lease:offer.lease,request:randomUUID(),index:0,offset:0,length:1});expect(value.data).toBeTruthy();});
+it("does not disable future native gestures after many completed or unknown cancellations",async()=>{const f=await setup();for(let i=0;i<4100;i++)f.files.cancel(randomUUID());expect((await f.prepare()).native).toBeDefined();});

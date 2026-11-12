@@ -5,7 +5,6 @@ export const DesktopNativeHelperOrigin=z.string().regex(/^http:\/\/n[a-f0-9]{32}
 export const DesktopNativeHelperDescriptor=z.object({id,origin:DesktopNativeHelperOrigin,url:z.string().max(2048)}).strict().refine(v=>v.url===`${v.origin}/bridge?id=${v.id}`);
 export type DesktopNativeHelperDescriptor=z.infer<typeof DesktopNativeHelperDescriptor>;
 export const DesktopNativeHelperRequest=z.discriminatedUnion("type",[
- z.object({type:z.literal("beat")}).strict(),
  z.object({type:z.literal("arm"),gesture:id}).strict(),
  z.object({type:z.literal("start"),gesture:id,offer:DesktopNativeFileOffer}).strict(),
  z.object({type:z.literal("bytes"),gesture:id,request:id,index:z.number().int().min(0).max(999),offset:integer,data:z.string().min(1).max(87384).regex(/^[A-Za-z0-9+/]*={0,2}$/)}).strict(),
@@ -13,7 +12,6 @@ export const DesktopNativeHelperRequest=z.discriminatedUnion("type",[
 ]);
 export type DesktopNativeHelperRequest=z.infer<typeof DesktopNativeHelperRequest>;
 export const DesktopNativeHelperEvent=z.discriminatedUnion("type",[
- z.object({type:z.literal("alive")}).strict(),
  z.object({type:z.literal("ready"),id}).strict(),
  z.object({type:z.literal("armed"),gesture:id}).strict(),
  z.object({type:z.literal("running"),gesture:id}).strict(),

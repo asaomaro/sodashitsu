@@ -11,7 +11,6 @@ function fixture(){
  return {core,offer,sent,calls,request,fallback,handoff,release,status,arm,clock:(value:number)=>{now=value;},revoke:()=>{allowed=false;}};
 }
 async function turn(){for(let i=0;i<8;i++)await Promise.resolve();}
-it("falls back to normal input when the admission clock is invalid",()=>{const f=fixture();f.clock(NaN);expect(f.core.begin(point)).toBe(false);expect(f.sent).toEqual([]);expect(f.core.pending).toBe(false);});
 it("leaves ordinary clicks alone and prepares only after a moved applied down",async()=>{
  const f=fixture(),gesture=f.arm();await turn();expect(f.request).not.toHaveBeenCalled();expect(f.core.pointer(point,"up",0)).toBe(false);expect(f.fallback).toHaveBeenCalledWith(undefined);expect(f.calls).toEqual([{action:"native_abort",gesture}]);
 });
@@ -36,3 +35,5 @@ it("does not revive a selection returned after its pointer was released",async()
 for(const mode of ["deadline","revoked","wrong-release"]){it(`does not admit a ${mode} selection`,async()=>{
  const f=fixture();f.arm();if(mode==="deadline")f.clock(850);if(mode==="revoked")f.revoke();if(mode==="wrong-release")f.request.mockImplementation(async(value:any)=>value.action==="native_prepare"?{native:f.offer}:{id:crypto.randomUUID()});f.core.pointer(moved,"move",1);await turn();expect(f.sent.some(v=>v.type==="start")).toBe(false);
 });}
+
+it("keeps a running native drag beyond the removed absolute host lifetime",async()=>{const f=fixture(),gesture=f.arm();f.core.pointer(moved,"move",1);await turn();f.clock(1000000);f.core.event({type:"need",gesture,request:crypto.randomUUID(),index:0,offset:0,length:1});await turn();expect(f.sent.at(-1)).toMatchObject({type:"bytes",gesture});expect(f.status).not.toHaveBeenLastCalledWith("ドラッグ転送を中止しました");});

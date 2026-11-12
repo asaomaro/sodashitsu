@@ -44,7 +44,7 @@ export class DesktopNativeGateway {
      preparing=true;clearTimeout(handshake);clearTimeout(this.expires);
      this.preparing=(async()=>{await this.binary.prepare();if(this.stopped)return;const native=this.nativeFactory({origin:this.parent,executable:this.binary.executable,args:this.binary.arguments??[],emit:event=>this.send(event)});if(this.stopped){await native.close();return;}this.native=native;void native.closed.then(()=>{void this.close();});verified=true;this.send({type:"ready",id:this.id});})();void this.preparing.catch(()=>{this.send({type:"error",message:"このPCのWindows補助プログラムを準備できませんでした"});void this.close();});return;
     }
-    this.native!.receive(data);if(data.type==="beat")this.send({type:"alive"});
+    this.native!.receive(data);
    }catch{void this.close();}
   });
  }

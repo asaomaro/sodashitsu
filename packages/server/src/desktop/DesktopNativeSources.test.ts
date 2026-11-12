@@ -12,6 +12,7 @@ vi.mock("node:fs/promises", { spy: true });
 describe("native source approved-root lease", () => {
   let root: string, scope: NativeSourceScope, allowed: boolean, now: number;
   const leases: DesktopNativeSources[] = [];
+  let owner:AbortController;
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "soda-native-source-"));
     scope = {
@@ -21,7 +22,7 @@ describe("native source approved-root lease", () => {
       generation: randomUUID(),
     };
     allowed = true;
-    now = 0;
+    now = 0;owner=new AbortController();
   });
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -36,6 +37,7 @@ describe("native source approved-root lease", () => {
       paths,
       scope,
       () => allowed,
+      owner.signal,
       () => now,
     );
     leases.push(lease);
@@ -124,6 +126,7 @@ describe("native source approved-root lease", () => {
           if (mode === "authority") reenter();
           return true;
         },
+        owner.signal,
         () => {
           if (mode === "clock") reenter();
           return 0;
@@ -226,22 +229,21 @@ describe("native source approved-root lease", () => {
     expect(() => lease.heartbeat(scope)).toThrow();
     await lease.close();
   });
-  it.each(["offer", "idle", "absolute", "backward"])("expires %s irreversibly", async (mode) => {
+  it.each(["idle"])("expires %s irreversibly", async (mode) => {
     await writeFile(join(root, "file.txt"), "abc");
     const lease = await source();
-    if (mode !== "offer") lease.activate(scope);
-    if (mode === "absolute") for (now = 4000; now < 900000; now += 4000) lease.heartbeat(scope);
-    now = mode === "offer" ? 1500 : mode === "idle" ? 5000 : mode === "absolute" ? 900000 : -1;
+    lease.activate(scope);
+    now = mode === "idle" ? 5000 : -1;
     expect(() => lease.heartbeat(scope)).toThrow();
     now = 0;
     expect(() => lease.manifest(scope)).toThrow();
   });
-  it("automatically cancels an unused offer without another request", async () => {
+  it("keeps an actively renewed file capability beyond the removed absolute host lifetime",async()=>{await writeFile(join(root,"file.txt"),"abc");const lease=await source();lease.activate(scope);for(now=4000;now<1000000;now+=4000)lease.heartbeat(scope);expect(lease.manifest(scope)).toHaveLength(1);await lease.close();});
+  it("cancels an unused offer on its existing owner abort without another request", async () => {
     vi.useFakeTimers();
     await writeFile(join(root, "file.txt"), "abc");
     const lease = await source();
-    now = 1500;
-    await vi.advanceTimersByTimeAsync(1500);
+    owner.abort();
     now = 0;
     expect(() => lease.activate(scope)).toThrow();
   });
@@ -271,14 +273,14 @@ describe("native source approved-root lease", () => {
         [join(root, "file.txt")],
         scope,
         () => true,
+        owner.signal,
         () => now,
       ),
       rejected = expect(creating).rejects.toThrow();
     try {
       await entered;
       expect(snapshot?.[0]).toBe(7);
-      now = 1500;
-      await vi.advanceTimersByTimeAsync(1500);
+      owner.abort();
       expect(snapshot?.every((byte) => byte === 0)).toBe(true);
     } finally {
       release();

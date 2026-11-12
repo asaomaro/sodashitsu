@@ -4,10 +4,10 @@ type Point={x:number;y:number;clientX:number;clientY:number};
 type Job={gesture:string;born:number;point:Point;seq?:number;ack:boolean;armed:boolean;started:boolean;moved:boolean;phase:"waiting"|"preparing"|"activating"|"native";latest?:Point;offer?:ReturnType<typeof DesktopNativeFileOffer.parse>;timer:ReturnType<typeof setTimeout>;heartbeat?:ReturnType<typeof setInterval>;};
 /** Browser gesture is owned until native completion. No input transform or target path. */
 export class DesktopNativeDrag {
- private job:Job|undefined;private retiring:string|undefined;private dead=false;private observed=0;
+ private job:Job|undefined;private retiring:string|undefined;private dead=false;
  constructor(private options:{files:DesktopFileClient;origin:string;send(value:DesktopNativeHelperRequest):void;valid(fresh:boolean):boolean;fallback(point:Point|undefined):void;handoff():void;release():void;status(value:string):void;now?:()=>number}){}
- private now(){const at=this.options.now?.()??performance.now();if(!Number.isFinite(at)||at<this.observed)throw Error("ドラッグの時計が不正です");this.observed=at;return at;}
- private live(job:Job,fresh=true){const valid=this.options.valid(fresh),at=this.now();if(this.dead||this.job!==job||!valid||at-job.born>=900000||fresh&&at-job.born>=750)throw Error("ドラッグの操作条件が終了しました");}
+ private now(){return this.options.now?.()??performance.now();}
+ private live(job:Job,fresh=true){const valid=this.options.valid(fresh),at=this.now();if(this.dead||this.job!==job||!valid||fresh&&at-job.born>=750)throw Error("ドラッグの操作条件が終了しました");}
  begin(point:Point){
   try{
    if(this.dead||this.job||this.retiring||!this.options.valid(true))return false;

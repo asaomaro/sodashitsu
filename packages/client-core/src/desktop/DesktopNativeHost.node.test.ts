@@ -35,11 +35,13 @@ it("preserves the original host gesture remainder in the native clock domain",()
 });
 it("refuses late process ready without renewing admission",()=>{const f=fixture();f.clock(840);f.ready();expect(f.child.killed).toBe(true);expect(f.events.some(v=>v.type==="running")).toBe(false);});
 it("never accepts a finished notification followed by nonzero process exit",()=>{const f=fixture();f.ready();f.send({type:"finished",copy:true});f.child.emit("close",3,null);expect(f.events.at(-1)).toMatchObject({type:"done",ok:false});});
-it("waits child close after idle cancellation and exposes host terminal completion",async()=>{
- const f=fixture();let closed=false;void f.host.closed.then(()=>{closed=true;});f.clock(5100);expect(()=>f.host.receive({type:"beat"})).toThrow("expired");await Promise.resolve();expect(closed).toBe(false);expect(f.child.killed).toBe(true);f.child.emit("close",3,null);await f.host.closed;expect(closed).toBe(true);
+it("waits actual child close after explicit owner cancellation",async()=>{
+ const f=fixture();let closed=false;void f.host.closed.then(()=>{closed=true;});f.clock(1000000);void f.host.close();await Promise.resolve();expect(closed).toBe(false);expect(f.child.killed).toBe(true);f.child.emit("close",3,null);await f.host.closed;expect(closed).toBe(true);
 });
 
 it("rejects reuse of a completed native file request",()=>{
  const f=fixture();f.ready();const request=randomUUID();for(const [offset,length]of [[0,65536],[65536,4464]]){f.send({type:"need",request,index:0,offset,length});f.host.receive({type:"bytes",gesture:f.gesture,request,index:0,offset,data:f.data.subarray(offset!,offset!+length!).toString("base64")});}
  f.send({type:"need",request,index:0,offset:0,length:1});expect(f.child.killed).toBe(true);expect(f.events.filter(v=>v.type==="need")).toHaveLength(2);
 });
+
+it("keeps an active native copy after browser timer throttling and prior host lifetime caps",()=>{const f=fixture();f.ready();f.clock(1000000);const request=randomUUID();f.send({type:"need",request,index:0,offset:0,length:1});expect(f.child.killed).toBe(false);expect(f.events.at(-1)).toMatchObject({type:"need",request});f.host.receive({type:"bytes",gesture:f.gesture,request,index:0,offset:0,data:f.data.subarray(0,1).toString("base64")});expect(f.child.killed).toBe(false);});

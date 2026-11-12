@@ -76,6 +76,7 @@ export class DesktopFiles {
   run(raw: unknown): Promise<DesktopFileResult> {
     const m = DesktopFileRequest.parse(raw),
       version = this.epoch;
+    const nativeAdmission=m.request.action==="native_prepare"?this.native?.admit(m.request.gesture):undefined;
     if(m.request.action==="native_abort")this.native?.cancel(m.request.gesture);
     const operationId = "id" in m.request ? m.request.id : ((m.request.action==="folder_resume_start"||m.request.action==="folder_resume_run")?m.request.request.id:undefined);
     if(m.request.action==="folder_abort"){
@@ -135,6 +136,7 @@ export class DesktopFiles {
         const fence = () => {
           if (
             this.dead ||
+            nativeAdmission?.signal.aborted ||
             version !== this.epoch ||
             !this.granted ||
             !this.allowed() ||
@@ -150,7 +152,7 @@ export class DesktopFiles {
           fence();
         };
         await guard();
-        if(m.request.action.startsWith("native_")){if(!this.native)throw Error("Explorerドラッグを利用できません");return reply(await this.native.run(m.request,()=>{fence();if(!this.valid())throw Error("共有元が変更されました");}));}
+        if(m.request.action.startsWith("native_")){if(!this.native)throw Error("Explorerドラッグを利用できません");return reply(await this.native.run(m.request,()=>{fence();if(!this.valid())throw Error("共有元が変更されました");},nativeAdmission));}
         if(m.request.action.startsWith("folder_resume_")){if(!this.folderCheckpoints)throw Error("フォルダの切断後再開には両端の更新が必要です");const {DesktopFolderCheckpointRequest}=await import("@sodashitsu/protocol");return reply(await this.folderCheckpoints.run({owner:this.owner,root:this.root,guard,fence,connected:()=>!this.dead&&this.allowed(),valid:this.valid},DesktopFolderCheckpointRequest.parse(m.request)));}
         if(m.request.action.startsWith("folder_")){if(!this.folders)throw Error("両端を更新してフォルダ転送に対応した接続を使ってください");const {DesktopFolderRequest}=await import("@sodashitsu/protocol");return reply(await this.folders.run(DesktopFolderRequest.parse(m.request),guard,fence));}
         if (m.request.action.startsWith("checkpoint_")) {
@@ -253,7 +255,7 @@ export class DesktopFiles {
       }
     });
     this.queue = result.catch(() => {});
-    return result;
+    return result.finally(()=>{if(nativeAdmission&&m.request.action==="native_prepare")this.native?.settled(m.request.gesture,nativeAdmission);});
   }
   async close() {
     this.dead = true;

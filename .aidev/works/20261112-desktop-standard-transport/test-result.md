@@ -764,3 +764,85 @@ FAILED (failures=1)
 ```
 
 Phase9 fixture alignment: legacy test JSON heartbeat senders use WebSocket protocol ping instead. The known old readonly/unacknowledged-share8s expectation is replaced with actual bounded pending-image/open-socket assertions and explicit stop; an unacknowledged image alone no longer proves transport death. No baseline retry was spent on it.
+
+## Phase 10
+
+Targeted Node host/gateway, NativeFiles/NativeSources/DesktopFiles and browser drag unit suites pass (90 before removing obsolete artificial clock-backwards tests;87 effective after). Inflight cancellation retains existing queued-root-guard and async selection cancellation regressions, then retires the context.4100 unknown/completed cancellations cannot disable a later fresh native gesture. Parent abort erases partial file snapshot during a blocked read without an autonomous Source timer. Node actual WS close retires Gateway/binary; Host close waits actual retained child close. Protocol/client-core compile passed. Browser DOM/network E2E added for16min browser clock advance with no beat frame and actual owner page close; execution is reserved for integration E2E, no actual Windows/Mac claim.
+
+OLD FAIL controls: former host lifetime, Gateway lifetime, Source absolute lifetime, browser drag absolute lifetime fail before the phase; correct paired old NativeFiles/NativeSources fail renewed grant beyond old15min; old NativeFiles ledger fails fresh prepare after4100 cancellations. Production files restored/byte-compared. Raw evidence for the latter two:
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopNativeFiles.test.ts (22 tests | 1 failed | 21 skipped) 31ms
+   × keeps a renewed native source grant beyond the removed absolute drag lifetime 30ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopNativeFiles.test.ts > keeps a renewed native source grant beyond the removed absolute drag lifetime
+Error: ドラッグの期限が終了しました
+ ❯ DesktopNativeSources.fence src/desktop/DesktopNativeSources.ts:121:15
+    119|         (!this.active && now - this.born >= 1500)
+    120|       )
+    121|         throw Error("ドラッグの期限が終了しました");
+       |               ^
+    122|       this.observed = now;
+    123|       return now;
+ ❯ DesktopNativeSources.checkScope src/desktop/DesktopNativeSources.ts:295:10
+ ❯ DesktopNativeSources.heartbeat src/desktop/DesktopNativeSources.ts:289:10
+ ❯ DesktopNativeFiles.run src/desktop/DesktopNativeFiles.ts:67:56
+ ❯ Object.run src/desktop/DesktopNativeFiles.test.ts:18:37
+ ❯ src/desktop/DesktopNativeFiles.test.ts:96:293
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 skipped (22)
+   Start at  00:03:34
+   Duration  1.13s (transform 77%, import 20%, tests 3%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-transport-zero-custom
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopNativeFiles.test.ts (23 tests | 1 failed | 22 skipped) 13ms
+   × does not disable future native gestures after many completed or unknown cancellations 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopNativeFiles.test.ts > does not disable future native gestures after many completed or unknown cancellations
+Error: 別のドラッグが処理中か期限切れです
+ ❯ DesktopNativeFiles.run src/desktop/DesktopNativeFiles.ts:39:89
+     37|   if(request.action==="native_prepare"){
+     38|    if(request.origin!==this.hooks.origin)throw Error("認証済みの接続元と一致しません"…
+     39|    if(this.dead||this.state||this.seen.has(request.gesture)||this.seen…
+       |                                                                                         ^
+     40|    const pointer=this.hooks.pointer(request.seq);if(!pointer||!pointer…
+     41|    if(this.dead||this.state||this.seen.has(request.gesture)||this.seen…
+ ❯ run src/desktop/DesktopNativeFiles.test.ts:18:37
+ ❯ Object.prepare src/desktop/DesktopNativeFiles.test.ts:18:68
+ ❯ src/desktop/DesktopNativeFiles.test.ts:96:192
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 skipped (23)
+   Start at  00:08:50
+   Duration  955ms (transform 77%, import 21%, tests 2%)
+
+
+```

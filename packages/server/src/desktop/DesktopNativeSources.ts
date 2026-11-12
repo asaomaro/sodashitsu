@@ -66,60 +66,33 @@ export class DesktopNativeSources {
   readonly id = randomUUID();
   private dead = false;
   private active = false;
-  private observed: number;
   private beatAt: number;
-  private readonly born: number;
   private pending = 0;
   private requests = new Set<string>();
   private closing: Promise<void> | undefined;
   private waiters: Array<() => void> = [];
-  private expiry: ReturnType<typeof setTimeout> | undefined;
   private buffers = new Set<Buffer>();
   private constructor(
     private scope: string,
     private saved: Saved[],
     private authority: () => boolean,
     private clock: () => number,
+    private signal:AbortSignal,
   ) {
-    this.born = this.observed = this.beatAt = clock();
-    if (!Number.isFinite(this.born) || this.born < 0) throw Error("ドラッグの時計を確認できません");
-    this.arm();
+    this.beatAt = clock();
+    signal.addEventListener("abort",this.abort,{once:true});
+    if(signal.aborted)this.cancel();
   }
-  private arm() {
-    clearTimeout(this.expiry);
-    if (this.dead) return;
-    const due = Math.min(
-      this.born + 900000,
-      this.beatAt + 5000,
-      this.active ? Infinity : this.born + 1500,
-    );
-    this.expiry = setTimeout(
-      () => {
-        try {
-          this.fence();
-          this.arm();
-        } catch {
-          /* fence erased the expired snapshot */
-        }
-      },
-      Math.max(1, due - this.observed),
-    );
-    this.expiry.unref();
-  }
+  private abort=()=>this.cancel();
   private fence() {
     try {
       if (this.dead || !this.authority()) throw Error("ドラッグのファイル操作許可が終了しました");
       const now = this.clock();
       if (this.dead) throw Error("ドラッグは終了しました");
       if (
-        !Number.isFinite(now) ||
-        now < this.observed ||
-        now - this.born >= 900000 ||
-        now - this.beatAt >= 5000 ||
-        (!this.active && now - this.born >= 1500)
+        now - this.beatAt >= 5000
       )
         throw Error("ドラッグの期限が終了しました");
-      this.observed = now;
       return now;
     } catch (e) {
       this.cancel();
@@ -131,6 +104,7 @@ export class DesktopNativeSources {
     paths: readonly string[],
     scope: NativeSourceScope,
     authority: () => boolean,
+    signal:AbortSignal,
     clock: () => number = () => performance.now(),
   ) {
     validateScope(scope);
@@ -140,7 +114,7 @@ export class DesktopNativeSources {
       saved: Saved[] = [],
       names = new Set<string>();
     let bytes = 0;
-    const lease = new DesktopNativeSources(scopeKey(scope), saved, authority, clock);
+    const lease = new DesktopNativeSources(scopeKey(scope), saved, authority, clock,signal);
     try {
       const visit = async (path: string, label: string): Promise<void> => {
         lease.fence();
@@ -283,12 +257,10 @@ export class DesktopNativeSources {
     this.checkScope(scope);
     if (this.active) throw Error("ドラッグは開始済みです");
     this.active = true;
-    this.arm();
   }
   heartbeat(scope: NativeSourceScope) {
     this.checkScope(scope);
-    this.beatAt = this.observed;
-    this.arm();
+    this.beatAt = this.clock();
   }
   private checkScope(scope: NativeSourceScope) {
     if (scopeKey(scope) !== this.scope) throw Error("別のドラッグには使えません");
@@ -324,7 +296,7 @@ export class DesktopNativeSources {
       length > file.entry.bytes - offset
     )
       throw Error("ドラッグの範囲が不正です");
-    const started = this.observed;
+    const started = this.clock();
     this.requests.add(request);
     this.pending++;
     let data: Buffer | undefined;
@@ -347,7 +319,7 @@ export class DesktopNativeSources {
   }
   private cancel() {
     this.dead = true;
-    clearTimeout(this.expiry);
+    this.signal.removeEventListener("abort",this.abort);
     for (const buffer of this.buffers) buffer.fill(0);
     this.buffers.clear();
     for (const file of this.saved) delete file.data;

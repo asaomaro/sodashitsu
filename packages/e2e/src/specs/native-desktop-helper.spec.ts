@@ -32,3 +32,8 @@ test("an unreachable localhost locator never becomes an authenticated helper",as
 test("native gateway termination reaches browser DOM and removes its frame",async({page})=>{
  const f=await demo();try{await page.goto(f.origin);await page.getByRole("button",{name:"Connect generated helper"}).click();await expect(page.locator("#status")).toHaveText("ready");await f.gateway.close();await expect(page.locator("#status")).toHaveText("closed",{timeout:8000});await expect(page.locator("[data-native-helper]")).toHaveCount(0);}finally{await f.close();}
 });
+
+test("browser timer throttling does not close a healthy local helper, and owner page close releases it",async({page})=>{
+ const f=await demo(),sent:string[]=[];page.on("websocket",socket=>socket.on("framesent",event=>sent.push(String(event.payload))));
+ try{await page.clock.install();await page.goto(f.origin);await page.getByRole("button",{name:"Connect generated helper"}).click();await expect(page.locator("#status")).toHaveText("ready");await page.clock.fastForward("16:00");await expect(page.locator("#status")).toHaveText("ready");expect(sent.some(raw=>JSON.parse(raw).type==="beat")).toBe(false);await page.close();expect(await f.gateway.done).toBe(true);}finally{await f.close();}
+});
